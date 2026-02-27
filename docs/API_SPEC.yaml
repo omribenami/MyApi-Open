@@ -1,0 +1,1193 @@
+openapi: 3.0.3
+info:
+  title: MyApi - Personal Identity & Data Gateway
+  version: 1.0.0
+  description: |
+    MyApi provides a secure, privacy-first API gateway to access user identity, preferences, 
+    and connected data sources. It serves as a Single Source of Truth (SSOT) for AI entities 
+    and applications communicating with the user.
+    
+    ## Architecture
+    - **Vault**: Dynamic context storage (identity docs, connectors, preferences)
+    - **Gateway**: API surface with access control and token management
+    - **Personal Brain**: Logic layer that routes requests and enforces privacy
+    
+    ## Security
+    - Zero-Knowledge architecture
+    - Scope-based access control
+    - Full audit logging
+    - Token revocation capabilities
+    
+  contact:
+    name: MyApi Support
+  license:
+    name: Proprietary
+
+servers:
+  - url: https://api.myapi.io/v1
+    description: Production server
+  - url: https://staging-api.myapi.io/v1
+    description: Staging server
+  - url: http://localhost:3000/v1
+    description: Local development server
+
+tags:
+  - name: Identity
+    description: User identity and profile endpoints
+  - name: Preferences
+    description: User preferences and settings
+  - name: Tokens
+    description: Token management and authentication
+  - name: Audit
+    description: Audit log access
+  - name: Connectors
+    description: Data source connector management
+  - name: Health
+    description: System health and status
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Personal Token (full access) or Guest Token (scoped access).
+        Include in Authorization header: `Bearer <token>`
+
+  schemas:
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          example: "UNAUTHORIZED"
+        message:
+          type: string
+          example: "Invalid or expired token"
+        details:
+          type: object
+          additionalProperties: true
+
+    Meta:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-02-18T21:00:00Z"
+        version:
+          type: string
+          example: "1.0.0"
+        requestId:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        rateLimit:
+          type: object
+          properties:
+            limit:
+              type: integer
+              example: 1000
+            remaining:
+              type: integer
+              example: 999
+            reset:
+              type: integer
+              format: int64
+              description: Unix timestamp when rate limit resets
+              example: 1708293600
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          example: 1
+        pageSize:
+          type: integer
+          example: 50
+        totalPages:
+          type: integer
+          example: 10
+        totalItems:
+          type: integer
+          example: 487
+
+    Identity:
+      type: object
+      properties:
+        userId:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-4789-a012-b3c4d5e6f789"
+        name:
+          type: string
+          example: "Ben-Ami"
+        email:
+          type: string
+          format: email
+          example: "user@example.com"
+        professional:
+          $ref: '#/components/schemas/ProfessionalProfile'
+        personal:
+          type: object
+          description: Personal information (filtered by scope)
+          properties:
+            bio:
+              type: string
+            location:
+              type: string
+            timezone:
+              type: string
+        availability:
+          $ref: '#/components/schemas/Availability'
+        scope:
+          type: array
+          items:
+            type: string
+          description: Fields included based on token scope
+          example: ["professional", "availability"]
+
+    ProfessionalProfile:
+      type: object
+      properties:
+        title:
+          type: string
+          example: "Senior Software Engineer"
+        company:
+          type: string
+          example: "TechCorp"
+        skills:
+          type: array
+          items:
+            type: string
+          example: ["Node.js", "Python", "Docker"]
+        experience:
+          type: array
+          items:
+            type: object
+            properties:
+              role:
+                type: string
+              company:
+                type: string
+              duration:
+                type: string
+              description:
+                type: string
+        education:
+          type: array
+          items:
+            type: object
+            properties:
+              degree:
+                type: string
+              institution:
+                type: string
+              year:
+                type: integer
+        links:
+          type: object
+          properties:
+            linkedin:
+              type: string
+              format: uri
+            github:
+              type: string
+              format: uri
+            website:
+              type: string
+              format: uri
+
+    Availability:
+      type: object
+      properties:
+        timezone:
+          type: string
+          example: "America/Chicago"
+        workingHours:
+          type: object
+          properties:
+            start:
+              type: string
+              example: "09:00"
+            end:
+              type: string
+              example: "17:00"
+        preferredDays:
+          type: array
+          items:
+            type: string
+          example: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+        upcomingEvents:
+          type: array
+          items:
+            type: object
+            properties:
+              start:
+                type: string
+                format: date-time
+              end:
+                type: string
+                format: date-time
+              title:
+                type: string
+              busy:
+                type: boolean
+        freeBusySlots:
+          type: array
+          items:
+            type: object
+            properties:
+              start:
+                type: string
+                format: date-time
+              end:
+                type: string
+                format: date-time
+              status:
+                type: string
+                enum: [free, busy, tentative]
+
+    Preferences:
+      type: object
+      properties:
+        communication:
+          type: object
+          properties:
+            tone:
+              type: string
+              enum: [professional, casual, friendly, formal]
+              example: "friendly"
+            verbosity:
+              type: string
+              enum: [concise, normal, detailed]
+              example: "normal"
+            language:
+              type: string
+              example: "en-US"
+        technical:
+          type: object
+          properties:
+            preferredStack:
+              type: array
+              items:
+                type: string
+              example: ["Node.js", "Python", "Docker"]
+            codeStyle:
+              type: string
+              example: "functional"
+            frameworks:
+              type: array
+              items:
+                type: string
+        scheduling:
+          type: object
+          properties:
+            meetingDuration:
+              type: integer
+              description: Default meeting duration in minutes
+              example: 30
+            bufferTime:
+              type: integer
+              description: Buffer between meetings in minutes
+              example: 15
+            maxDailyMeetings:
+              type: integer
+              example: 5
+        notifications:
+          type: object
+          properties:
+            email:
+              type: boolean
+            push:
+              type: boolean
+            sms:
+              type: boolean
+            frequency:
+              type: string
+              enum: [realtime, hourly, daily, weekly]
+
+    Token:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "b2c3d4e5-f6a7-4890-b123-c4d5e6f7a890"
+        type:
+          type: string
+          enum: [personal, guest]
+          example: "guest"
+        name:
+          type: string
+          description: Human-readable name for the token
+          example: "Calendar Integration"
+        scope:
+          type: array
+          items:
+            type: string
+          example: ["identity:professional", "availability:read"]
+          description: |
+            Scopes define access permissions:
+            - identity:read - Basic identity info
+            - identity:professional - Professional profile
+            - identity:personal - Personal info
+            - availability:read - Calendar/availability
+            - preferences:read - User preferences
+            - connectors:read - List connectors
+            - connectors:write - Add/remove connectors
+            - audit:read - View audit logs
+            - tokens:read - List tokens
+            - tokens:write - Create/revoke tokens
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastUsed:
+          type: string
+          format: date-time
+          nullable: true
+        usageCount:
+          type: integer
+          example: 42
+
+    TokenCreateRequest:
+      type: object
+      required:
+        - name
+        - scope
+      properties:
+        name:
+          type: string
+          example: "Third-party calendar app"
+        scope:
+          type: array
+          items:
+            type: string
+          example: ["identity:professional", "availability:read"]
+        expiresIn:
+          type: integer
+          description: Token lifetime in seconds (optional, null = no expiry)
+          example: 2592000
+          nullable: true
+
+    AuditEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+        tokenId:
+          type: string
+          format: uuid
+        tokenType:
+          type: string
+          enum: [personal, guest]
+        tokenName:
+          type: string
+        action:
+          type: string
+          example: "GET /api/v1/identity"
+        endpoint:
+          type: string
+          example: "/api/v1/identity"
+        method:
+          type: string
+          enum: [GET, POST, PUT, PATCH, DELETE]
+        statusCode:
+          type: integer
+          example: 200
+        ipAddress:
+          type: string
+          example: "192.168.1.100"
+        userAgent:
+          type: string
+        requestId:
+          type: string
+          format: uuid
+        scope:
+          type: array
+          items:
+            type: string
+        dataAccessed:
+          type: array
+          items:
+            type: string
+          description: Fields/resources accessed in this request
+          example: ["identity.professional", "identity.email"]
+
+    Connector:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [github, linkedin, calendar, journal, notion, gdrive, custom]
+          example: "github"
+        name:
+          type: string
+          example: "GitHub Profile"
+        status:
+          type: string
+          enum: [active, inactive, error]
+          example: "active"
+        readOnly:
+          type: boolean
+          example: true
+          description: Whether this connector is read-only
+        createdAt:
+          type: string
+          format: date-time
+        lastSync:
+          type: string
+          format: date-time
+          nullable: true
+        config:
+          type: object
+          description: Connector-specific configuration (sanitized)
+          additionalProperties: true
+
+    ConnectorCreateRequest:
+      type: object
+      required:
+        - type
+        - name
+        - config
+      properties:
+        type:
+          type: string
+          enum: [github, linkedin, calendar, journal, notion, gdrive, custom]
+        name:
+          type: string
+          example: "My GitHub"
+        config:
+          type: object
+          description: Connector-specific configuration
+          additionalProperties: true
+          example:
+            username: "octocat"
+            apiToken: "ghp_xxxxxxxxxxxxx"
+
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+          example: "healthy"
+        version:
+          type: string
+          example: "1.0.0"
+        uptime:
+          type: integer
+          description: Uptime in seconds
+          example: 86400
+        components:
+          type: object
+          properties:
+            vault:
+              type: string
+              enum: [healthy, unhealthy]
+            gateway:
+              type: string
+              enum: [healthy, unhealthy]
+            brain:
+              type: string
+              enum: [healthy, unhealthy]
+            database:
+              type: string
+              enum: [healthy, unhealthy]
+        timestamp:
+          type: string
+          format: date-time
+
+  responses:
+    UnauthorizedError:
+      description: Authentication token is missing or invalid
+      headers:
+        X-RateLimit-Limit:
+          schema:
+            type: integer
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+        X-RateLimit-Reset:
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              errors:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Error'
+              meta:
+                $ref: '#/components/schemas/Meta'
+
+    ForbiddenError:
+      description: Insufficient permissions for this operation
+      headers:
+        X-RateLimit-Limit:
+          schema:
+            type: integer
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+        X-RateLimit-Reset:
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              errors:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Error'
+              meta:
+                $ref: '#/components/schemas/Meta'
+
+    RateLimitError:
+      description: Rate limit exceeded
+      headers:
+        X-RateLimit-Limit:
+          schema:
+            type: integer
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+            example: 0
+        X-RateLimit-Reset:
+          schema:
+            type: integer
+        Retry-After:
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              errors:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Error'
+              meta:
+                $ref: '#/components/schemas/Meta'
+
+  parameters:
+    TokenIdParam:
+      name: id
+      in: path
+      required: true
+      description: Token ID
+      schema:
+        type: string
+        format: uuid
+
+security:
+  - BearerAuth: []
+
+paths:
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Returns the health status of the API and its components
+      operationId: getHealth
+      security: []
+      responses:
+        '200':
+          description: Health status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/HealthStatus'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+
+  /identity:
+    get:
+      tags:
+        - Identity
+      summary: Get user identity
+      description: |
+        Returns user identity information filtered by the token's scope.
+        Personal tokens receive full identity data; guest tokens receive only scoped fields.
+      operationId: getIdentity
+      responses:
+        '200':
+          description: User identity
+          headers:
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+            X-RateLimit-Reset:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Identity'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /identity/professional:
+    get:
+      tags:
+        - Identity
+      summary: Get professional profile
+      description: Returns only the professional profile section of the user's identity
+      operationId: getProfessionalProfile
+      responses:
+        '200':
+          description: Professional profile
+          headers:
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+            X-RateLimit-Reset:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ProfessionalProfile'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /identity/availability:
+    get:
+      tags:
+        - Identity
+      summary: Get calendar and availability data
+      description: Returns the user's calendar information, working hours, and free/busy slots
+      operationId: getAvailability
+      parameters:
+        - name: start
+          in: query
+          description: Start date for availability window (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+        - name: end
+          in: query
+          description: End date for availability window (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+        - name: timezone
+          in: query
+          description: Timezone for results (IANA timezone)
+          schema:
+            type: string
+            example: "America/Chicago"
+      responses:
+        '200':
+          description: Availability data
+          headers:
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+            X-RateLimit-Reset:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Availability'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /preferences:
+    get:
+      tags:
+        - Preferences
+      summary: Get user preferences
+      description: Returns user preferences including communication style, technical preferences, and scheduling settings
+      operationId: getPreferences
+      responses:
+        '200':
+          description: User preferences
+          headers:
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+            X-RateLimit-Reset:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Preferences'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /tokens:
+    get:
+      tags:
+        - Tokens
+      summary: List active tokens
+      description: |
+        Lists all active tokens. Only accessible with a personal token.
+        Returns token metadata without exposing the actual token values.
+      operationId: listTokens
+      parameters:
+        - name: type
+          in: query
+          description: Filter by token type
+          schema:
+            type: string
+            enum: [personal, guest]
+      responses:
+        '200':
+          description: List of tokens
+          headers:
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+            X-RateLimit-Reset:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Token'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          description: Only personal tokens can list all tokens
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Error'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+    post:
+      tags:
+        - Tokens
+      summary: Create a new guest token
+      description: |
+        Creates a new guest token with specified scope and expiration.
+        Only accessible with a personal token.
+      operationId: createToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenCreateRequest'
+      responses:
+        '201':
+          description: Token created successfully
+          headers:
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+            X-RateLimit-Reset:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    allOf:
+                      - $ref: '#/components/schemas/Token'
+                      - type: object
+                        properties:
+                          token:
+                            type: string
+                            description: The actual token value (only returned on creation)
+                            example: "myapi_guest_abc123def456..."
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Error'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          description: Only personal tokens can create guest tokens
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Error'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /tokens/{id}:
+    delete:
+      tags:
+        - Tokens
+      summary: Revoke a token
+      description: |
+        Revokes a token immediately. The token will no longer be valid for any requests.
+        Only accessible with a personal token.
+      operationId: revokeToken
+      parameters:
+        - $ref: '#/components/parameters/TokenIdParam'
+      responses:
+        '204':
+          description: Token revoked successfully
+          headers:
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+            X-RateLimit-Reset:
+              schema:
+                type: integer
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          description: Only personal tokens can revoke tokens
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Error'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '404':
+          description: Token not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Error'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /audit:
+    get:
+      tags:
+        - Audit
+      summary: Get audit log
+      description: |
+        Returns the audit log of all API access and actions.
+        Only accessible with a personal token.
+        Supports pagination and filtering.
+      operationId: getAuditLog
+      parameters:
+        - name: page
+          in: query
+          description: Page number
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          description: Number of items per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: tokenId
+          in: query
+          description: Filter by token ID
+          schema:
+            type: string
+            format: uuid
+        - name: action
+          in: query
+          description: Filter by action/endpoint
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          description: Filter by start date (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+        - name: endDate
+          in: query
+          description: Filter by end date (ISO 8601)
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Audit log entries
+          headers:
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+            X-RateLimit-Reset:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditEntry'
+                  meta:
+                    allOf:
+                      - $ref: '#/components/schemas/Meta'
+                      - type: object
+                        properties:
+                          pagination:
+                            $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          description: Only personal tokens can access audit logs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Error'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+  /connectors:
+    get:
+      tags:
+        - Connectors
+      summary: List active connectors
+      description: Returns a list of all active data source connectors
+      operationId: listConnectors
+      parameters:
+        - name: type
+          in: query
+          description: Filter by connector type
+          schema:
+            type: string
+            enum: [github, linkedin, calendar, journal, notion, gdrive, custom]
+        - name: status
+          in: query
+          description: Filter by status
+          schema:
+            type: string
+            enum: [active, inactive, error]
+      responses:
+        '200':
+          description: List of connectors
+          headers:
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+            X-RateLimit-Reset:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Connector'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+    post:
+      tags:
+        - Connectors
+      summary: Add a connector
+      description: |
+        Adds a new data source connector.
+        Requires connectors:write scope.
+      operationId: createConnector
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConnectorCreateRequest'
+      responses:
+        '201':
+          description: Connector created successfully
+          headers:
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+            X-RateLimit-Reset:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Connector'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Error'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          description: Requires connectors:write scope
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Error'
+                  meta:
+                    $ref: '#/components/schemas/Meta'
+        '429':
+          $ref: '#/components/responses/RateLimitError'

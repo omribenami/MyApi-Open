@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MyApi Sign In / Sign Up</title>
+  <style>
+    :root{--bg:#0b1020;--card:#121a2b;--text:#e5e7eb;--muted:#93a3b8;}
+    @media (prefers-color-scheme: light){:root{--bg:#f7f7fb;--card:#fff;--text:#111;--muted:#555;}}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:Arial, Helvetica, sans-serif;min-height:100vh;}
+    .wrap{max-width:860px;margin:0 auto; padding:32px 16px;}
+    .card{background:var(--card);border-radius:14px;padding:24px;border:1px solid #334155;box-shadow:0 4px 16px rgba(0,0,0,.15)}
+    h1{margin:0 0 8px;font-size:28px}
+    h2{font-size:20px;margin:0 0 14px}
+    label{display:block;margin:8px 0 4px;font-size:12px;color:var(--muted)}
+    input{width:100%;padding:10px 12px;border-radius:8px;border:1px solid #334155;background:#0b1020;color:#fff}
+    .btn{padding:10px 14px;border-radius:8px;border:0;background:#4f46e5;color:white;font-weight:600;cursor:pointer}
+    .btn.secondary{background:#374151}
+    .row{display:flex;gap:16px}
+    .col{flex:1}
+    .tabs{display:flex;gap:8px;margin-bottom:12px}
+    .tab{padding:8px 14px;border-radius:8px;background:#1e1e2d;color:white;cursor:pointer}
+    .tab.active{background:#4f46e5}
+    .hidden{display:none}
+    .note{font-size:12px;color:var(--muted);margin-top:8px}
+    @media (max-width: 640px){ .wrap{padding:16px} }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card" style="margin-bottom:16px;text-align:center">
+      <h1>🔐 MyApi</h1>
+      <div class="tabs" aria-label="Auth tabs">
+        <button class="tab active" id="tabSignIn">Sign In</button>
+        <button class="tab" id="tabSignUp">Sign Up</button>
+      </div>
+      <div id="signinForm" class="sign-form">
+        <div class="col">
+          <label for="si_username">Username</label>
+          <input id="si_username" type="text" placeholder="Username" />
+        </div>
+        <div class="col">
+          <label for="si_password">Password</label>
+          <input id="si_password" type="password" placeholder="Password" />
+        </div>
+        <button class="btn" id="loginBtn">Sign In</button>
+        <div class="note" id="signinNote">Use Sign Up to create a new account.</div>
+      </div>
+      <div id="signupForm" class="hidden sign-form">
+        <div class="row"><div class="col"><label for="su_username">Username</label><input id="su_username" type="text" placeholder="Username" /></div><div class="col"><label for="su_password">Password</label><input id="su_password" type="password" placeholder="Password" /></div></div>
+        <div class="row"><div class="col"><label for="su_display">Display Name</label><input id="su_display" type="text" placeholder="Display name" /></div><div class="col"><label for="su_email">Email</label><input id="su_email" type="email" placeholder="Email" /></div></div>
+        <div class="row"><div class="col"><label for="su_timezone">Timezone</label><input id="su_timezone" type="text" placeholder="e.g. America/Chicago" /></div><div class="col"></div></div>
+        <button class="btn" id="signupBtn">Create Account</button>
+        <div class="note" id="signupNote">After signup, you may be prompted to complete onboarding and MFA setup.</div>
+      </div>
+    </div>
+    <div class="card" id="flowCard" class="hidden">
+      <h2>Onboarding flow</h2>
+      <p class="note">Sign in to begin onboarding. This panel will guide you through Identity, Connectors, and Vault setup.</p>
+    </div>
+  </div>
+  <script>
+    function $(id){return document.getElementById(id)}
+    const tabSignIn = $('tabSignIn');
+    const tabSignUp = $('tabSignUp');
+    const signinForm = $('signinForm');
+    const signupForm = $('signupForm');
+    tabSignIn.addEventListener('click', ()=>{ signinForm.classList.remove('hidden'); signupForm.classList.add('hidden'); tabSignIn.classList.add('active'); tabSignUp.classList.remove('active'); });
+    tabSignUp.addEventListener('click', ()=>{ signinForm.classList.add('hidden'); signupForm.classList.remove('hidden'); tabSignUp.classList.add('active'); tabSignIn.classList.remove('active'); });
+
+    async function post(url, data){
+      const res = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data), credentials:'include'});
+      return res.json();
+    }
+
+    $('loginBtn').addEventListener('click', async ()=>{
+      const u = $('si_username').value; const p = $('si_password').value;
+      if(!u || !p){ alert('Please enter username and password'); return; }
+      try{ await fetch('/api/v1/auth/login', {method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body: JSON.stringify({username:u,password:p})}); window.location.href = '/dashboard/'; }catch(err){ alert('Login failed'); }
+    });
+
+    $('signupBtn').addEventListener('click', async ()=>{
+      const u = $('su_username').value; const p = $('su_password').value; const d = $('su_display').value; const e = $('su_email').value; const t = $('su_timezone').value;
+      if(!u || !p){ alert('Username and password required'); return; }
+      const res = await fetch('/api/v1/auth/register', {method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body: JSON.stringify({username:u,password:p,display_name:d,email:e,timezone:t})});
+      if(res.ok){ // auto-login
+        await fetch('/api/v1/auth/login', {method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body: JSON.stringify({username:u,password:p})}); window.location.href = '/dashboard/';
+      }else{ const data = await res.json(); alert('Signup failed: ' + (data.error||'Unknown error')); }
+    });
+  </script>
+</body>
+</html>
