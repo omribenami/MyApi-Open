@@ -6,8 +6,7 @@ import Login from './pages/Login';
 import DashboardHome from './pages/DashboardHome';
 import ServiceConnectors from './pages/ServiceConnectors';
 import TokenVault from './pages/TokenVault';
-import APIKeys from './pages/APIKeys';
-import GuestAccess from './pages/GuestAccess';
+import AccessTokens from './pages/AccessTokens';
 import Personas from './pages/Personas';
 import KnowledgeBase from './pages/KnowledgeBase';
 import Identity from './pages/Identity';
@@ -67,14 +66,6 @@ function App() {
               }
             />
             <Route
-              path="/api-keys"
-              element={
-                <ProtectedRoute>
-                  <APIKeys />
-                </ProtectedRoute>
-              }
-            />
-            <Route
               path="/tokens"
               element={
                 <ProtectedRoute>
@@ -83,10 +74,10 @@ function App() {
               }
             />
             <Route
-              path="/guest"
+              path="/access-tokens"
               element={
                 <ProtectedRoute>
-                  <GuestAccess />
+                  <AccessTokens />
                 </ProtectedRoute>
               }
             />

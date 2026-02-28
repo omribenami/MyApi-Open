@@ -78,6 +78,14 @@ function ServiceCard({ service, onConnect, onRevoke }) {
               Refresh
             </button>
           </>
+        ) : service.notConfigured ? (
+          <button
+            onClick={() => onConnect(service)}
+            className="w-full px-4 py-2 rounded-lg text-sm font-medium text-slate-400 bg-slate-700 border border-slate-600 cursor-pointer hover:border-amber-600 hover:text-amber-300 transition-colors"
+            title="OAuth credentials not configured on server"
+          >
+            Connect — Not yet configured
+          </button>
         ) : (
           <button
             onClick={() => onConnect(service)}

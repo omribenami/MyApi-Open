@@ -10,12 +10,11 @@ function Layout({ children, onLogout }) {
   const navItems = [
     { path: '/', label: 'Dashboard', icon: '📊' },
     { path: '/services', label: 'Services', icon: '🔗' },
-    { path: '/api-keys', label: 'API Keys', icon: '🔑' },
     { path: '/tokens', label: 'Token Vault', icon: '🔐' },
+    { path: '/access-tokens', label: 'Access Tokens', icon: '🔑' },
     { path: '/personas', label: 'Personas', icon: '🤖' },
     { path: '/identity', label: 'Identity', icon: '🪪' },
     { path: '/knowledge', label: 'Knowledge', icon: '🧠' },
-    { path: '/guest', label: 'Guest Access', icon: '🎟️' },
     { path: '/settings', label: 'Settings', icon: '⚙️' },
   ];
 

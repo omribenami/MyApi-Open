@@ -7,7 +7,6 @@ function DashboardHome() {
   const [stats, setStats] = useState({
     tokens: 0,
     connectors: 0,
-    auditLogs: 0,
   });
   const [loading, setLoading] = useState(true);
   const [health, setHealth] = useState(null);
@@ -19,11 +18,10 @@ function DashboardHome() {
       try {
         const headers = { 'Authorization': `Bearer ${masterToken}` };
 
-        const [healthRes, tokensRes, connectorsRes, auditRes] = await Promise.all([
+        const [healthRes, tokensRes, connectorsRes] = await Promise.all([
           fetch('/health'),
           fetch('/api/v1/tokens', { headers }).catch(() => ({ ok: false })),
           fetch('/api/v1/oauth/status', { headers }).catch(() => ({ ok: false })),
-          fetch('/api/v1/audit?limit=1', { headers }).catch(() => ({ ok: false })),
         ]);
 
         if (healthRes.ok) {
@@ -38,15 +36,9 @@ function DashboardHome() {
 
         if (connectorsRes.ok) {
           const connectorsData = await connectorsRes.json();
-          // oauth/status returns { services: [...] }
           const serviceList = connectorsData.services || connectorsData.data || [];
           const connected = serviceList.filter((c) => c.status === 'connected');
           setStats((s) => ({ ...s, connectors: connected.length }));
-        }
-
-        if (auditRes.ok) {
-          const auditData = await auditRes.json();
-          setStats((s) => ({ ...s, auditLogs: auditData.meta?.total || 0 }));
         }
       } catch (err) {
         console.error('Failed to fetch dashboard data:', err);
@@ -76,14 +68,6 @@ function DashboardHome() {
       color: 'green',
       link: '/services',
       description: 'OAuth and integrations',
-    },
-    {
-      label: 'Audit Logs',
-      value: stats.auditLogs,
-      icon: '📋',
-      color: 'purple',
-      link: '#',
-      description: 'Security and activity',
     },
   ];
 
@@ -132,7 +116,7 @@ function DashboardHome() {
       )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {statCards.map((card) => (
           <Link
             key={card.label}
@@ -171,14 +155,14 @@ function DashboardHome() {
           </Link>
 
           <Link
-            to="/tokens"
+            to="/access-tokens"
             className="bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-blue-500 rounded-lg p-6 transition-all"
           >
             <div className="flex items-center gap-3">
               <span className="text-2xl">🔑</span>
               <div>
-                <h3 className="font-semibold text-white">Create a Token</h3>
-                <p className="text-sm text-slate-400">Generate API credentials</p>
+                <h3 className="font-semibold text-white">Manage Tokens</h3>
+                <p className="text-sm text-slate-400">Master token &amp; guest access</p>
               </div>
             </div>
           </Link>
