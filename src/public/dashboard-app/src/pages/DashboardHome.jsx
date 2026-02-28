@@ -38,7 +38,9 @@ function DashboardHome() {
 
         if (connectorsRes.ok) {
           const connectorsData = await connectorsRes.json();
-          const connected = connectorsData.data?.filter((c) => c.status === 'connected') || [];
+          // oauth/status returns { services: [...] }
+          const serviceList = connectorsData.services || connectorsData.data || [];
+          const connected = serviceList.filter((c) => c.status === 'connected');
           setStats((s) => ({ ...s, connectors: connected.length }));
         }
 

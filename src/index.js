@@ -12,6 +12,7 @@ const {
   createVaultToken,
   getVaultTokens,
   deleteVaultToken,
+  decryptVaultToken,
   createAccessToken,
   getAccessTokens,
   revokeAccessToken,
@@ -114,14 +115,9 @@ app.use(session({
   cookie: { secure: false, httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000, sameSite: 'lax' }
 }));
 
-// Login page as the default landing
-app.get('/', (req, res) => {
-  if (req.session && req.session.user) return res.redirect('/dashboard/');
-  res.sendFile(path.join(__dirname, 'public', 'login.html'));
-});
-app.get('/login', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'login.html'));
-});
+// Redirect to React dashboard
+app.get('/', (req, res) => res.redirect('/dashboard/'));
+app.get('/login', (req, res) => res.redirect('/dashboard/'));
 
 // Dashboard: serve static files (auth handled client-side via localStorage token)
 app.use('/dashboard', express.static(path.join(__dirname, 'public', 'dist')));
@@ -132,8 +128,7 @@ const onboardRoutes = require('./onboard');
 app.use('/api/v1', onboardRoutes);
 
 // User profile routes
-app.get('/api/v1/users/me', (req, res) => {
-  if (!req.session || !req.session.user) return res.status(401).json({ error: 'unauthorized' });
+app.get('/api/v1/users/me', authenticate, (req, res) => {
   const userMdPath = path.join(__dirname, '..', '..', '..', 'USER.md');
   let identity = {};
   if (fs.existsSync(userMdPath)) {
@@ -144,11 +139,11 @@ app.get('/api/v1/users/me', (req, res) => {
       if (m) identity[m[1].trim()] = m[2].trim();
     }
   }
-  res.json({ user: req.session.user, identity });
+  const user = req.user || { id: 'owner', username: 'owner' };
+  res.json({ user, identity });
 });
 
-app.put('/api/v1/users/me', (req, res) => {
-  if (!req.session || !req.session.user) return res.status(401).json({ error: 'unauthorized' });
+app.put('/api/v1/users/me', authenticate, (req, res) => {
   const userMdPath = path.join(__dirname, '..', '..', '..', 'USER.md');
   const fields = req.body || {};
   let md = fs.existsSync(userMdPath) ? fs.readFileSync(userMdPath, 'utf8') : '# USER.md\n\n';
@@ -374,9 +369,10 @@ app.put("/api/v1/preferences", authenticate, (req, res) => {
 // --- VAULT TOKENS (encrypted external API keys) ---
 app.post("/api/v1/vault/tokens", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can add vault tokens" });
-  const { label, description, token } = req.body;
-  if (!label || !token) return res.status(400).json({ error: "label and token are required" });
-  const vaultToken = createVaultToken(label, description, token);
+  const { name, label, description, token, service } = req.body;
+  const tokenLabel = name || label;
+  if (!tokenLabel || !token) return res.status(400).json({ error: "name and token are required" });
+  const vaultToken = createVaultToken(tokenLabel, description, token, service);
   createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "create_vault_token", resource: `/vault/tokens/${vaultToken.id}`, scope: req.tokenMeta.scope, ip: req.ip });
   res.status(201).json({ data: vaultToken });
 });
@@ -384,7 +380,16 @@ app.post("/api/v1/vault/tokens", authenticate, (req, res) => {
 app.get("/api/v1/vault/tokens", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can view vault tokens" });
   createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "list_vault_tokens", resource: "/vault/tokens", scope: req.tokenMeta.scope, ip: req.ip });
-  res.json({ data: getVaultTokens() });
+  const tokens = getVaultTokens();
+  res.json({ data: tokens, tokens });
+});
+
+app.get("/api/v1/vault/tokens/:id/reveal", authenticate, (req, res) => {
+  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can decrypt vault tokens" });
+  const vaultToken = decryptVaultToken(req.params.id);
+  if (!vaultToken) return res.status(404).json({ error: "Token not found" });
+  createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "reveal_vault_token", resource: `/vault/tokens/${req.params.id}`, scope: req.tokenMeta.scope, ip: req.ip });
+  res.json({ data: vaultToken });
 });
 
 app.delete("/api/v1/vault/tokens/:id", authenticate, (req, res) => {
@@ -1661,6 +1666,6 @@ app.get('/dashboard/*', (req, res) => {
 
 // --- Start ---
 bootstrap();
-app.listen(PORT, () => {
-  console.log(`Server ready on http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server ready on http://0.0.0.0:${PORT}`);
 });

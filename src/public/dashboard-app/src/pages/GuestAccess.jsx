@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
+import { useAuthStore } from '../stores/authStore';
 
-function GuestAccess({ token }) {
+function GuestAccess() {
+  const token = useAuthStore((state) => state.masterToken);
   const [tokens, setTokens] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showGenerator, setShowGenerator] = useState(false);

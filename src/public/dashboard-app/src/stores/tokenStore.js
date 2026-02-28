@@ -26,8 +26,14 @@ export const useTokenStore = create((set, get) => ({
       }
 
       const data = await response.json();
+      // Normalize tokenId → id for consistent field access across modals
+      const normalized = (data.data || []).map(t => ({
+        ...t,
+        id: t.id || t.tokenId,
+        name: t.label || t.name,
+      }));
       set({
-        tokens: data.data || [],
+        tokens: normalized,
         isLoading: false,
         error: null,
       });

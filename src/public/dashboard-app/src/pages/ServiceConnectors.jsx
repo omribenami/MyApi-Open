@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useServicesStore } from '../stores/servicesStore';
 import ServiceCard from '../components/ServiceCard';
-import RevokeConfirmationModal from '../components/RevokeConfirmationModal';
 import { startOAuthFlow, getServiceById, AVAILABLE_SERVICES } from '../utils/oauth';
 import { oauth } from '../utils/apiClient';
 
@@ -15,11 +14,10 @@ function ServiceConnectors() {
     isLoading,
     error,
     setError,
-    openConnectModal,
-    closeConnectModal,
     openRevokeModal,
     closeRevokeModal,
     showRevokeModal,
+    revokeServiceId,
   } = useServicesStore();
 
   const [isRevoking, setIsRevoking] = useState(false);
@@ -37,7 +35,7 @@ function ServiceConnectors() {
 
     try {
       const response = await oauth.getStatus();
-      const statuses = response.data.data || [];
+      const statuses = response.data.services || [];
 
       // Transform API response to component state
       const formattedServices = statuses.map((status) => ({
@@ -207,13 +205,34 @@ function ServiceConnectors() {
       )}
 
       {/* Revoke Confirmation Modal */}
-      {showRevokeModal && (
-        <RevokeConfirmationModal
-          service={services.find((s) => s.status === 'connected')}
-          onConfirm={handleRevoke}
-          isLoading={isRevoking}
-          error={error}
-        />
+      {showRevokeModal && revokeServiceId && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 border border-slate-700 rounded-lg max-w-md w-full p-6">
+            <h2 className="text-xl font-bold text-white mb-2">Disconnect Service?</h2>
+            <p className="text-slate-400 text-sm mb-4">
+              Are you sure you want to disconnect <span className="font-semibold text-white capitalize">{revokeServiceId}</span>? This will remove its OAuth access.
+            </p>
+            <div className="bg-red-900 bg-opacity-30 border border-red-700 rounded-lg p-3 mb-6">
+              <p className="text-sm text-red-200">Any integrations relying on this connection will stop working.</p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={closeRevokeModal}
+                disabled={isRevoking}
+                className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleRevoke(services.find((s) => s.name === revokeServiceId))}
+                disabled={isRevoking}
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
+              >
+                {isRevoking ? 'Disconnecting...' : 'Disconnect'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

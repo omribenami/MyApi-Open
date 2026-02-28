@@ -192,14 +192,21 @@ function initDatabase() {
   // Seed default scopes if not already present
   seedDefaultScopes();
 
+  // Add service column to vault_tokens if not already present (migration)
+  try {
+    db.exec('ALTER TABLE vault_tokens ADD COLUMN service TEXT');
+  } catch (e) {
+    // Column already exists — ignore
+  }
+
   console.log('Database initialized at:', dbPath);
 }
 
 // Vault Tokens
-function createVaultToken(label, description, token) {
+function createVaultToken(label, description, token, service) {
   const id = 'vt_' + crypto.randomBytes(16).toString('hex');
   const encryptionKey = process.env.VAULT_KEY || 'default-vault-key-change-me';
-  
+
   // Simple encryption using crypto (AES-256-CBC)
   const algorithm = 'aes-256-cbc';
   const key = crypto.scryptSync(encryptionKey, 'salt', 32);
@@ -209,21 +216,23 @@ function createVaultToken(label, description, token) {
   encrypted += cipher.final('hex');
   // Store IV with encrypted data
   encrypted = iv.toString('hex') + ':' + encrypted;
-  
+
   const tokenPreview = token.length > 8 ? token.slice(0, 4) + '***' + token.slice(-4) : '***';
   const now = new Date().toISOString();
 
   const stmt = db.prepare(`
-    INSERT INTO vault_tokens (id, label, description, encrypted_token, token_preview, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO vault_tokens (id, label, description, encrypted_token, token_preview, created_at, updated_at, service)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
-  stmt.run(id, label, description || null, encrypted, tokenPreview, now, now);
-  
+  stmt.run(id, label, description || null, encrypted, tokenPreview, now, now, service || null);
+
   return {
     id,
+    name: label,
     label,
     description,
+    service: service || null,
     tokenPreview,
     createdAt: now,
   };
@@ -231,18 +240,48 @@ function createVaultToken(label, description, token) {
 
 function getVaultTokens() {
   const stmt = db.prepare(`
-    SELECT id, label, description, token_preview, created_at, updated_at
+    SELECT id, label, description, token_preview, service, created_at, updated_at
     FROM vault_tokens
     ORDER BY created_at DESC
   `);
   return stmt.all().map(row => ({
     id: row.id,
+    name: row.label,
     label: row.label,
     description: row.description,
+    service: row.service,
     tokenPreview: row.token_preview,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }));
+}
+
+function decryptVaultToken(id) {
+  const encryptionKey = process.env.VAULT_KEY || 'default-vault-key-change-me';
+  const row = db.prepare('SELECT * FROM vault_tokens WHERE id = ?').get(id);
+  if (!row) return null;
+  try {
+    const algorithm = 'aes-256-cbc';
+    const key = crypto.scryptSync(encryptionKey, 'salt', 32);
+    const [ivHex, encryptedData] = row.encrypted_token.split(':');
+    const iv = Buffer.from(ivHex, 'hex');
+    const decipher = crypto.createDecipheriv(algorithm, key, iv);
+    let decrypted = decipher.update(encryptedData, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return {
+      id: row.id,
+      name: row.label,
+      label: row.label,
+      description: row.description,
+      service: row.service,
+      token: decrypted,
+      tokenPreview: row.token_preview,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  } catch (e) {
+    return null;
+  }
 }
 
 function deleteVaultToken(id) {
@@ -1155,6 +1194,7 @@ module.exports = {
   createVaultToken,
   getVaultTokens,
   deleteVaultToken,
+  decryptVaultToken,
   createAccessToken,
   getAccessTokens,
   revokeAccessToken,

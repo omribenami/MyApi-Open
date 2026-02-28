@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import DashboardHome from './pages/DashboardHome';
 import ServiceConnectors from './pages/ServiceConnectors';
 import TokenVault from './pages/TokenVault';
+import APIKeys from './pages/APIKeys';
 import GuestAccess from './pages/GuestAccess';
 import Personas from './pages/Personas';
 import KnowledgeBase from './pages/KnowledgeBase';
@@ -62,6 +63,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <ServiceConnectors />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/api-keys"
+              element={
+                <ProtectedRoute>
+                  <APIKeys />
                 </ProtectedRoute>
               }
             />
