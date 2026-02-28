@@ -1,0 +1,49 @@
+{
+  "name": "myapi-platform",
+  "version": "0.1.0",
+  "description": "Personal API platform with Vault, Gateway, and Brain",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "build:frontend": "cd public/dashboard-app && npm run build",
+    "init": "node scripts/init-db.js",
+    "test": "cd ../tests && node run-all-tests.js",
+    "test:phase5": "cd ../tests && node test-phase5-gateway-context.js",
+    "test:phase6": "cd ../tests && node test-phase6-persona-manager.js",
+    "test:phase7": "cd ../tests && node test-phase7-oauth.js",
+    "test:security": "cd ../tests && node test-security.js",
+    "test:audit": "cd ../tests && node test-audit-logging.js"
+  },
+  "keywords": [
+    "api",
+    "identity",
+    "privacy",
+    "vault"
+  ],
+  "author": "MyApi Team",
+  "license": "MIT",
+  "dependencies": {
+    "bcrypt": "^5.1.1",
+    "better-sqlite3": "^9.6.0",
+    "cors": "^2.8.5",
+    "crypto-js": "^4.2.0",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "express-session": "^1.19.0",
+    "express-validator": "^7.0.1",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "speakeasy": "^2.0.0",
+    "uuid": "^9.0.1",
+    "@langchain/core": "^0.1.0",
+    "@langchain/openai": "^0.0.11",
+    "langchain": "^0.1.0",
+    "marked": "^11.1.0",
+    "axios": "^1.6.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
