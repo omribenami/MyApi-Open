@@ -253,10 +253,56 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_marketplace_listings_type ON marketplace_listings(type);
     CREATE INDEX IF NOT EXISTS idx_marketplace_listings_status ON marketplace_listings(status);
     CREATE INDEX IF NOT EXISTS idx_marketplace_ratings_listing ON marketplace_ratings(listing_id);
+
+    CREATE TABLE IF NOT EXISTS service_categories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      label TEXT NOT NULL,
+      icon TEXT,
+      description TEXT,
+      color TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS services (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      label TEXT NOT NULL,
+      category_id INTEGER NOT NULL,
+      icon TEXT,
+      description TEXT,
+      auth_type TEXT NOT NULL,
+      api_endpoint TEXT,
+      documentation_url TEXT,
+      active INTEGER DEFAULT 1,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (category_id) REFERENCES service_categories(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS service_api_methods (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      service_id INTEGER NOT NULL,
+      method_name TEXT NOT NULL,
+      http_method TEXT DEFAULT 'GET',
+      endpoint TEXT NOT NULL,
+      description TEXT,
+      parameters TEXT,
+      response_example TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (service_id) REFERENCES services(id),
+      UNIQUE(service_id, method_name)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_services_category ON services(category_id);
+    CREATE INDEX IF NOT EXISTS idx_service_api_methods_service ON service_api_methods(service_id);
   `);
 
   // Seed default scopes if not already present
   seedDefaultScopes();
+
+  // Seed service categories and services
+  seedServiceCategories();
+  seedServices();
 
   // Add service column to vault_tokens if not already present (migration)
   try {
@@ -1544,6 +1590,159 @@ function getMyMarketplaceListings(ownerId) {
   `).all(ownerId).map(_formatListing);
 }
 
+// Services & Categories
+function seedServiceCategories() {
+  const categories = [
+    { name: 'social', label: '🌐 Social Media', icon: 'Share2', color: '#3B82F6' },
+    { name: 'dev', label: '👨‍💻 Development', icon: 'Code', color: '#8B5CF6' },
+    { name: 'productivity', label: '📊 Productivity', icon: 'Zap', color: '#F59E0B' },
+    { name: 'payment', label: '💳 Payment', icon: 'CreditCard', color: '#10B981' },
+    { name: 'communication', label: '💬 Communication', icon: 'MessageSquare', color: '#EC4899' },
+    { name: 'cloud', label: '☁️ Cloud', icon: 'Cloud', color: '#06B6D4' },
+    { name: 'analytics', label: '📈 Analytics', icon: 'BarChart3', color: '#EF4444' },
+  ];
+
+  const checkStmt = db.prepare('SELECT COUNT(*) as count FROM service_categories');
+  const result = checkStmt.get();
+  
+  if (result.count === 0) {
+    const now = new Date().toISOString();
+    const insertStmt = db.prepare(`
+      INSERT INTO service_categories (name, label, icon, color, created_at)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+
+    for (const cat of categories) {
+      insertStmt.run(cat.name, cat.label, cat.icon, cat.color, now);
+    }
+    console.log('Seeded service categories');
+  }
+}
+
+function seedServices() {
+  const services = [
+    // Social Media
+    { name: 'twitter', label: 'Twitter/X', category: 'social', icon: 'Twitter', auth: 'oauth2', endpoint: 'https://api.twitter.com/2', docs: 'https://developer.twitter.com' },
+    { name: 'linkedin', label: 'LinkedIn', category: 'social', icon: 'Linkedin', auth: 'oauth2', endpoint: 'https://api.linkedin.com/v2', docs: 'https://docs.microsoft.com/en-us/linkedin' },
+    { name: 'instagram', label: 'Instagram', category: 'social', icon: 'Instagram', auth: 'oauth2', endpoint: 'https://graph.instagram.com', docs: 'https://developers.facebook.com/docs/instagram' },
+    { name: 'tiktok', label: 'TikTok', category: 'social', icon: 'Music', auth: 'oauth2', endpoint: 'https://open.tiktok.com/v1', docs: 'https://developers.tiktok.com' },
+    { name: 'youtube', label: 'YouTube', category: 'social', icon: 'Youtube', auth: 'oauth2', endpoint: 'https://www.googleapis.com/youtube/v3', docs: 'https://developers.google.com/youtube' },
+    { name: 'twitch', label: 'Twitch', category: 'social', icon: 'Twitch', auth: 'oauth2', endpoint: 'https://api.twitch.tv/helix', docs: 'https://dev.twitch.tv/docs/api' },
+    { name: 'bluesky', label: 'Bluesky', category: 'social', icon: 'Share2', auth: 'jwt', endpoint: 'https://bsky.social/xrpc', docs: 'https://docs.bsky.app' },
+    { name: 'mastodon', label: 'Mastodon', category: 'social', icon: 'Share2', auth: 'oauth2', endpoint: 'https://mastodon.social/api/v1', docs: 'https://docs.joinmastodon.org' },
+    
+    // Development
+    { name: 'gitlab', label: 'GitLab', category: 'dev', icon: 'GitBranch', auth: 'oauth2', endpoint: 'https://gitlab.com/api/v4', docs: 'https://docs.gitlab.com/ee/api' },
+    { name: 'bitbucket', label: 'Bitbucket', category: 'dev', icon: 'GitBranch', auth: 'oauth2', endpoint: 'https://api.bitbucket.org/2.0', docs: 'https://developer.atlassian.com/cloud/bitbucket' },
+    { name: 'azuredevops', label: 'Azure DevOps', category: 'dev', icon: 'Package', auth: 'oauth2', endpoint: 'https://dev.azure.com', docs: 'https://docs.microsoft.com/en-us/rest/api/azure/devops' },
+    { name: 'travisci', label: 'Travis CI', category: 'dev', icon: 'Zap', auth: 'token', endpoint: 'https://api.travis-ci.com', docs: 'https://docs.travis-ci.com/api' },
+    { name: 'circleci', label: 'CircleCI', category: 'dev', icon: 'Zap', auth: 'token', endpoint: 'https://circleci.com/api/v2', docs: 'https://circleci.com/docs/api/v2' },
+    { name: 'gitea', label: 'Gitea', category: 'dev', icon: 'GitBranch', auth: 'oauth2', endpoint: 'https://api.gitea.io', docs: 'https://docs.gitea.io/en-us/api-usage' },
+    
+    // Productivity
+    { name: 'notion', label: 'Notion', category: 'productivity', icon: 'FileText', auth: 'oauth2', endpoint: 'https://api.notion.com/v1', docs: 'https://developers.notion.com' },
+    { name: 'airtable', label: 'Airtable', category: 'productivity', icon: 'Grid', auth: 'token', endpoint: 'https://api.airtable.com/v0', docs: 'https://airtable.com/developers/web/api' },
+    { name: 'asana', label: 'Asana', category: 'productivity', icon: 'CheckSquare', auth: 'oauth2', endpoint: 'https://app.asana.com/api/1.0', docs: 'https://developers.asana.com' },
+    { name: 'monday', label: 'Monday.com', category: 'productivity', icon: 'Calendar', auth: 'token', endpoint: 'https://api.monday.com/graphql', docs: 'https://monday.com/developers' },
+    { name: 'trello', label: 'Trello', category: 'productivity', icon: 'Layout', auth: 'oauth2', endpoint: 'https://api.trello.com/1', docs: 'https://developer.atlassian.com/cloud/trello' },
+    { name: 'jira', label: 'Jira', category: 'productivity', icon: 'CheckCircle', auth: 'oauth2', endpoint: 'https://your-domain.atlassian.net/rest/api/2', docs: 'https://developer.atlassian.com/cloud/jira' },
+    { name: 'clickup', label: 'ClickUp', category: 'productivity', icon: 'CheckSquare', auth: 'token', endpoint: 'https://api.clickup.com/api/v2', docs: 'https://clickup.com/api' },
+    { name: 'linear', label: 'Linear', category: 'productivity', icon: 'Inbox', auth: 'token', endpoint: 'https://api.linear.app/graphql', docs: 'https://developers.linear.app' },
+    
+    // Payment
+    { name: 'stripe', label: 'Stripe', category: 'payment', icon: 'CreditCard', auth: 'key', endpoint: 'https://api.stripe.com/v1', docs: 'https://stripe.com/docs/api' },
+    { name: 'paypal', label: 'PayPal', category: 'payment', icon: 'DollarSign', auth: 'oauth2', endpoint: 'https://api-m.paypal.com', docs: 'https://developer.paypal.com' },
+    { name: 'shopify', label: 'Shopify', category: 'payment', icon: 'ShoppingCart', auth: 'oauth2', endpoint: 'https://your-store.myshopify.com/admin/api/2024-01', docs: 'https://shopify.dev/api/admin-rest' },
+    { name: 'square', label: 'Square', category: 'payment', icon: 'CreditCard', auth: 'oauth2', endpoint: 'https://api.square.com/v2', docs: 'https://developer.squareup.com' },
+    
+    // Communication
+    { name: 'email', label: 'Email/SMTP', category: 'communication', icon: 'Mail', auth: 'oauth2', endpoint: 'smtp.gmail.com', docs: 'https://support.google.com/mail' },
+    { name: 'telegram', label: 'Telegram', category: 'communication', icon: 'Send', auth: 'token', endpoint: 'https://api.telegram.org/bot', docs: 'https://core.telegram.org/bots/api' },
+    { name: 'signal', label: 'Signal', category: 'communication', icon: 'Lock', auth: 'webhook', endpoint: 'https://signal.org', docs: 'https://signal.org/docs' },
+    { name: 'matrix', label: 'Matrix', category: 'communication', icon: 'MessageSquare', auth: 'token', endpoint: 'https://matrix.org/_matrix', docs: 'https://spec.matrix.org/latest' },
+    { name: 'mattermost', label: 'Mattermost', category: 'communication', icon: 'MessageSquare', auth: 'oauth2', endpoint: 'https://mattermost.example.com/api/v4', docs: 'https://developers.mattermost.com' },
+    
+    // Cloud
+    { name: 'aws', label: 'Amazon AWS', category: 'cloud', icon: 'Cloud', auth: 'key', endpoint: 'https://aws.amazon.com', docs: 'https://docs.aws.amazon.com' },
+    { name: 'azure', label: 'Microsoft Azure', category: 'cloud', icon: 'Cloud', auth: 'oauth2', endpoint: 'https://management.azure.com', docs: 'https://docs.microsoft.com/en-us/azure' },
+    { name: 'gcp', label: 'Google Cloud', category: 'cloud', icon: 'Cloud', auth: 'key', endpoint: 'https://www.googleapis.com', docs: 'https://cloud.google.com/docs' },
+    { name: 'digitalocean', label: 'DigitalOcean', category: 'cloud', icon: 'Cloud', auth: 'token', endpoint: 'https://api.digitalocean.com/v2', docs: 'https://docs.digitalocean.com/reference/api' },
+    
+    // Analytics
+    { name: 'mixpanel', label: 'Mixpanel', category: 'analytics', icon: 'BarChart3', auth: 'token', endpoint: 'https://api.mixpanel.com', docs: 'https://developer.mixpanel.com' },
+    { name: 'segment', label: 'Segment', category: 'analytics', icon: 'TrendingUp', auth: 'token', endpoint: 'https://api.segment.com', docs: 'https://segment.com/docs/api' },
+    { name: 'googleanalytics', label: 'Google Analytics', category: 'analytics', icon: 'BarChart3', auth: 'oauth2', endpoint: 'https://www.googleapis.com/analytics/v3', docs: 'https://developers.google.com/analytics' },
+  ];
+
+  const checkStmt = db.prepare('SELECT COUNT(*) as count FROM services');
+  const result = checkStmt.get();
+  
+  if (result.count === 0) {
+    const getCategoryId = db.prepare('SELECT id FROM service_categories WHERE name = ?');
+    const now = new Date().toISOString();
+    const insertStmt = db.prepare(`
+      INSERT INTO services (name, label, category_id, icon, auth_type, api_endpoint, documentation_url, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    for (const srv of services) {
+      const catId = getCategoryId.get(srv.category).id;
+      insertStmt.run(srv.name, srv.label, catId, srv.icon, srv.auth, srv.endpoint, srv.docs, now);
+    }
+    console.log('Seeded services');
+  }
+}
+
+function getServiceCategories() {
+  return db.prepare('SELECT * FROM service_categories ORDER BY name').all();
+}
+
+function getServices() {
+  return db.prepare(`
+    SELECT s.*, sc.name as category_name, sc.label as category_label
+    FROM services s
+    JOIN service_categories sc ON s.category_id = sc.id
+    WHERE s.active = 1
+    ORDER BY sc.name, s.label
+  `).all();
+}
+
+function getServicesByCategory(categoryName) {
+  return db.prepare(`
+    SELECT s.*, sc.name as category_name, sc.label as category_label
+    FROM services s
+    JOIN service_categories sc ON s.category_id = sc.id
+    WHERE sc.name = ? AND s.active = 1
+    ORDER BY s.label
+  `).all(categoryName);
+}
+
+function getServiceByName(name) {
+  return db.prepare(`
+    SELECT s.*, sc.name as category_name, sc.label as category_label
+    FROM services s
+    JOIN service_categories sc ON s.category_id = sc.id
+    WHERE s.name = ?
+  `).get(name);
+}
+
+function getServiceMethods(serviceId) {
+  return db.prepare(`
+    SELECT * FROM service_api_methods
+    WHERE service_id = ?
+    ORDER BY method_name
+  `).all(serviceId);
+}
+
+function addServiceMethod(serviceId, methodName, httpMethod, endpoint, description, params, responseExample) {
+  const now = new Date().toISOString();
+  const stmt = db.prepare(`
+    INSERT INTO service_api_methods (service_id, method_name, http_method, endpoint, description, parameters, response_example, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  stmt.run(serviceId, methodName, httpMethod, endpoint, description, params ? JSON.stringify(params) : null, responseExample, now);
+}
+
 module.exports = {
   db,
   initDatabase,
@@ -1625,4 +1824,13 @@ module.exports = {
   rateMarketplaceListing,
   incrementInstallCount,
   getMyMarketplaceListings,
+  // Services
+  seedServiceCategories,
+  seedServices,
+  getServiceCategories,
+  getServices,
+  getServicesByCategory,
+  getServiceByName,
+  getServiceMethods,
+  addServiceMethod,
 };

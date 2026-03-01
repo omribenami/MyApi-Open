@@ -71,6 +71,15 @@ const {
   rateMarketplaceListing,
   incrementInstallCount,
   getMyMarketplaceListings,
+  // Services
+  seedServiceCategories,
+  seedServices,
+  getServiceCategories,
+  getServices,
+  getServicesByCategory,
+  getServiceByName,
+  getServiceMethods,
+  addServiceMethod,
 } = require("./database");
 
 // OAuth service adapters
@@ -1434,6 +1443,134 @@ app.get("/api/v1/oauth/test/:service", authenticate, async (req, res) => {
   } catch (error) {
     console.error(`OAuth test error for ${service}:`, error.message);
     res.status(500).json({ error: "Failed to test token", message: error.message });
+  }
+});
+
+// ===== SERVICES & INTEGRATIONS =====
+
+// Get all service categories
+app.get('/api/v1/services/categories', authenticate, (req, res) => {
+  try {
+    const { getServiceCategories } = require('./database');
+    const categories = getServiceCategories();
+    res.json({ data: categories });
+  } catch (err) {
+    console.error('Service categories error:', err);
+    res.status(500).json({ error: 'Failed to get categories' });
+  }
+});
+
+// Get all services (optionally filter by category)
+app.get('/api/v1/services', authenticate, (req, res) => {
+  try {
+    const { category } = req.query;
+    const { getServices, getServicesByCategory } = require('./database');
+    
+    let services;
+    if (category) {
+      services = getServicesByCategory(category);
+    } else {
+      services = getServices();
+    }
+    
+    res.json({ data: services, count: services.length });
+  } catch (err) {
+    console.error('Services list error:', err);
+    res.status(500).json({ error: 'Failed to get services' });
+  }
+});
+
+// Get specific service details
+app.get('/api/v1/services/:name', authenticate, (req, res) => {
+  try {
+    const { getServiceByName, getServiceMethods } = require('./database');
+    const service = getServiceByName(req.params.name);
+    
+    if (!service) {
+      return res.status(404).json({ error: 'Service not found' });
+    }
+    
+    const methods = getServiceMethods(service.id);
+    
+    res.json({
+      data: {
+        ...service,
+        methods: methods
+      }
+    });
+  } catch (err) {
+    console.error('Service detail error:', err);
+    res.status(500).json({ error: 'Failed to get service' });
+  }
+});
+
+// Get service API methods
+app.get('/api/v1/services/:serviceId/methods', authenticate, (req, res) => {
+  try {
+    const { getServiceMethods } = require('./database');
+    const methods = getServiceMethods(parseInt(req.params.serviceId));
+    
+    res.json({ data: methods, count: methods.length });
+  } catch (err) {
+    console.error('Service methods error:', err);
+    res.status(500).json({ error: 'Failed to get service methods' });
+  }
+});
+
+// Execute a service API call (AI communication layer)
+app.post('/api/v1/services/:serviceName/execute', authenticate, async (req, res) => {
+  try {
+    const { serviceName } = req.params;
+    const { method, params } = req.body;
+    
+    if (!method) {
+      return res.status(400).json({ error: 'method is required' });
+    }
+    
+    const { getServiceByName, getOAuthToken } = require('./database');
+    const service = getServiceByName(serviceName);
+    
+    if (!service) {
+      return res.status(404).json({ error: 'Service not found' });
+    }
+    
+    // Check if user has connected this service (OAuth token)
+    const token = getOAuthToken(serviceName, 'owner');
+    if (!token && service.auth_type !== 'webhook') {
+      return res.status(403).json({ error: `Service '${serviceName}' not connected. Please connect it first.` });
+    }
+    
+    // Execute the API call
+    // This is a placeholder - in reality, each service would have an adapter
+    // that knows how to execute methods specific to that service
+    
+    // For now, return a stub response showing the structure
+    const result = {
+      service: serviceName,
+      method: method,
+      status: 'executed',
+      timestamp: new Date().toISOString(),
+      // In production, this would contain actual API response
+      response: {
+        message: `${method} called on ${serviceName}`,
+        params: params || {}
+      }
+    };
+    
+    // Log the execution
+    createAuditLog({
+      requesterId: req.tokenMeta.tokenId,
+      action: 'service_execute',
+      resource: `/services/${serviceName}/execute`,
+      scope: req.tokenMeta.scope,
+      ip: req.ip,
+      details: { service: serviceName, method, params }
+    });
+    
+    res.json({ data: result });
+  } catch (err) {
+    console.error('Service execution error:', err);
+    res.status(500).json({ error: 'Failed to execute service method' });
   }
 });
 
