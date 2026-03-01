@@ -876,6 +876,50 @@ app.post("/api/v1/auth/login", (req, res) => {
   res.json({ data: { token: sessionToken, user: { id: user.id, username: user.username, displayName: user.displayName, email: user.email, timezone: user.timezone } } });
 });
 
+// Token-based login (for API access tokens)
+app.post("/api/v1/auth/token-login", (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(400).json({ error: "token is required" });
+  
+  // Verify token against stored tokens
+  const tokens = getAccessTokens();
+  const tokenRecord = tokens.find(t => {
+    // Check if token matches the hash
+    return bcrypt.compareSync(token, t.hash);
+  });
+  
+  if (!tokenRecord || tokenRecord.revokedAt) {
+    return res.status(401).json({ error: "Invalid or revoked token" });
+  }
+  
+  // Create session
+  const sessionToken = crypto.randomBytes(32).toString('hex');
+  if (!global.sessions) global.sessions = {};
+  global.sessions[sessionToken] = { 
+    tokenId: tokenRecord.tokenId,
+    ownerId: tokenRecord.ownerId,
+    scope: tokenRecord.scope,
+    createdAt: Date.now() 
+  };
+  
+  createAuditLog({ 
+    requesterId: tokenRecord.tokenId, 
+    action: "token_login", 
+    resource: "/auth/token-login", 
+    scope: tokenRecord.scope, 
+    ip: req.ip 
+  });
+  
+  res.json({ 
+    data: { 
+      sessionToken, 
+      token: tokenRecord.tokenId,
+      scope: tokenRecord.scope,
+      message: "Token authentication successful"
+    } 
+  });
+});
+
 app.get("/api/v1/auth/me", (req, res) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) return res.status(401).json({ error: "Not authenticated" });
