@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { usePersonaStore } from '../stores/personaStore';
 import CreatePersonaModal from '../components/CreatePersonaModal';
@@ -26,7 +27,11 @@ function Personas() {
     openSetActiveConfirmation,
   } = usePersonaStore();
 
+  const navigate = useNavigate();
   const [fetchError, setFetchError] = useState(null);
+  const [personaTokens, setPersonaTokens] = useState({}); // {personaId: {token, copied}}
+  const [publishingId, setPublishingId] = useState(null);
+  const [generatingTokenId, setGeneratingTokenId] = useState(null);
 
   useEffect(() => {
     if (masterToken) {
@@ -213,6 +218,93 @@ function Personas() {
     }
   };
 
+  const handlePublishToMarketplace = async (persona) => {
+    setPublishingId(persona.id);
+    try {
+      const response = await fetch('/api/v1/marketplace', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${masterToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          type: 'persona',
+          title: persona.name,
+          description: persona.description || '',
+          content: JSON.stringify({
+            soul_content: persona.soul_content || '',
+            traits: persona.traits || [],
+          }),
+          tags: (persona.traits || []).join(', '),
+        }),
+      });
+
+      if (response.ok) {
+        navigate('/my-listings');
+      } else {
+        const err = await response.json();
+        setError(err.error || 'Failed to publish');
+      }
+    } catch (err) {
+      setError('Failed to publish to marketplace');
+    } finally {
+      setPublishingId(null);
+    }
+  };
+
+  const handleGenerateToken = async (persona) => {
+    setGeneratingTokenId(persona.id);
+    try {
+      const response = await fetch('/api/v1/tokens', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${masterToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          label: `Persona: ${persona.name}`,
+          scopes: ['personas', 'read', 'chat'],
+          expiresInHours: null,
+          allowedPersonas: [persona.id],
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const token = data.data?.token || data.token;
+        setPersonaTokens(prev => ({
+          ...prev,
+          [persona.id]: { token, copied: false },
+        }));
+      } else {
+        const err = await response.json();
+        setError(err.error || 'Failed to generate token');
+      }
+    } catch (err) {
+      setError('Failed to generate token');
+    } finally {
+      setGeneratingTokenId(null);
+    }
+  };
+
+  const handleCopyToken = async (personaId) => {
+    const tokenData = personaTokens[personaId];
+    if (!tokenData?.token) return;
+    try {
+      await navigator.clipboard.writeText(tokenData.token);
+      setPersonaTokens(prev => ({
+        ...prev,
+        [personaId]: { ...prev[personaId], copied: true },
+      }));
+      setTimeout(() => {
+        setPersonaTokens(prev => ({
+          ...prev,
+          [personaId]: { ...prev[personaId], copied: false },
+        }));
+      }, 2000);
+    } catch {}
+  };
+
   if (isLoading && personas.length === 0) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -357,6 +449,27 @@ function Personas() {
                 </div>
               )}
 
+              {/* Persona Token */}
+              {personaTokens[persona.id] && (
+                <div className="mb-4 p-3 bg-slate-900 rounded-lg border border-slate-700">
+                  <p className="text-xs text-slate-400 mb-2">Persona Token — copy it now</p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-xs text-green-300 font-mono break-all bg-slate-800 p-2 rounded">
+                      {personaTokens[persona.id].token}
+                    </code>
+                    <button
+                      onClick={() => handleCopyToken(persona.id)}
+                      className="px-3 py-1.5 text-xs text-blue-400 hover:text-blue-300 bg-slate-700 rounded flex-shrink-0"
+                    >
+                      {personaTokens[persona.id].copied ? '✓ Copied!' : '📋 Copy'}
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-2">
+                    API: GET /api/v1/context • Scoped to this persona only
+                  </p>
+                </div>
+              )}
+
               {/* Actions */}
               <div className="flex gap-2 pt-4 border-t border-slate-700">
                 <button
@@ -379,11 +492,29 @@ function Personas() {
                 </button>
               </div>
 
+              {/* Publish & Token buttons */}
+              <div className="flex gap-2 mt-2">
+                <button
+                  onClick={() => handlePublishToMarketplace(persona)}
+                  disabled={publishingId === persona.id}
+                  className="flex-1 px-3 py-2 text-sm font-medium text-purple-400 hover:text-purple-200 hover:bg-purple-900 hover:bg-opacity-30 rounded transition-colors border border-transparent hover:border-purple-700 disabled:opacity-50"
+                >
+                  {publishingId === persona.id ? '⏳ Publishing...' : '🏪 Publish'}
+                </button>
+                <button
+                  onClick={() => handleGenerateToken(persona)}
+                  disabled={generatingTokenId === persona.id}
+                  className="flex-1 px-3 py-2 text-sm font-medium text-amber-400 hover:text-amber-200 hover:bg-amber-900 hover:bg-opacity-30 rounded transition-colors border border-transparent hover:border-amber-700 disabled:opacity-50"
+                >
+                  {generatingTokenId === persona.id ? '⏳ Generating...' : '🔑 Get Token'}
+                </button>
+              </div>
+
               {/* Set Active Button */}
               {!persona.active && (
                 <button
                   onClick={() => openSetActiveConfirmation(persona.id)}
-                  className="w-full mt-3 px-3 py-2 text-sm font-medium text-green-400 hover:text-green-200 hover:bg-green-900 hover:bg-opacity-30 rounded transition-colors border border-transparent hover:border-green-700"
+                  className="w-full mt-2 px-3 py-2 text-sm font-medium text-green-400 hover:text-green-200 hover:bg-green-900 hover:bg-opacity-30 rounded transition-colors border border-transparent hover:border-green-700"
                 >
                   ⭐ Set as Active
                 </button>
