@@ -13,6 +13,7 @@ function Layout({ children, onLogout }) {
     { path: '/tokens', label: 'Token Vault', icon: '🔐' },
     { path: '/access-tokens', label: 'Access Tokens', icon: '🔑' },
     { path: '/personas', label: 'Personas', icon: '🤖' },
+    { path: '/skills', label: 'Skills', icon: '🧩' },
     { path: '/identity', label: 'Identity', icon: '🪪' },
     { path: '/knowledge', label: 'Knowledge', icon: '🧠' },
     { path: '/marketplace', label: 'Marketplace', icon: '🏪' },

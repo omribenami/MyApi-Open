@@ -196,6 +196,31 @@ function initDatabase() {
       UNIQUE(persona_id, document_id)
     );
 
+    CREATE TABLE IF NOT EXISTS skills (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      description TEXT,
+      version TEXT DEFAULT '1.0.0',
+      author TEXT,
+      category TEXT DEFAULT 'custom',
+      script_content TEXT,
+      config_json TEXT,
+      active INTEGER DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS skill_documents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      skill_id INTEGER NOT NULL,
+      document_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE(skill_id, document_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_skills_active ON skills(active);
+    CREATE INDEX IF NOT EXISTS idx_skill_documents_skill ON skill_documents(skill_id);
+
     CREATE TABLE IF NOT EXISTS marketplace_listings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       owner_id TEXT NOT NULL,
@@ -1278,6 +1303,95 @@ function detachDocumentFromPersona(personaId, documentId) {
   return result.changes > 0;
 }
 
+// Skills
+function createSkill(name, description, version, author, category, scriptContent, configJson) {
+  const now = new Date().toISOString();
+  const stmt = db.prepare(`
+    INSERT INTO skills (name, description, version, author, category, script_content, config_json, active, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+  `);
+  const result = stmt.run(name, description || null, version || '1.0.0', author || null, category || 'custom', scriptContent || null, configJson || null, now, now);
+  return getSkillById(result.lastInsertRowid);
+}
+
+function getSkills() {
+  return db.prepare('SELECT * FROM skills ORDER BY created_at DESC').all().map(row => ({
+    ...row, active: Boolean(row.active),
+    config_json: row.config_json ? (() => { try { return JSON.parse(row.config_json); } catch { return row.config_json; } })() : null,
+  }));
+}
+
+function getSkillById(id) {
+  const row = db.prepare('SELECT * FROM skills WHERE id = ?').get(id);
+  if (!row) return null;
+  return {
+    ...row, active: Boolean(row.active),
+    config_json: row.config_json ? (() => { try { return JSON.parse(row.config_json); } catch { return row.config_json; } })() : null,
+  };
+}
+
+function updateSkill(id, updates) {
+  const skill = getSkillById(id);
+  if (!skill) return null;
+  const now = new Date().toISOString();
+  const name = updates.name !== undefined ? updates.name : skill.name;
+  const description = updates.description !== undefined ? updates.description : skill.description;
+  const version = updates.version !== undefined ? updates.version : skill.version;
+  const author = updates.author !== undefined ? updates.author : skill.author;
+  const category = updates.category !== undefined ? updates.category : skill.category;
+  const scriptContent = updates.script_content !== undefined ? updates.script_content : skill.script_content;
+  const configJson = updates.config_json !== undefined
+    ? (typeof updates.config_json === 'object' ? JSON.stringify(updates.config_json) : updates.config_json)
+    : (typeof skill.config_json === 'object' ? JSON.stringify(skill.config_json) : skill.config_json);
+
+  db.prepare(`
+    UPDATE skills SET name=?, description=?, version=?, author=?, category=?, script_content=?, config_json=?, updated_at=? WHERE id=?
+  `).run(name, description, version, author, category, scriptContent, configJson, now, id);
+  return getSkillById(id);
+}
+
+function deleteSkill(id) {
+  db.prepare('DELETE FROM skill_documents WHERE skill_id = ?').run(id);
+  const result = db.prepare('DELETE FROM skills WHERE id = ?').run(id);
+  return result.changes > 0;
+}
+
+function setActiveSkill(id) {
+  const skill = getSkillById(id);
+  if (!skill) return null;
+  const now = new Date().toISOString();
+  db.prepare('UPDATE skills SET active = 0 WHERE id != ?').run(id);
+  db.prepare('UPDATE skills SET active = 1, updated_at = ? WHERE id = ?').run(now, id);
+  return getSkillById(id);
+}
+
+function getSkillDocuments(skillId) {
+  return db.prepare(`
+    SELECT sd.document_id, kd.title, kd.source, kd.created_at
+    FROM skill_documents sd
+    JOIN kb_documents kd ON sd.document_id = kd.id
+    WHERE sd.skill_id = ?
+    ORDER BY sd.created_at DESC
+  `).all(skillId).map(r => ({
+    documentId: r.document_id, title: r.title, source: r.source, createdAt: r.created_at,
+  }));
+}
+
+function attachDocumentToSkill(skillId, documentId) {
+  const now = new Date().toISOString();
+  try {
+    db.prepare('INSERT INTO skill_documents (skill_id, document_id, created_at) VALUES (?, ?, ?)').run(skillId, documentId, now);
+    return true;
+  } catch (e) {
+    if (e.code === 'SQLITE_CONSTRAINT_UNIQUE') return false;
+    throw e;
+  }
+}
+
+function detachDocumentFromSkill(skillId, documentId) {
+  return db.prepare('DELETE FROM skill_documents WHERE skill_id = ? AND document_id = ?').run(skillId, documentId).changes > 0;
+}
+
 // Marketplace
 function _formatListing(row) {
   return {
@@ -1489,6 +1603,16 @@ module.exports = {
   getKBDocuments,
   getKBDocumentById,
   deleteKBDocument,
+  // Skills
+  createSkill,
+  getSkills,
+  getSkillById,
+  updateSkill,
+  deleteSkill,
+  setActiveSkill,
+  getSkillDocuments,
+  attachDocumentToSkill,
+  detachDocumentFromSkill,
   // Marketplace
   createMarketplaceListing,
   getPersonaDocuments,

@@ -13,6 +13,7 @@ import Identity from './pages/Identity';
 import Settings from './pages/Settings';
 import Marketplace from './pages/Marketplace';
 import MyListings from './pages/MyListings';
+import Skills from './pages/Skills';
 import Layout from './components/Layout';
 
 // Create React Query client
@@ -112,6 +113,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Settings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/skills"
+              element={
+                <ProtectedRoute>
+                  <Skills />
                 </ProtectedRoute>
               }
             />
