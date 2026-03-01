@@ -1,7 +1,7 @@
 import { formatServiceStatus, formatLastSynced, getServiceById } from '../utils/oauth';
 import { useServicesStore } from '../stores/servicesStore';
 
-function ServiceCard({ service, onConnect, onRevoke }) {
+function ServiceCard({ service, onConnect, onRevoke, onDetails }) {
   // Support both old format (from AVAILABLE_SERVICES) and new API format
   const serviceInfo = getServiceById(service.name) || {
     name: service.label || service.name,
@@ -20,10 +20,11 @@ function ServiceCard({ service, onConnect, onRevoke }) {
 
   return (
     <div
-      className={`relative bg-slate-800 border-2 rounded-lg overflow-hidden transition-all duration-200 ${
+      onClick={() => onDetails && onDetails(service)}
+      className={`relative bg-slate-800 border-2 rounded-lg overflow-hidden transition-all duration-200 cursor-pointer ${
         isSelected
           ? 'border-blue-500 shadow-lg shadow-blue-500/20'
-          : 'border-slate-700 hover:border-slate-600'
+          : 'border-slate-700 hover:border-slate-600 hover:shadow-lg'
       }`}
     >
       {/* Header */}
