@@ -1,1 +1,0 @@
-Security scan results show all new skills pass static checks. Proceed with installation when consented by user.

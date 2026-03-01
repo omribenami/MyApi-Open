@@ -1,9 +1,0 @@
-Patch plan (Milestone 1a): MFA-enabled login groundwork
-- Patch 1: Add speakeasy to dependencies
-- Patch 2: Extend DB (add mfa_secret text, mfa_verified int)
-- Patch 3: MFA endpoints (/api/v1/auth/mfa/setup, /api/v1/auth/mfa/verify)
-- Patch 4: Extend /api/v1/auth/register to seed MFA secret and set upto enrollment
-- Patch 5: Extend /api/v1/auth/login to enforce MFA
-- Patch 6: Frontend login MFA prompt UI
-- Patch 7: Onboarding triggers MFA enrollment
-- Patch 8: Tests and smoke checks

@@ -2,26 +2,29 @@ import { useState, useEffect } from 'react';
 import { useTokenStore } from '../stores/tokenStore';
 import { useAuthStore } from '../stores/authStore';
 
+const AVAILABLE_SCOPES = [
+  { value: 'read', label: 'Basic Read', description: 'Name, role, company' },
+  { value: 'professional', label: 'Professional', description: 'Skills, education, experience' },
+  { value: 'availability', label: 'Availability', description: 'Calendar, timezone' },
+  { value: 'personas', label: 'Personas', description: 'Public persona profiles' },
+  { value: 'knowledge', label: 'Knowledge', description: 'Knowledge base access' },
+  { value: 'chat', label: 'Chat', description: 'Conversation and messaging' },
+];
+
 function EditTokenModal({ isOpen, token, onClose, onSuccess }) {
   const masterToken = useAuthStore((state) => state.masterToken);
-  const { updateToken, isSaving, scopes, fetchScopes } = useTokenStore();
+  const { updateToken, isSaving } = useTokenStore();
 
   const [selectedScopes, setSelectedScopes] = useState([]);
-  const [searchScopes, setSearchScopes] = useState('');
 
   // Initialize selected scopes when token changes
   useEffect(() => {
-    if (token && token.scopes) {
-      setSelectedScopes(token.scopes);
+    if (token) {
+      const tokenScopes = Array.isArray(token.scopes) ? token.scopes
+        : token.scope ? [token.scope] : [];
+      setSelectedScopes(tokenScopes);
     }
   }, [token]);
-
-  // Fetch scopes on mount
-  useEffect(() => {
-    if (isOpen && masterToken && scopes.length === 0) {
-      fetchScopes(masterToken);
-    }
-  }, [isOpen, masterToken, scopes.length, fetchScopes]);
 
   const handleScopeToggle = (scope) => {
     setSelectedScopes((prev) =>
@@ -29,14 +32,6 @@ function EditTokenModal({ isOpen, token, onClose, onSuccess }) {
         ? prev.filter((s) => s !== scope)
         : [...prev, scope]
     );
-  };
-
-  const handleClearScopes = () => {
-    setSelectedScopes([]);
-  };
-
-  const handleSelectAll = () => {
-    setSelectedScopes(scopes);
   };
 
   const handleSubmit = async (e) => {
@@ -59,7 +54,6 @@ function EditTokenModal({ isOpen, token, onClose, onSuccess }) {
 
   const handleClose = () => {
     setSelectedScopes(token?.scopes || []);
-    setSearchScopes('');
     onClose();
   };
 
@@ -108,85 +102,28 @@ function EditTokenModal({ isOpen, token, onClose, onSuccess }) {
 
           {/* Scope Selection */}
           <div>
-            <div className="flex items-center justify-between mb-3">
-              <label className="block text-sm font-medium text-slate-300">
-                Scopes <span className="text-red-400">*</span>
-              </label>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={handleSelectAll}
-                  className="text-xs text-slate-400 hover:text-slate-300"
+            <label className="block text-sm font-medium text-slate-300 mb-3">
+              Scopes <span className="text-red-400">*</span>
+            </label>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {AVAILABLE_SCOPES.map((scope) => (
+                <label
+                  key={scope.value}
+                  className="flex items-start gap-3 p-3 bg-slate-900 rounded-lg cursor-pointer hover:bg-slate-800 border border-transparent hover:border-slate-600 transition-colors"
                 >
-                  Select all
-                </button>
-                <span className="text-slate-600">•</span>
-                <button
-                  type="button"
-                  onClick={handleClearScopes}
-                  className="text-xs text-slate-400 hover:text-slate-300"
-                >
-                  Clear
-                </button>
-              </div>
-            </div>
-
-            {/* Scope Search */}
-            <input
-              type="text"
-              value={searchScopes}
-              onChange={(e) => setSearchScopes(e.target.value)}
-              placeholder="Search scopes..."
-              className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-white placeholder-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 outline-none mb-3 text-sm"
-            />
-
-            {/* Selected Scopes Display */}
-            {selectedScopes.length > 0 && (
-              <div className="bg-slate-900 rounded-lg p-3 mb-3 border border-slate-700">
-                <div className="flex flex-wrap gap-2">
-                  {selectedScopes.map((scope) => (
-                    <span
-                      key={scope}
-                      className="inline-flex items-center gap-2 bg-blue-600 bg-opacity-30 text-blue-200 px-3 py-1 rounded-lg text-sm"
-                    >
-                      {scope}
-                      <button
-                        type="button"
-                        onClick={() => handleScopeToggle(scope)}
-                        className="text-blue-300 hover:text-blue-100 font-bold"
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Available Scopes */}
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {scopes.length > 0 ? (
-                scopes
-                  .filter((scope) =>
-                    scope.toLowerCase().includes(searchScopes.toLowerCase())
-                  )
-                  .map((scope) => (
-                    <label
-                      key={scope}
-                      className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-700 cursor-pointer"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedScopes.includes(scope)}
-                        onChange={() => handleScopeToggle(scope)}
-                        className="w-4 h-4 rounded border border-slate-600 bg-slate-900 text-blue-600 cursor-pointer"
-                      />
-                      <span className="text-sm text-slate-300">{scope}</span>
-                    </label>
-                  ))
-              ) : (
-                <p className="text-sm text-slate-400 text-center py-4">No scopes available</p>
-              )}
+                  <input
+                    type="checkbox"
+                    checked={selectedScopes.includes(scope.value)}
+                    onChange={() => handleScopeToggle(scope.value)}
+                    className="mt-0.5 h-4 w-4 text-blue-600 bg-slate-800 border-slate-600 rounded"
+                  />
+                  <div>
+                    <p className="text-sm font-medium text-white">{scope.label}</p>
+                    <p className="text-xs text-slate-400">{scope.description}</p>
+                  </div>
+                </label>
+              ))}
             </div>
           </div>
 
