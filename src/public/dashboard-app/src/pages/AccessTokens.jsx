@@ -43,9 +43,34 @@ function AccessTokens() {
   const [createForm, setCreateForm] = useState({ label: '', scopes: [], expiresInHours: '168' });
   const [newlyCreated, setNewlyCreated] = useState(null);
 
+  // Persona scoping
+  const [personas, setPersonas] = useState([]);
+  const [personasLoading, setPersonasLoading] = useState(false);
+  const [allowedPersonas, setAllowedPersonas] = useState([]); // empty = all
+  const [allPersonas, setAllPersonas] = useState(true); // "All Personas" checkbox
+
   useEffect(() => {
     if (masterToken) fetchTokens(masterToken);
   }, [masterToken, fetchTokens]);
+
+  // Fetch personas when the 'personas' scope is toggled on
+  useEffect(() => {
+    if (createForm.scopes.includes('personas') && personas.length === 0 && !personasLoading) {
+      setPersonasLoading(true);
+      fetch('/api/v1/personas', { headers: { Authorization: `Bearer ${masterToken}` } })
+        .then((r) => r.json())
+        .then((json) => {
+          if (json.data) setPersonas(json.data);
+        })
+        .catch(() => {})
+        .finally(() => setPersonasLoading(false));
+    }
+    // Reset selection when scope removed
+    if (!createForm.scopes.includes('personas')) {
+      setAllowedPersonas([]);
+      setAllPersonas(true);
+    }
+  }, [createForm.scopes, masterToken]);
 
   // Auto-clear messages
   useEffect(() => {
@@ -86,19 +111,42 @@ function AccessTokens() {
     }));
   };
 
+  const handlePersonaToggle = (id) => {
+    setAllPersonas(false);
+    setAllowedPersonas((prev) =>
+      prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]
+    );
+  };
+
+  const handleAllPersonasToggle = () => {
+    setAllPersonas(true);
+    setAllowedPersonas([]);
+  };
+
   const handleCreateSubmit = async (e) => {
     e.preventDefault();
     if (createForm.scopes.length === 0) return;
 
-    const created = await createToken(masterToken, {
+    const payload = {
       label: createForm.label,
       scopes: createForm.scopes,
       expiresInHours: createForm.expiresInHours ? parseInt(createForm.expiresInHours) : null,
-    });
+    };
+
+    // Only include allowedPersonas when 'personas' scope is selected and specific ones chosen
+    if (createForm.scopes.includes('personas') && !allPersonas && allowedPersonas.length > 0) {
+      payload.allowedPersonas = allowedPersonas;
+    } else {
+      payload.allowedPersonas = []; // empty = all
+    }
+
+    const created = await createToken(masterToken, payload);
 
     if (created) {
       setNewlyCreated(created);
       setCreateForm({ label: '', scopes: [], expiresInHours: '168' });
+      setAllowedPersonas([]);
+      setAllPersonas(true);
       setShowCreateForm(false);
     }
   };
@@ -111,8 +159,29 @@ function AccessTokens() {
     }
   };
 
+  const handleOpenCreate = () => {
+    setShowCreateForm((v) => !v);
+    setNewlyCreated(null);
+    // Reset persona state when toggling form
+    setAllowedPersonas([]);
+    setAllPersonas(true);
+  };
+
   // Guest tokens = non-master tokens that are not revoked
   const guestTokens = tokens.filter((t) => !t.isMaster && t.scope !== 'full' && !t.revokedAt);
+
+  // Resolve persona names for display on token cards
+  const getPersonaLabel = (token) => {
+    if (!token.scopes || !token.scopes.some((s) => s.includes('personas'))) return null;
+    if (!token.allowedPersonas || token.allowedPersonas.length === 0) return 'All';
+    if (personas.length > 0) {
+      const names = token.allowedPersonas
+        .map((id) => personas.find((p) => p.id === id)?.name)
+        .filter(Boolean);
+      if (names.length > 0) return names.join(', ');
+    }
+    return `${token.allowedPersonas.length} persona(s)`;
+  };
 
   return (
     <div className="space-y-10">
@@ -199,7 +268,7 @@ function AccessTokens() {
             </p>
           </div>
           <button
-            onClick={() => { setShowCreateForm((v) => !v); setNewlyCreated(null); }}
+            onClick={handleOpenCreate}
             className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors flex-shrink-0"
           >
             {showCreateForm ? 'Cancel' : '+ New Token'}
@@ -284,6 +353,71 @@ function AccessTokens() {
                 )}
               </div>
 
+              {/* Per-persona scoping — shown when 'personas' scope is selected */}
+              {createForm.scopes.includes('personas') && (
+                <div className="border border-slate-600 rounded-lg p-4 space-y-3">
+                  <div>
+                    <p className="text-sm font-medium text-slate-200">Persona Access</p>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Choose which personas this token can access. Leave as "All" to allow any persona.
+                    </p>
+                  </div>
+
+                  {personasLoading ? (
+                    <div className="flex items-center gap-2 text-slate-400 text-sm">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                      Loading personas…
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {/* All Personas option */}
+                      <label className="flex items-center gap-3 p-2.5 bg-slate-900 rounded-lg cursor-pointer hover:bg-slate-800 border border-transparent hover:border-slate-600 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={allPersonas}
+                          onChange={handleAllPersonasToggle}
+                          className="h-4 w-4 text-blue-600 bg-slate-800 border-slate-600 rounded"
+                        />
+                        <span className="text-sm font-medium text-white">All Personas</span>
+                        <span className="text-xs text-slate-400 ml-auto">Default</span>
+                      </label>
+
+                      {personas.length > 0 && (
+                        <>
+                          <div className="border-t border-slate-700 my-1" />
+                          {personas.map((persona) => (
+                            <label
+                              key={persona.id}
+                              className="flex items-center gap-3 p-2.5 bg-slate-900 rounded-lg cursor-pointer hover:bg-slate-800 border border-transparent hover:border-slate-600 transition-colors"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={allowedPersonas.includes(persona.id)}
+                                onChange={() => handlePersonaToggle(persona.id)}
+                                className="h-4 w-4 text-blue-600 bg-slate-800 border-slate-600 rounded"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-white">{persona.name}</p>
+                                {persona.description && (
+                                  <p className="text-xs text-slate-400 truncate">{persona.description}</p>
+                                )}
+                              </div>
+                              {persona.active ? (
+                                <span className="text-xs text-green-400 flex-shrink-0">Active</span>
+                              ) : null}
+                            </label>
+                          ))}
+                        </>
+                      )}
+
+                      {personas.length === 0 && (
+                        <p className="text-xs text-slate-500 px-1">No personas found — token will have access to all personas.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">Expires In</label>
                 <select
@@ -334,62 +468,77 @@ function AccessTokens() {
           </div>
         ) : (
           <div className="space-y-3">
-            {guestTokens.map((token) => (
-              <div
-                key={token.id}
-                className="bg-slate-800 border border-slate-700 rounded-lg p-5 hover:border-slate-600 transition-colors"
-              >
-                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-white">{token.label || token.name}</h3>
+            {guestTokens.map((token) => {
+              const personaLabel = getPersonaLabel(token);
+              return (
+                <div
+                  key={token.id}
+                  className="bg-slate-800 border border-slate-700 rounded-lg p-5 hover:border-slate-600 transition-colors"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-white">{token.label || token.name}</h3>
 
-                    {/* Scopes */}
-                    {token.scopes && token.scopes.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 mt-2">
-                        {token.scopes.map((scope) => (
-                          <span
-                            key={scope}
-                            className="px-2 py-0.5 bg-blue-600 bg-opacity-20 text-blue-300 text-xs rounded border border-blue-700 border-opacity-50"
-                          >
-                            {scope}
+                      {/* Scopes */}
+                      {token.scopes && token.scopes.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {token.scopes.map((scope) => (
+                            <span
+                              key={scope}
+                              className="px-2 py-0.5 bg-blue-600 bg-opacity-20 text-blue-300 text-xs rounded border border-blue-700 border-opacity-50"
+                            >
+                              {scope}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Persona restriction badge */}
+                      {personaLabel && (
+                        <div className="mt-2">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-600 bg-opacity-20 text-purple-300 text-xs rounded border border-purple-700 border-opacity-50">
+                            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                            Personas: {personaLabel}
                           </span>
-                        ))}
-                      </div>
-                    )}
+                        </div>
+                      )}
 
-                    {/* Metadata */}
-                    <div className="flex flex-wrap gap-4 mt-3 text-xs text-slate-400">
-                      {token.createdAt && (
-                        <span>Created: {new Date(token.createdAt).toLocaleDateString()}</span>
-                      )}
-                      {token.expiresAt ? (
-                        <span className="text-amber-400">
-                          Expires: {new Date(token.expiresAt).toLocaleDateString()}
-                        </span>
-                      ) : (
-                        <span>Expires: Never</span>
-                      )}
+                      {/* Metadata */}
+                      <div className="flex flex-wrap gap-4 mt-3 text-xs text-slate-400">
+                        {token.createdAt && (
+                          <span>Created: {new Date(token.createdAt).toLocaleDateString()}</span>
+                        )}
+                        {token.expiresAt ? (
+                          <span className="text-amber-400">
+                            Expires: {new Date(token.expiresAt).toLocaleDateString()}
+                          </span>
+                        ) : (
+                          <span>Expires: Never</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex gap-2 flex-shrink-0">
+                      <button
+                        onClick={() => { selectToken(token); setShowEditModal(true); }}
+                        className="px-3 py-1.5 text-sm text-blue-400 hover:text-blue-300 bg-slate-700 hover:bg-slate-600 rounded transition-colors"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => { selectToken(token); setShowRevokeModal(true); }}
+                        className="px-3 py-1.5 text-sm text-red-400 hover:text-red-300 bg-slate-700 hover:bg-slate-600 rounded transition-colors"
+                      >
+                        Revoke
+                      </button>
                     </div>
                   </div>
-
-                  {/* Actions */}
-                  <div className="flex gap-2 flex-shrink-0">
-                    <button
-                      onClick={() => { selectToken(token); setShowEditModal(true); }}
-                      className="px-3 py-1.5 text-sm text-blue-400 hover:text-blue-300 bg-slate-700 hover:bg-slate-600 rounded transition-colors"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => { selectToken(token); setShowRevokeModal(true); }}
-                      className="px-3 py-1.5 text-sm text-red-400 hover:text-red-300 bg-slate-700 hover:bg-slate-600 rounded transition-colors"
-                    >
-                      Revoke
-                    </button>
-                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>

@@ -406,7 +406,7 @@ app.delete("/api/v1/vault/tokens/:id", authenticate, (req, res) => {
 app.post("/api/v1/tokens", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can create tokens" });
   
-  const { label = "Guest Token", scopes, expiresInHours, description } = req.body;
+  const { label = "Guest Token", scopes, expiresInHours, description, allowedPersonas } = req.body;
   
   // Parse scopes - support both template names and individual scopes
   let finalScopes = [];
@@ -455,30 +455,36 @@ app.post("/api/v1/tokens", authenticate, (req, res) => {
   let expiresAt = null;
   if (expiresInHours) expiresAt = new Date(Date.now() + expiresInHours * 3600000).toISOString();
   
-  const tokenId = createAccessToken(hash, "owner", JSON.stringify(finalScopes), label, expiresAt);
-  
+  // Validate allowedPersonas if provided
+  const personaIds = Array.isArray(allowedPersonas) && allowedPersonas.length > 0
+    ? allowedPersonas.map(Number).filter(n => !isNaN(n))
+    : null;
+
+  const tokenId = createAccessToken(hash, "owner", JSON.stringify(finalScopes), label, expiresAt, personaIds);
+
   // Grant the scopes to the token
   grantScopes(tokenId, finalScopes);
-  
-  createAuditLog({ 
-    requesterId: req.tokenMeta.tokenId, 
-    action: "create_guest_token_scoped", 
-    resource: `/tokens/${tokenId}`, 
-    scope: req.tokenMeta.scope, 
+
+  createAuditLog({
+    requesterId: req.tokenMeta.tokenId,
+    action: "create_guest_token_scoped",
+    resource: `/tokens/${tokenId}`,
+    scope: req.tokenMeta.scope,
     ip: req.ip,
-    details: { scopes: finalScopes, label }
+    details: { scopes: finalScopes, label, allowedPersonas: personaIds }
   });
-  
-  res.status(201).json({ 
-    data: { 
-      id: tokenId, 
-      token: rawToken, 
-      scopes: finalScopes, 
-      label, 
+
+  res.status(201).json({
+    data: {
+      id: tokenId,
+      token: rawToken,
+      scopes: finalScopes,
+      label,
       description: description || null,
-      createdAt: new Date().toISOString(), 
-      expiresAt 
-    } 
+      allowedPersonas: personaIds,
+      createdAt: new Date().toISOString(),
+      expiresAt
+    }
   });
 });
 
@@ -501,12 +507,13 @@ app.get("/api/v1/tokens/:id", authenticate, (req, res) => {
     ip: req.ip 
   });
   
-  res.json({ 
+  res.json({
     data: {
       id: token.tokenId,
       label: token.label,
       description: null,
       scopes: scopes,
+      allowedPersonas: token.allowedPersonas || null,
       createdAt: token.createdAt,
       expiresAt: token.expiresAt,
       revokedAt: token.revokedAt,
@@ -642,7 +649,8 @@ app.get("/api/v1/tokens", authenticate, (req, res) => {
   const tokens = getAccessTokens();
   const tokensWithScopes = tokens.map(t => ({
     ...t,
-    scopes: getTokenScopes(t.tokenId)
+    scopes: getTokenScopes(t.tokenId),
+    allowedPersonas: t.allowedPersonas || null
   }));
   
   createAuditLog({ 

@@ -199,6 +199,13 @@ function initDatabase() {
     // Column already exists — ignore
   }
 
+  // Add allowed_personas column to access_tokens if not already present (migration)
+  try {
+    db.exec('ALTER TABLE access_tokens ADD COLUMN allowed_personas TEXT');
+  } catch (e) {
+    // Column already exists — ignore
+  }
+
   console.log('Database initialized at:', dbPath);
 }
 
@@ -291,16 +298,19 @@ function deleteVaultToken(id) {
 }
 
 // Access Tokens
-function createAccessToken(hash, ownerId, scope, label, expiresAt = null) {
+function createAccessToken(hash, ownerId, scope, label, expiresAt = null, allowedPersonas = null) {
   const id = 'tok_' + crypto.randomBytes(16).toString('hex');
   const now = new Date().toISOString();
+  const allowedPersonasJson = allowedPersonas && allowedPersonas.length > 0
+    ? JSON.stringify(allowedPersonas)
+    : null;
 
   const stmt = db.prepare(`
-    INSERT INTO access_tokens (id, hash, owner_id, scope, label, created_at, revoked_at, expires_at)
-    VALUES (?, ?, ?, ?, ?, ?, NULL, ?)
+    INSERT INTO access_tokens (id, hash, owner_id, scope, label, created_at, revoked_at, expires_at, allowed_personas)
+    VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)
   `);
 
-  stmt.run(id, hash, ownerId, scope, label, now, expiresAt);
+  stmt.run(id, hash, ownerId, scope, label, now, expiresAt, allowedPersonasJson);
   return id;
 }
 
@@ -310,7 +320,7 @@ function getAccessTokens(ownerId = null) {
     query += ' WHERE owner_id = ?';
   }
   query += ' ORDER BY created_at DESC';
-  
+
   const stmt = db.prepare(query);
   const rows = ownerId ? stmt.all(ownerId) : stmt.all();
   return rows.map(row => ({
@@ -322,7 +332,8 @@ function getAccessTokens(ownerId = null) {
     createdAt: row.created_at,
     revokedAt: row.revoked_at,
     expiresAt: row.expires_at,
-    active: !row.revoked_at
+    active: !row.revoked_at,
+    allowedPersonas: row.allowed_personas ? JSON.parse(row.allowed_personas) : null
   }));
 }
 
