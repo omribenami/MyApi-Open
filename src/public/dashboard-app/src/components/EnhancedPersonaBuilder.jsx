@@ -160,7 +160,7 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
   return (
     <div className="space-y-6">
       {/* Tab Navigation */}
-      <div className="flex gap-2 border-b border-slate-700">
+      <div className="flex gap-2 border-b border-slate-700 overflow-x-auto pb-1 no-scrollbar">
         {[
           { id: 'identity', label: '👤 Identity' },
           { id: 'personality', label: '🎭 Personality' },
