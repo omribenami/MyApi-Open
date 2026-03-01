@@ -188,6 +188,14 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_access_token_scopes_token ON access_token_scopes(token_id);
     CREATE INDEX IF NOT EXISTS idx_access_token_scopes_scope ON access_token_scopes(scope_name);
 
+    CREATE TABLE IF NOT EXISTS persona_documents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      persona_id INTEGER NOT NULL,
+      document_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE(persona_id, document_id)
+    );
+
     CREATE TABLE IF NOT EXISTS marketplace_listings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       owner_id TEXT NOT NULL,
@@ -662,13 +670,13 @@ function revokeHandshake(handshakeId) {
 }
 
 // Personas
-function createPersona(name, soulContent, description) {
+function createPersona(name, soulContent, description, templateData = null) {
   const now = new Date().toISOString();
   const stmt = db.prepare(`
-    INSERT INTO personas (name, soul_content, description, active, created_at, updated_at)
-    VALUES (?, ?, ?, 0, ?, ?)
+    INSERT INTO personas (name, soul_content, description, active, created_at, updated_at, template_data)
+    VALUES (?, ?, ?, 0, ?, ?, ?)
   `);
-  const result = stmt.run(name, soulContent, description || null, now, now);
+  const result = stmt.run(name, soulContent, description || null, now, now, templateData ? JSON.stringify(templateData) : null);
   return {
     id: result.lastInsertRowid,
     name,
@@ -676,13 +684,14 @@ function createPersona(name, soulContent, description) {
     description,
     active: false,
     created_at: now,
-    updated_at: now
+    updated_at: now,
+    template_data: templateData
   };
 }
 
 function getPersonas() {
   const stmt = db.prepare(`
-    SELECT id, name, soul_content, description, active, created_at, updated_at
+    SELECT id, name, soul_content, description, active, created_at, updated_at, template_data
     FROM personas
     ORDER BY created_at DESC
   `);
@@ -693,13 +702,14 @@ function getPersonas() {
     description: row.description,
     active: Boolean(row.active),
     created_at: row.created_at,
-    updated_at: row.updated_at
+    updated_at: row.updated_at,
+    template_data: row.template_data ? JSON.parse(row.template_data) : null
   }));
 }
 
 function getPersonaById(id) {
   const stmt = db.prepare(`
-    SELECT id, name, soul_content, description, active, created_at, updated_at
+    SELECT id, name, soul_content, description, active, created_at, updated_at, template_data
     FROM personas
     WHERE id = ?
   `);
@@ -712,13 +722,14 @@ function getPersonaById(id) {
     description: row.description,
     active: Boolean(row.active),
     created_at: row.created_at,
-    updated_at: row.updated_at
+    updated_at: row.updated_at,
+    template_data: row.template_data ? JSON.parse(row.template_data) : null
   };
 }
 
 function getActivePersona() {
   const stmt = db.prepare(`
-    SELECT id, name, soul_content, description, active, created_at, updated_at
+    SELECT id, name, soul_content, description, active, created_at, updated_at, template_data
     FROM personas
     WHERE active = 1
     LIMIT 1
@@ -732,7 +743,8 @@ function getActivePersona() {
     description: row.description,
     active: Boolean(row.active),
     created_at: row.created_at,
-    updated_at: row.updated_at
+    updated_at: row.updated_at,
+    template_data: row.template_data ? JSON.parse(row.template_data) : null
   };
 }
 
@@ -744,13 +756,14 @@ function updatePersona(id, updates) {
   const name = updates.name !== undefined ? updates.name : persona.name;
   const soulContent = updates.soul_content !== undefined ? updates.soul_content : persona.soul_content;
   const description = updates.description !== undefined ? updates.description : persona.description;
+  const templateData = updates.template_data !== undefined ? updates.template_data : persona.template_data;
   
   const stmt = db.prepare(`
     UPDATE personas
-    SET name = ?, soul_content = ?, description = ?, updated_at = ?
+    SET name = ?, soul_content = ?, description = ?, updated_at = ?, template_data = ?
     WHERE id = ?
   `);
-  stmt.run(name, soulContent, description, now, id);
+  stmt.run(name, soulContent, description, now, templateData ? JSON.stringify(templateData) : null, id);
   
   return {
     id,
@@ -759,7 +772,8 @@ function updatePersona(id, updates) {
     description,
     active: persona.active,
     created_at: persona.created_at,
-    updated_at: now
+    updated_at: now,
+    template_data: templateData
   };
 }
 
@@ -1232,6 +1246,38 @@ function deleteKBDocument(id) {
   return result.changes > 0;
 }
 
+// Persona Documents
+function getPersonaDocuments(personaId) {
+  return db.prepare(`
+    SELECT pd.document_id, kd.title, kd.source, kd.created_at
+    FROM persona_documents pd
+    JOIN kb_documents kd ON pd.document_id = kd.id
+    WHERE pd.persona_id = ?
+    ORDER BY pd.created_at DESC
+  `).all(personaId).map(r => ({
+    documentId: r.document_id,
+    title: r.title,
+    source: r.source,
+    createdAt: r.created_at,
+  }));
+}
+
+function attachDocumentToPersona(personaId, documentId) {
+  const now = new Date().toISOString();
+  try {
+    db.prepare('INSERT INTO persona_documents (persona_id, document_id, created_at) VALUES (?, ?, ?)').run(personaId, documentId, now);
+    return true;
+  } catch (e) {
+    if (e.code === 'SQLITE_CONSTRAINT_UNIQUE') return false; // already attached
+    throw e;
+  }
+}
+
+function detachDocumentFromPersona(personaId, documentId) {
+  const result = db.prepare('DELETE FROM persona_documents WHERE persona_id = ? AND document_id = ?').run(personaId, documentId);
+  return result.changes > 0;
+}
+
 // Marketplace
 function _formatListing(row) {
   return {
@@ -1445,6 +1491,9 @@ module.exports = {
   deleteKBDocument,
   // Marketplace
   createMarketplaceListing,
+  getPersonaDocuments,
+  attachDocumentToPersona,
+  detachDocumentFromPersona,
   getMarketplaceListings,
   getMarketplaceListing,
   updateMarketplaceListing,

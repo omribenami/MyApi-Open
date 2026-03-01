@@ -59,6 +59,9 @@ const {
   addKBDocument,
   getKBDocuments,
   deleteKBDocument,
+  getPersonaDocuments,
+  attachDocumentToPersona,
+  detachDocumentFromPersona,
   // Marketplace
   createMarketplaceListing,
   getMarketplaceListings,
@@ -1000,7 +1003,7 @@ app.get("/api/v1/handshakes/:id/status", (req, res) => {
 // POST /api/v1/personas — Create new persona
 app.post("/api/v1/personas", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can create personas" });
-  const { name, soul_content, description } = req.body;
+  const { name, soul_content, description, templateData } = req.body;
   if (!name || !soul_content) return res.status(400).json({ error: "name and soul_content are required" });
   
   // Validate soul_content is markdown-like
@@ -1008,7 +1011,7 @@ app.post("/api/v1/personas", authenticate, (req, res) => {
     return res.status(400).json({ error: "soul_content must be non-empty markdown text" });
   }
   
-  const persona = createPersona(name, soul_content, description);
+  const persona = createPersona(name, soul_content, description, templateData);
   createAuditLog({ 
     requesterId: req.tokenMeta.tokenId, 
     action: "create_persona", 
@@ -1149,6 +1152,38 @@ app.delete("/api/v1/personas/:id", authenticate, (req, res) => {
     ip: req.ip
   });
   
+  res.json({ ok: true });
+});
+
+// --- Persona Documents ---
+
+// GET /api/v1/personas/:id/documents — Get attached KB documents
+app.get("/api/v1/personas/:id/documents", authenticate, (req, res) => {
+  const personaId = parseInt(req.params.id);
+  const docs = getPersonaDocuments(personaId);
+  res.json({ data: docs });
+});
+
+// POST /api/v1/personas/:id/documents — Attach a KB document
+app.post("/api/v1/personas/:id/documents", authenticate, (req, res) => {
+  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Insufficient scope" });
+  const personaId = parseInt(req.params.id);
+  const { documentId } = req.body;
+  if (!documentId) return res.status(400).json({ error: "documentId required" });
+  
+  const persona = getPersonaById(personaId);
+  if (!persona) return res.status(404).json({ error: "Persona not found" });
+  
+  attachDocumentToPersona(personaId, documentId);
+  res.json({ ok: true });
+});
+
+// DELETE /api/v1/personas/:id/documents/:docId — Detach a KB document
+app.delete("/api/v1/personas/:id/documents/:docId", authenticate, (req, res) => {
+  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Insufficient scope" });
+  const personaId = parseInt(req.params.id);
+  const { docId } = req.params;
+  detachDocumentFromPersona(personaId, docId);
   res.json({ ok: true });
 });
 
