@@ -83,6 +83,7 @@ function initDatabase() {
       name TEXT NOT NULL,
       soul_content TEXT NOT NULL,
       description TEXT,
+      template_data TEXT,
       active INTEGER DEFAULT 0,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -1621,57 +1622,57 @@ function seedServiceCategories() {
 
 function seedServices() {
   const services = [
-    // Social Media
-    { name: 'twitter', label: 'Twitter/X', category: 'social', icon: 'Twitter', auth: 'oauth2', endpoint: 'https://api.twitter.com/2', docs: 'https://developer.twitter.com' },
-    { name: 'linkedin', label: 'LinkedIn', category: 'social', icon: 'Linkedin', auth: 'oauth2', endpoint: 'https://api.linkedin.com/v2', docs: 'https://docs.microsoft.com/en-us/linkedin' },
-    { name: 'instagram', label: 'Instagram', category: 'social', icon: 'Instagram', auth: 'oauth2', endpoint: 'https://graph.instagram.com', docs: 'https://developers.facebook.com/docs/instagram' },
-    { name: 'tiktok', label: 'TikTok', category: 'social', icon: 'Music', auth: 'oauth2', endpoint: 'https://open.tiktok.com/v1', docs: 'https://developers.tiktok.com' },
-    { name: 'youtube', label: 'YouTube', category: 'social', icon: 'Youtube', auth: 'oauth2', endpoint: 'https://www.googleapis.com/youtube/v3', docs: 'https://developers.google.com/youtube' },
-    { name: 'twitch', label: 'Twitch', category: 'social', icon: 'Twitch', auth: 'oauth2', endpoint: 'https://api.twitch.tv/helix', docs: 'https://dev.twitch.tv/docs/api' },
-    { name: 'bluesky', label: 'Bluesky', category: 'social', icon: 'Share2', auth: 'jwt', endpoint: 'https://bsky.social/xrpc', docs: 'https://docs.bsky.app' },
-    { name: 'mastodon', label: 'Mastodon', category: 'social', icon: 'Share2', auth: 'oauth2', endpoint: 'https://mastodon.social/api/v1', docs: 'https://docs.joinmastodon.org' },
+    // Social Media - with official logos
+    { name: 'twitter', label: 'Twitter/X', category: 'social', icon: 'https://cdn.simpleicons.org/x/000000', auth: 'oauth2', endpoint: 'https://api.twitter.com/2', docs: 'https://developer.twitter.com' },
+    { name: 'linkedin', label: 'LinkedIn', category: 'social', icon: 'https://cdn.simpleicons.org/linkedin/0A66C2', auth: 'oauth2', endpoint: 'https://api.linkedin.com/v2', docs: 'https://docs.microsoft.com/en-us/linkedin' },
+    { name: 'instagram', label: 'Instagram', category: 'social', icon: 'https://cdn.simpleicons.org/instagram/E4405F', auth: 'oauth2', endpoint: 'https://graph.instagram.com', docs: 'https://developers.facebook.com/docs/instagram' },
+    { name: 'tiktok', label: 'TikTok', category: 'social', icon: 'https://cdn.simpleicons.org/tiktok/000000', auth: 'oauth2', endpoint: 'https://open.tiktok.com/v1', docs: 'https://developers.tiktok.com' },
+    { name: 'youtube', label: 'YouTube', category: 'social', icon: 'https://cdn.simpleicons.org/youtube/FF0000', auth: 'oauth2', endpoint: 'https://www.googleapis.com/youtube/v3', docs: 'https://developers.google.com/youtube' },
+    { name: 'twitch', label: 'Twitch', category: 'social', icon: 'https://cdn.simpleicons.org/twitch/9146FF', auth: 'oauth2', endpoint: 'https://api.twitch.tv/helix', docs: 'https://dev.twitch.tv/docs/api' },
+    { name: 'bluesky', label: 'Bluesky', category: 'social', icon: 'https://cdn.simpleicons.org/bluesky/1185FE', auth: 'jwt', endpoint: 'https://bsky.social/xrpc', docs: 'https://docs.bsky.app' },
+    { name: 'mastodon', label: 'Mastodon', category: 'social', icon: 'https://cdn.simpleicons.org/mastodon/6364FF', auth: 'oauth2', endpoint: 'https://mastodon.social/api/v1', docs: 'https://docs.joinmastodon.org' },
     
-    // Development
-    { name: 'gitlab', label: 'GitLab', category: 'dev', icon: 'GitBranch', auth: 'oauth2', endpoint: 'https://gitlab.com/api/v4', docs: 'https://docs.gitlab.com/ee/api' },
-    { name: 'bitbucket', label: 'Bitbucket', category: 'dev', icon: 'GitBranch', auth: 'oauth2', endpoint: 'https://api.bitbucket.org/2.0', docs: 'https://developer.atlassian.com/cloud/bitbucket' },
-    { name: 'azuredevops', label: 'Azure DevOps', category: 'dev', icon: 'Package', auth: 'oauth2', endpoint: 'https://dev.azure.com', docs: 'https://docs.microsoft.com/en-us/rest/api/azure/devops' },
-    { name: 'travisci', label: 'Travis CI', category: 'dev', icon: 'Zap', auth: 'token', endpoint: 'https://api.travis-ci.com', docs: 'https://docs.travis-ci.com/api' },
-    { name: 'circleci', label: 'CircleCI', category: 'dev', icon: 'Zap', auth: 'token', endpoint: 'https://circleci.com/api/v2', docs: 'https://circleci.com/docs/api/v2' },
-    { name: 'gitea', label: 'Gitea', category: 'dev', icon: 'GitBranch', auth: 'oauth2', endpoint: 'https://api.gitea.io', docs: 'https://docs.gitea.io/en-us/api-usage' },
+    // Development - with official logos
+    { name: 'gitlab', label: 'GitLab', category: 'dev', icon: 'https://cdn.simpleicons.org/gitlab/FC6D26', auth: 'oauth2', endpoint: 'https://gitlab.com/api/v4', docs: 'https://docs.gitlab.com/ee/api' },
+    { name: 'bitbucket', label: 'Bitbucket', category: 'dev', icon: 'https://cdn.simpleicons.org/bitbucket/0052CC', auth: 'oauth2', endpoint: 'https://api.bitbucket.org/2.0', docs: 'https://developer.atlassian.com/cloud/bitbucket' },
+    { name: 'azuredevops', label: 'Azure DevOps', category: 'dev', icon: 'https://cdn.simpleicons.org/azuredevops/0078D4', auth: 'oauth2', endpoint: 'https://dev.azure.com', docs: 'https://docs.microsoft.com/en-us/rest/api/azure/devops' },
+    { name: 'travisci', label: 'Travis CI', category: 'dev', icon: 'https://cdn.simpleicons.org/travisci/3EAAAF', auth: 'token', endpoint: 'https://api.travis-ci.com', docs: 'https://docs.travis-ci.com/api' },
+    { name: 'circleci', label: 'CircleCI', category: 'dev', icon: 'https://cdn.simpleicons.org/circleci/343434', auth: 'token', endpoint: 'https://circleci.com/api/v2', docs: 'https://circleci.com/docs/api/v2' },
+    { name: 'gitea', label: 'Gitea', category: 'dev', icon: 'https://cdn.simpleicons.org/gitea/609926', auth: 'oauth2', endpoint: 'https://api.gitea.io', docs: 'https://docs.gitea.io/en-us/api-usage' },
     
-    // Productivity
-    { name: 'notion', label: 'Notion', category: 'productivity', icon: 'FileText', auth: 'oauth2', endpoint: 'https://api.notion.com/v1', docs: 'https://developers.notion.com' },
-    { name: 'airtable', label: 'Airtable', category: 'productivity', icon: 'Grid', auth: 'token', endpoint: 'https://api.airtable.com/v0', docs: 'https://airtable.com/developers/web/api' },
-    { name: 'asana', label: 'Asana', category: 'productivity', icon: 'CheckSquare', auth: 'oauth2', endpoint: 'https://app.asana.com/api/1.0', docs: 'https://developers.asana.com' },
-    { name: 'monday', label: 'Monday.com', category: 'productivity', icon: 'Calendar', auth: 'token', endpoint: 'https://api.monday.com/graphql', docs: 'https://monday.com/developers' },
-    { name: 'trello', label: 'Trello', category: 'productivity', icon: 'Layout', auth: 'oauth2', endpoint: 'https://api.trello.com/1', docs: 'https://developer.atlassian.com/cloud/trello' },
-    { name: 'jira', label: 'Jira', category: 'productivity', icon: 'CheckCircle', auth: 'oauth2', endpoint: 'https://your-domain.atlassian.net/rest/api/2', docs: 'https://developer.atlassian.com/cloud/jira' },
-    { name: 'clickup', label: 'ClickUp', category: 'productivity', icon: 'CheckSquare', auth: 'token', endpoint: 'https://api.clickup.com/api/v2', docs: 'https://clickup.com/api' },
-    { name: 'linear', label: 'Linear', category: 'productivity', icon: 'Inbox', auth: 'token', endpoint: 'https://api.linear.app/graphql', docs: 'https://developers.linear.app' },
+    // Productivity - with official logos
+    { name: 'notion', label: 'Notion', category: 'productivity', icon: 'https://cdn.simpleicons.org/notion/000000', auth: 'oauth2', endpoint: 'https://api.notion.com/v1', docs: 'https://developers.notion.com' },
+    { name: 'airtable', label: 'Airtable', category: 'productivity', icon: 'https://cdn.simpleicons.org/airtable/13B5EA', auth: 'token', endpoint: 'https://api.airtable.com/v0', docs: 'https://airtable.com/developers/web/api' },
+    { name: 'asana', label: 'Asana', category: 'productivity', icon: 'https://cdn.simpleicons.org/asana/F06A6A', auth: 'oauth2', endpoint: 'https://app.asana.com/api/1.0', docs: 'https://developers.asana.com' },
+    { name: 'monday', label: 'Monday.com', category: 'productivity', icon: 'https://cdn.simpleicons.org/monday/0055CC', auth: 'token', endpoint: 'https://api.monday.com/graphql', docs: 'https://monday.com/developers' },
+    { name: 'trello', label: 'Trello', category: 'productivity', icon: 'https://cdn.simpleicons.org/trello/0052CC', auth: 'oauth2', endpoint: 'https://api.trello.com/1', docs: 'https://developer.atlassian.com/cloud/trello' },
+    { name: 'jira', label: 'Jira', category: 'productivity', icon: 'https://cdn.simpleicons.org/jira/0052CC', auth: 'oauth2', endpoint: 'https://your-domain.atlassian.net/rest/api/2', docs: 'https://developer.atlassian.com/cloud/jira' },
+    { name: 'clickup', label: 'ClickUp', category: 'productivity', icon: 'https://cdn.simpleicons.org/clickup/7B68EE', auth: 'token', endpoint: 'https://api.clickup.com/api/v2', docs: 'https://clickup.com/api' },
+    { name: 'linear', label: 'Linear', category: 'productivity', icon: 'https://cdn.simpleicons.org/linear/5E6AD2', auth: 'token', endpoint: 'https://api.linear.app/graphql', docs: 'https://developers.linear.app' },
     
-    // Payment
-    { name: 'stripe', label: 'Stripe', category: 'payment', icon: 'CreditCard', auth: 'key', endpoint: 'https://api.stripe.com/v1', docs: 'https://stripe.com/docs/api' },
-    { name: 'paypal', label: 'PayPal', category: 'payment', icon: 'DollarSign', auth: 'oauth2', endpoint: 'https://api-m.paypal.com', docs: 'https://developer.paypal.com' },
-    { name: 'shopify', label: 'Shopify', category: 'payment', icon: 'ShoppingCart', auth: 'oauth2', endpoint: 'https://your-store.myshopify.com/admin/api/2024-01', docs: 'https://shopify.dev/api/admin-rest' },
-    { name: 'square', label: 'Square', category: 'payment', icon: 'CreditCard', auth: 'oauth2', endpoint: 'https://api.square.com/v2', docs: 'https://developer.squareup.com' },
+    // Payment - with official logos
+    { name: 'stripe', label: 'Stripe', category: 'payment', icon: 'https://cdn.simpleicons.org/stripe/008CDD', auth: 'key', endpoint: 'https://api.stripe.com/v1', docs: 'https://stripe.com/docs/api' },
+    { name: 'paypal', label: 'PayPal', category: 'payment', icon: 'https://cdn.simpleicons.org/paypal/003087', auth: 'oauth2', endpoint: 'https://api-m.paypal.com', docs: 'https://developer.paypal.com' },
+    { name: 'shopify', label: 'Shopify', category: 'payment', icon: 'https://cdn.simpleicons.org/shopify/96C63E', auth: 'oauth2', endpoint: 'https://your-store.myshopify.com/admin/api/2024-01', docs: 'https://shopify.dev/api/admin-rest' },
+    { name: 'square', label: 'Square', category: 'payment', icon: 'https://cdn.simpleicons.org/square/3693F3', auth: 'oauth2', endpoint: 'https://api.square.com/v2', docs: 'https://developer.squareup.com' },
     
-    // Communication
-    { name: 'email', label: 'Email/SMTP', category: 'communication', icon: 'Mail', auth: 'oauth2', endpoint: 'smtp.gmail.com', docs: 'https://support.google.com/mail' },
-    { name: 'telegram', label: 'Telegram', category: 'communication', icon: 'Send', auth: 'token', endpoint: 'https://api.telegram.org/bot', docs: 'https://core.telegram.org/bots/api' },
-    { name: 'signal', label: 'Signal', category: 'communication', icon: 'Lock', auth: 'webhook', endpoint: 'https://signal.org', docs: 'https://signal.org/docs' },
-    { name: 'matrix', label: 'Matrix', category: 'communication', icon: 'MessageSquare', auth: 'token', endpoint: 'https://matrix.org/_matrix', docs: 'https://spec.matrix.org/latest' },
-    { name: 'mattermost', label: 'Mattermost', category: 'communication', icon: 'MessageSquare', auth: 'oauth2', endpoint: 'https://mattermost.example.com/api/v4', docs: 'https://developers.mattermost.com' },
+    // Communication - with official logos
+    { name: 'email', label: 'Email/SMTP', category: 'communication', icon: 'https://cdn.simpleicons.org/gmail/EA4335', auth: 'oauth2', endpoint: 'smtp.gmail.com', docs: 'https://support.google.com/mail' },
+    { name: 'telegram', label: 'Telegram', category: 'communication', icon: 'https://cdn.simpleicons.org/telegram/0088cc', auth: 'token', endpoint: 'https://api.telegram.org/bot', docs: 'https://core.telegram.org/bots/api' },
+    { name: 'signal', label: 'Signal', category: 'communication', icon: 'https://cdn.simpleicons.org/signal/3A76F0', auth: 'webhook', endpoint: 'https://signal.org', docs: 'https://signal.org/docs' },
+    { name: 'matrix', label: 'Matrix', category: 'communication', icon: 'https://cdn.simpleicons.org/matrix/000000', auth: 'token', endpoint: 'https://matrix.org/_matrix', docs: 'https://spec.matrix.org/latest' },
+    { name: 'mattermost', label: 'Mattermost', category: 'communication', icon: 'https://cdn.simpleicons.org/mattermost/0058CC', auth: 'oauth2', endpoint: 'https://mattermost.example.com/api/v4', docs: 'https://developers.mattermost.com' },
     
-    // Cloud
-    { name: 'aws', label: 'Amazon AWS', category: 'cloud', icon: 'Cloud', auth: 'key', endpoint: 'https://aws.amazon.com', docs: 'https://docs.aws.amazon.com' },
-    { name: 'azure', label: 'Microsoft Azure', category: 'cloud', icon: 'Cloud', auth: 'oauth2', endpoint: 'https://management.azure.com', docs: 'https://docs.microsoft.com/en-us/azure' },
-    { name: 'gcp', label: 'Google Cloud', category: 'cloud', icon: 'Cloud', auth: 'key', endpoint: 'https://www.googleapis.com', docs: 'https://cloud.google.com/docs' },
-    { name: 'digitalocean', label: 'DigitalOcean', category: 'cloud', icon: 'Cloud', auth: 'token', endpoint: 'https://api.digitalocean.com/v2', docs: 'https://docs.digitalocean.com/reference/api' },
+    // Cloud - with official logos
+    { name: 'aws', label: 'Amazon AWS', category: 'cloud', icon: 'https://cdn.simpleicons.org/amazonaws/FF9900', auth: 'key', endpoint: 'https://aws.amazon.com', docs: 'https://docs.aws.amazon.com' },
+    { name: 'azure', label: 'Microsoft Azure', category: 'cloud', icon: 'https://cdn.simpleicons.org/microsoftazure/0078D4', auth: 'oauth2', endpoint: 'https://management.azure.com', docs: 'https://docs.microsoft.com/en-us/azure' },
+    { name: 'gcp', label: 'Google Cloud', category: 'cloud', icon: 'https://cdn.simpleicons.org/googlecloud/4285F4', auth: 'key', endpoint: 'https://www.googleapis.com', docs: 'https://cloud.google.com/docs' },
+    { name: 'digitalocean', label: 'DigitalOcean', category: 'cloud', icon: 'https://cdn.simpleicons.org/digitalocean/0080FF', auth: 'token', endpoint: 'https://api.digitalocean.com/v2', docs: 'https://docs.digitalocean.com/reference/api' },
     
-    // Analytics
-    { name: 'mixpanel', label: 'Mixpanel', category: 'analytics', icon: 'BarChart3', auth: 'token', endpoint: 'https://api.mixpanel.com', docs: 'https://developer.mixpanel.com' },
-    { name: 'segment', label: 'Segment', category: 'analytics', icon: 'TrendingUp', auth: 'token', endpoint: 'https://api.segment.com', docs: 'https://segment.com/docs/api' },
-    { name: 'googleanalytics', label: 'Google Analytics', category: 'analytics', icon: 'BarChart3', auth: 'oauth2', endpoint: 'https://www.googleapis.com/analytics/v3', docs: 'https://developers.google.com/analytics' },
+    // Analytics - with official logos
+    { name: 'mixpanel', label: 'Mixpanel', category: 'analytics', icon: 'https://cdn.simpleicons.org/mixpanel/25C881', auth: 'token', endpoint: 'https://api.mixpanel.com', docs: 'https://developer.mixpanel.com' },
+    { name: 'segment', label: 'Segment', category: 'analytics', icon: 'https://cdn.simpleicons.org/segment/221F1F', auth: 'token', endpoint: 'https://api.segment.com', docs: 'https://segment.com/docs/api' },
+    { name: 'googleanalytics', label: 'Google Analytics', category: 'analytics', icon: 'https://cdn.simpleicons.org/googleanalytics/E37400', auth: 'oauth2', endpoint: 'https://www.googleapis.com/analytics/v3', docs: 'https://developers.google.com/analytics' },
   ];
 
   const checkStmt = db.prepare('SELECT COUNT(*) as count FROM services');
