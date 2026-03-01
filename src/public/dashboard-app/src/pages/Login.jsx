@@ -71,14 +71,20 @@ function Login() {
     setError('');
     setLoading(true);
     try {
-      const response = await fetch('/api/v1/tokens', {
-        headers: { 'Authorization': `Bearer ${token}` },
+      const response = await fetch('/api/v1/tokens/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
       });
       if (response.ok) {
+        const result = await response.json();
         setMasterToken(token);
+        localStorage.setItem('sessionToken', token);
+        localStorage.setItem('tokenData', JSON.stringify(result.data));
         setTimeout(() => { window.location.href = '/dashboard/'; }, 100);
       } else {
-        setError('Invalid master token. Please check and try again.');
+        const errorData = await response.json();
+        setError(errorData.error || 'Invalid token. Please check and try again.');
       }
     } catch (err) {
       setError('Connection failed. Is the server running?');

@@ -685,6 +685,51 @@ app.get("/api/v1/tokens", authenticate, (req, res) => {
   res.json({ data: tokensWithScopes });
 });
 
+// Validate token endpoint (for login page)
+app.post("/api/v1/tokens/validate", (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(400).json({ error: "token is required" });
+  
+  const tokens = getAccessTokens();
+  let matched = null;
+  
+  // Find matching token
+  for (const tokenRecord of tokens) {
+    if (!tokenRecord.revokedAt && bcrypt.compareSync(token, tokenRecord.hash)) {
+      matched = tokenRecord;
+      break;
+    }
+  }
+  
+  if (!matched) {
+    createAuditLog({ 
+      requesterId: "unknown", 
+      action: "token_validation_failed", 
+      resource: "/tokens/validate", 
+      ip: req.ip 
+    });
+    return res.status(401).json({ error: "Invalid token" });
+  }
+  
+  createAuditLog({ 
+    requesterId: matched.tokenId, 
+    action: "token_validated", 
+    resource: "/tokens/validate", 
+    scope: matched.scope,
+    ip: req.ip 
+  });
+  
+  // Return minimal safe info
+  res.json({ 
+    data: { 
+      valid: true,
+      tokenId: matched.tokenId,
+      scope: matched.scope,
+      label: matched.label
+    } 
+  });
+});
+
 // --- CONNECTORS ---
 app.get("/api/v1/connectors", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Insufficient scope" });
