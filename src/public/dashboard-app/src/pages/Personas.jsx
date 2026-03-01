@@ -10,10 +10,33 @@ function Personas() {
   const [selectedPersona, setSelectedPersona] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingPersona, setEditingPersona] = useState(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
 
   useEffect(() => {
     fetchPersonas();
   }, []);
+
+  const handleSelectPersona = async (persona) => {
+    setLoadingDetail(true);
+    try {
+      // Fetch full persona details including soul_content
+      const response = await fetch(`/api/v1/personas/${persona.id}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setSelectedPersona(data.data);
+      } else {
+        setSelectedPersona(persona);
+      }
+    } catch (err) {
+      console.error('Failed to fetch full persona:', err);
+      setSelectedPersona(persona);
+    } finally {
+      setLoadingDetail(false);
+    }
+  };
 
   const fetchPersonas = async () => {
     setIsLoading(true);
@@ -171,40 +194,43 @@ function Personas() {
             {personas.map((persona) => (
               <div
                 key={persona.id}
-                onClick={() => setSelectedPersona(persona)}
-                className="bg-slate-800 border border-slate-700 rounded-lg p-6 hover:border-blue-500 hover:shadow-lg hover:shadow-blue-500/20 cursor-pointer transition-all duration-200"
+                onClick={() => handleSelectPersona(persona)}
+                className="bg-slate-800/90 border border-slate-700 rounded-lg p-5 hover:border-slate-500 cursor-pointer transition-colors duration-200"
               >
-                {/* Status badge */}
-                <div className="mb-4">
+                {/* Header */}
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h3 className="text-lg font-semibold text-white truncate">{persona.name}</h3>
                   <span
-                    className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${
+                    className={`inline-block px-2.5 py-1 rounded-md text-[11px] font-medium border ${
                       persona.active
-                        ? 'bg-green-900 text-green-200'
-                        : 'bg-slate-700 text-slate-300'
+                        ? 'bg-slate-700 text-slate-200 border-slate-600'
+                        : 'bg-slate-800 text-slate-400 border-slate-700'
                     }`}
                   >
-                    {persona.active ? '✓ Active' : 'Inactive'}
+                    {persona.active ? 'Active' : 'Inactive'}
                   </span>
                 </div>
 
-                {/* Name and description */}
-                <h3 className="text-xl font-bold text-white mb-2">{persona.name}</h3>
-                <p className="text-slate-400 text-sm mb-4 line-clamp-2">{persona.description}</p>
+                {/* Description */}
+                <p className="text-slate-400 text-sm mb-3 line-clamp-2">
+                  {persona.description || 'No description yet.'}
+                </p>
 
                 {/* Preview of soul content */}
-                <div className="bg-slate-900 rounded p-3 mb-4 text-xs text-slate-300 max-h-24 overflow-hidden">
+                <div className="bg-slate-900/80 rounded border border-slate-700/50 p-3 mb-3 text-xs text-slate-300 max-h-24 overflow-hidden">
                   <pre className="whitespace-pre-wrap break-words font-mono text-slate-400">
-                    {persona.soul_content?.substring(0, 200)}...
+                    {(persona.soul_content || 'No SOUL.md content yet.').substring(0, 180)}
+                    {(persona.soul_content || '').length > 180 ? '…' : ''}
                   </pre>
                 </div>
 
                 {/* Meta info */}
                 <p className="text-xs text-slate-500">
-                  Created {new Date(persona.created_at).toLocaleDateString()}
+                  Updated {new Date(persona.updated_at || persona.created_at).toLocaleDateString()}
                 </p>
 
                 {/* Click hint */}
-                <p className="text-xs text-blue-400 mt-3">Click to view full details →</p>
+                <p className="text-xs text-slate-400 mt-2">Tap to open details →</p>
               </div>
             ))}
           </div>
