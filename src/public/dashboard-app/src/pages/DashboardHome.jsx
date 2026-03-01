@@ -6,6 +6,7 @@ function DashboardHome() {
   const masterToken = useAuthStore((state) => state.masterToken);
   const [stats, setStats] = useState({
     tokens: 0,
+    vaultTokens: 0,
     connectors: 0,
   });
   const [loading, setLoading] = useState(true);
@@ -18,9 +19,10 @@ function DashboardHome() {
       try {
         const headers = { 'Authorization': `Bearer ${masterToken}` };
 
-        const [healthRes, tokensRes, connectorsRes] = await Promise.all([
+        const [healthRes, tokensRes, vaultRes, connectorsRes] = await Promise.all([
           fetch('/health'),
           fetch('/api/v1/tokens', { headers }).catch(() => ({ ok: false })),
+          fetch('/api/v1/vault/tokens', { headers }).catch(() => ({ ok: false })),
           fetch('/api/v1/oauth/status', { headers }).catch(() => ({ ok: false })),
         ]);
 
@@ -32,6 +34,12 @@ function DashboardHome() {
         if (tokensRes.ok) {
           const tokensData = await tokensRes.json();
           setStats((s) => ({ ...s, tokens: tokensData.data?.length || 0 }));
+        }
+
+        if (vaultRes.ok) {
+          const vaultData = await vaultRes.json();
+          const vaultTokens = vaultData.tokens || vaultData.data || [];
+          setStats((s) => ({ ...s, vaultTokens: vaultTokens.length }));
         }
 
         if (connectorsRes.ok) {
@@ -60,6 +68,14 @@ function DashboardHome() {
       color: 'blue',
       link: '/access-tokens',
       description: 'Master & guest tokens',
+    },
+    {
+      label: 'Token Vault',
+      value: stats.vaultTokens,
+      icon: '🔐',
+      color: 'purple',
+      link: '/tokens',
+      description: 'External service credentials',
     },
     {
       label: 'Connected Services',
@@ -116,7 +132,7 @@ function DashboardHome() {
       )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {statCards.map((card) => (
           <Link
             key={card.label}
