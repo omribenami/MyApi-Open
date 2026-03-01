@@ -71,6 +71,16 @@ const {
   rateMarketplaceListing,
   incrementInstallCount,
   getMyMarketplaceListings,
+  // Skills
+  createSkill,
+  getSkills,
+  getSkillById,
+  updateSkill,
+  deleteSkill,
+  setActiveSkill,
+  getSkillDocuments,
+  attachDocumentToSkill,
+  detachDocumentFromSkill,
   // Services
   seedServiceCategories,
   seedServices,
@@ -1973,6 +1983,122 @@ app.get('/api/v1/brain/context', authenticate, async (req, res) => {
   } catch (error) {
     console.error('Get context error:', error);
     res.status(500).json({ error: 'Failed to get context', message: error.message });
+  }
+});
+
+// ===== DASHBOARD STATS =====
+app.get('/api/v1/dashboard/stats', authenticate, (req, res) => {
+  try {
+    const personas = getPersonas();
+    const skills = getSkills();
+    const kbDocs = getKBDocuments();
+    res.json({
+      personas: { total: personas.length, active: personas.filter(p => p.active).length },
+      skills: { total: skills.length, active: skills.filter(s => s.active).length },
+      knowledgeBase: { total: kbDocs.length },
+    });
+  } catch (err) {
+    console.error('Dashboard stats error:', err);
+    res.status(500).json({ error: 'Failed to get dashboard stats' });
+  }
+});
+
+// ===== SKILLS =====
+app.get('/api/v1/skills', authenticate, (req, res) => {
+  try {
+    const skills = getSkills();
+    res.json({ data: skills });
+  } catch (err) {
+    console.error('Skills list error:', err);
+    res.status(500).json({ error: 'Failed to get skills' });
+  }
+});
+
+app.get('/api/v1/skills/:id', authenticate, (req, res) => {
+  try {
+    const skill = getSkillById(req.params.id);
+    if (!skill) return res.status(404).json({ error: 'Skill not found' });
+    res.json({ data: skill });
+  } catch (err) {
+    console.error('Skill get error:', err);
+    res.status(500).json({ error: 'Failed to get skill' });
+  }
+});
+
+app.post('/api/v1/skills', authenticate, (req, res) => {
+  try {
+    const { name, description, version, author, category, script_content, config_json } = req.body;
+    if (!name) return res.status(400).json({ error: 'Name is required' });
+    const skill = createSkill(name, description, version, author, category, script_content, config_json);
+    res.status(201).json({ data: skill });
+  } catch (err) {
+    console.error('Skill create error:', err);
+    res.status(500).json({ error: 'Failed to create skill' });
+  }
+});
+
+app.put('/api/v1/skills/:id', authenticate, (req, res) => {
+  try {
+    const skill = updateSkill(req.params.id, req.body);
+    if (!skill) return res.status(404).json({ error: 'Skill not found' });
+    res.json({ data: skill });
+  } catch (err) {
+    console.error('Skill update error:', err);
+    res.status(500).json({ error: 'Failed to update skill' });
+  }
+});
+
+app.delete('/api/v1/skills/:id', authenticate, (req, res) => {
+  try {
+    const result = deleteSkill(req.params.id);
+    if (!result) return res.status(404).json({ error: 'Skill not found' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Skill delete error:', err);
+    res.status(500).json({ error: 'Failed to delete skill' });
+  }
+});
+
+app.put('/api/v1/skills/:id/activate', authenticate, (req, res) => {
+  try {
+    const skill = setActiveSkill(req.params.id);
+    if (!skill) return res.status(404).json({ error: 'Skill not found' });
+    res.json({ data: skill });
+  } catch (err) {
+    console.error('Skill activate error:', err);
+    res.status(500).json({ error: 'Failed to activate skill' });
+  }
+});
+
+app.get('/api/v1/skills/:id/documents', authenticate, (req, res) => {
+  try {
+    const docs = getSkillDocuments(req.params.id);
+    res.json({ data: docs });
+  } catch (err) {
+    console.error('Skill docs error:', err);
+    res.status(500).json({ error: 'Failed to get skill documents' });
+  }
+});
+
+app.post('/api/v1/skills/:id/documents', authenticate, (req, res) => {
+  try {
+    const { document_id } = req.body;
+    if (!document_id) return res.status(400).json({ error: 'document_id is required' });
+    const result = attachDocumentToSkill(req.params.id, document_id);
+    res.status(201).json({ data: result });
+  } catch (err) {
+    console.error('Skill doc attach error:', err);
+    res.status(500).json({ error: 'Failed to attach document' });
+  }
+});
+
+app.delete('/api/v1/skills/:id/documents/:docId', authenticate, (req, res) => {
+  try {
+    detachDocumentFromSkill(req.params.id, req.params.docId);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Skill doc detach error:', err);
+    res.status(500).json({ error: 'Failed to detach document' });
   }
 });
 

@@ -9,6 +9,11 @@ function DashboardHome() {
     vaultTokens: 0,
     connectors: 0,
     myListings: 0,
+    personas: 0,
+    activePersona: null,
+    skills: 0,
+    activeSkills: 0,
+    kbDocs: 0,
   });
   const [loading, setLoading] = useState(true);
   const [health, setHealth] = useState(null);
@@ -20,12 +25,15 @@ function DashboardHome() {
       try {
         const headers = { 'Authorization': `Bearer ${masterToken}` };
 
-        const [healthRes, tokensRes, vaultRes, connectorsRes, myListingsRes] = await Promise.all([
+        const [healthRes, tokensRes, vaultRes, connectorsRes, myListingsRes, personasRes, skillsRes, kbRes] = await Promise.all([
           fetch('/health'),
           fetch('/api/v1/tokens', { headers }).catch(() => ({ ok: false })),
           fetch('/api/v1/vault/tokens', { headers }).catch(() => ({ ok: false })),
           fetch('/api/v1/oauth/status', { headers }).catch(() => ({ ok: false })),
           fetch('/api/v1/marketplace-my', { headers }).catch(() => ({ ok: false })),
+          fetch('/api/v1/personas', { headers }).catch(() => ({ ok: false })),
+          fetch('/api/v1/skills', { headers }).catch(() => ({ ok: false })),
+          fetch('/api/v1/brain/knowledge-base', { headers }).catch(() => ({ ok: false })),
         ]);
 
         if (healthRes.ok) {
@@ -54,6 +62,25 @@ function DashboardHome() {
         if (myListingsRes.ok) {
           const myListingsData = await myListingsRes.json();
           setStats((s) => ({ ...s, myListings: (myListingsData.listings || []).length }));
+        }
+
+        if (personasRes.ok) {
+          const personasData = await personasRes.json();
+          const personas = personasData.data || [];
+          const active = personas.find((p) => p.active);
+          setStats((s) => ({ ...s, personas: personas.length, activePersona: active?.name || null }));
+        }
+
+        if (skillsRes.ok) {
+          const skillsData = await skillsRes.json();
+          const skills = skillsData.data || [];
+          setStats((s) => ({ ...s, skills: skills.length, activeSkills: skills.filter((s) => s.active).length }));
+        }
+
+        if (kbRes.ok) {
+          const kbData = await kbRes.json();
+          const docs = kbData.data || kbData.documents || [];
+          setStats((s) => ({ ...s, kbDocs: docs.length }));
         }
       } catch (err) {
         console.error('Failed to fetch dashboard data:', err);
@@ -93,6 +120,30 @@ function DashboardHome() {
       description: 'OAuth and integrations',
     },
     {
+      label: 'Personas',
+      value: stats.personas,
+      icon: '🎭',
+      color: 'pink',
+      link: '/personas',
+      description: stats.activePersona ? `Active: ${stats.activePersona}` : 'AI personality profiles',
+    },
+    {
+      label: 'Skills',
+      value: stats.skills,
+      icon: '🧩',
+      color: 'teal',
+      link: '/skills',
+      description: `${stats.activeSkills} active skill${stats.activeSkills !== 1 ? 's' : ''}`,
+    },
+    {
+      label: 'Knowledge Base',
+      value: stats.kbDocs,
+      icon: '📚',
+      color: 'indigo',
+      link: '/knowledge-base',
+      description: 'Documents & memory',
+    },
+    {
       label: 'My Listings',
       value: stats.myListings,
       icon: '📦',
@@ -107,6 +158,9 @@ function DashboardHome() {
     green: 'from-green-600 to-green-700',
     purple: 'from-purple-600 to-purple-700',
     amber: 'from-amber-600 to-orange-600',
+    pink: 'from-pink-600 to-rose-700',
+    teal: 'from-teal-600 to-cyan-700',
+    indigo: 'from-indigo-600 to-violet-700',
   };
 
   if (loading) {
