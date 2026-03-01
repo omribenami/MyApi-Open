@@ -25,10 +25,22 @@ function ServiceCard({ service, onConnect, onRevoke }) {
         {/* Service Info */}
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center">
-            <div className="text-4xl mr-4">{serviceInfo.icon}</div>
+            {/* Logo Image or Fallback Icon */}
+            {service.icon ? (
+              <img 
+                src={service.icon} 
+                alt={service.label || service.name}
+                className="w-12 h-12 mr-4 rounded"
+                onError={(e) => {
+                  e.target.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%236366f1"><circle cx="12" cy="12" r="10"/></svg>';
+                }}
+              />
+            ) : (
+              <div className="text-4xl mr-4">{serviceInfo.icon}</div>
+            )}
             <div>
-              <h3 className="text-lg font-semibold text-white">{serviceInfo.name}</h3>
-              <p className="text-sm text-slate-400 mt-1">{serviceInfo.description}</p>
+              <h3 className="text-lg font-semibold text-white">{service.label || serviceInfo.name}</h3>
+              <p className="text-sm text-slate-400 mt-1">{service.description || serviceInfo.description}</p>
             </div>
           </div>
           <div className="ml-4">

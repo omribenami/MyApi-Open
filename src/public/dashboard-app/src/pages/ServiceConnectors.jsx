@@ -28,59 +28,35 @@ function ServiceConnectors() {
   }, [masterToken]);
 
   const fetchServices = async () => {
-    if (!masterToken) return;
-
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await oauth.getStatus();
-      const statuses = response.data.services || [];
+      // Fetch all services from the API (38+ services with logos)
+      const response = await fetch('/api/v1/services');
+      if (!response.ok) throw new Error('Failed to fetch services');
+      
+      const data = await response.json();
+      const allServices = data.data || [];
 
-      // Build a map of API-returned services by name
-      const apiMap = {};
-      statuses.forEach((s) => {
-        apiMap[s.name] = s;
-      });
+      // Transform API services to frontend format
+      const transformed = allServices.map((svc) => ({
+        name: svc.name,
+        label: svc.label,
+        icon: svc.icon, // URL from simpleicons.org
+        description: svc.description || `Connect to ${svc.label}`,
+        auth_type: svc.auth_type,
+        api_endpoint: svc.api_endpoint,
+        documentation_url: svc.documentation_url,
+        category: svc.category_name,
+        status: 'disconnected', // Default - can be enhanced with OAuth status
+        enabled: true,
+      }));
 
-      // Merge AVAILABLE_SERVICES with the API response so all services always appear
-      const merged = AVAILABLE_SERVICES.map((svc) => {
-        const apiData = apiMap[svc.id];
-        if (apiData) {
-          return {
-            name: svc.id,
-            status: apiData.status || 'disconnected',
-            lastSync: apiData.lastSync || null,
-            scope: apiData.scope || null,
-            enabled: apiData.enabled !== false, // treat missing as enabled
-            notConfigured: apiData.enabled === false,
-          };
-        }
-        // Service exists in frontend list but not returned by API at all
-        return {
-          name: svc.id,
-          status: 'disconnected',
-          lastSync: null,
-          scope: null,
-          enabled: false,
-          notConfigured: true,
-        };
-      });
-
-      setServices(merged);
+      setServices(transformed);
     } catch (err) {
       console.error('Failed to fetch services:', err);
-      // On API failure, still show all available services as not-configured
-      const fallback = AVAILABLE_SERVICES.map((svc) => ({
-        name: svc.id,
-        status: 'disconnected',
-        lastSync: null,
-        scope: null,
-        enabled: false,
-        notConfigured: true,
-      }));
-      setServices(fallback);
-      setError('Could not load service status. Showing all available services.');
+      setError('Could not load services. Please refresh the page.');
     } finally {
       setIsLoading(false);
     }
