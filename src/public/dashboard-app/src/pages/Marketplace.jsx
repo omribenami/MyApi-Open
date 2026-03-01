@@ -93,13 +93,32 @@ function ListingModal({ listing, onClose, onInstall, masterToken }) {
   const [detail, setDetail] = useState(listing);
   const [installing, setInstalling] = useState(false);
 
+  const [installSuccess, setInstallSuccess] = useState(false);
+
   async function handleInstall() {
     setInstalling(true);
     try {
+      // Track install
       await fetch(`/api/v1/marketplace/${listing.id}/install`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${masterToken}` },
       });
+
+      // For personas: create a local copy
+      if (detail.type === 'persona' && detail.content) {
+        const content = typeof detail.content === 'string' ? JSON.parse(detail.content) : detail.content;
+        await fetch('/api/v1/personas', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${masterToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: detail.title,
+            description: detail.description || '',
+            soul_content: content.soul_content || '',
+          }),
+        });
+      }
+
+      setInstallSuccess(true);
       onInstall && onInstall();
       setDetail(d => ({ ...d, installCount: (d.installCount || 0) + 1 }));
     } finally {
@@ -192,7 +211,7 @@ function ListingModal({ listing, onClose, onInstall, masterToken }) {
           )}
 
           {/* Install button */}
-          {masterToken && (
+          {masterToken && !installSuccess && (
             <button
               onClick={handleInstall}
               disabled={installing}
@@ -200,6 +219,22 @@ function ListingModal({ listing, onClose, onInstall, masterToken }) {
             >
               {installing ? 'Installing...' : `Install / Use (${detail.installCount || 0})`}
             </button>
+          )}
+
+          {installSuccess && (
+            <div className="bg-green-900 bg-opacity-30 border border-green-700 rounded-lg p-4 space-y-2">
+              <p className="text-green-300 font-medium">✓ {detail.type === 'persona' ? 'Persona installed!' : 'Added!'}</p>
+              {detail.type === 'persona' && (
+                <>
+                  <p className="text-sm text-slate-400">This persona is now available in your Personas page.</p>
+                  <div className="bg-slate-800 rounded p-3 mt-2">
+                    <p className="text-xs text-slate-400 mb-1">API Endpoint:</p>
+                    <code className="text-xs text-green-300 font-mono">GET /api/v1/context</code>
+                    <p className="text-xs text-slate-500 mt-1">Use your master token to access this persona via the API.</p>
+                  </div>
+                </>
+              )}
+            </div>
           )}
 
           {/* Ratings */}
@@ -337,7 +372,7 @@ export default function Marketplace() {
           className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500"
         >
           <option value="newest">Newest</option>
-          <option value="popular">Most Popular</option>
+          <option value="popular">Top Rated</option>
           <option value="most_used">Most Used</option>
         </select>
       </div>
