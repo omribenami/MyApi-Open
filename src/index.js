@@ -1147,6 +1147,8 @@ app.get("/api/v1/personas", authenticate, (req, res) => {
       name: p.name,
       active: p.active,
       description: p.description,
+      soul_content: p.soul_content,
+      template_data: p.template_data,
       created_at: p.created_at
     }))
   });
@@ -1173,7 +1175,9 @@ app.get("/api/v1/personas/:id", authenticate, (req, res) => {
       soul_content: persona.soul_content,
       description: persona.description,
       active: persona.active,
-      created_at: persona.created_at
+      created_at: persona.created_at,
+      updated_at: persona.updated_at,
+      template_data: persona.template_data
     }
   });
 });
@@ -2105,10 +2109,18 @@ app.get('/api/v1/marketplace-my', authenticate, (req, res) => {
   }
 });
 
-// --- Serve React app for all /dashboard/* routes ---
-app.get('/dashboard/*', (req, res) => {
+// --- Serve React app for all /dashboard routes ---
+const sendDashboardIndex = (req, res) => {
+  // Prevent stale SPA shell on mobile browsers after deploys
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
   res.sendFile(path.join(__dirname, 'public', 'dist', 'index.html'));
-});
+};
+
+app.get('/dashboard', sendDashboardIndex);
+app.get('/dashboard/', sendDashboardIndex);
+app.get('/dashboard/*', sendDashboardIndex);
 
 // --- Start ---
 bootstrap();
