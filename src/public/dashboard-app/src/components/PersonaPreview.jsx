@@ -134,7 +134,7 @@ function PersonaPreview({ persona, showEditButton = false, onEdit = null }) {
         {soulContent ? (
           <div className="prose prose-invert max-w-none">
             <div className={`text-slate-300 overflow-hidden relative ${shouldCollapse && !showFullContent ? 'max-h-48' : ''}`}>
-              {renderContent(soulContent)}
+              <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">{soulContent}</pre>
               {shouldCollapse && !showFullContent && (
                 <div className="absolute bottom-0 left-0 w-full h-24 bg-gradient-to-t from-slate-800/90 to-transparent pointer-events-none"></div>
               )}

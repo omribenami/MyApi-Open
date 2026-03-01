@@ -230,7 +230,7 @@ function Personas() {
                 </p>
 
                 {/* Click hint */}
-                <p className="text-xs text-slate-400 mt-2">Tap to open details →</p>
+                <p className="text-xs text-blue-400 mt-2 font-medium">Click to view full details →</p>
               </div>
             ))}
           </div>
