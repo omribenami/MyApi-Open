@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useAuthStore } from '../stores/authStore';
 import PersonaPreview from './PersonaPreview';
 
 function PersonaDetailModal({ persona, onClose, onEdit, onSetActive, onDelete }) {
@@ -14,7 +15,7 @@ function PersonaDetailModal({ persona, onClose, onEdit, onSetActive, onDelete })
   const fetchAttachedDocuments = async () => {
     setLoadingDocs(true);
     try {
-      const token = localStorage.getItem('sessionToken');
+      const token = useAuthStore.getState().masterToken;
       const response = await fetch(`/api/v1/personas/${persona.id}/documents`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });

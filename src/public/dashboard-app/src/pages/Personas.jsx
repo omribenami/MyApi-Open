@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
+import { useAuthStore } from '../stores/authStore';
 import PersonaDetailModal from '../components/PersonaDetailModal';
 import EnhancedPersonaBuilder from '../components/EnhancedPersonaBuilder';
 
 function Personas() {
-  const token = localStorage.getItem('sessionToken');
+  const token = useAuthStore((state) => state.masterToken);
   const [personas, setPersonas] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -13,8 +14,8 @@ function Personas() {
   const [loadingDetail, setLoadingDetail] = useState(false);
 
   useEffect(() => {
-    fetchPersonas();
-  }, []);
+    if (token) fetchPersonas();
+  }, [token]);
 
   const handleSelectPersona = async (persona) => {
     setLoadingDetail(true);
