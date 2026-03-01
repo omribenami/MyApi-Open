@@ -2,13 +2,19 @@ import { formatServiceStatus, formatLastSynced, getServiceById } from '../utils/
 import { useServicesStore } from '../stores/servicesStore';
 
 function ServiceCard({ service, onConnect, onRevoke }) {
-  const serviceInfo = getServiceById(service.name);
+  // Support both old format (from AVAILABLE_SERVICES) and new API format
+  const serviceInfo = getServiceById(service.name) || {
+    name: service.label || service.name,
+    description: service.description || '',
+    icon: service.icon
+  };
+  
   const status = formatServiceStatus(service.status);
   const lastSynced = formatLastSynced(service.lastSync);
   const { selectedService } = useServicesStore();
   const isSelected = selectedService?.name === service.name;
 
-  if (!serviceInfo) {
+  if (!serviceInfo || !serviceInfo.name) {
     return null;
   }
 

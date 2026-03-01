@@ -97,8 +97,8 @@ function ServiceConnectors() {
     }
   };
 
-  const connectedServices = services.filter((s) => s.status === 'connected');
-  const disconnectedServices = services.filter((s) => s.status !== 'connected');
+  const connectedServices = services.filter((s) => s.status === 'connected' && s.label);
+  const disconnectedServices = services.filter((s) => s.status !== 'connected' && s.label);
 
   return (
     <div className="space-y-8">
