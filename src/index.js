@@ -1449,7 +1449,7 @@ app.get("/api/v1/oauth/test/:service", authenticate, async (req, res) => {
 // ===== SERVICES & INTEGRATIONS =====
 
 // Get all service categories
-app.get('/api/v1/services/categories', authenticate, (req, res) => {
+app.get('/api/v1/services/categories', (req, res) => {
   try {
     const { getServiceCategories } = require('./database');
     const categories = getServiceCategories();
@@ -1461,7 +1461,7 @@ app.get('/api/v1/services/categories', authenticate, (req, res) => {
 });
 
 // Get all services (optionally filter by category)
-app.get('/api/v1/services', authenticate, (req, res) => {
+app.get('/api/v1/services', (req, res) => {
   try {
     const { category } = req.query;
     const { getServices, getServicesByCategory } = require('./database');
@@ -1481,7 +1481,7 @@ app.get('/api/v1/services', authenticate, (req, res) => {
 });
 
 // Get specific service details
-app.get('/api/v1/services/:name', authenticate, (req, res) => {
+app.get('/api/v1/services/:name', (req, res) => {
   try {
     const { getServiceByName, getServiceMethods } = require('./database');
     const service = getServiceByName(req.params.name);
@@ -1505,7 +1505,7 @@ app.get('/api/v1/services/:name', authenticate, (req, res) => {
 });
 
 // Get service API methods
-app.get('/api/v1/services/:serviceId/methods', authenticate, (req, res) => {
+app.get('/api/v1/services/:serviceId/methods', (req, res) => {
   try {
     const { getServiceMethods } = require('./database');
     const methods = getServiceMethods(parseInt(req.params.serviceId));
