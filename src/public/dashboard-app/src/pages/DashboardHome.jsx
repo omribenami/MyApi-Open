@@ -8,6 +8,7 @@ function DashboardHome() {
     tokens: 0,
     vaultTokens: 0,
     connectors: 0,
+    myListings: 0,
   });
   const [loading, setLoading] = useState(true);
   const [health, setHealth] = useState(null);
@@ -19,11 +20,12 @@ function DashboardHome() {
       try {
         const headers = { 'Authorization': `Bearer ${masterToken}` };
 
-        const [healthRes, tokensRes, vaultRes, connectorsRes] = await Promise.all([
+        const [healthRes, tokensRes, vaultRes, connectorsRes, myListingsRes] = await Promise.all([
           fetch('/health'),
           fetch('/api/v1/tokens', { headers }).catch(() => ({ ok: false })),
           fetch('/api/v1/vault/tokens', { headers }).catch(() => ({ ok: false })),
           fetch('/api/v1/oauth/status', { headers }).catch(() => ({ ok: false })),
+          fetch('/api/v1/marketplace-my', { headers }).catch(() => ({ ok: false })),
         ]);
 
         if (healthRes.ok) {
@@ -47,6 +49,11 @@ function DashboardHome() {
           const serviceList = connectorsData.services || connectorsData.data || [];
           const connected = serviceList.filter((c) => c.status === 'connected');
           setStats((s) => ({ ...s, connectors: connected.length }));
+        }
+
+        if (myListingsRes.ok) {
+          const myListingsData = await myListingsRes.json();
+          setStats((s) => ({ ...s, myListings: (myListingsData.listings || []).length }));
         }
       } catch (err) {
         console.error('Failed to fetch dashboard data:', err);
@@ -85,12 +92,21 @@ function DashboardHome() {
       link: '/services',
       description: 'OAuth and integrations',
     },
+    {
+      label: 'My Listings',
+      value: stats.myListings,
+      icon: '📦',
+      color: 'amber',
+      link: '/my-listings',
+      description: 'Published to marketplace',
+    },
   ];
 
   const colorMap = {
     blue: 'from-blue-600 to-blue-700',
     green: 'from-green-600 to-green-700',
     purple: 'from-purple-600 to-purple-700',
+    amber: 'from-amber-600 to-orange-600',
   };
 
   if (loading) {
@@ -179,6 +195,19 @@ function DashboardHome() {
               <div>
                 <h3 className="font-semibold text-white">Manage Tokens</h3>
                 <p className="text-sm text-slate-400">Master token &amp; guest access</p>
+              </div>
+            </div>
+          </Link>
+
+          <Link
+            to="/marketplace"
+            className="bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-amber-500 rounded-lg p-6 transition-all"
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">🏪</span>
+              <div>
+                <h3 className="font-semibold text-white">Browse Marketplace</h3>
+                <p className="text-sm text-slate-400">Discover personas, APIs &amp; skills</p>
               </div>
             </div>
           </Link>

@@ -15,6 +15,8 @@ function Layout({ children, onLogout }) {
     { path: '/personas', label: 'Personas', icon: '🤖' },
     { path: '/identity', label: 'Identity', icon: '🪪' },
     { path: '/knowledge', label: 'Knowledge', icon: '🧠' },
+    { path: '/marketplace', label: 'Marketplace', icon: '🏪' },
+    { path: '/my-listings', label: 'My Listings', icon: '📦' },
     { path: '/settings', label: 'Settings', icon: '⚙️' },
   ];
 

@@ -59,6 +59,15 @@ const {
   addKBDocument,
   getKBDocuments,
   deleteKBDocument,
+  // Marketplace
+  createMarketplaceListing,
+  getMarketplaceListings,
+  getMarketplaceListing,
+  updateMarketplaceListing,
+  removeMarketplaceListing,
+  rateMarketplaceListing,
+  incrementInstallCount,
+  getMyMarketplaceListings,
 } = require("./database");
 
 // OAuth service adapters
@@ -1664,6 +1673,139 @@ app.get('/api/v1/brain/context', authenticate, async (req, res) => {
   } catch (error) {
     console.error('Get context error:', error);
     res.status(500).json({ error: 'Failed to get context', message: error.message });
+  }
+});
+
+// ===== MARKETPLACE =====
+
+// GET /api/v1/marketplace - public browse
+app.get('/api/v1/marketplace', (req, res) => {
+  try {
+    const { type, sort, search, tags } = req.query;
+    const listings = getMarketplaceListings({ type, sort, search, tags });
+    res.json({ listings });
+  } catch (err) {
+    console.error('Marketplace list error:', err);
+    res.status(500).json({ error: 'Failed to get listings' });
+  }
+});
+
+// GET /api/v1/marketplace/:id - public single listing
+app.get('/api/v1/marketplace/:id', (req, res) => {
+  try {
+    const listing = getMarketplaceListing(parseInt(req.params.id));
+    if (!listing) return res.status(404).json({ error: 'Listing not found' });
+    res.json({ listing });
+  } catch (err) {
+    console.error('Marketplace get error:', err);
+    res.status(500).json({ error: 'Failed to get listing' });
+  }
+});
+
+// POST /api/v1/marketplace - create listing
+app.post('/api/v1/marketplace', authenticate, (req, res) => {
+  try {
+    const { type, title, description, content, tags, price } = req.body;
+    if (!type || !title) return res.status(400).json({ error: 'type and title are required' });
+    if (!['persona', 'api', 'skill'].includes(type)) return res.status(400).json({ error: 'type must be persona, api, or skill' });
+
+    const ownerId = req.tokenMeta.ownerId;
+    const listing = createMarketplaceListing(ownerId, type, title, description, content, tags, price);
+
+    createAuditLog({
+      requesterId: req.tokenMeta.tokenId,
+      action: 'marketplace_listing_created',
+      resource: `/api/v1/marketplace/${listing.id}`,
+      scope: req.tokenMeta.scope,
+      ip: req.ip,
+      details: { type, title }
+    });
+
+    res.status(201).json({ listing });
+  } catch (err) {
+    console.error('Marketplace create error:', err);
+    res.status(500).json({ error: 'Failed to create listing' });
+  }
+});
+
+// PUT /api/v1/marketplace/:id - update own listing
+app.put('/api/v1/marketplace/:id', authenticate, (req, res) => {
+  try {
+    const ownerId = req.tokenMeta.ownerId;
+    const listing = updateMarketplaceListing(parseInt(req.params.id), ownerId, req.body);
+    if (!listing) return res.status(404).json({ error: 'Listing not found or not yours' });
+    res.json({ listing });
+  } catch (err) {
+    console.error('Marketplace update error:', err);
+    res.status(500).json({ error: 'Failed to update listing' });
+  }
+});
+
+// DELETE /api/v1/marketplace/:id - remove own listing
+app.delete('/api/v1/marketplace/:id', authenticate, (req, res) => {
+  try {
+    const ownerId = req.tokenMeta.ownerId;
+    const ok = removeMarketplaceListing(parseInt(req.params.id), ownerId);
+    if (!ok) return res.status(404).json({ error: 'Listing not found or not yours' });
+
+    createAuditLog({
+      requesterId: req.tokenMeta.tokenId,
+      action: 'marketplace_listing_removed',
+      resource: `/api/v1/marketplace/${req.params.id}`,
+      scope: req.tokenMeta.scope,
+      ip: req.ip
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Marketplace delete error:', err);
+    res.status(500).json({ error: 'Failed to remove listing' });
+  }
+});
+
+// POST /api/v1/marketplace/:id/rate - rate a listing
+app.post('/api/v1/marketplace/:id/rate', authenticate, (req, res) => {
+  try {
+    const { rating, review } = req.body;
+    const listingId = parseInt(req.params.id);
+    if (!rating || rating < 1 || rating > 5) return res.status(400).json({ error: 'rating must be 1-5' });
+
+    const listing = getMarketplaceListing(listingId);
+    if (!listing) return res.status(404).json({ error: 'Listing not found' });
+
+    const userId = req.tokenMeta.ownerId;
+    const result = rateMarketplaceListing(listingId, userId, rating, review);
+    res.json(result);
+  } catch (err) {
+    console.error('Marketplace rate error:', err);
+    res.status(500).json({ error: 'Failed to rate listing' });
+  }
+});
+
+// POST /api/v1/marketplace/:id/install - track install/use
+app.post('/api/v1/marketplace/:id/install', authenticate, (req, res) => {
+  try {
+    const listingId = parseInt(req.params.id);
+    const listing = getMarketplaceListing(listingId);
+    if (!listing) return res.status(404).json({ error: 'Listing not found' });
+
+    incrementInstallCount(listingId);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Marketplace install error:', err);
+    res.status(500).json({ error: 'Failed to track install' });
+  }
+});
+
+// GET /api/v1/marketplace-my - get my listings
+app.get('/api/v1/marketplace-my', authenticate, (req, res) => {
+  try {
+    const ownerId = req.tokenMeta.ownerId;
+    const listings = getMyMarketplaceListings(ownerId);
+    res.json({ listings });
+  } catch (err) {
+    console.error('My listings error:', err);
+    res.status(500).json({ error: 'Failed to get your listings' });
   }
 });
 

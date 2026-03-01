@@ -11,6 +11,8 @@ import Personas from './pages/Personas';
 import KnowledgeBase from './pages/KnowledgeBase';
 import Identity from './pages/Identity';
 import Settings from './pages/Settings';
+import Marketplace from './pages/Marketplace';
+import MyListings from './pages/MyListings';
 import Layout from './components/Layout';
 
 // Create React Query client
@@ -110,6 +112,15 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Settings />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="/marketplace" element={<Marketplace />} />
+            <Route
+              path="/my-listings"
+              element={
+                <ProtectedRoute>
+                  <MyListings />
                 </ProtectedRoute>
               }
             />

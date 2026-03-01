@@ -187,6 +187,39 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_kb_documents_source ON kb_documents(source);
     CREATE INDEX IF NOT EXISTS idx_access_token_scopes_token ON access_token_scopes(token_id);
     CREATE INDEX IF NOT EXISTS idx_access_token_scopes_scope ON access_token_scopes(scope_name);
+
+    CREATE TABLE IF NOT EXISTS marketplace_listings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      owner_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT,
+      content TEXT,
+      tags TEXT DEFAULT '',
+      price TEXT DEFAULT 'free',
+      status TEXT DEFAULT 'active',
+      avg_rating REAL DEFAULT 0,
+      rating_count INTEGER DEFAULT 0,
+      install_count INTEGER DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS marketplace_ratings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      listing_id INTEGER NOT NULL,
+      user_id TEXT NOT NULL,
+      rating INTEGER NOT NULL,
+      review TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (listing_id) REFERENCES marketplace_listings(id),
+      UNIQUE(listing_id, user_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_marketplace_listings_owner ON marketplace_listings(owner_id);
+    CREATE INDEX IF NOT EXISTS idx_marketplace_listings_type ON marketplace_listings(type);
+    CREATE INDEX IF NOT EXISTS idx_marketplace_listings_status ON marketplace_listings(status);
+    CREATE INDEX IF NOT EXISTS idx_marketplace_ratings_listing ON marketplace_ratings(listing_id);
   `);
 
   // Seed default scopes if not already present
@@ -1199,6 +1232,158 @@ function deleteKBDocument(id) {
   return result.changes > 0;
 }
 
+// Marketplace
+function _formatListing(row) {
+  return {
+    id: row.id,
+    ownerId: row.owner_id,
+    ownerName: row.owner_display_name || row.owner_name || row.owner_id,
+    type: row.type,
+    title: row.title,
+    description: row.description,
+    content: row.content ? (() => { try { return JSON.parse(row.content); } catch { return row.content; } })() : null,
+    tags: row.tags ? row.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
+    price: row.price,
+    status: row.status,
+    avgRating: row.avg_rating,
+    ratingCount: row.rating_count,
+    installCount: row.install_count,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function createMarketplaceListing(ownerId, type, title, description, content, tags, price) {
+  const now = new Date().toISOString();
+  const contentStr = content ? (typeof content === 'object' ? JSON.stringify(content) : content) : null;
+  const stmt = db.prepare(`
+    INSERT INTO marketplace_listings (owner_id, type, title, description, content, tags, price, status, avg_rating, rating_count, install_count, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'active', 0, 0, 0, ?, ?)
+  `);
+  const result = stmt.run(ownerId, type, title, description || null, contentStr, tags || '', price || 'free', now, now);
+  return getMarketplaceListing(result.lastInsertRowid);
+}
+
+function getMarketplaceListings({ type, sort, search, tags, status = 'active' } = {}) {
+  let query = `
+    SELECT ml.*, u.username as owner_name, u.display_name as owner_display_name
+    FROM marketplace_listings ml
+    LEFT JOIN users u ON ml.owner_id = u.id
+    WHERE ml.status = ?
+  `;
+  const params = [status];
+
+  if (type && type !== 'all') {
+    query += ' AND ml.type = ?';
+    params.push(type);
+  }
+  if (search) {
+    query += ' AND (ml.title LIKE ? OR ml.description LIKE ?)';
+    params.push(`%${search}%`, `%${search}%`);
+  }
+  if (tags) {
+    query += ' AND ml.tags LIKE ?';
+    params.push(`%${tags}%`);
+  }
+
+  if (sort === 'popular') {
+    query += ' ORDER BY ml.avg_rating DESC, ml.rating_count DESC';
+  } else if (sort === 'most_used') {
+    query += ' ORDER BY ml.install_count DESC';
+  } else {
+    query += ' ORDER BY ml.created_at DESC';
+  }
+
+  return db.prepare(query).all(...params).map(_formatListing);
+}
+
+function getMarketplaceListing(id) {
+  const row = db.prepare(`
+    SELECT ml.*, u.username as owner_name, u.display_name as owner_display_name
+    FROM marketplace_listings ml
+    LEFT JOIN users u ON ml.owner_id = u.id
+    WHERE ml.id = ?
+  `).get(id);
+  if (!row) return null;
+
+  const ratings = db.prepare(`
+    SELECT mr.*, u.username, u.display_name
+    FROM marketplace_ratings mr
+    LEFT JOIN users u ON mr.user_id = u.id
+    WHERE mr.listing_id = ?
+    ORDER BY mr.created_at DESC
+  `).all(id).map(r => ({
+    id: r.id,
+    userId: r.user_id,
+    reviewerName: r.display_name || r.username || 'Anonymous',
+    rating: r.rating,
+    review: r.review,
+    createdAt: r.created_at,
+  }));
+
+  return { ..._formatListing(row), ratings };
+}
+
+function updateMarketplaceListing(id, ownerId, updates) {
+  const existing = db.prepare('SELECT * FROM marketplace_listings WHERE id = ? AND owner_id = ?').get(id, ownerId);
+  if (!existing) return null;
+
+  const now = new Date().toISOString();
+  const title = updates.title !== undefined ? updates.title : existing.title;
+  const description = updates.description !== undefined ? updates.description : existing.description;
+  const contentVal = updates.content !== undefined
+    ? (typeof updates.content === 'object' ? JSON.stringify(updates.content) : updates.content)
+    : existing.content;
+  const tags = updates.tags !== undefined ? updates.tags : existing.tags;
+  const status = updates.status !== undefined ? updates.status : existing.status;
+
+  db.prepare(`
+    UPDATE marketplace_listings SET title=?, description=?, content=?, tags=?, status=?, updated_at=? WHERE id=?
+  `).run(title, description, contentVal, tags, status, now, id);
+
+  return getMarketplaceListing(id);
+}
+
+function removeMarketplaceListing(id, ownerId) {
+  const result = db.prepare(
+    `UPDATE marketplace_listings SET status='removed', updated_at=? WHERE id=? AND owner_id=?`
+  ).run(new Date().toISOString(), id, ownerId);
+  return result.changes > 0;
+}
+
+function rateMarketplaceListing(listingId, userId, rating, review) {
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO marketplace_ratings (listing_id, user_id, rating, review, created_at)
+    VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(listing_id, user_id) DO UPDATE SET rating=excluded.rating, review=excluded.review, created_at=excluded.created_at
+  `).run(listingId, userId, rating, review || null, now);
+
+  const stats = db.prepare(
+    `SELECT AVG(rating) as avg, COUNT(*) as cnt FROM marketplace_ratings WHERE listing_id=?`
+  ).get(listingId);
+  const newAvg = Math.round((stats.avg || 0) * 10) / 10;
+  db.prepare(`UPDATE marketplace_listings SET avg_rating=?, rating_count=?, updated_at=? WHERE id=?`)
+    .run(newAvg, stats.cnt, now, listingId);
+
+  return { avgRating: newAvg, ratingCount: stats.cnt };
+}
+
+function incrementInstallCount(listingId) {
+  db.prepare(`UPDATE marketplace_listings SET install_count=install_count+1, updated_at=? WHERE id=?`)
+    .run(new Date().toISOString(), listingId);
+}
+
+function getMyMarketplaceListings(ownerId) {
+  return db.prepare(`
+    SELECT ml.*, u.username as owner_name, u.display_name as owner_display_name
+    FROM marketplace_listings ml
+    LEFT JOIN users u ON ml.owner_id = u.id
+    WHERE ml.owner_id = ? AND ml.status != 'removed'
+    ORDER BY ml.created_at DESC
+  `).all(ownerId).map(_formatListing);
+}
+
 module.exports = {
   db,
   initDatabase,
@@ -1258,4 +1443,13 @@ module.exports = {
   getKBDocuments,
   getKBDocumentById,
   deleteKBDocument,
+  // Marketplace
+  createMarketplaceListing,
+  getMarketplaceListings,
+  getMarketplaceListing,
+  updateMarketplaceListing,
+  removeMarketplaceListing,
+  rateMarketplaceListing,
+  incrementInstallCount,
+  getMyMarketplaceListings,
 };
