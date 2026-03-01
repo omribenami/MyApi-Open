@@ -54,12 +54,12 @@ function DashboardHome() {
 
   const statCards = [
     {
-      label: 'Active Tokens',
+      label: 'Access Tokens',
       value: stats.tokens,
-      icon: '🔐',
+      icon: '🔑',
       color: 'blue',
-      link: '/tokens',
-      description: 'API tokens and credentials',
+      link: '/access-tokens',
+      description: 'Master & guest tokens',
     },
     {
       label: 'Connected Services',
