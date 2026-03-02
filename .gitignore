@@ -3,3 +3,17 @@ node_modules/
 .env
 dist/
 *.log
+
+# Python cache artifacts
+__pycache__/
+*.pyc
+
+# SQLite runtime sidecars
+*.sqlite-shm
+*.sqlite-wal
+
+# Build/cache
+.cache/
+
+# Local virtual environment
+backend/venv/
