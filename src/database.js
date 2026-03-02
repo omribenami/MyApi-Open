@@ -206,6 +206,7 @@ function initDatabase() {
       category TEXT DEFAULT 'custom',
       script_content TEXT,
       config_json TEXT,
+      repo_url TEXT,
       active INTEGER DEFAULT 0,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
@@ -1324,7 +1325,7 @@ function deleteKBDocument(id) {
 // Persona Documents
 function getPersonaDocuments(personaId) {
   return db.prepare(`
-    SELECT pd.document_id, kd.title, kd.source, kd.created_at
+    SELECT pd.document_id, kd.title, kd.source, kd.content, kd.created_at
     FROM persona_documents pd
     JOIN kb_documents kd ON pd.document_id = kd.id
     WHERE pd.persona_id = ?
@@ -1333,6 +1334,7 @@ function getPersonaDocuments(personaId) {
     documentId: r.document_id,
     title: r.title,
     source: r.source,
+    preview: r.content ? String(r.content).slice(0, 180) : '',
     createdAt: r.created_at,
   }));
 }
@@ -1354,13 +1356,14 @@ function detachDocumentFromPersona(personaId, documentId) {
 }
 
 // Skills
-function createSkill(name, description, version, author, category, scriptContent, configJson) {
+function createSkill(name, description, version, author, category, scriptContent, configJson, repoUrl) {
   const now = new Date().toISOString();
   const stmt = db.prepare(`
-    INSERT INTO skills (name, description, version, author, category, script_content, config_json, active, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+    INSERT INTO skills (name, description, version, author, category, script_content, config_json, repo_url, active, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
   `);
-  const result = stmt.run(name, description || null, version || '1.0.0', author || null, category || 'custom', scriptContent || null, configJson || null, now, now);
+  const configValue = typeof configJson === 'object' ? JSON.stringify(configJson) : (configJson || null);
+  const result = stmt.run(name, description || null, version || '1.0.0', author || null, category || 'custom', scriptContent || null, configValue, repoUrl || null, now, now);
   return getSkillById(result.lastInsertRowid);
 }
 
@@ -1390,13 +1393,14 @@ function updateSkill(id, updates) {
   const author = updates.author !== undefined ? updates.author : skill.author;
   const category = updates.category !== undefined ? updates.category : skill.category;
   const scriptContent = updates.script_content !== undefined ? updates.script_content : skill.script_content;
+  const repoUrl = updates.repo_url !== undefined ? updates.repo_url : skill.repo_url;
   const configJson = updates.config_json !== undefined
     ? (typeof updates.config_json === 'object' ? JSON.stringify(updates.config_json) : updates.config_json)
     : (typeof skill.config_json === 'object' ? JSON.stringify(skill.config_json) : skill.config_json);
 
   db.prepare(`
-    UPDATE skills SET name=?, description=?, version=?, author=?, category=?, script_content=?, config_json=?, updated_at=? WHERE id=?
-  `).run(name, description, version, author, category, scriptContent, configJson, now, id);
+    UPDATE skills SET name=?, description=?, version=?, author=?, category=?, script_content=?, config_json=?, repo_url=?, updated_at=? WHERE id=?
+  `).run(name, description, version, author, category, scriptContent, configJson, repoUrl, now, id);
   return getSkillById(id);
 }
 

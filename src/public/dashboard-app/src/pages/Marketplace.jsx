@@ -104,18 +104,38 @@ function ListingModal({ listing, onClose, onInstall, masterToken }) {
         headers: { 'Authorization': `Bearer ${masterToken}` },
       });
 
-      // For personas: create a local copy
-      if (detail.type === 'persona' && detail.content) {
+      // Install into local resources based on type
+      if (detail.content) {
         const content = typeof detail.content === 'string' ? JSON.parse(detail.content) : detail.content;
-        await fetch('/api/v1/personas', {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${masterToken}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: detail.title,
-            description: detail.description || '',
-            soul_content: content.soul_content || '',
-          }),
-        });
+
+        if (detail.type === 'persona') {
+          await fetch('/api/v1/personas', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${masterToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: detail.title,
+              description: detail.description || '',
+              soul_content: content.soul_content || '',
+            }),
+          });
+        }
+
+        if (detail.type === 'skill') {
+          await fetch('/api/v1/skills', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${masterToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: detail.title,
+              description: detail.description || content.tagline || '',
+              version: content.version || '1.0.0',
+              author: detail.ownerName,
+              category: content.category || 'custom',
+              script_content: content.script_content || '',
+              config_json: content.config_json || { marketplace_listing_id: detail.id },
+              repo_url: content.repo_url || '',
+            }),
+          });
+        }
       }
 
       setInstallSuccess(true);

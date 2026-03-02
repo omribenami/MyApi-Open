@@ -2004,6 +2004,97 @@ app.get('/api/v1/dashboard/stats', authenticate, (req, res) => {
 });
 
 // ===== SKILLS =====
+function parseGitHubRepoUrl(repoUrl) {
+  if (!repoUrl) return null;
+  const trimmed = String(repoUrl).trim().replace(/\.git$/, '');
+  const m = trimmed.match(/^https?:\/\/github\.com\/([^\/]+)\/([^\/\?#]+)(?:[\/\?#].*)?$/i);
+  if (!m) return null;
+  return { owner: m[1], repo: m[2], normalized: `https://github.com/${m[1]}/${m[2]}` };
+}
+
+async function fetchGitHubRepoMetadata(repoUrl) {
+  const parsed = parseGitHubRepoUrl(repoUrl);
+  if (!parsed) throw new Error('Only GitHub repository URLs are currently supported');
+
+  const headers = { 'User-Agent': 'MyApi-Skill-Scanner' };
+  const repoRes = await fetch(`https://api.github.com/repos/${parsed.owner}/${parsed.repo}`, { headers });
+  if (!repoRes.ok) throw new Error('Repository not found or inaccessible');
+  const repo = await repoRes.json();
+
+  const defaultBranch = repo.default_branch || 'main';
+  const readmeRes = await fetch(`https://raw.githubusercontent.com/${parsed.owner}/${parsed.repo}/${defaultBranch}/README.md`, { headers });
+  const pkgRes = await fetch(`https://raw.githubusercontent.com/${parsed.owner}/${parsed.repo}/${defaultBranch}/package.json`, { headers });
+  const skillDocRes = await fetch(`https://raw.githubusercontent.com/${parsed.owner}/${parsed.repo}/${defaultBranch}/SKILL.md`, { headers });
+
+  const readme = readmeRes.ok ? await readmeRes.text() : '';
+  const skillDoc = skillDocRes.ok ? await skillDocRes.text() : '';
+  let pkg = null;
+  if (pkgRes.ok) {
+    try { pkg = JSON.parse(await pkgRes.text()); } catch {}
+  }
+
+  const name = pkg?.name || repo.name;
+  const description = repo.description || pkg?.description || (readme.split('\n').find((l) => l.trim()) || '').replace(/^#\s*/, '') || 'Imported from repository';
+  const version = pkg?.version || '1.0.0';
+  const author = (typeof pkg?.author === 'string' ? pkg.author : pkg?.author?.name) || repo.owner?.login || '';
+
+  const language = (repo.language || '').toLowerCase();
+  const category = language.includes('python') ? 'automation'
+    : language.includes('javascript') || language.includes('typescript') ? 'integration'
+    : language.includes('go') || language.includes('rust') ? 'security'
+    : 'custom';
+
+  const scriptContent = skillDoc || readme || '';
+  const scanner = runSkillScanner({ readme, skillDoc, pkg, repo });
+
+  return {
+    metadata: {
+      name,
+      description,
+      version,
+      author,
+      category,
+      repo_url: parsed.normalized,
+      script_content: scriptContent,
+      config_json: {
+        source: 'github',
+        stars: repo.stargazers_count || 0,
+        forks: repo.forks_count || 0,
+        default_branch: defaultBranch,
+        topics: repo.topics || [],
+        scanner,
+      },
+    },
+    scanner,
+  };
+}
+
+function runSkillScanner({ readme = '', skillDoc = '', pkg = null, repo = null }) {
+  const text = `${readme}\n${skillDoc}\n${JSON.stringify(pkg || {})}`.toLowerCase();
+  const dangerousPatterns = [
+    /rm\s+-rf\s+\//,
+    /curl\s+.*\|\s*sh/,
+    /wget\s+.*\|\s*bash/,
+    /eval\(/,
+    /child_process/,
+    /powershell\s+-enc/,
+    /bitcoin|crypto miner|keylogger/,
+  ];
+  const findings = dangerousPatterns
+    .filter((rx) => rx.test(text))
+    .map((rx) => `Matched pattern: ${rx}`);
+
+  const hasLicense = /license/i.test(JSON.stringify(pkg || {})) || /license/i.test(readme);
+  const score = Math.max(0, 100 - findings.length * 35 + (hasLicense ? 5 : 0) + ((repo?.stargazers_count || 0) > 3 ? 5 : 0));
+  return {
+    safe_to_use: findings.length === 0,
+    score,
+    badge: findings.length === 0 ? 'safe' : 'warning',
+    findings,
+    checked_at: new Date().toISOString(),
+  };
+}
+
 app.get('/api/v1/skills', authenticate, (req, res) => {
   try {
     const skills = getSkills();
@@ -2027,13 +2118,47 @@ app.get('/api/v1/skills/:id', authenticate, (req, res) => {
 
 app.post('/api/v1/skills', authenticate, (req, res) => {
   try {
-    const { name, description, version, author, category, script_content, config_json } = req.body;
+    const { name, description, version, author, category, script_content, config_json, repo_url } = req.body;
     if (!name) return res.status(400).json({ error: 'Name is required' });
-    const skill = createSkill(name, description, version, author, category, script_content, config_json);
+    const skill = createSkill(name, description, version, author, category, script_content, config_json, repo_url);
     res.status(201).json({ data: skill });
   } catch (err) {
     console.error('Skill create error:', err);
     res.status(500).json({ error: 'Failed to create skill' });
+  }
+});
+
+app.post('/api/v1/skills/scan-repo', authenticate, async (req, res) => {
+  try {
+    const { repo_url } = req.body || {};
+    if (!repo_url) return res.status(400).json({ error: 'repo_url is required' });
+    const result = await fetchGitHubRepoMetadata(repo_url);
+    res.json(result);
+  } catch (err) {
+    console.error('Skill scan repo error:', err);
+    res.status(400).json({ error: err.message || 'Failed to scan repository' });
+  }
+});
+
+app.post('/api/v1/skills/from-repo', authenticate, async (req, res) => {
+  try {
+    const { repo_url } = req.body || {};
+    if (!repo_url) return res.status(400).json({ error: 'repo_url is required' });
+    const { metadata, scanner } = await fetchGitHubRepoMetadata(repo_url);
+    const skill = createSkill(
+      metadata.name,
+      metadata.description,
+      metadata.version,
+      metadata.author,
+      metadata.category,
+      metadata.script_content,
+      metadata.config_json,
+      metadata.repo_url
+    );
+    res.status(201).json({ data: skill, scanner });
+  } catch (err) {
+    console.error('Skill create from repo error:', err);
+    res.status(400).json({ error: err.message || 'Failed to import skill from repository' });
   }
 });
 

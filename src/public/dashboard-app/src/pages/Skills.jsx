@@ -14,13 +14,14 @@ const CATEGORIES = [
   { value: 'custom', label: '🛠️ Custom' },
 ];
 
-function CreateEditModal({ isEdit, skill, onSave, onClose }) {
+function CreateEditModal({ isEdit, skill, onSave, onClose, masterToken }) {
   const [form, setForm] = useState({
     name: skill?.name || '',
     description: skill?.description || '',
     version: skill?.version || '1.0.0',
     author: skill?.author || '',
     category: skill?.category || 'custom',
+    repo_url: skill?.repo_url || '',
     script_content: skill?.script_content || '',
     config_json: skill?.config_json
       ? typeof skill.config_json === 'object'
@@ -29,7 +30,39 @@ function CreateEditModal({ isEdit, skill, onSave, onClose }) {
       : '{}',
   });
   const [saving, setSaving] = useState(false);
+  const [scanning, setScanning] = useState(false);
   const [error, setError] = useState(null);
+  const [scanner, setScanner] = useState(skill?.config_json?.scanner || null);
+
+  const handleScan = async () => {
+    if (!form.repo_url?.trim()) {
+      setError('Repository URL is required');
+      return;
+    }
+    setScanning(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/v1/skills/scan-repo', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${masterToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repo_url: form.repo_url.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to scan repository');
+
+      const meta = data.metadata || {};
+      setScanner(data.scanner || null);
+      setForm((prev) => ({
+        ...prev,
+        ...meta,
+        config_json: JSON.stringify(meta.config_json || {}, null, 2),
+      }));
+    } catch (err) {
+      setError(err.message || 'Failed to scan repository');
+    } finally {
+      setScanning(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -53,115 +86,57 @@ function CreateEditModal({ isEdit, skill, onSave, onClose }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
       <div className="bg-slate-800 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[85vh] overflow-y-auto">
         <div className="sticky top-0 flex items-center justify-between p-6 border-b border-slate-700 bg-slate-800 z-10">
-          <h2 className="text-xl font-bold text-white">
-            {isEdit ? '✏️ Edit Skill' : '➕ Create Skill'}
-          </h2>
+          <h2 className="text-xl font-bold text-white">{isEdit ? '✏️ Edit Skill' : '➕ Add Skill from Git Repo'}</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-white text-2xl">✕</button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {error && (
-            <div className="bg-red-900 bg-opacity-30 border border-red-700 rounded-lg p-3 text-red-200 text-sm">
-              {error}
+          {error && <div className="bg-red-900 bg-opacity-30 border border-red-700 rounded-lg p-3 text-red-200 text-sm">{error}</div>}
+
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1">GitHub Repository URL *</label>
+            <div className="flex gap-2">
+              <input
+                type="url"
+                value={form.repo_url}
+                onChange={(e) => setForm({ ...form, repo_url: e.target.value })}
+                className="flex-1 px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="https://github.com/user/repo"
+                required={!isEdit}
+              />
+              <button type="button" onClick={handleScan} disabled={scanning} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg disabled:opacity-50">
+                {scanning ? 'Scanning...' : 'Scan & Parse'}
+              </button>
+            </div>
+          </div>
+
+          {scanner && (
+            <div className={`rounded-lg p-3 border ${scanner.safe_to_use ? 'bg-green-900/30 border-green-700 text-green-200' : 'bg-amber-900/30 border-amber-700 text-amber-200'}`}>
+              <p className="font-medium">
+                {scanner.safe_to_use ? '✅ Safe to use' : '⚠️ Scanner found potential risks'}
+                <span className="ml-2 text-xs opacity-80">score: {scanner.score}</span>
+              </p>
+              {scanner.findings?.length > 0 && <p className="text-xs mt-1">{scanner.findings.join(' • ')}</p>}
             </div>
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">Name *</label>
-              <input
-                type="text"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="My Awesome Skill"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">Version</label>
-              <input
-                type="text"
-                value={form.version}
-                onChange={(e) => setForm({ ...form, version: e.target.value })}
-                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="1.0.0"
-              />
-            </div>
+            <div><label className="block text-sm font-medium text-slate-300 mb-1">Name *</label><input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white" /></div>
+            <div><label className="block text-sm font-medium text-slate-300 mb-1">Version</label><input type="text" value={form.version} onChange={(e) => setForm({ ...form, version: e.target.value })} className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white" /></div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">Author</label>
-              <input
-                type="text"
-                value={form.author}
-                onChange={(e) => setForm({ ...form, author: e.target.value })}
-                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Your name"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">Category</label>
-              <select
-                value={form.category}
-                onChange={(e) => setForm({ ...form, category: e.target.value })}
-                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {CATEGORIES.map((c) => (
-                  <option key={c.value} value={c.value}>{c.label}</option>
-                ))}
-              </select>
-            </div>
+            <div><label className="block text-sm font-medium text-slate-300 mb-1">Author</label><input type="text" value={form.author} onChange={(e) => setForm({ ...form, author: e.target.value })} className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white" /></div>
+            <div><label className="block text-sm font-medium text-slate-300 mb-1">Category</label><select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white">{CATEGORIES.map((c) => (<option key={c.value} value={c.value}>{c.label}</option>))}</select></div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">Description</label>
-            <textarea
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-              rows={2}
-              className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-              placeholder="What does this skill do?"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">Script Content</label>
-            <textarea
-              value={form.script_content}
-              onChange={(e) => setForm({ ...form, script_content: e.target.value })}
-              rows={8}
-              className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-green-300 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
-              placeholder="# Your skill script or markdown content here..."
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">Configuration (JSON)</label>
-            <textarea
-              value={form.config_json}
-              onChange={(e) => setForm({ ...form, config_json: e.target.value })}
-              rows={4}
-              className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-amber-300 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
-              placeholder='{"key": "value"}'
-            />
-          </div>
+          <div><label className="block text-sm font-medium text-slate-300 mb-1">Description</label><textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white resize-none" /></div>
+          <div><label className="block text-sm font-medium text-slate-300 mb-1">Script Content</label><textarea value={form.script_content} onChange={(e) => setForm({ ...form, script_content: e.target.value })} rows={8} className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-green-300 font-mono text-sm resize-y" /></div>
+          <div><label className="block text-sm font-medium text-slate-300 mb-1">Configuration (JSON)</label><textarea value={form.config_json} onChange={(e) => setForm({ ...form, config_json: e.target.value })} rows={4} className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-amber-300 font-mono text-sm resize-y" /></div>
 
           <div className="flex gap-3 pt-4 border-t border-slate-700">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors font-medium"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium disabled:opacity-50"
-            >
-              {saving ? '⏳ Saving...' : isEdit ? 'Update Skill' : 'Create Skill'}
-            </button>
+            <button type="button" onClick={onClose} className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors font-medium">Cancel</button>
+            <button type="submit" disabled={saving} className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium disabled:opacity-50">{saving ? '⏳ Saving...' : isEdit ? 'Update Skill' : 'Create Skill'}</button>
           </div>
         </form>
       </div>
@@ -292,9 +267,11 @@ function Skills() {
           description: skill.description || '',
           content: JSON.stringify({
             script_content: skill.script_content || '',
-            config_json: skill.config_json || '{}',
+            config_json: skill.config_json || {},
             version: skill.version,
             category: skill.category,
+            repo_url: skill.repo_url || '',
+            scanner: skill?.config_json?.scanner || null,
           }),
           tags: skill.category || '',
         }),
@@ -426,6 +403,11 @@ function Skills() {
                         ✓ Active
                       </span>
                     )}
+                    {skill?.config_json?.scanner?.safe_to_use && (
+                      <span className="inline-block px-2 py-0.5 bg-emerald-700 text-emerald-100 text-xs font-medium rounded border border-emerald-500">
+                        🛡 Safe to use
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -510,10 +492,10 @@ function Skills() {
 
       {/* Modals */}
       {showCreateModal && (
-        <CreateEditModal isEdit={false} onSave={handleCreate} onClose={closeCreateModal} />
+        <CreateEditModal isEdit={false} onSave={handleCreate} onClose={closeCreateModal} masterToken={masterToken} />
       )}
       {showEditModal && selectedSkill && (
-        <CreateEditModal isEdit={true} skill={selectedSkill} onSave={handleUpdate} onClose={closeEditModal} />
+        <CreateEditModal isEdit={true} skill={selectedSkill} onSave={handleUpdate} onClose={closeEditModal} masterToken={masterToken} />
       )}
       {showDeleteConfirmation && (
         <DeleteConfirmModal onConfirm={handleDelete} onClose={closeDeleteConfirmation} />
