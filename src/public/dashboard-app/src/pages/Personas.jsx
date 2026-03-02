@@ -58,6 +58,28 @@ function Personas() {
     }
   };
 
+  const syncPersonaDocuments = async (personaId, nextDocumentIds = []) => {
+    const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+    const response = await fetch(`/api/v1/personas/${personaId}/documents`, { headers: { 'Authorization': `Bearer ${token}` } });
+    const payload = response.ok ? await response.json() : { data: [] };
+    const currentIds = (payload.data || []).map((doc) => doc.documentId);
+
+    const toAttach = nextDocumentIds.filter((id) => !currentIds.includes(id));
+    const toDetach = currentIds.filter((id) => !nextDocumentIds.includes(id));
+
+    await Promise.all([
+      ...toAttach.map((documentId) => fetch(`/api/v1/personas/${personaId}/documents`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ documentId }),
+      })),
+      ...toDetach.map((docId) => fetch(`/api/v1/personas/${personaId}/documents/${docId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` },
+      })),
+    ]);
+  };
+
   const handleCreatePersona = async (data) => {
     try {
       const response = await fetch('/api/v1/personas', {
@@ -70,6 +92,8 @@ function Personas() {
       });
 
       if (response.ok) {
+        const created = await response.json();
+        await syncPersonaDocuments(created?.data?.id, data.attachedDocuments || []);
         setShowCreateModal(false);
         await fetchPersonas();
       } else {
@@ -95,6 +119,7 @@ function Personas() {
       });
 
       if (response.ok) {
+        await syncPersonaDocuments(editingPersona.id, data.attachedDocuments || []);
         setEditingPersona(null);
         await fetchPersonas();
       } else {
@@ -243,8 +268,19 @@ function Personas() {
         <PersonaDetailModal
           persona={selectedPersona}
           onClose={() => setSelectedPersona(null)}
-          onEdit={() => {
-            setEditingPersona(selectedPersona);
+          onEdit={async () => {
+            try {
+              const response = await fetch(`/api/v1/personas/${selectedPersona.id}/documents`, {
+                headers: { 'Authorization': `Bearer ${token}` },
+              });
+              const data = response.ok ? await response.json() : { data: [] };
+              setEditingPersona({
+                ...selectedPersona,
+                attachedDocuments: (data.data || []).map((doc) => doc.documentId),
+              });
+            } catch {
+              setEditingPersona(selectedPersona);
+            }
             setSelectedPersona(null);
           }}
           onSetActive={() => handleSetActive(selectedPersona.id)}
@@ -299,8 +335,9 @@ function Personas() {
 
             <EnhancedPersonaBuilder
               initialData={{
+                ...(editingPersona.template_data || {}),
                 name: editingPersona.name,
-                soul_content: editingPersona.soul_content,
+                attachedDocuments: editingPersona.attachedDocuments || [],
               }}
               onSave={handleEditPersona}
               isLoading={isLoading}

@@ -5,6 +5,7 @@ import PersonaPreview from './PersonaPreview';
 function PersonaDetailModal({ persona, onClose, onEdit, onSetActive, onDelete }) {
   const [attachedDocuments, setAttachedDocuments] = useState([]);
   const [loadingDocs, setLoadingDocs] = useState(false);
+  const [selectedDoc, setSelectedDoc] = useState(null);
 
   useEffect(() => {
     if (persona?.id) {
@@ -58,14 +59,24 @@ function PersonaDetailModal({ persona, onClose, onEdit, onSetActive, onDelete })
           </div>
 
           {/* Attached Documents Section */}
-          {attachedDocuments.length > 0 && (
-            <div className="mt-8 pt-8 border-t border-slate-800">
-              <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider mb-4">
-                Attached Knowledge Base Documents
-              </h3>
+          <div className="mt-8 pt-8 border-t border-slate-800">
+            <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider mb-4">
+              Attached Knowledge Base Documents
+            </h3>
+
+            {loadingDocs ? (
+              <p className="text-sm text-slate-500">Loading documents…</p>
+            ) : attachedDocuments.length === 0 ? (
+              <p className="text-sm text-slate-500">No documents attached to this persona.</p>
+            ) : (
               <div className="space-y-3">
                 {attachedDocuments.map((doc) => (
-                  <div key={doc.documentId} className="flex items-start gap-4 p-4 bg-slate-800/50 border border-slate-700/50 rounded-lg">
+                  <button
+                    key={doc.documentId}
+                    type="button"
+                    onClick={() => setSelectedDoc(doc)}
+                    className="w-full text-left flex items-start gap-4 p-4 bg-slate-800/50 border border-slate-700/50 rounded-lg hover:border-slate-600 transition-colors"
+                  >
                     <div className="text-slate-500">
                       <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
@@ -79,12 +90,13 @@ function PersonaDetailModal({ persona, onClose, onEdit, onSetActive, onDelete })
                       <p className="font-medium text-slate-200 truncate">{doc.title}</p>
                       <p className="text-xs text-slate-500 truncate mt-0.5">{doc.source}</p>
                       {doc.preview && <p className="text-xs text-slate-400 mt-1 line-clamp-2">{doc.preview}</p>}
+                      <p className="text-[11px] text-blue-400 mt-2">Click to preview</p>
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {/* Sticky Footer Actions */}
@@ -115,6 +127,30 @@ function PersonaDetailModal({ persona, onClose, onEdit, onSetActive, onDelete })
           </button>
         </div>
       </div>
+
+      {selectedDoc && (
+        <div className="fixed inset-0 z-[60] bg-black/70 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-lg w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+            <div className="sticky top-0 bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center justify-between">
+              <div>
+                <p className="text-sm text-white font-medium">{selectedDoc.title}</p>
+                <p className="text-xs text-slate-500">{selectedDoc.source}</p>
+              </div>
+              <button
+                onClick={() => setSelectedDoc(null)}
+                className="text-slate-400 hover:text-slate-200 text-xl"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-4">
+              <pre className="whitespace-pre-wrap text-sm text-slate-300 font-mono leading-relaxed">
+                {selectedDoc.preview || 'No preview available.'}
+              </pre>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
