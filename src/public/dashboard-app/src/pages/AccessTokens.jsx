@@ -8,9 +8,9 @@ const GUEST_SCOPES = [
   { value: 'read', label: 'Basic Read', description: 'Name, role, company' },
   { value: 'professional', label: 'Professional', description: 'Skills, education, experience' },
   { value: 'availability', label: 'Availability', description: 'Calendar, timezone' },
-  { value: 'personas', label: 'Personas', description: 'Public persona profiles' },
-  { value: 'knowledge', label: 'Knowledge', description: 'Knowledge base access' },
-  { value: 'chat', label: 'Chat', description: 'Conversation and messaging' },
+  { value: 'personas:read', label: 'Personas', description: 'Public persona profiles' },
+  { value: 'brain:read', label: 'Knowledge', description: 'Knowledge/context read access' },
+  { value: 'brain:chat', label: 'Chat', description: 'Conversation and messaging' },
 ];
 
 function AccessTokens() {
@@ -55,7 +55,7 @@ function AccessTokens() {
 
   // Fetch personas when the 'personas' scope is toggled on
   useEffect(() => {
-    if (createForm.scopes.includes('personas') && personas.length === 0 && !personasLoading) {
+    if (createForm.scopes.includes('personas:read') && personas.length === 0 && !personasLoading) {
       setPersonasLoading(true);
       fetch('/api/v1/personas', { headers: { Authorization: `Bearer ${masterToken}` } })
         .then((r) => r.json())
@@ -66,7 +66,7 @@ function AccessTokens() {
         .finally(() => setPersonasLoading(false));
     }
     // Reset selection when scope removed
-    if (!createForm.scopes.includes('personas')) {
+    if (!createForm.scopes.includes('personas:read')) {
       setAllowedPersonas([]);
       setAllPersonas(true);
     }
@@ -134,7 +134,7 @@ function AccessTokens() {
     };
 
     // Only include allowedPersonas when 'personas' scope is selected and specific ones chosen
-    if (createForm.scopes.includes('personas') && !allPersonas && allowedPersonas.length > 0) {
+    if (createForm.scopes.includes('personas:read') && !allPersonas && allowedPersonas.length > 0) {
       payload.allowedPersonas = allowedPersonas;
     } else {
       payload.allowedPersonas = []; // empty = all
@@ -172,7 +172,7 @@ function AccessTokens() {
 
   // Resolve persona names for display on token cards
   const getPersonaLabel = (token) => {
-    if (!token.scopes || !token.scopes.some((s) => s.includes('personas'))) return null;
+    if (!token.scopes || !token.scopes.some((s) => s.includes('personas:read'))) return null;
     if (!token.allowedPersonas || token.allowedPersonas.length === 0) return 'All';
     if (personas.length > 0) {
       const names = token.allowedPersonas
@@ -354,7 +354,7 @@ function AccessTokens() {
               </div>
 
               {/* Per-persona scoping — shown when 'personas' scope is selected */}
-              {createForm.scopes.includes('personas') && (
+              {createForm.scopes.includes('personas:read') && (
                 <div className="border border-slate-600 rounded-lg p-4 space-y-3">
                   <div>
                     <p className="text-sm font-medium text-slate-200">Persona Access</p>

@@ -6,9 +6,9 @@ const AVAILABLE_SCOPES = [
   { value: 'read', label: 'Basic Read', description: 'Name, role, company' },
   { value: 'professional', label: 'Professional', description: 'Skills, education, experience' },
   { value: 'availability', label: 'Availability', description: 'Calendar, timezone' },
-  { value: 'personas', label: 'Personas', description: 'Public persona profiles' },
-  { value: 'knowledge', label: 'Knowledge', description: 'Knowledge base access' },
-  { value: 'chat', label: 'Chat', description: 'Conversation and messaging' },
+  { value: 'personas:read', label: 'Personas', description: 'Public persona profiles' },
+  { value: 'brain:read', label: 'Knowledge', description: 'Knowledge/context read access' },
+  { value: 'brain:chat', label: 'Chat', description: 'Conversation and messaging' },
 ];
 
 function EditTokenModal({ isOpen, token, onClose, onSuccess }) {
