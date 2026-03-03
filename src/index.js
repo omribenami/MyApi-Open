@@ -232,7 +232,7 @@ const vault = { identityDocs: {}, preferences: {} };
 
 // --- Rate Limiter ---
 const rateLimitMap = {};
-function rateLimit(windowMs = 60000, maxRequests = 60) {
+function rateLimit(windowMs = 60000, maxRequests = (process.env.NODE_ENV === 'test' ? 1000 : 60)) {
   return (req, res, next) => {
     const key = req.ip;
     const now = Date.now();
@@ -384,13 +384,32 @@ app.get("/health", (req, res) => {
 function parseAndValidateHttpUrl(value) {
   if (!value || typeof value !== 'string') return null;
   try {
-    const normalized = String(value).trim();
+    let normalized = String(value).trim();
+    if (!/^https?:\/\//i.test(normalized)) {
+      normalized = `https://${normalized}`;
+    }
     const u = new URL(normalized);
     if (!['http:', 'https:'].includes(u.protocol)) return null;
+    u.hash = '';
     return u.toString();
   } catch {
     return null;
   }
+}
+
+function normalizeSecretToken(value) {
+  if (value === undefined || value === null) return '';
+  return String(value).trim();
+}
+
+function parseFlexibleBoolean(value) {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value === 1;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    return ['1', 'true', 'yes', 'y', 'on'].includes(normalized);
+  }
+  return false;
 }
 
 function getEffectiveScopes(req) {
@@ -492,79 +511,265 @@ function buildCapabilitiesForRequest(req) {
 async function discoverApiFromWebsite(websiteUrl) {
   const normalizedWebsiteUrl = parseAndValidateHttpUrl(websiteUrl);
   if (!normalizedWebsiteUrl) {
-    return { sourceWebsiteUrl: websiteUrl, apiBaseUrl: null, authScheme: 'unknown', confidence: 0, notes: 'invalid website URL' };
+    return {
+      sourceWebsiteUrl: websiteUrl,
+      apiBaseUrl: null,
+      authScheme: 'unknown',
+      confidence: 0,
+      notes: 'invalid website URL'
+    };
   }
 
+  const origin = new URL(normalizedWebsiteUrl).origin;
   const fallback = {
     sourceWebsiteUrl: normalizedWebsiteUrl,
-    apiBaseUrl: `${new URL(normalizedWebsiteUrl).origin}/api`,
+    apiBaseUrl: `${origin}/api`,
     authScheme: 'unknown',
     confidence: 0.25,
     notes: 'fallback heuristic used',
   };
 
+  const probeCandidates = [
+    `${origin}/openapi.json`,
+    `${origin}/swagger.json`,
+    `${origin}/.well-known/openapi.json`,
+    `${origin}/api/openapi.json`,
+    `${origin}/api/v1/openapi.json`,
+  ];
+
+  for (const candidate of probeCandidates) {
+    try {
+      const probeResp = await fetch(candidate, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout(3000),
+      });
+      if (!probeResp.ok) continue;
+      const body = await probeResp.json();
+      if (body?.openapi || body?.swagger || body?.paths) {
+        const basePath = body?.servers?.[0]?.url ? parseAndValidateHttpUrl(body.servers[0].url) : null;
+        return {
+          sourceWebsiteUrl: normalizedWebsiteUrl,
+          apiBaseUrl: basePath || fallback.apiBaseUrl,
+          authScheme: 'unknown',
+          confidence: 0.8,
+          notes: `discovered from ${candidate}`,
+          raw: { source: 'probe', candidate },
+        };
+      }
+    } catch {
+      // best-effort probe
+    }
+  }
+
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return fallback;
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000);
+  const attempts = [5000, 8000];
+  let lastError = null;
 
-  try {
-    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      signal: controller.signal,
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        temperature: 0,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: 'Return strict JSON only: {"apiBaseUrl": string|null, "authScheme": "Bearer"|"Basic"|"ApiKey"|"OAuth2"|"unknown", "confidence": number, "notes": string}. Never include secrets.' },
-          { role: 'user', content: `Website URL: ${normalizedWebsiteUrl}. Infer likely public API base URL and auth scheme.` }
-        ]
-      })
-    });
+  for (const timeoutMs of attempts) {
+    try {
+      const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        signal: AbortSignal.timeout(timeoutMs),
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          temperature: 0,
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: 'Return strict JSON only: {"apiBaseUrl": string|null, "authScheme": "Bearer"|"Basic"|"ApiKey"|"OAuth2"|"unknown", "confidence": number, "notes": string}. Never include secrets.' },
+            { role: 'user', content: `Website URL: ${normalizedWebsiteUrl}. Infer likely public API base URL and auth scheme.` }
+          ]
+        })
+      });
 
-    if (!resp.ok) return fallback;
-    const data = await resp.json();
-    const raw = data?.choices?.[0]?.message?.content || '{}';
-    const parsed = JSON.parse(raw);
-    const parsedUrl = parseAndValidateHttpUrl(parsed.apiBaseUrl || '') || fallback.apiBaseUrl;
-    return {
-      sourceWebsiteUrl: normalizedWebsiteUrl,
-      apiBaseUrl: parsedUrl,
-      authScheme: ['Bearer', 'Basic', 'ApiKey', 'OAuth2', 'unknown'].includes(parsed.authScheme) ? parsed.authScheme : 'unknown',
-      confidence: typeof parsed.confidence === 'number' ? Math.max(0, Math.min(1, parsed.confidence)) : fallback.confidence,
-      notes: String(parsed.notes || 'AI-assisted discovery'),
-      raw: parsed,
-    };
-  } catch {
-    return fallback;
-  } finally {
-    clearTimeout(timeout);
+      if (!resp.ok) {
+        lastError = `upstream_status_${resp.status}`;
+        continue;
+      }
+
+      const data = await resp.json();
+      const raw = data?.choices?.[0]?.message?.content || '{}';
+      const parsed = JSON.parse(raw);
+      const parsedUrl = parseAndValidateHttpUrl(parsed.apiBaseUrl || '') || fallback.apiBaseUrl;
+      return {
+        sourceWebsiteUrl: normalizedWebsiteUrl,
+        apiBaseUrl: parsedUrl,
+        authScheme: ['Bearer', 'Basic', 'ApiKey', 'OAuth2', 'unknown'].includes(parsed.authScheme) ? parsed.authScheme : 'unknown',
+        confidence: typeof parsed.confidence === 'number' ? Math.max(0, Math.min(1, parsed.confidence)) : fallback.confidence,
+        notes: String(parsed.notes || 'AI-assisted discovery'),
+        raw: parsed,
+      };
+    } catch (err) {
+      lastError = err?.name || 'request_error';
+    }
   }
+
+  return {
+    ...fallback,
+    notes: `fallback heuristic used after discovery retries (${lastError || 'unknown_error'})`,
+  };
 }
 
 app.get('/api/v1/capabilities', authenticate, (req, res) => {
-  res.json(buildCapabilitiesForRequest(req));
+  const capabilities = buildCapabilitiesForRequest(req);
+  res.json({
+    ...capabilities,
+    examples: {
+      checkCapabilities: {
+        method: 'GET',
+        url: '/api/v1/capabilities',
+      },
+      uploadKnowledgeBase: {
+        method: 'POST',
+        url: '/api/v1/brain/knowledge-base/upload',
+        contentType: 'multipart/form-data',
+        oneOfFields: ['file', 'document', 'upload', 'kbFile'],
+      }
+    }
+  });
 });
 
 app.get('/api/v1/tokens/me/capabilities', authenticate, (req, res) => {
-  res.json(buildCapabilitiesForRequest(req));
+  const capabilities = buildCapabilitiesForRequest(req);
+  res.json({
+    token: {
+      tokenId: req.tokenMeta?.tokenId,
+      scope: req.tokenMeta?.scope,
+      authType: req.authType || 'bearer',
+      allowedPersonas: req.tokenMeta?.allowedPersonas || null,
+    },
+    capabilities,
+  });
 });
 
 app.get('/openapi.json', (req, res) => {
+  const host = req.get('host');
+  const scheme = req.protocol || 'http';
+
   res.json({
     openapi: '3.0.0',
-    info: { title: 'MyApi', version: '0.1.0' },
+    info: {
+      title: 'MyApi',
+      version: '0.1.0',
+      description: 'Personal API platform with scope-aware discovery and automation-friendly endpoints.',
+    },
+    servers: [{ url: `${scheme}://${host}` }],
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'API token',
+        },
+      },
+      schemas: {
+        ErrorResponse: {
+          type: 'object',
+          properties: {
+            error: { type: 'string' },
+            message: { type: 'string' },
+          },
+        },
+        DiscoveryRequest: {
+          type: 'object',
+          required: ['websiteUrl'],
+          properties: {
+            websiteUrl: { type: 'string', format: 'uri', example: 'https://example.com' },
+          },
+        },
+        VaultTokenCreateRequest: {
+          type: 'object',
+          required: ['name', 'service', 'token', 'websiteUrl'],
+          properties: {
+            name: { type: 'string', example: 'GitHub PAT' },
+            service: { type: 'string', example: 'github' },
+            token: { type: 'string', example: 'ghp_xxx' },
+            websiteUrl: { type: 'string', format: 'uri', example: 'https://github.com' },
+            discoverApi: { type: 'boolean', example: true },
+          },
+        },
+      },
+    },
+    security: [{ bearerAuth: [] }],
     paths: {
-      '/api/v1/capabilities': { get: { summary: 'Scope-aware capability manifest' } },
-      '/api/v1/tokens/me/capabilities': { get: { summary: 'Capability manifest for current token' } },
-      '/api/v1/vault/discover-api': { post: { summary: 'Discover likely API base URL from website URL' } },
-      '/api/v1/brain/knowledge-base/upload': { post: { summary: 'Upload KB document' } },
+      '/api/v1/capabilities': {
+        get: {
+          summary: 'Scope-aware capability manifest',
+          description: 'Returns only endpoints available to the caller scope.',
+          security: [{ bearerAuth: [] }],
+          responses: {
+            '200': { description: 'Capabilities manifest' },
+            '401': { description: 'Unauthorized', content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } } },
+          },
+        },
+      },
+      '/api/v1/tokens/me/capabilities': {
+        get: {
+          summary: 'Capability manifest for current token',
+          security: [{ bearerAuth: [] }],
+          responses: { '200': { description: 'Token capability manifest' } },
+        },
+      },
+      '/api/v1/vault/discover-api': {
+        post: {
+          summary: 'Discover likely API base URL from website URL',
+          security: [{ bearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/DiscoveryRequest' } } },
+          },
+          responses: {
+            '200': { description: 'Discovery metadata' },
+            '400': { description: 'Invalid request', content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } } },
+          },
+        },
+      },
+      '/api/v1/vault/tokens': {
+        post: {
+          summary: 'Store API token with optional API discovery',
+          security: [{ bearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: { $ref: '#/components/schemas/VaultTokenCreateRequest' } } },
+          },
+          responses: {
+            '201': { description: 'Vault token created' },
+            '400': { description: 'Validation error', content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } } },
+          },
+        },
+      },
+      '/api/v1/brain/knowledge-base/upload': {
+        post: {
+          summary: 'Upload KB document',
+          security: [{ bearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              'multipart/form-data': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    file: { type: 'string', format: 'binary' },
+                    document: { type: 'string', format: 'binary' },
+                    upload: { type: 'string', format: 'binary' },
+                    kbFile: { type: 'string', format: 'binary' },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            '201': { description: 'Document uploaded and chunked into KB entries' },
+            '400': { description: 'Upload validation error', content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } } },
+          },
+        },
+      },
     },
   });
 });
@@ -577,9 +782,17 @@ app.get('/.well-known/ai-plugin.json', (req, res) => {
     name_for_human: 'MyApi',
     name_for_model: 'myapi',
     description_for_human: 'Self-describing personal API platform',
-    description_for_model: 'Use capabilities endpoints first, then execute scoped API operations.',
-    auth: { type: 'service_http' },
+    description_for_model: 'Call /api/v1/capabilities first. Use returned scope-aware guidance before invoking mutating endpoints.',
+    auth: {
+      type: 'service_http',
+      authorization_type: 'bearer',
+      verification_tokens: {},
+      instructions: 'Use Authorization: Bearer <token> for API agents, or a logged-in browser session cookie.'
+    },
     api: { type: 'openapi', url: `${scheme}://${host}/openapi.json` },
+    logo_url: `${scheme}://${host}/favicon.ico`,
+    legal_info_url: `${scheme}://${host}/`,
+    contact_email: 'support@localhost',
   });
 });
 
@@ -622,33 +835,75 @@ app.put("/api/v1/preferences", authenticate, (req, res) => {
 // --- VAULT TOKENS (encrypted external API keys) ---
 app.post("/api/v1/vault/tokens", authenticate, async (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can add vault tokens" });
-  const { name, label, description, token, service, websiteUrl, discoverApi } = req.body;
-  const tokenLabel = name || label;
-  if (!tokenLabel || !token || !service) return res.status(400).json({ error: "name, service, and token are required" });
 
-  const normalizedWebsiteUrl = parseAndValidateHttpUrl(websiteUrl);
-  if (!normalizedWebsiteUrl) return res.status(400).json({ error: "websiteUrl must be a valid http(s) URL" });
+  try {
+    const { name, label, description, token, service, websiteUrl, url, apiUrl, discoverApi } = req.body || {};
+    const tokenLabel = String(name || label || '').trim();
+    const normalizedToken = normalizeSecretToken(token);
+    const normalizedService = String(service || '').trim().toLowerCase();
+    const websiteCandidate = websiteUrl || url || apiUrl;
 
-  const discovery = discoverApi ? await discoverApiFromWebsite(normalizedWebsiteUrl) : null;
-  const vaultToken = createVaultToken(tokenLabel, description, token, service, normalizedWebsiteUrl, discovery);
-  createAuditLog({
-    requesterId: req.tokenMeta.tokenId,
-    action: "create_vault_token",
-    resource: `/vault/tokens/${vaultToken.id}`,
-    scope: req.tokenMeta.scope,
-    ip: req.ip,
-    details: { service, websiteUrl: normalizedWebsiteUrl, discoverApi: !!discoverApi, discoveredApiUrl: discovery?.apiBaseUrl || null }
-  });
-  res.status(201).json({ data: vaultToken });
+    if (!tokenLabel || !normalizedToken || !normalizedService) {
+      return res.status(400).json({ error: "name, service, and token are required" });
+    }
+
+    if (normalizedToken.length < 8 || normalizedToken.length > 8192) {
+      return res.status(400).json({ error: 'token length must be between 8 and 8192 characters' });
+    }
+
+    const normalizedWebsiteUrl = parseAndValidateHttpUrl(websiteCandidate);
+    if (!normalizedWebsiteUrl) {
+      return res.status(400).json({
+        error: "websiteUrl must be a valid http(s) URL",
+        hint: 'You may provide websiteUrl, url, or apiUrl (http/https).',
+      });
+    }
+
+    const shouldDiscoverApi = parseFlexibleBoolean(discoverApi);
+    const discovery = shouldDiscoverApi ? await discoverApiFromWebsite(normalizedWebsiteUrl) : null;
+    const vaultToken = createVaultToken(tokenLabel, description, normalizedToken, normalizedService, normalizedWebsiteUrl, discovery);
+    createAuditLog({
+      requesterId: req.tokenMeta.tokenId,
+      action: "create_vault_token",
+      resource: `/vault/tokens/${vaultToken.id}`,
+      scope: req.tokenMeta.scope,
+      ip: req.ip,
+      details: {
+        service: normalizedService,
+        websiteUrl: normalizedWebsiteUrl,
+        discoverApi: shouldDiscoverApi,
+        discoveredApiUrl: discovery?.apiBaseUrl || null,
+      }
+    });
+    res.status(201).json({ data: vaultToken });
+  } catch (error) {
+    console.error('Vault token intake error:', error);
+    res.status(500).json({ error: 'Failed to store vault token', message: 'Please retry with a valid URL and token.' });
+  }
 });
 
 app.post('/api/v1/vault/discover-api', authenticate, async (req, res) => {
   if (req.tokenMeta.scope !== 'full') return res.status(403).json({ error: 'Only master token can discover API metadata' });
-  const { websiteUrl } = req.body || {};
-  const normalized = parseAndValidateHttpUrl(websiteUrl);
-  if (!normalized) return res.status(400).json({ error: 'websiteUrl must be a valid http(s) URL' });
-  const discovery = await discoverApiFromWebsite(normalized);
-  res.json({ data: discovery });
+
+  try {
+    const { websiteUrl, url, apiUrl } = req.body || {};
+    const normalized = parseAndValidateHttpUrl(websiteUrl || url || apiUrl);
+    if (!normalized) {
+      return res.status(400).json({
+        error: 'websiteUrl must be a valid http(s) URL',
+        hint: 'Provide one of: websiteUrl, url, apiUrl',
+      });
+    }
+
+    const discovery = await discoverApiFromWebsite(normalized);
+    res.json({ data: discovery });
+  } catch (error) {
+    console.error('Vault discovery error:', error);
+    res.status(500).json({
+      error: 'Failed to discover API metadata',
+      message: 'Try again with a canonical website URL (e.g., https://example.com).',
+    });
+  }
 });
 
 app.get("/api/v1/vault/tokens", authenticate, (req, res) => {
