@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useAuthStore } from '../stores/authStore';
 
 function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
   const [tab, setTab] = useState('identity'); // identity, personality, rules, preview
@@ -36,17 +37,20 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
 
   const [error, setError] = useState('');
   const [availableDocuments, setAvailableDocuments] = useState([]);
+  const masterToken = useAuthStore((state) => state.masterToken);
 
   useEffect(() => {
     fetchDocuments();
-  }, []);
+  }, [masterToken]);
 
   const fetchDocuments = async () => {
     try {
-      const response = await fetch('/api/v1/knowledge-base');
+      const response = await fetch('/api/v1/brain/knowledge-base', {
+        headers: masterToken ? { Authorization: `Bearer ${masterToken}` } : {},
+      });
       if (response.ok) {
         const data = await response.json();
-        setAvailableDocuments(data.data || data || []);
+        setAvailableDocuments(data.data || data.documents || data || []);
       }
     } catch (err) {
       console.error('Failed to fetch documents:', err);

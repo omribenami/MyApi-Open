@@ -176,7 +176,7 @@ function Login() {
             </h2>
             <p className="text-slate-400 text-base sm:text-lg mb-8 leading-relaxed">
               One dashboard to manage all your APIs, services, tokens, and AI personas.
-              Built for developers who want control.
+              Built by AI, for AI.
             </p>
 
             {/* Feature cards grid */}
