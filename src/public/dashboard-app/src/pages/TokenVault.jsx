@@ -7,7 +7,7 @@ function TokenVault() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
-  const [formData, setFormData] = useState({ name: '', service: '', token: '', websiteUrl: '', discoveredApiUrl: '', discoveredAuthScheme: '' });
+  const [formData, setFormData] = useState({ name: '', token: '', websiteUrl: '', discoveredApiUrl: '', discoveredAuthScheme: '' });
   const [discovering, setDiscovering] = useState(false);
   // revealedTokens maps id -> decrypted token string (or null if not revealed)
   const [revealedTokens, setRevealedTokens] = useState({});
@@ -84,8 +84,8 @@ function TokenVault() {
   };
 
   const handleAddToken = async () => {
-    if (!formData.name || !formData.service || !formData.token || !formData.websiteUrl) {
-      setError('Name, service, token, and website URL are required');
+    if (!formData.name || !formData.token || !formData.websiteUrl) {
+      setError('Name, URL, and token are required');
       return;
     }
     setError('');
@@ -99,15 +99,16 @@ function TokenVault() {
         },
         body: JSON.stringify({
           name: formData.name,
-          service: formData.service,
           token: formData.token,
           websiteUrl: formData.websiteUrl,
-          discoverApi: true,
+          discoveredApiUrl: formData.discoveredApiUrl,
+          discoveredAuthScheme: formData.discoveredAuthScheme,
+          discoverApi: !formData.discoveredApiUrl, // only discover if not provided
         }),
       });
 
       if (response.ok) {
-        setFormData({ name: '', service: '', token: '', websiteUrl: '', discoveredApiUrl: '', discoveredAuthScheme: '' });
+        setFormData({ name: '', token: '', websiteUrl: '', discoveredApiUrl: '', discoveredAuthScheme: '' });
         setShowAddModal(false);
         await fetchTokens();
       } else {
@@ -371,19 +372,6 @@ function TokenVault() {
                 />
               </div>
 
-              <div>
-                <label className="block text-sm text-slate-300 mb-2">Service</label>
-                <select
-                  value={formData.service}
-                  onChange={(e) => setFormData({ ...formData, service: e.target.value })}
-                  className="w-full px-3 py-2 ui-input focus:border-slate-500 focus:outline-none"
-                >
-                  <option value="">Select service...</option>
-                  {services.map(s => (
-                    <option key={s.id} value={s.id}>{s.icon} {s.name}</option>
-                  ))}
-                </select>
-              </div>
 
               <div>
                 <label className="block text-sm text-slate-300 mb-2">Website URL</label>
@@ -394,21 +382,31 @@ function TokenVault() {
                   placeholder="https://example.com"
                   className="w-full px-3 py-2 ui-input focus:border-slate-500 focus:outline-none"
                 />
-                <div className="mt-2 flex gap-2">
+              </div>
+
+              <div>
+                <label className="block text-sm text-slate-300 mb-2">API URL (Optional)</label>
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    value={formData.discoveredApiUrl}
+                    onChange={(e) => setFormData({ ...formData, discoveredApiUrl: e.target.value })}
+                    placeholder="https://api.example.com"
+                    className="flex-1 px-3 py-2 ui-input focus:border-slate-500 focus:outline-none"
+                  />
                   <button
                     type="button"
                     onClick={handleDiscoverApi}
-                    disabled={discovering}
-                    className="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-60 text-slate-100 text-sm border border-slate-600"
+                    disabled={discovering || !formData.websiteUrl}
+                    className="px-4 py-2 rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-60 text-slate-100 text-sm border border-slate-600 whitespace-nowrap"
+                    title="Scan Website URL for API endpoint"
                   >
-                    {discovering ? 'Discovering...' : 'Discover API URL'}
+                    {discovering ? 'Scanning...' : 'Scan'}
                   </button>
-                  {formData.discoveredApiUrl && (
-                    <span className="text-xs text-emerald-300 self-center truncate" title={formData.discoveredApiUrl}>
-                      {formData.discoveredApiUrl} {formData.discoveredAuthScheme ? `(${formData.discoveredAuthScheme})` : ''}
-                    </span>
-                  )}
                 </div>
+                {formData.discoveredAuthScheme && formData.discoveredAuthScheme !== 'unknown' && (
+                  <p className="mt-1 text-xs text-slate-400">Detected Auth: {formData.discoveredAuthScheme}</p>
+                )}
               </div>
 
               <div>
@@ -427,7 +425,7 @@ function TokenVault() {
               <button
                 onClick={() => {
                   setShowAddModal(false);
-                  setFormData({ name: '', service: '', token: '', websiteUrl: '', discoveredApiUrl: '', discoveredAuthScheme: '' });
+                  setFormData({ name: '', token: '', websiteUrl: '', discoveredApiUrl: '', discoveredAuthScheme: '' });
                   setError('');
                 }}
                 className="flex-1 px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition-colors"

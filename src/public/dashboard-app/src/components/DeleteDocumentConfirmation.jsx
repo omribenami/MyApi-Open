@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useKnowledgeStore } from '../stores/knowledgeStore';
 
@@ -15,8 +15,25 @@ function DeleteDocumentConfirmation() {
   } = useKnowledgeStore();
 
   const [deleting, setDeleting] = useState(false);
+  const [usage, setUsage] = useState({ direct: [], viaSkills: [], total: 0 });
 
   const targetDocument = documents.find((d) => d.id === targetDocumentId);
+
+  useEffect(() => {
+    const loadUsage = async () => {
+      if (!showDeleteConfirmation || !targetDocumentId || !masterToken) return;
+      try {
+        const res = await fetch(`/api/v1/brain/knowledge-base/${targetDocumentId}/attachments`, {
+          headers: { Authorization: `Bearer ${masterToken}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setUsage(data?.data || { direct: [], viaSkills: [], total: 0 });
+        }
+      } catch {}
+    };
+    loadUsage();
+  }, [showDeleteConfirmation, targetDocumentId, masterToken]);
 
   const handleConfirm = async () => {
     if (!targetDocumentId || !masterToken) return;
@@ -93,6 +110,20 @@ function DeleteDocumentConfirmation() {
               </span>
             </div>
           </div>
+
+          {usage.total > 0 && (
+            <div className="bg-amber-900/30 border border-amber-700 rounded-lg p-3 space-y-1">
+              <p className="text-amber-300 text-sm font-semibold">
+                ⚠️ This document is attached to {usage.total} persona reference{usage.total !== 1 ? 's' : ''}.
+              </p>
+              {usage.direct?.slice(0, 3).map((item) => (
+                <p key={`d-${item.personaId}`} className="text-amber-200 text-xs">• Persona: {item.personaName}</p>
+              ))}
+              {usage.viaSkills?.slice(0, 3).map((item) => (
+                <p key={`s-${item.personaId}-${item.skillId}`} className="text-amber-200 text-xs">• Persona: {item.personaName} via skill {item.skillName}</p>
+              ))}
+            </div>
+          )}
 
           <div className="bg-red-900 bg-opacity-30 border border-red-800 rounded-lg p-3">
             <p className="text-red-300 text-sm font-medium">

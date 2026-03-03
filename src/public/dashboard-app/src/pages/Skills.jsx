@@ -153,13 +153,21 @@ function CreateEditModal({ isEdit, skill, onSave, onClose, masterToken }) {
   );
 }
 
-function DeleteConfirmModal({ onConfirm, onClose }) {
+function DeleteConfirmModal({ onConfirm, onClose, usage }) {
   const [deleting, setDeleting] = useState(false);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
       <div className="bg-slate-800 rounded-lg shadow-xl max-w-sm w-full mx-4 p-6">
         <h3 className="text-lg font-bold text-white mb-2">Delete Skill?</h3>
-        <p className="text-slate-400 text-sm mb-6">This action cannot be undone.</p>
+        <p className="text-slate-400 text-sm mb-3">This action cannot be undone.</p>
+        {usage?.total > 0 && (
+          <div className="mb-4 rounded-lg border border-amber-700 bg-amber-900/20 p-3">
+            <p className="text-amber-300 text-sm font-medium">⚠️ This skill is attached to {usage.total} persona{usage.total !== 1 ? 's' : ''}.</p>
+            {(usage.personas || []).slice(0, 4).map((p) => (
+              <p key={p.personaId} className="text-amber-200 text-xs mt-1">• {p.personaName}</p>
+            ))}
+          </div>
+        )}
         <div className="flex gap-3">
           <button onClick={onClose} className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium">
             Cancel
@@ -196,10 +204,27 @@ function Skills() {
   const [skillTokens, setSkillTokens] = useState({});
   const [publishingId, setPublishingId] = useState(null);
   const [generatingTokenId, setGeneratingTokenId] = useState(null);
+  const [deleteUsage, setDeleteUsage] = useState({ personas: [], total: 0 });
 
   useEffect(() => {
     if (masterToken) fetchSkills();
   }, [masterToken]);
+
+  useEffect(() => {
+    const loadDeleteUsage = async () => {
+      if (!showDeleteConfirmation || !targetSkillId || !masterToken) return;
+      try {
+        const res = await fetch(`/api/v1/skills/${targetSkillId}/attachments`, {
+          headers: { Authorization: `Bearer ${masterToken}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setDeleteUsage(data?.data || { personas: [], total: 0 });
+        }
+      } catch {}
+    };
+    loadDeleteUsage();
+  }, [showDeleteConfirmation, targetSkillId, masterToken]);
 
   const fetchSkills = async () => {
     setIsLoading(true);
@@ -533,7 +558,7 @@ function Skills() {
         <CreateEditModal isEdit={true} skill={selectedSkill} onSave={handleUpdate} onClose={closeEditModal} masterToken={masterToken} />
       )}
       {showDeleteConfirmation && (
-        <DeleteConfirmModal onConfirm={handleDelete} onClose={closeDeleteConfirmation} />
+        <DeleteConfirmModal onConfirm={handleDelete} onClose={closeDeleteConfirmation} usage={deleteUsage} />
       )}
       <SkillDetailModal />
     </div>

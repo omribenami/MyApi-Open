@@ -856,12 +856,12 @@ app.post("/api/v1/vault/tokens", authenticate, async (req, res) => {
     const { name, label, description, token, service, websiteUrl, url, apiUrl, discoverApi } = req.body || {};
     const tokenLabel = String(name || label || '').trim();
     const normalizedToken = normalizeSecretToken(token);
-    const normalizedService = String(service || '').trim().toLowerCase();
     const websiteCandidate = websiteUrl || url || apiUrl;
 
-    if (!tokenLabel || !normalizedToken || !normalizedService) {
-      return res.status(400).json({ error: "name, service, and token are required" });
+    if (!tokenLabel || !normalizedToken) {
+      return res.status(400).json({ error: "name and token are required" });
     }
+
 
     if (normalizedToken.length < 8 || normalizedToken.length > 8192) {
       return res.status(400).json({ error: 'token length must be between 8 and 8192 characters' });
@@ -875,8 +875,28 @@ app.post("/api/v1/vault/tokens", authenticate, async (req, res) => {
       });
     }
 
+    const normalizedService = String(service || '').trim().toLowerCase() || (() => {
+      try {
+        const host = new URL(normalizedWebsiteUrl).hostname.replace(/^www\./, '');
+        return host.split('.')[0] || 'custom';
+      } catch {
+        return 'custom';
+      }
+    })();
+
     const shouldDiscoverApi = parseFlexibleBoolean(discoverApi);
-    const discovery = shouldDiscoverApi ? await discoverApiFromWebsite(normalizedWebsiteUrl) : null;
+    let discovery = shouldDiscoverApi ? await discoverApiFromWebsite(normalizedWebsiteUrl) : null;
+    
+    // If not discovering, or if discovery failed to find one, but user provided an explicit API URL
+    const manualApiUrl = req.body.discoveredApiUrl || req.body.apiUrl;
+    if (manualApiUrl && (!discovery || !discovery.apiBaseUrl)) {
+      const parsedManual = parseAndValidateHttpUrl(manualApiUrl);
+      if (parsedManual) {
+        discovery = discovery || { authScheme: req.body.discoveredAuthScheme || 'unknown' };
+        discovery.apiBaseUrl = parsedManual;
+      }
+    }
+
     const vaultToken = createVaultToken(tokenLabel, description, normalizedToken, normalizedService, normalizedWebsiteUrl, discovery);
     createAuditLog({
       requesterId: req.tokenMeta.tokenId,
@@ -2757,6 +2777,33 @@ app.get('/api/v1/brain/knowledge-base/:id', authenticate, (req, res) => {
   }
 });
 
+// GET /api/v1/brain/knowledge-base/:id/attachments - list persona references
+app.get('/api/v1/brain/knowledge-base/:id/attachments', authenticate, (req, res) => {
+  try {
+    const { id } = req.params;
+    const personaDocs = db.prepare(`
+      SELECT p.id as personaId, p.name as personaName, 'direct_document' as linkType
+      FROM persona_documents pd
+      JOIN personas p ON p.id = pd.persona_id
+      WHERE pd.document_id = ?
+    `).all(id);
+
+    const personaSkillDocs = db.prepare(`
+      SELECT p.id as personaId, p.name as personaName, s.id as skillId, s.name as skillName, 'skill_document' as linkType
+      FROM persona_skill_documents psd
+      JOIN persona_skills ps ON ps.persona_id = psd.persona_id AND ps.skill_id = psd.skill_id
+      JOIN personas p ON p.id = psd.persona_id
+      JOIN skills s ON s.id = psd.skill_id
+      WHERE psd.document_id = ?
+    `).all(id);
+
+    res.json({ data: { direct: personaDocs, viaSkills: personaSkillDocs, total: personaDocs.length + personaSkillDocs.length } });
+  } catch (error) {
+    console.error('Get KB attachment usage error:', error);
+    res.status(500).json({ error: 'Failed to inspect document attachments' });
+  }
+});
+
 // DELETE /api/v1/brain/knowledge-base/:id - Delete KB document
 app.delete('/api/v1/brain/knowledge-base/:id', authenticate, (req, res) => {
   try {
@@ -3081,6 +3128,22 @@ app.put('/api/v1/skills/:id', authenticate, (req, res) => {
   } catch (err) {
     console.error('Skill update error:', err);
     res.status(500).json({ error: 'Failed to update skill' });
+  }
+});
+
+app.get('/api/v1/skills/:id/attachments', authenticate, (req, res) => {
+  try {
+    const personaRefs = db.prepare(`
+      SELECT p.id as personaId, p.name as personaName
+      FROM persona_skills ps
+      JOIN personas p ON p.id = ps.persona_id
+      WHERE ps.skill_id = ?
+      ORDER BY p.name ASC
+    `).all(req.params.id);
+    res.json({ data: { personas: personaRefs, total: personaRefs.length } });
+  } catch (err) {
+    console.error('Skill attachment inspection error:', err);
+    res.status(500).json({ error: 'Failed to inspect skill attachments' });
   }
 });
 
