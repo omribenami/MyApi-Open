@@ -96,7 +96,30 @@ function PersonaPreview({ persona, showEditButton = false, onEdit = null }) {
 
   const soulContent = persona.soul_content || '';
   const shouldCollapse = soulContent.length > 420 || soulContent.split('\n').length > 14;
+  const templateData = persona.template_data && typeof persona.template_data === 'object' ? persona.template_data : null;
 
+  const toLabel = (key) => key
+    .replace(/_/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+
+  const renderValue = (value) => {
+    if (value === null || value === undefined || value === '') return '—';
+    if (Array.isArray(value)) {
+      if (value.length === 0) return '—';
+      return value.join(', ');
+    }
+    if (typeof value === 'object') {
+      return JSON.stringify(value, null, 2);
+    }
+    return String(value);
+  };
+
+  const metadataStats = {
+    lines: soulContent ? soulContent.split('\n').length : 0,
+    chars: soulContent ? soulContent.length : 0,
+    sections: soulContent ? soulContent.split('\n').filter((l) => l.startsWith('#')).length : 0,
+  };
   return (
     <div className="w-full">
       {/* Header with actions */}
@@ -115,8 +138,8 @@ function PersonaPreview({ persona, showEditButton = false, onEdit = null }) {
         )}
       </div>
 
-      {/* Status badge */}
-      <div className="mb-6">
+      {/* Status + quick stats */}
+      <div className="mb-6 flex flex-wrap items-center gap-2">
         <span
           className={`inline-block px-3 py-1 rounded-md text-xs font-medium ${
             persona.active
@@ -126,6 +149,15 @@ function PersonaPreview({ persona, showEditButton = false, onEdit = null }) {
         >
           {persona.active ? 'Active' : 'Inactive'}
         </span>
+        <span className="inline-block px-3 py-1 rounded-md text-xs border border-slate-700 text-slate-400">
+          {metadataStats.sections} sections
+        </span>
+        <span className="inline-block px-3 py-1 rounded-md text-xs border border-slate-700 text-slate-400">
+          {metadataStats.lines} lines
+        </span>
+        <span className="inline-block px-3 py-1 rounded-md text-xs border border-slate-700 text-slate-400">
+          {metadataStats.chars} chars
+        </span>
       </div>
 
       {/* Main content area */}
@@ -134,7 +166,9 @@ function PersonaPreview({ persona, showEditButton = false, onEdit = null }) {
         {soulContent ? (
           <div className="prose prose-invert max-w-none">
             <div className={`text-slate-300 overflow-hidden relative ${shouldCollapse && !showFullContent ? 'max-h-48' : ''}`}>
-              <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">{soulContent}</pre>
+              <div className="rounded-md border border-slate-700/60 bg-slate-900/40 p-4">
+                {renderContent(soulContent)}
+              </div>
               {shouldCollapse && !showFullContent && (
                 <div className="absolute bottom-0 left-0 w-full h-24 bg-gradient-to-t from-slate-800/90 to-transparent pointer-events-none"></div>
               )}
@@ -157,36 +191,24 @@ function PersonaPreview({ persona, showEditButton = false, onEdit = null }) {
         )}
 
         {/* Template data if available */}
-        {persona.template_data && (showFullContent || !shouldCollapse) && (
+        {templateData && (showFullContent || !shouldCollapse) && (
           <div className="mt-8 pt-6 border-t border-slate-700/50">
             <h2 className="text-lg font-medium text-slate-200 mb-4">
-              Template Data
+              Persona Configuration
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {persona.template_data.name && (
-                <div className="bg-slate-800/80 p-3 rounded-md border border-slate-700/50">
-                  <p className="text-slate-500 text-xs uppercase tracking-wider mb-1">Name</p>
-                  <p className="text-slate-300 text-sm">{persona.template_data.name}</p>
+              {Object.entries(templateData).map(([key, value]) => (
+                <div key={key} className="bg-slate-800/80 p-3 rounded-md border border-slate-700/50">
+                  <p className="text-slate-500 text-xs uppercase tracking-wider mb-1">{toLabel(key)}</p>
+                  {typeof value === 'object' && value !== null ? (
+                    <pre className="text-slate-300 text-xs whitespace-pre-wrap font-mono leading-relaxed">
+                      {renderValue(value)}
+                    </pre>
+                  ) : (
+                    <p className="text-slate-300 text-sm whitespace-pre-wrap">{renderValue(value)}</p>
+                  )}
                 </div>
-              )}
-              {persona.template_data.title && (
-                <div className="bg-slate-800/80 p-3 rounded-md border border-slate-700/50">
-                  <p className="text-slate-500 text-xs uppercase tracking-wider mb-1">Title</p>
-                  <p className="text-slate-300 text-sm">{persona.template_data.title}</p>
-                </div>
-              )}
-              {persona.template_data.tone && (
-                <div className="bg-slate-800/80 p-3 rounded-md border border-slate-700/50">
-                  <p className="text-slate-500 text-xs uppercase tracking-wider mb-1">Tone</p>
-                  <p className="text-slate-300 text-sm">{persona.template_data.tone}</p>
-                </div>
-              )}
-              {persona.template_data.traits && (
-                <div className="bg-slate-800/80 p-3 rounded-md border border-slate-700/50">
-                  <p className="text-slate-500 text-xs uppercase tracking-wider mb-1">Traits</p>
-                  <p className="text-slate-300 text-sm">{persona.template_data.traits}</p>
-                </div>
-              )}
+              ))}
             </div>
           </div>
         )}
