@@ -521,23 +521,26 @@ function seedDefaultScopes() {
     { name: 'audit:read', category: 'audit', description: 'Read audit logs' },
     { name: 'personas:read', category: 'personas', description: 'Read persona definitions' },
     { name: 'personas:write', category: 'personas', description: 'Create and manage personas' },
+    { name: 'skills:read', category: 'skills', description: 'Read skills and skill metadata' },
+    { name: 'skills:write', category: 'skills', description: 'Create and manage skills' },
     { name: 'admin:*', category: 'admin', description: 'Full admin access (grants all scopes)' },
   ];
 
-  const checkStmt = db.prepare('SELECT COUNT(*) as count FROM scope_definitions');
-  const result = checkStmt.get();
-  
-  if (result.count === 0) {
-    const now = new Date().toISOString();
-    const insertStmt = db.prepare(`
-      INSERT INTO scope_definitions (scope_name, description, category, permissions, created_at)
-      VALUES (?, ?, ?, ?, ?)
-    `);
+  const now = new Date().toISOString();
+  const insertStmt = db.prepare(`
+    INSERT OR IGNORE INTO scope_definitions (scope_name, description, category, permissions, created_at)
+    VALUES (?, ?, ?, ?, ?)
+  `);
 
-    for (const scope of scopes) {
-      insertStmt.run(scope.name, scope.description, scope.category, null, now);
-    }
-    console.log('Seeded default scopes');
+  const updateStmt = db.prepare(`
+    UPDATE scope_definitions
+    SET description = ?, category = ?
+    WHERE scope_name = ?
+  `);
+
+  for (const scope of scopes) {
+    insertStmt.run(scope.name, scope.description, scope.category, null, now);
+    updateStmt.run(scope.description, scope.category, scope.name);
   }
 }
 
@@ -618,7 +621,7 @@ function hasPermission(tokenScopes, requiredScopes) {
 
 function expandScopeTemplate(template) {
   const templates = {
-    'read': ['identity:read', 'vault:read', 'services:read', 'brain:read', 'audit:read'],
+    'read': ['identity:read', 'vault:read', 'services:read', 'brain:read', 'audit:read', 'skills:read'],
     'professional': ['identity:read'],
     'availability': ['identity:read'],
     'guest': ['identity:read'],

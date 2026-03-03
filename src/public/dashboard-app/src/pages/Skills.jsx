@@ -305,7 +305,7 @@ function Skills() {
         headers: { Authorization: `Bearer ${masterToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           label: `Skill: ${skill.name}`,
-          scopes: ['skills', 'read'],
+          scopes: ['skills:read'],
           expiresInHours: null,
         }),
       });

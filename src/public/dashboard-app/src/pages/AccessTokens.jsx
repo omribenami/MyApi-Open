@@ -11,6 +11,8 @@ const GUEST_SCOPES = [
   { value: 'personas:read', label: 'Personas', description: 'Public persona profiles' },
   { value: 'brain:read', label: 'Knowledge', description: 'Knowledge/context read access' },
   { value: 'brain:chat', label: 'Chat', description: 'Conversation and messaging' },
+  { value: 'skills:read', label: 'Skills (Read)', description: 'Read skills and metadata' },
+  { value: 'skills:write', label: 'Skills (Write)', description: 'Create and manage skills' },
 ];
 
 function AccessTokens() {
