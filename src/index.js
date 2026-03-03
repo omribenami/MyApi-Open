@@ -2249,6 +2249,50 @@ const kbUploadFields = kbUpload.fields([
   { name: 'kbFile', maxCount: 1 },
 ]);
 
+const KB_UPLOAD_DIR = process.env.KB_UPLOAD_DIR || path.join(__dirname, 'uploads', 'knowledge-base');
+
+function sanitizeFilename(filename = 'upload.bin') {
+  return filename
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .replace(/_+/g, '_')
+    .slice(0, 180);
+}
+
+function ensureKbUploadDir() {
+  if (!fs.existsSync(KB_UPLOAD_DIR)) {
+    fs.mkdirSync(KB_UPLOAD_DIR, { recursive: true });
+  }
+}
+
+async function persistUploadFile(uploadedFile) {
+  ensureKbUploadDir();
+
+  const originalName = uploadedFile.originalname || 'uploaded-file';
+  const safeName = sanitizeFilename(originalName);
+  const ext = path.extname(safeName) || '.bin';
+  const base = path.basename(safeName, ext);
+  const ts = Date.now();
+  const random = crypto.randomBytes(6).toString('hex');
+  const localFilename = `${base}-${ts}-${random}${ext}`;
+  const localPath = path.join(KB_UPLOAD_DIR, localFilename);
+
+  fs.writeFileSync(localPath, uploadedFile.buffer);
+
+  // Future-ready: if S3 credentials exist we can mirror upload to S3.
+  // For now, local persistence is guaranteed and acts as fallback/default.
+  const hasS3Creds = Boolean(
+    process.env.S3_BUCKET &&
+    process.env.AWS_ACCESS_KEY_ID &&
+    process.env.AWS_SECRET_ACCESS_KEY
+  );
+
+  return {
+    storage: hasS3Creds ? 'local-fallback' : 'local',
+    localPath,
+    localFilename,
+  };
+}
+
 function getLLMAdapter() {
   if (!llmAdapter) {
     llmAdapter = new LLMAdapter({ 
@@ -2523,6 +2567,7 @@ app.post('/api/v1/brain/knowledge-base/upload', authenticate, kbUploadFields, as
       return res.status(400).json({ error: 'No readable text found in uploaded file' });
     }
 
+    const persisted = await persistUploadFile(uploadedFile);
     const docs = await knowledgeBase.addDocument('upload', originalName, content);
 
     createAuditLog({
@@ -2536,12 +2581,20 @@ app.post('/api/v1/brain/knowledge-base/upload', authenticate, kbUploadFields, as
         mimeType: uploadedFile.mimetype,
         bytes: uploadedFile.size,
         chunks: docs.length,
+        storage: persisted.storage,
+        localPath: persisted.localPath,
       }
     });
 
     res.status(201).json({
       ok: true,
-      file: { name: originalName, size: uploadedFile.size, mimeType: uploadedFile.mimetype },
+      file: {
+        name: originalName,
+        size: uploadedFile.size,
+        mimeType: uploadedFile.mimetype,
+        storage: persisted.storage,
+        localPath: persisted.localPath,
+      },
       documentsCreated: docs.length,
       documents: docs.map((d) => ({ id: d.id, title: d.title, source: d.source, createdAt: d.createdAt })),
     });

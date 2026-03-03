@@ -17,3 +17,6 @@ __pycache__/
 
 # Local virtual environment
 backend/venv/
+
+# Local KB uploaded files
+src/uploads/

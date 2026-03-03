@@ -269,16 +269,27 @@ function KnowledgeBase() {
 
       xhr.onload = async () => {
         try {
-          const data = JSON.parse(xhr.responseText || '{}');
+          const contentType = xhr.getResponseHeader('content-type') || '';
+          let data = null;
+
+          if (contentType.includes('application/json')) {
+            data = JSON.parse(xhr.responseText || '{}');
+          }
+
           if (xhr.status >= 200 && xhr.status < 300) {
-            setSuccess(`Uploaded ${file.name} (${data.documentsCreated || 0} KB document chunks)`);
+            const created = data?.documentsCreated || 0;
+            const storage = data?.file?.storage ? ` · stored: ${data.file.storage}` : '';
+            setSuccess(`Uploaded ${file.name} (${created} KB document chunks${storage})`);
             await fetchDocuments();
           } else {
-            const details = data.details ? ` (${data.details})` : '';
-            setError((data.error || 'Upload failed') + details);
+            const fallbackText = (xhr.responseText || '').slice(0, 180).trim();
+            const details = data?.details ? ` (${data.details})` : '';
+            const msg = data?.error || `Upload failed (HTTP ${xhr.status})`;
+            setError(fallbackText && !data ? `${msg}: ${fallbackText}` : msg + details);
           }
         } catch {
-          setError('Upload failed: server returned unreadable response');
+          const fallbackText = (xhr.responseText || '').slice(0, 180).trim();
+          setError(fallbackText ? `Upload failed: ${fallbackText}` : 'Upload failed: server returned unreadable response');
         } finally {
           setUploading(false);
           setUploadProgress(0);
