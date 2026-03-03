@@ -524,13 +524,23 @@ async function discoverApiFromWebsite(websiteUrl) {
     };
   }
 
-  const origin = new URL(normalizedWebsiteUrl).origin;
+  const urlObj = new URL(normalizedWebsiteUrl);
+  const origin = urlObj.origin;
+  
+  // Heuristic: If hostname starts with www., guess api.domain.com
+  let guessedApiOrigin = `${origin}/api`;
+  if (urlObj.hostname.startsWith('www.')) {
+    guessedApiOrigin = `${urlObj.protocol}//api.${urlObj.hostname.slice(4)}`;
+  } else {
+    guessedApiOrigin = `${urlObj.protocol}//api.${urlObj.hostname}`;
+  }
+
   const fallback = {
     sourceWebsiteUrl: normalizedWebsiteUrl,
-    apiBaseUrl: `${origin}/api`,
+    apiBaseUrl: guessedApiOrigin,
     authScheme: 'unknown',
-    confidence: 0.25,
-    notes: 'fallback heuristic used',
+    confidence: 0.35,
+    notes: 'fallback heuristic used (OpenAI key not configured)',
   };
 
   const probeCandidates = [
@@ -539,6 +549,8 @@ async function discoverApiFromWebsite(websiteUrl) {
     `${origin}/.well-known/openapi.json`,
     `${origin}/api/openapi.json`,
     `${origin}/api/v1/openapi.json`,
+    `${guessedApiOrigin}/openapi.json`,
+    `${guessedApiOrigin}/api/v1/openapi.json`
   ];
 
   for (const candidate of probeCandidates) {
