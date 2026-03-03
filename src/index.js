@@ -101,6 +101,9 @@ const WhatsAppAdapter = require("./services/whatsapp-adapter");
 
 const app = express();
 const PORT = process.env.PORT || 4500;
+const WORKSPACE_ROOT = path.join(__dirname, '..', '..', '..');
+const USER_MD_PATH = path.join(WORKSPACE_ROOT, 'USER.md');
+const SOUL_MD_PATH = path.join(WORKSPACE_ROOT, 'SOUL.md');
 
 // Initialize database
 initDatabase();
@@ -160,14 +163,13 @@ app.use('/api/v1', onboardRoutes);
 
 // User profile routes
 app.get('/api/v1/users/me', authenticate, (req, res) => {
-  const userMdPath = path.join(__dirname, '..', '..', '..', 'USER.md');
   let identity = {};
-  if (fs.existsSync(userMdPath)) {
-    const raw = fs.readFileSync(userMdPath, 'utf8');
+  if (fs.existsSync(USER_MD_PATH)) {
+    const raw = fs.readFileSync(USER_MD_PATH, 'utf8');
     const lines = raw.split('\n');
     for (const line of lines) {
-      const m = line.match(/^\s*[-*]\s*\*\*(.+?)\*\*[:\s]*(.+)/);
-      if (m) identity[m[1].trim()] = m[2].trim();
+      const m = line.match(/^\s*[-*]\s*\*\*(.+?)\*\*[:\s]*(.*)$/);
+      if (m) identity[m[1].trim()] = (m[2] || '').trim();
     }
   }
   const user = req.user || { id: 'owner', username: 'owner' };
@@ -175,19 +177,26 @@ app.get('/api/v1/users/me', authenticate, (req, res) => {
 });
 
 app.put('/api/v1/users/me', authenticate, (req, res) => {
-  const userMdPath = path.join(__dirname, '..', '..', '..', 'USER.md');
   const fields = req.body || {};
-  let md = fs.existsSync(userMdPath) ? fs.readFileSync(userMdPath, 'utf8') : '# USER.md\n\n';
-  for (const [key, value] of Object.entries(fields)) {
-    if (!value) continue;
+  const lines = (fs.existsSync(USER_MD_PATH) ? fs.readFileSync(USER_MD_PATH, 'utf8') : '# USER.md\n\n').split('\n');
+
+  for (const [key, rawValue] of Object.entries(fields)) {
+    const value = typeof rawValue === 'string' ? rawValue.trim() : rawValue;
     const marker = `- **${key}**:`;
-    const lines = md.split('\n');
     const idx = lines.findIndex(l => l.trim().startsWith(marker));
+
+    if (value === undefined || value === null || value === '') {
+      if (idx >= 0) lines.splice(idx, 1);
+      continue;
+    }
+
     if (idx >= 0) lines[idx] = `- **${key}**: ${value}`;
     else lines.push(`- **${key}**: ${value}`);
-    md = lines.join('\n');
   }
-  fs.writeFileSync(userMdPath, md);
+
+  const nextMd = `${lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()}\n`;
+  fs.writeFileSync(USER_MD_PATH, nextMd);
+  vault.identityDocs['owner'] = parseUserMd(nextMd);
   res.json({ ok: true });
 });
 
@@ -308,6 +317,12 @@ function parseUserMd(raw) {
   return result;
 }
 
+function syncActivePersonaToSoulFile() {
+  const activePersona = getActivePersona();
+  if (!activePersona || !activePersona.soul_content) return;
+  fs.writeFileSync(SOUL_MD_PATH, activePersona.soul_content.endsWith('\n') ? activePersona.soul_content : `${activePersona.soul_content}\n`);
+}
+
 // --- Bootstrap ---
 function bootstrap() {
   const existingTokens = getAccessTokens();
@@ -327,20 +342,21 @@ function bootstrap() {
   // Initialize Personas: Create default persona from SOUL.md if none exist
   const existingPersonas = getPersonas();
   if (existingPersonas.length === 0) {
-    const soulMdPath = path.join(__dirname, "..", "..", "..", "SOUL.md");
     let defaultSoulContent = `# SOUL.md - Default Persona\n\nDefault personality and values.\n`;
-    if (fs.existsSync(soulMdPath)) {
-      defaultSoulContent = fs.readFileSync(soulMdPath, "utf8");
+    if (fs.existsSync(SOUL_MD_PATH)) {
+      defaultSoulContent = fs.readFileSync(SOUL_MD_PATH, "utf8");
     }
     const defaultPersona = createPersona("Default", defaultSoulContent, "Default persona from SOUL.md");
     setActivePersona(defaultPersona.id);
+    syncActivePersonaToSoulFile();
     console.log(`✓ Created default persona (id: ${defaultPersona.id})`);
+  } else {
+    syncActivePersonaToSoulFile();
   }
 
   // Load identity from USER.md
-  const userMdPath = path.join(__dirname, "..", "..", "..", "USER.md");
-  if (fs.existsSync(userMdPath)) {
-    vault.identityDocs["owner"] = parseUserMd(fs.readFileSync(userMdPath, "utf-8"));
+  if (fs.existsSync(USER_MD_PATH)) {
+    vault.identityDocs["owner"] = parseUserMd(fs.readFileSync(USER_MD_PATH, "utf-8"));
   } else {
     vault.identityDocs["owner"] = { name: "User", role: "Unknown" };
   }
@@ -763,10 +779,9 @@ app.get("/api/v1/gateway/context", authenticate, (req, res) => {
   
   try {
     // Read USER.md
-    const userMdPath = path.join(__dirname, "..", "..", "..", "USER.md");
     let userProfile = {};
-    if (fs.existsSync(userMdPath)) {
-      const raw = fs.readFileSync(userMdPath, "utf8");
+    if (fs.existsSync(USER_MD_PATH)) {
+      const raw = fs.readFileSync(USER_MD_PATH, "utf8");
       const lines = raw.split("\n");
       for (const line of lines) {
         const match = line.match(/^\s*[-*]\s*\*\*(.+?)\*\*[:\s]*(.+)/);
@@ -792,9 +807,8 @@ app.get("/api/v1/gateway/context", authenticate, (req, res) => {
       }
     } else {
       // Fallback to SOUL.md file if no active persona
-      const soulMdPath = path.join(__dirname, "..", "..", "..", "SOUL.md");
-      if (fs.existsSync(soulMdPath)) {
-        const raw = fs.readFileSync(soulMdPath, "utf8");
+      if (fs.existsSync(SOUL_MD_PATH)) {
+        const raw = fs.readFileSync(SOUL_MD_PATH, "utf8");
         soulProfile.raw = raw;
         const lines = raw.split("\n");
         for (const line of lines) {
@@ -1204,6 +1218,7 @@ app.put("/api/v1/personas/:id", authenticate, (req, res) => {
   // If setting as active
   if (active === true) {
     const updated = setActivePersona(personaId);
+    syncActivePersonaToSoulFile();
     createAuditLog({ 
       requesterId: req.tokenMeta.tokenId, 
       action: "update_persona", 
@@ -1226,6 +1241,7 @@ app.put("/api/v1/personas/:id", authenticate, (req, res) => {
   } else {
     // Update persona fields
     const updated = updatePersona(personaId, { name, soul_content, description });
+    if (updated.active) syncActivePersonaToSoulFile();
     createAuditLog({ 
       requesterId: req.tokenMeta.tokenId, 
       action: "update_persona", 
@@ -1256,6 +1272,7 @@ app.delete("/api/v1/personas/:id", authenticate, (req, res) => {
   if (deleted === null) return res.status(400).json({ error: "Cannot delete the last remaining persona" });
   if (!deleted) return res.status(404).json({ error: "Persona not found" });
   
+  syncActivePersonaToSoulFile();
   createAuditLog({ 
     requesterId: req.tokenMeta.tokenId, 
     action: "delete_persona", 

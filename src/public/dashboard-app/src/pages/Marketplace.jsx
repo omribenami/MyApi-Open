@@ -94,6 +94,7 @@ function ListingModal({ listing, onClose, onInstall, masterToken }) {
   const [installing, setInstalling] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
   const [installSuccess, setInstallSuccess] = useState(false);
+  const [installError, setInstallError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -129,19 +130,30 @@ function ListingModal({ listing, onClose, onInstall, masterToken }) {
   async function handleInstall() {
     if (isInstalled) return;
     setInstalling(true);
+    setInstallError('');
     try {
-      // Track install
-      await fetch(`/api/v1/marketplace/${listing.id}/install`, {
+      const installRes = await fetch(`/api/v1/marketplace/${listing.id}/install`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${masterToken}` },
       });
+      if (!installRes.ok) {
+        const data = await installRes.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to track install');
+      }
 
       // Install into local resources based on type
       if (detail.content) {
-        const content = typeof detail.content === 'string' ? JSON.parse(detail.content) : detail.content;
+        let content = detail.content;
+        if (typeof content === 'string') {
+          try {
+            content = JSON.parse(content);
+          } catch {
+            content = {};
+          }
+        }
 
         if (detail.type === 'persona') {
-          await fetch('/api/v1/personas', {
+          const personaRes = await fetch('/api/v1/personas', {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${masterToken}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -150,6 +162,10 @@ function ListingModal({ listing, onClose, onInstall, masterToken }) {
               soul_content: content.soul_content || '',
             }),
           });
+          if (!personaRes.ok) {
+            const data = await personaRes.json().catch(() => ({}));
+            throw new Error(data.error || 'Failed to install persona');
+          }
         }
 
         if (detail.type === 'skill') {
@@ -158,7 +174,7 @@ function ListingModal({ listing, onClose, onInstall, masterToken }) {
             marketplace_listing_id: detail.id,
           };
 
-          await fetch('/api/v1/skills', {
+          const skillRes = await fetch('/api/v1/skills', {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${masterToken}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -172,6 +188,10 @@ function ListingModal({ listing, onClose, onInstall, masterToken }) {
               repo_url: content.repo_url || '',
             }),
           });
+          if (!skillRes.ok) {
+            const data = await skillRes.json().catch(() => ({}));
+            throw new Error(data.error || 'Failed to install skill');
+          }
         }
       }
 
@@ -179,6 +199,8 @@ function ListingModal({ listing, onClose, onInstall, masterToken }) {
       setInstallSuccess(true);
       onInstall && onInstall();
       setDetail(d => ({ ...d, installCount: (d.installCount || 0) + 1 }));
+    } catch (err) {
+      setInstallError(err.message || 'Install failed');
     } finally {
       setInstalling(false);
     }
@@ -270,13 +292,18 @@ function ListingModal({ listing, onClose, onInstall, masterToken }) {
 
           {/* Install button */}
           {masterToken && !installSuccess && (
-            <button
-              onClick={handleInstall}
-              disabled={installing || isInstalled}
-              className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 text-white font-semibold rounded-lg transition-all shadow-lg"
-            >
-              {installing ? 'Installing...' : isInstalled ? 'Installed' : `Install / Use (${detail.installCount || 0})`}
-            </button>
+            <>
+              <button
+                onClick={handleInstall}
+                disabled={installing || isInstalled}
+                className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 text-white font-semibold rounded-lg transition-all shadow-lg"
+              >
+                {installing ? 'Installing...' : isInstalled ? 'Installed' : `Install / Use (${detail.installCount || 0})`}
+              </button>
+              {installError && (
+                <p className="text-sm text-red-400">{installError}</p>
+              )}
+            </>
           )}
 
           {installSuccess && (
