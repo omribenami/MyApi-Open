@@ -66,6 +66,10 @@ const {
   getPersonaDocumentContents,
   attachDocumentToPersona,
   detachDocumentFromPersona,
+  getPersonaSkills,
+  attachSkillToPersona,
+  detachSkillFromPersona,
+  getPersonaSkillPackages,
   // Marketplace
   createMarketplaceListing,
   getMarketplaceListings,
@@ -1839,6 +1843,38 @@ app.delete("/api/v1/personas/:id/documents/:docId", authenticate, (req, res) => 
   res.json({ ok: true });
 });
 
+// --- Persona Skills ---
+app.get('/api/v1/personas/:id/skills', authenticate, (req, res) => {
+  const personaId = parseInt(req.params.id);
+  const skills = getPersonaSkills(personaId);
+  res.json({ data: skills });
+});
+
+app.post('/api/v1/personas/:id/skills', authenticate, (req, res) => {
+  if (req.tokenMeta.scope !== 'full') return res.status(403).json({ error: 'Insufficient scope' });
+  const personaId = parseInt(req.params.id);
+  const skillId = parseInt(req.body?.skillId);
+
+  if (!skillId) return res.status(400).json({ error: 'skillId required' });
+
+  const persona = getPersonaById(personaId);
+  if (!persona) return res.status(404).json({ error: 'Persona not found' });
+
+  const skill = getSkillById(skillId);
+  if (!skill) return res.status(404).json({ error: 'Skill not found' });
+
+  attachSkillToPersona(personaId, skillId);
+  res.json({ ok: true });
+});
+
+app.delete('/api/v1/personas/:id/skills/:skillId', authenticate, (req, res) => {
+  if (req.tokenMeta.scope !== 'full') return res.status(403).json({ error: 'Insufficient scope' });
+  const personaId = parseInt(req.params.id);
+  const skillId = parseInt(req.params.skillId);
+  detachSkillFromPersona(personaId, skillId);
+  res.json({ ok: true });
+});
+
 // --- OAuth Endpoints ---
 
 // GET /api/v1/oauth/authorize/:service — Start OAuth flow
@@ -2412,14 +2448,25 @@ app.post('/api/v1/brain/chat', authenticate, async (req, res) => {
     // Query global knowledge base
     const relevantDocs = knowledgeBase.queryKnowledgeBase(message, 3);
 
-    // Add persona-scoped docs when persona scope is active
+    // Add persona-scoped docs + skills package when persona scope is active
     let personaDocs = [];
+    let personaSkillPackages = [];
     if (personaScope.personaId !== null && personaScope.personaId !== undefined) {
       personaDocs = getPersonaDocumentContents(personaScope.personaId);
+      personaSkillPackages = Object.values(getPersonaSkillPackages(personaScope.personaId));
     }
 
     const rankedPersonaDocs = personaDocs
       .map((doc) => ({ ...doc, score: scoreByQuery(`${doc.title} ${doc.content}`, message) }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5);
+
+    const rankedSkillDocs = personaSkillPackages
+      .flatMap((pkg) => (pkg.documents || []).map((doc) => ({
+        ...doc,
+        skillName: pkg.name,
+        score: scoreByQuery(`${pkg.name} ${doc.title} ${doc.content}`, message),
+      })))
       .sort((a, b) => b.score - a.score)
       .slice(0, 5);
 
@@ -2433,6 +2480,18 @@ app.post('/api/v1/brain/chat', authenticate, async (req, res) => {
     if (rankedPersonaDocs.length > 0) {
       systemPrompt += '\n\nPersona-attached knowledge:\n' + rankedPersonaDocs
         .map((doc) => `### ${doc.title}\n${String(doc.content || '').slice(0, 2000)}`)
+        .join('\n\n');
+    }
+
+    if (personaSkillPackages.length > 0) {
+      systemPrompt += '\n\nPersona-attached skills:\n' + personaSkillPackages
+        .map((pkg) => `- ${pkg.name}${pkg.description ? `: ${pkg.description}` : ''}`)
+        .join('\n');
+    }
+
+    if (rankedSkillDocs.length > 0) {
+      systemPrompt += '\n\nSkill-attached knowledge for persona:\n' + rankedSkillDocs
+        .map((doc) => `### [${doc.skillName}] ${doc.title}\n${String(doc.content || '').slice(0, 2000)}`)
         .join('\n\n');
     }
 
@@ -2475,6 +2534,8 @@ app.post('/api/v1/brain/chat', authenticate, async (req, res) => {
         memory: context.memory?.memories?.length || 0,
         documents: relevantDocs.length,
         personaDocuments: rankedPersonaDocs.length,
+        personaSkills: personaSkillPackages.length,
+        personaSkillDocuments: rankedSkillDocs.length,
         personaId: personaScope.personaId ?? null
       }
     });
@@ -2716,6 +2777,7 @@ app.get('/api/v1/brain/context', authenticate, async (req, res) => {
     }
 
     let personaDocuments = [];
+    let personaSkills = [];
     if (personaScope.personaId !== null && personaScope.personaId !== undefined) {
       personaDocuments = getPersonaDocumentContents(personaScope.personaId).map((doc) => ({
         id: doc.id,
@@ -2723,6 +2785,21 @@ app.get('/api/v1/brain/context', authenticate, async (req, res) => {
         source: doc.source,
         preview: String(doc.content || '').slice(0, 400),
         metadata: doc.metadata,
+      }));
+      personaSkills = Object.values(getPersonaSkillPackages(personaScope.personaId)).map((pkg) => ({
+        skillId: pkg.skillId,
+        name: pkg.name,
+        description: pkg.description,
+        version: pkg.version,
+        category: pkg.category,
+        author: pkg.author,
+        documents: (pkg.documents || []).map((d) => ({
+          id: d.id,
+          title: d.title,
+          source: d.source,
+          preview: String(d.content || '').slice(0, 400),
+          metadata: d.metadata,
+        })),
       }));
     }
 
@@ -2735,6 +2812,7 @@ app.get('/api/v1/brain/context', authenticate, async (req, res) => {
       details: {
         personaId: personaScope.personaId ?? null,
         personaDocumentCount: personaDocuments.length,
+        personaSkillCount: personaSkills.length,
       }
     });
 
@@ -2743,6 +2821,7 @@ app.get('/api/v1/brain/context', authenticate, async (req, res) => {
       personaContext: {
         personaId: personaScope.personaId ?? null,
         documents: personaDocuments,
+        skills: personaSkills,
       }
     });
   } catch (error) {

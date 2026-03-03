@@ -80,6 +80,28 @@ function Personas() {
     ]);
   };
 
+  const syncPersonaSkills = async (personaId, nextSkillIds = []) => {
+    const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+    const response = await fetch(`/api/v1/personas/${personaId}/skills`, { headers: { 'Authorization': `Bearer ${token}` } });
+    const payload = response.ok ? await response.json() : { data: [] };
+    const currentIds = (payload.data || []).map((skill) => skill.skillId);
+
+    const toAttach = nextSkillIds.filter((id) => !currentIds.includes(id));
+    const toDetach = currentIds.filter((id) => !nextSkillIds.includes(id));
+
+    await Promise.all([
+      ...toAttach.map((skillId) => fetch(`/api/v1/personas/${personaId}/skills`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ skillId }),
+      })),
+      ...toDetach.map((skillId) => fetch(`/api/v1/personas/${personaId}/skills/${skillId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` },
+      })),
+    ]);
+  };
+
   const handleCreatePersona = async (data) => {
     try {
       const response = await fetch('/api/v1/personas', {
@@ -94,6 +116,7 @@ function Personas() {
       if (response.ok) {
         const created = await response.json();
         await syncPersonaDocuments(created?.data?.id, data.attachedDocuments || []);
+        await syncPersonaSkills(created?.data?.id, data.attachedSkills || []);
         setShowCreateModal(false);
         await fetchPersonas();
       } else {
@@ -120,6 +143,7 @@ function Personas() {
 
       if (response.ok) {
         await syncPersonaDocuments(editingPersona.id, data.attachedDocuments || []);
+        await syncPersonaSkills(editingPersona.id, data.attachedSkills || []);
         setEditingPersona(null);
         await fetchPersonas();
       } else {
@@ -270,13 +294,22 @@ function Personas() {
           onClose={() => setSelectedPersona(null)}
           onEdit={async () => {
             try {
-              const response = await fetch(`/api/v1/personas/${selectedPersona.id}/documents`, {
-                headers: { 'Authorization': `Bearer ${token}` },
-              });
-              const data = response.ok ? await response.json() : { data: [] };
+              const [docRes, skillRes] = await Promise.all([
+                fetch(`/api/v1/personas/${selectedPersona.id}/documents`, {
+                  headers: { 'Authorization': `Bearer ${token}` },
+                }),
+                fetch(`/api/v1/personas/${selectedPersona.id}/skills`, {
+                  headers: { 'Authorization': `Bearer ${token}` },
+                }),
+              ]);
+
+              const docsData = docRes.ok ? await docRes.json() : { data: [] };
+              const skillsData = skillRes.ok ? await skillRes.json() : { data: [] };
+
               setEditingPersona({
                 ...selectedPersona,
-                attachedDocuments: (data.data || []).map((doc) => doc.documentId),
+                attachedDocuments: (docsData.data || []).map((doc) => doc.documentId),
+                attachedSkills: (skillsData.data || []).map((skill) => skill.skillId),
               });
             } catch {
               setEditingPersona(selectedPersona);
@@ -338,6 +371,7 @@ function Personas() {
                 ...(editingPersona.template_data || {}),
                 name: editingPersona.name,
                 attachedDocuments: editingPersona.attachedDocuments || [],
+                attachedSkills: editingPersona.attachedSkills || [],
               }}
               onSave={handleEditPersona}
               isLoading={isLoading}

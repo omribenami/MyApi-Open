@@ -3,7 +3,7 @@ import { useAuthStore } from '../stores/authStore';
 
 function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
   const [tab, setTab] = useState('identity'); // identity, personality, rules, preview
-  const [formData, setFormData] = useState(initialData || {
+  const defaultFormData = {
     // Identity
     name: '',
     title: '',
@@ -11,14 +11,14 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
     yearsExperience: '',
     achievement: '',
     coreGoal: '',
-    
+
     // Personality & Tone
     tone: '',
     communicationStyle: '',
     traits: '',
     vocabulary: '',
     avoidWords: '',
-    
+
     // Operational Rules
     formatting: '',
     knowledgeLimit: '',
@@ -26,21 +26,31 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
     knowledgeLimitRedirect: '',
     internalLogic: '',
     greeting: '',
-    
+
     // Constraints
     doNotActions: '',
     alwaysActions: '',
-    
-    // Documents
+
+    // Documents + Skills
     attachedDocuments: [],
+    attachedSkills: [],
+  };
+
+  const [formData, setFormData] = useState({
+    ...defaultFormData,
+    ...(initialData || {}),
+    attachedDocuments: Array.isArray(initialData?.attachedDocuments) ? initialData.attachedDocuments : [],
+    attachedSkills: Array.isArray(initialData?.attachedSkills) ? initialData.attachedSkills : [],
   });
 
   const [error, setError] = useState('');
   const [availableDocuments, setAvailableDocuments] = useState([]);
+  const [availableSkills, setAvailableSkills] = useState([]);
   const masterToken = useAuthStore((state) => state.masterToken);
 
   useEffect(() => {
     fetchDocuments();
+    fetchSkills();
   }, [masterToken]);
 
   const fetchDocuments = async () => {
@@ -57,6 +67,20 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
     }
   };
 
+  const fetchSkills = async () => {
+    try {
+      const response = await fetch('/api/v1/skills', {
+        headers: masterToken ? { Authorization: `Bearer ${masterToken}` } : {},
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setAvailableSkills(data.data || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch skills:', err);
+    }
+  };
+
   const handleInputChange = (field, value) => {
     setFormData(prev => ({
       ...prev,
@@ -70,6 +94,15 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
       attachedDocuments: prev.attachedDocuments.includes(docId)
         ? prev.attachedDocuments.filter(id => id !== docId)
         : [...prev.attachedDocuments, docId]
+    }));
+  };
+
+  const handleSkillToggle = (skillId) => {
+    setFormData(prev => ({
+      ...prev,
+      attachedSkills: prev.attachedSkills.includes(skillId)
+        ? prev.attachedSkills.filter(id => id !== skillId)
+        : [...prev.attachedSkills, skillId]
     }));
   };
 
@@ -451,7 +484,7 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
                 <p className="text-sm mt-2">Create documents first in the Knowledge Base tab.</p>
               </div>
             ) : (
-              <div className="space-y-2 max-h-96 overflow-y-auto">
+              <div className="space-y-2 max-h-72 overflow-y-auto">
                 {availableDocuments.map((doc) => (
                   <label
                     key={doc.id}
@@ -471,6 +504,35 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
                 ))}
               </div>
             )}
+
+            <div className="pt-4 border-t border-slate-700">
+              <p className="text-sm text-slate-400 mb-3">
+                Attach skills to this persona. Persona-scoped tokens will include these skills and their attached docs in context.
+              </p>
+              {availableSkills.length === 0 ? (
+                <div className="text-center py-4 text-slate-400 text-sm">No skills found.</div>
+              ) : (
+                <div className="space-y-2 max-h-72 overflow-y-auto">
+                  {availableSkills.map((skill) => (
+                    <label
+                      key={skill.id}
+                      className="flex items-center gap-3 p-3 bg-slate-700 hover:bg-slate-600 rounded-lg cursor-pointer transition-colors"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={formData.attachedSkills.includes(skill.id)}
+                        onChange={() => handleSkillToggle(skill.id)}
+                        className="w-4 h-4 accent-blue-500"
+                      />
+                      <div className="flex-1">
+                        <p className="font-medium text-white">{skill.name}</p>
+                        <p className="text-xs text-slate-400">{skill.category || 'custom'}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -494,6 +556,23 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
                       <div key={docId} className="flex items-center gap-2 text-slate-300 text-sm">
                         <span>📄</span>
                         <span>{doc?.title}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {formData.attachedSkills.length > 0 && (
+              <div className="bg-slate-900 border border-slate-700 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-white mb-4">Attached Skills</h3>
+                <div className="space-y-2">
+                  {formData.attachedSkills.map((skillId) => {
+                    const skill = availableSkills.find((s) => s.id === skillId);
+                    return (
+                      <div key={skillId} className="flex items-center gap-2 text-slate-300 text-sm">
+                        <span>🧩</span>
+                        <span>{skill?.name}</span>
                       </div>
                     );
                   })}

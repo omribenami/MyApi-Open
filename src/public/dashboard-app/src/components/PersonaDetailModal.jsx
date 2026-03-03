@@ -4,12 +4,14 @@ import PersonaPreview from './PersonaPreview';
 
 function PersonaDetailModal({ persona, onClose, onEdit, onSetActive, onDelete }) {
   const [attachedDocuments, setAttachedDocuments] = useState([]);
+  const [attachedSkills, setAttachedSkills] = useState([]);
   const [loadingDocs, setLoadingDocs] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState(null);
 
   useEffect(() => {
     if (persona?.id) {
       fetchAttachedDocuments();
+      fetchAttachedSkills();
     }
   }, [persona?.id]);
 
@@ -29,6 +31,22 @@ function PersonaDetailModal({ persona, onClose, onEdit, onSetActive, onDelete })
       console.error('Failed to fetch documents:', err);
     } finally {
       setLoadingDocs(false);
+    }
+  };
+
+  const fetchAttachedSkills = async () => {
+    try {
+      const token = useAuthStore.getState().masterToken;
+      const response = await fetch(`/api/v1/personas/${persona.id}/skills`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setAttachedSkills(data.data || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch skills:', err);
     }
   };
 
@@ -58,44 +76,65 @@ function PersonaDetailModal({ persona, onClose, onEdit, onSetActive, onDelete })
             <PersonaPreview persona={persona} />
           </div>
 
-          {/* Attached Documents Section */}
-          <div className="mt-8 pt-8 border-t border-slate-800">
-            <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider mb-4">
-              Attached Knowledge Base Documents
-            </h3>
+          {/* Attached package section */}
+          <div className="mt-8 pt-8 border-t border-slate-800 grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div>
+              <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider mb-4">
+                Attached Knowledge Base Documents
+              </h3>
 
-            {loadingDocs ? (
-              <p className="text-sm text-slate-500">Loading documents…</p>
-            ) : attachedDocuments.length === 0 ? (
-              <p className="text-sm text-slate-500">No documents attached to this persona.</p>
-            ) : (
-              <div className="space-y-3">
-                {attachedDocuments.map((doc) => (
-                  <button
-                    key={doc.documentId}
-                    type="button"
-                    onClick={() => setSelectedDoc(doc)}
-                    className="w-full text-left flex items-start gap-4 p-4 bg-slate-800/50 border border-slate-700/50 rounded-lg hover:border-slate-600 transition-colors"
-                  >
-                    <div className="text-slate-500">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                        <polyline points="14 2 14 8 20 8"></polyline>
-                        <line x1="16" y1="13" x2="8" y2="13"></line>
-                        <line x1="16" y1="17" x2="8" y2="17"></line>
-                        <polyline points="10 9 9 9 8 9"></polyline>
-                      </svg>
+              {loadingDocs ? (
+                <p className="text-sm text-slate-500">Loading documents…</p>
+              ) : attachedDocuments.length === 0 ? (
+                <p className="text-sm text-slate-500">No documents attached to this persona.</p>
+              ) : (
+                <div className="space-y-3">
+                  {attachedDocuments.map((doc) => (
+                    <button
+                      key={doc.documentId}
+                      type="button"
+                      onClick={() => setSelectedDoc(doc)}
+                      className="w-full text-left flex items-start gap-4 p-4 bg-slate-800/50 border border-slate-700/50 rounded-lg hover:border-slate-600 transition-colors"
+                    >
+                      <div className="text-slate-500">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                          <polyline points="14 2 14 8 20 8"></polyline>
+                          <line x1="16" y1="13" x2="8" y2="13"></line>
+                          <line x1="16" y1="17" x2="8" y2="17"></line>
+                          <polyline points="10 9 9 9 8 9"></polyline>
+                        </svg>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-slate-200 truncate">{doc.title}</p>
+                        <p className="text-xs text-slate-500 truncate mt-0.5">{doc.source}</p>
+                        {doc.preview && <p className="text-xs text-slate-400 mt-1 line-clamp-2">{doc.preview}</p>}
+                        <p className="text-[11px] text-blue-400 mt-2">Click to preview</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider mb-4">
+                Attached Skills
+              </h3>
+              {attachedSkills.length === 0 ? (
+                <p className="text-sm text-slate-500">No skills attached to this persona.</p>
+              ) : (
+                <div className="space-y-3">
+                  {attachedSkills.map((skill) => (
+                    <div key={skill.skillId} className="p-4 bg-slate-800/50 border border-slate-700/50 rounded-lg">
+                      <p className="font-medium text-slate-200">{skill.name}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">{skill.category || 'custom'} {skill.version ? `• v${skill.version}` : ''}</p>
+                      {skill.description && <p className="text-xs text-slate-400 mt-1 line-clamp-2">{skill.description}</p>}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-slate-200 truncate">{doc.title}</p>
-                      <p className="text-xs text-slate-500 truncate mt-0.5">{doc.source}</p>
-                      {doc.preview && <p className="text-xs text-slate-400 mt-1 line-clamp-2">{doc.preview}</p>}
-                      <p className="text-[11px] text-blue-400 mt-2">Click to preview</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

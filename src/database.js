@@ -203,6 +203,14 @@ function initDatabase() {
       UNIQUE(persona_id, document_id)
     );
 
+    CREATE TABLE IF NOT EXISTS persona_skills (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      persona_id INTEGER NOT NULL,
+      skill_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE(persona_id, skill_id)
+    );
+
     CREATE TABLE IF NOT EXISTS skills (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -228,6 +236,8 @@ function initDatabase() {
 
     CREATE INDEX IF NOT EXISTS idx_skills_active ON skills(active);
     CREATE INDEX IF NOT EXISTS idx_skill_documents_skill ON skill_documents(skill_id);
+    CREATE INDEX IF NOT EXISTS idx_persona_skills_persona ON persona_skills(persona_id);
+    CREATE INDEX IF NOT EXISTS idx_persona_skills_skill ON persona_skills(skill_id);
 
     CREATE TABLE IF NOT EXISTS marketplace_listings (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -933,6 +943,8 @@ function deletePersona(id) {
   const { count } = countStmt.get();
   if (count <= 1) return null; // Cannot delete the only persona
   
+  db.prepare('DELETE FROM persona_documents WHERE persona_id = ?').run(id);
+  db.prepare('DELETE FROM persona_skills WHERE persona_id = ?').run(id);
   const stmt = db.prepare('DELETE FROM personas WHERE id = ?');
   const result = stmt.run(id);
   return result.changes > 0;
@@ -1420,6 +1432,92 @@ function attachDocumentToPersona(personaId, documentId) {
 function detachDocumentFromPersona(personaId, documentId) {
   const result = db.prepare('DELETE FROM persona_documents WHERE persona_id = ? AND document_id = ?').run(personaId, documentId);
   return result.changes > 0;
+}
+
+function getPersonaSkills(personaId) {
+  return db.prepare(`
+    SELECT ps.skill_id, s.name, s.description, s.version, s.category, s.author, s.active, s.created_at, s.updated_at
+    FROM persona_skills ps
+    JOIN skills s ON ps.skill_id = s.id
+    WHERE ps.persona_id = ?
+    ORDER BY ps.created_at DESC
+  `).all(personaId).map((r) => ({
+    skillId: r.skill_id,
+    name: r.name,
+    description: r.description,
+    version: r.version,
+    category: r.category,
+    author: r.author,
+    active: Boolean(r.active),
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  }));
+}
+
+function attachSkillToPersona(personaId, skillId) {
+  const now = new Date().toISOString();
+  try {
+    db.prepare('INSERT INTO persona_skills (persona_id, skill_id, created_at) VALUES (?, ?, ?)').run(personaId, skillId, now);
+    return true;
+  } catch (e) {
+    if (e.code === 'SQLITE_CONSTRAINT_UNIQUE') return false;
+    throw e;
+  }
+}
+
+function detachSkillFromPersona(personaId, skillId) {
+  return db.prepare('DELETE FROM persona_skills WHERE persona_id = ? AND skill_id = ?').run(personaId, skillId).changes > 0;
+}
+
+function getPersonaSkillPackages(personaId) {
+  return db.prepare(`
+    SELECT
+      s.id as skill_id,
+      s.name,
+      s.description,
+      s.version,
+      s.category,
+      s.author,
+      s.script_content,
+      s.config_json,
+      kd.id as document_id,
+      kd.title as document_title,
+      kd.source as document_source,
+      kd.content as document_content,
+      kd.metadata as document_metadata
+    FROM persona_skills ps
+    JOIN skills s ON ps.skill_id = s.id
+    LEFT JOIN skill_documents sd ON sd.skill_id = s.id
+    LEFT JOIN kb_documents kd ON kd.id = sd.document_id
+    WHERE ps.persona_id = ?
+    ORDER BY s.id DESC, sd.created_at DESC
+  `).all(personaId).reduce((acc, row) => {
+    if (!acc[row.skill_id]) {
+      acc[row.skill_id] = {
+        skillId: row.skill_id,
+        name: row.name,
+        description: row.description,
+        version: row.version,
+        category: row.category,
+        author: row.author,
+        scriptContent: row.script_content,
+        config: row.config_json ? (() => { try { return JSON.parse(row.config_json); } catch { return row.config_json; } })() : null,
+        documents: [],
+      };
+    }
+
+    if (row.document_id) {
+      acc[row.skill_id].documents.push({
+        id: row.document_id,
+        title: row.document_title,
+        source: row.document_source,
+        content: row.document_content,
+        metadata: row.document_metadata ? (() => { try { return JSON.parse(row.document_metadata); } catch { return row.document_metadata; } })() : null,
+      });
+    }
+
+    return acc;
+  }, {});
 }
 
 // Skills
@@ -2053,6 +2151,10 @@ module.exports = {
   getPersonaDocumentContents,
   attachDocumentToPersona,
   detachDocumentFromPersona,
+  getPersonaSkills,
+  attachSkillToPersona,
+  detachSkillFromPersona,
+  getPersonaSkillPackages,
   getMarketplaceListings,
   getMarketplaceListing,
   updateMarketplaceListing,
