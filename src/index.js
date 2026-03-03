@@ -1141,12 +1141,50 @@ app.get("/api/v1/scopes", authenticate, (req, res) => {
     data: {
       scopes: scopes,
       templates: {
-        read: ['identity:read', 'vault:read', 'services:read', 'brain:read', 'audit:read'],
+        read: ['identity:read', 'vault:read', 'services:read', 'brain:read', 'audit:read', 'skills:read'],
         professional: ['identity:read'],
         availability: ['identity:read'],
         guest: ['identity:read'],
         admin: ['admin:*']
       }
+    }
+  });
+});
+
+// Regenerate token secret (returns a new raw token for same token id/scopes)
+app.post("/api/v1/tokens/:id/regenerate", authenticate, (req, res) => {
+  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can regenerate tokens" });
+
+  const tokens = getAccessTokens();
+  const token = tokens.find(t => t.tokenId === req.params.id);
+  if (!token) return res.status(404).json({ error: "Token not found" });
+  if (token.revokedAt) return res.status(400).json({ error: "Cannot regenerate a revoked token" });
+
+  const rawToken = crypto.randomBytes(32).toString("hex");
+  const hash = bcrypt.hashSync(rawToken, 10);
+  const now = new Date().toISOString();
+
+  db.prepare('UPDATE access_tokens SET hash = ?, updated_at = ? WHERE id = ?').run(hash, now, req.params.id);
+
+  const scopes = getTokenScopes(req.params.id);
+
+  createAuditLog({
+    requesterId: req.tokenMeta.tokenId,
+    action: "regenerate_token",
+    resource: `/tokens/${req.params.id}`,
+    scope: req.tokenMeta.scope,
+    ip: req.ip,
+    details: { scopes }
+  });
+
+  res.json({
+    data: {
+      id: req.params.id,
+      token: rawToken,
+      scopes,
+      regeneratedAt: now,
+      expiresAt: token.expiresAt,
+      allowedPersonas: token.allowedPersonas || null
     }
   });
 });

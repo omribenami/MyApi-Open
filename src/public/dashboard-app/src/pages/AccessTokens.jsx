@@ -44,6 +44,10 @@ function AccessTokens() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [createForm, setCreateForm] = useState({ label: '', scopes: [], expiresInHours: '168' });
   const [newlyCreated, setNewlyCreated] = useState(null);
+  const [revealedTokens, setRevealedTokens] = useState({});
+  const [visibleTokenIds, setVisibleTokenIds] = useState({});
+  const [copiedTokenId, setCopiedTokenId] = useState(null);
+  const [regeneratingTokenId, setRegeneratingTokenId] = useState(null);
 
   // Persona scoping
   const [personas, setPersonas] = useState([]);
@@ -173,6 +177,10 @@ function AccessTokens() {
 
     if (created) {
       setNewlyCreated(created);
+      if (created.id && created.token) {
+        setRevealedTokens((prev) => ({ ...prev, [created.id]: created.token }));
+        setVisibleTokenIds((prev) => ({ ...prev, [created.id]: true }));
+      }
       setCreateForm({ label: '', scopes: [], expiresInHours: '168' });
       setAllowedPersonas([]);
       setAllPersonas(true);
@@ -182,6 +190,43 @@ function AccessTokens() {
 
   const handleCopyNew = async (token) => {
     await copyText(token);
+  };
+
+  const handleCopyGuestToken = async (tokenId) => {
+    const rawToken = revealedTokens[tokenId];
+    if (!rawToken) {
+      clearError();
+      return;
+    }
+
+    const ok = await copyText(rawToken);
+    if (ok) {
+      setCopiedTokenId(tokenId);
+      setTimeout(() => setCopiedTokenId(null), 1800);
+    }
+  };
+
+  const handleRegenerateToken = async (token) => {
+    setRegeneratingTokenId(token.id);
+    clearError();
+    try {
+      const res = await fetch(`/api/v1/tokens/${token.id}/regenerate`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${masterToken}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to regenerate token');
+
+      if (data?.data?.token) {
+        setRevealedTokens((prev) => ({ ...prev, [token.id]: data.data.token }));
+        setVisibleTokenIds((prev) => ({ ...prev, [token.id]: true }));
+      }
+      await fetchTokens(masterToken);
+    } catch (err) {
+      setError(err.message || 'Failed to regenerate token');
+    } finally {
+      setRegeneratingTokenId(null);
+    }
   };
 
   const handleOpenCreate = () => {
@@ -543,10 +588,21 @@ function AccessTokens() {
                           <span>Expires: Never</span>
                         )}
                       </div>
+
+                      <div className="mt-3 p-3 bg-slate-900 rounded-lg border border-slate-700">
+                        <code className="text-xs text-slate-300 font-mono break-all">
+                          {revealedTokens[token.id] && visibleTokenIds[token.id]
+                            ? revealedTokens[token.id]
+                            : maskToken(revealedTokens[token.id] || token.id || token.tokenId || '')}
+                        </code>
+                        {!revealedTokens[token.id] && (
+                          <p className="mt-2 text-[11px] text-slate-500">Token secret is hidden until creation/regeneration.</p>
+                        )}
+                      </div>
                     </div>
 
                     {/* Actions */}
-                    <div className="flex gap-2 flex-shrink-0">
+                    <div className="grid grid-cols-2 sm:grid-cols-1 gap-2 flex-shrink-0 min-w-[150px]">
                       <button
                         onClick={() => { selectToken(token); setShowEditModal(true); }}
                         className="px-3 py-1.5 text-sm text-blue-400 hover:text-blue-300 bg-slate-700 hover:bg-slate-600 rounded transition-colors"
@@ -554,8 +610,31 @@ function AccessTokens() {
                         Edit
                       </button>
                       <button
+                        onClick={() => setVisibleTokenIds((prev) => ({ ...prev, [token.id]: !prev[token.id] }))}
+                        className="px-3 py-1.5 text-sm text-slate-200 hover:text-white bg-slate-700 hover:bg-slate-600 rounded transition-colors"
+                        disabled={!revealedTokens[token.id]}
+                        title={revealedTokens[token.id] ? 'Toggle hide/reveal' : 'Regenerate token first to reveal/copy'}
+                      >
+                        {visibleTokenIds[token.id] ? 'Hide' : 'Reveal'}
+                      </button>
+                      <button
+                        onClick={() => handleCopyGuestToken(token.id)}
+                        className="px-3 py-1.5 text-sm text-cyan-300 hover:text-cyan-200 bg-slate-700 hover:bg-slate-600 rounded transition-colors disabled:opacity-50"
+                        disabled={!revealedTokens[token.id]}
+                        title={revealedTokens[token.id] ? 'Copy token' : 'Regenerate token first to copy'}
+                      >
+                        {copiedTokenId === token.id ? 'Copied!' : 'Copy'}
+                      </button>
+                      <button
+                        onClick={() => handleRegenerateToken(token)}
+                        className="px-3 py-1.5 text-sm text-amber-300 hover:text-amber-200 bg-slate-700 hover:bg-slate-600 rounded transition-colors disabled:opacity-50"
+                        disabled={regeneratingTokenId === token.id}
+                      >
+                        {regeneratingTokenId === token.id ? 'Regenerating…' : 'Regenerate'}
+                      </button>
+                      <button
                         onClick={() => { selectToken(token); setShowRevokeModal(true); }}
-                        className="px-3 py-1.5 text-sm text-red-400 hover:text-red-300 bg-slate-700 hover:bg-slate-600 rounded transition-colors"
+                        className="px-3 py-1.5 text-sm text-red-400 hover:text-red-300 bg-slate-700 hover:bg-slate-600 rounded transition-colors col-span-2 sm:col-span-1"
                       >
                         Revoke
                       </button>

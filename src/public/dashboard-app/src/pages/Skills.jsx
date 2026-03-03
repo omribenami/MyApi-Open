@@ -324,16 +324,42 @@ function Skills() {
     }
   };
 
+  const copyText = async (text) => {
+    if (!text) return false;
+    try {
+      if (navigator?.clipboard?.writeText && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch {}
+
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '-1000px';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    } catch {
+      return false;
+    }
+  };
+
   const handleCopyToken = async (skillId) => {
     const t = skillTokens[skillId];
     if (!t?.token) return;
-    try {
-      await navigator.clipboard.writeText(t.token);
+    const ok = await copyText(t.token);
+    if (ok) {
       setSkillTokens((prev) => ({ ...prev, [skillId]: { ...prev[skillId], copied: true } }));
       setTimeout(() => {
         setSkillTokens((prev) => ({ ...prev, [skillId]: { ...prev[skillId], copied: false } }));
       }, 2000);
-    } catch {}
+    }
   };
 
   const categoryLabel = (cat) => CATEGORIES.find((c) => c.value === cat)?.label || cat;
