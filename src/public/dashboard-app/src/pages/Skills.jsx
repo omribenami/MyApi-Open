@@ -114,7 +114,16 @@ function CreateEditModal({ isEdit, skill, onSave, onClose, masterToken }) {
             <div className={`rounded-lg p-3 border ${scanner.safe_to_use ? 'bg-green-900/30 border-green-700 text-green-200' : 'bg-amber-900/30 border-amber-700 text-amber-200'}`}>
               <p className="font-medium">
                 {scanner.safe_to_use ? '✅ Safe to use' : '⚠️ Scanner found potential risks'}
-                <span className="ml-2 text-xs opacity-80">score: {scanner.score}</span>
+                <span className="ml-2 text-xs opacity-80">
+                  score: {scanner.score}
+                  <span
+                    className="ml-1 cursor-help underline decoration-dotted"
+                    title="Score starts at 100. The scanner checks README/SKILL.md/package.json text for risky patterns (rm -rf /, curl|sh, wget|bash, eval(), child_process, encoded PowerShell, miner/keylogger terms). It subtracts 35 per match, adds +5 if license is detected, and +5 if repo stars > 3."
+                    aria-label="How score is calculated"
+                  >
+                    *
+                  </span>
+                </span>
               </p>
               {scanner.findings?.length > 0 && <p className="text-xs mt-1">{scanner.findings.join(' • ')}</p>}
             </div>
