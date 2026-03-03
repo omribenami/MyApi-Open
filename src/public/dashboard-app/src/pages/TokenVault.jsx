@@ -210,19 +210,19 @@ function TokenVault() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white">External Token Vault</h1>
+          <h1 className="text-2xl font-semibold text-slate-100">External Token Vault</h1>
           <p className="mt-2 text-slate-400">Securely store API keys and credentials for external services</p>
         </div>
         <button
           onClick={() => { setShowAddModal(true); setError(''); }}
-          className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors self-start sm:self-auto"
+          className="ui-button self-start sm:self-auto"
         >
           + Add Token
         </button>
       </div>
 
       {error && (
-        <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300">
+        <div className="ui-toast border-red-500/30 bg-red-500/10 text-red-300">
           {error}
         </div>
       )}
@@ -235,13 +235,12 @@ function TokenVault() {
           </div>
         </div>
       ) : tokens.length === 0 ? (
-        <div className="rounded-lg bg-slate-800 border-2 border-dashed border-slate-700 p-12 text-center">
-          <div className="text-5xl mb-4">🔐</div>
-          <h3 className="text-lg font-semibold text-white mb-2">No external tokens stored yet</h3>
+        <div className="ui-card border-2 border-dashed p-10 text-center">
+                    <h3 className="text-lg font-semibold text-white mb-2">No external tokens stored yet</h3>
           <p className="text-slate-400 mb-6">Add API keys for OpenAI, AWS, GitHub, Stripe, and more</p>
           <button
             onClick={() => setShowAddModal(true)}
-            className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+            className="ui-button px-6"
           >
             Add Your First Token
           </button>
@@ -277,14 +276,14 @@ function TokenVault() {
                           {revealingId === token.id
                             ? '...'
                             : revealedTokens[token.id] !== undefined
-                              ? '👁 Hide'
-                              : '👁 Show'}
+                              ? 'Hide'
+                              : 'Show'}
                         </button>
                         <button
                           onClick={() => handleCopyToken(token.id)}
                           className="text-xs text-blue-400 hover:text-blue-300 px-2 py-1 rounded hover:bg-slate-800"
                         >
-                          📋 Copy
+                          Copy
                         </button>
                       </div>
                     </div>
@@ -310,7 +309,7 @@ function TokenVault() {
                   onClick={() => handleDeleteToken(token.id)}
                   className="text-red-400 hover:text-red-300 hover:bg-red-500/10 px-3 py-2 rounded transition-colors flex-shrink-0"
                 >
-                  🗑️ Delete
+                  Delete
                 </button>
               </div>
             </div>
@@ -338,7 +337,7 @@ function TokenVault() {
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   placeholder="e.g., My OpenAI API Key"
-                  className="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-800 text-white focus:border-blue-500 focus:outline-none"
+                  className="w-full px-3 py-2 ui-input focus:border-slate-500 focus:outline-none"
                 />
               </div>
 
@@ -347,7 +346,7 @@ function TokenVault() {
                 <select
                   value={formData.service}
                   onChange={(e) => setFormData({ ...formData, service: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-800 text-white focus:border-blue-500 focus:outline-none"
+                  className="w-full px-3 py-2 ui-input focus:border-slate-500 focus:outline-none"
                 >
                   <option value="">Select service...</option>
                   {services.map(s => (
@@ -363,14 +362,14 @@ function TokenVault() {
                   value={formData.websiteUrl}
                   onChange={(e) => setFormData({ ...formData, websiteUrl: e.target.value })}
                   placeholder="https://example.com"
-                  className="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-800 text-white focus:border-blue-500 focus:outline-none"
+                  className="w-full px-3 py-2 ui-input focus:border-slate-500 focus:outline-none"
                 />
                 <div className="mt-2 flex gap-2">
                   <button
                     type="button"
                     onClick={handleDiscoverApi}
                     disabled={discovering}
-                    className="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-sm"
+                    className="px-3 py-1.5 rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-60 text-slate-100 text-sm border border-slate-600"
                   >
                     {discovering ? 'Discovering...' : 'Discover API URL'}
                   </button>

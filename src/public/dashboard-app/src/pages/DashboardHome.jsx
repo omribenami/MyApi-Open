@@ -98,70 +98,46 @@ function DashboardHome() {
     {
       label: 'Access Tokens',
       value: stats.tokens,
-      icon: '🔑',
-      color: 'blue',
       link: '/access-tokens',
       description: 'Master & guest tokens',
     },
     {
       label: 'Token Vault',
       value: stats.vaultTokens,
-      icon: '🔐',
-      color: 'purple',
       link: '/tokens',
       description: 'External service credentials',
     },
     {
       label: 'Connected Services',
       value: stats.connectors,
-      icon: '🔗',
-      color: 'green',
       link: '/services',
       description: 'OAuth and integrations',
     },
     {
       label: 'Personas',
       value: stats.personas,
-      icon: '🎭',
-      color: 'pink',
       link: '/personas',
       description: stats.activePersona ? `Active: ${stats.activePersona}` : 'AI personality profiles',
     },
     {
       label: 'Skills',
       value: stats.skills,
-      icon: '🧩',
-      color: 'teal',
       link: '/skills',
       description: `${stats.activeSkills} active skill${stats.activeSkills !== 1 ? 's' : ''}`,
     },
     {
       label: 'Knowledge Base',
       value: stats.kbDocs,
-      icon: '📚',
-      color: 'indigo',
       link: '/knowledge-base',
       description: 'Documents & memory',
     },
     {
       label: 'My Listings',
       value: stats.myListings,
-      icon: '📦',
-      color: 'amber',
       link: '/my-listings',
       description: 'Published to marketplace',
     },
   ];
-
-  const colorMap = {
-    blue: 'from-blue-600 to-blue-700',
-    green: 'from-green-600 to-green-700',
-    purple: 'from-purple-600 to-purple-700',
-    amber: 'from-amber-600 to-orange-600',
-    pink: 'from-pink-600 to-rose-700',
-    teal: 'from-teal-600 to-cyan-700',
-    indigo: 'from-indigo-600 to-violet-700',
-  };
 
   if (loading) {
     return (
@@ -180,24 +156,22 @@ function DashboardHome() {
     <div className="space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-4xl font-bold text-white">Welcome to MyApi</h1>
-        <p className="mt-2 text-slate-400 text-lg">
-          Manage your personal APIs, services, and credentials in one place
+        <h1 className="text-3xl font-semibold tracking-tight text-slate-100">MyApi Dashboard</h1>
+        <p className="mt-1 text-slate-400 text-base">
+          Manage APIs, services, and credentials in one place.
         </p>
       </div>
 
       {/* Status Alert */}
       {health && (
-        <div className="rounded-lg bg-green-900 bg-opacity-30 border border-green-700 p-4">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">✓</span>
-            <div>
-              <h3 className="text-sm font-medium text-green-200">System Status</h3>
-              <p className="text-xs text-green-300 mt-1">
-                All systems operational. {health.uptime && `Uptime: ${health.uptime}`}
-              </p>
-            </div>
+        <div className="rounded-md bg-slate-900 border border-slate-800 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-medium text-slate-200">System Status</h3>
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs border border-emerald-700 text-emerald-300 bg-emerald-900/20">Operational</span>
           </div>
+          <p className="text-xs text-slate-400 mt-2">
+            {health.uptime && `Uptime: ${health.uptime}`}
+          </p>
         </div>
       )}
 
@@ -207,34 +181,30 @@ function DashboardHome() {
           <Link
             key={card.label}
             to={card.link}
-            className={`bg-gradient-to-br ${colorMap[card.color]} rounded-lg p-6 text-white shadow-lg hover:shadow-xl transition-shadow cursor-pointer group`}
+            className="rounded-md p-5 border border-slate-800 bg-slate-900 hover:border-slate-700 transition-colors"
           >
-            <div className="flex items-start justify-between mb-4">
+            <div className="flex items-start justify-between mb-3">
               <div>
-                <p className="text-sm font-medium opacity-90">{card.label}</p>
-                <p className="text-3xl font-bold mt-2">{card.value}</p>
-              </div>
-              <div className="text-3xl opacity-50 group-hover:opacity-75 transition-opacity">
-                {card.icon}
+                <p className="text-sm font-medium text-slate-300">{card.label}</p>
+                <p className="text-3xl font-semibold mt-1 text-slate-100">{card.value}</p>
               </div>
             </div>
-            <p className="text-xs opacity-80">{card.description}</p>
+            <p className="text-xs text-slate-400">{card.description}</p>
           </Link>
         ))}
       </div>
 
       {/* Quick Actions */}
       <div className="space-y-4">
-        <h2 className="text-xl font-semibold text-white">Quick Actions</h2>
+        <h2 className="text-lg font-semibold text-slate-100">Quick Actions</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Link
             to="/services"
-            className="bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-blue-500 rounded-lg p-6 transition-all"
+            className="bg-slate-900 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-md p-5 transition-colors"
           >
             <div className="flex items-center gap-3">
-              <span className="text-2xl">🔗</span>
               <div>
-                <h3 className="font-semibold text-white">Connect a Service</h3>
+                <h3 className="font-semibold text-slate-100">Connect a Service</h3>
                 <p className="text-sm text-slate-400">Add OAuth integrations</p>
               </div>
             </div>
@@ -242,12 +212,11 @@ function DashboardHome() {
 
           <Link
             to="/access-tokens"
-            className="bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-blue-500 rounded-lg p-6 transition-all"
+            className="bg-slate-900 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-md p-5 transition-colors"
           >
             <div className="flex items-center gap-3">
-              <span className="text-2xl">🔑</span>
               <div>
-                <h3 className="font-semibold text-white">Manage Tokens</h3>
+                <h3 className="font-semibold text-slate-100">Manage Tokens</h3>
                 <p className="text-sm text-slate-400">Master token &amp; guest access</p>
               </div>
             </div>
@@ -255,12 +224,11 @@ function DashboardHome() {
 
           <Link
             to="/marketplace"
-            className="bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-amber-500 rounded-lg p-6 transition-all"
+            className="bg-slate-900 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-md p-5 transition-colors"
           >
             <div className="flex items-center gap-3">
-              <span className="text-2xl">🏪</span>
               <div>
-                <h3 className="font-semibold text-white">Browse Marketplace</h3>
+                <h3 className="font-semibold text-slate-100">Browse Marketplace</h3>
                 <p className="text-sm text-slate-400">Discover personas, APIs &amp; skills</p>
               </div>
             </div>
@@ -269,15 +237,15 @@ function DashboardHome() {
       </div>
 
       {/* Getting Started */}
-      <div className="bg-slate-800 border border-slate-700 rounded-lg p-8">
-        <h2 className="text-xl font-semibold text-white mb-4">Getting Started</h2>
+      <div className="bg-slate-900 border border-slate-800 rounded-md p-6">
+        <h2 className="text-lg font-semibold text-slate-100 mb-4">Getting Started</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-blue-600 text-white text-xs font-bold">
+              <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-slate-700 text-slate-100 text-xs font-bold">
                 1
               </span>
-              <span className="font-medium text-white">Connect Services</span>
+              <span className="font-medium text-slate-100">Connect Services</span>
             </div>
             <p className="text-slate-400">
               Start by connecting to external services like Google, GitHub, or Slack using OAuth.
@@ -286,10 +254,10 @@ function DashboardHome() {
 
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-blue-600 text-white text-xs font-bold">
+              <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-slate-700 text-slate-100 text-xs font-bold">
                 2
               </span>
-              <span className="font-medium text-white">Create Tokens</span>
+              <span className="font-medium text-slate-100">Create Tokens</span>
             </div>
             <p className="text-slate-400">
               Generate API tokens with specific scopes and permissions for secure access.
@@ -298,10 +266,10 @@ function DashboardHome() {
 
           <div>
             <div className="flex items-center gap-2 mb-2">
-              <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-blue-600 text-white text-xs font-bold">
+              <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-slate-700 text-slate-100 text-xs font-bold">
                 3
               </span>
-              <span className="font-medium text-white">Manage & Monitor</span>
+              <span className="font-medium text-slate-100">Manage & Monitor</span>
             </div>
             <p className="text-slate-400">
               Track all API usage, audit logs, and manage permissions from one dashboard.
@@ -314,11 +282,11 @@ function DashboardHome() {
       <div className="text-center text-sm text-slate-500 pt-8 border-t border-slate-800">
         <p>
           Need help? Check our{' '}
-          <a href="#" className="text-blue-400 hover:text-blue-300">
+          <a href="#" className="text-slate-300 hover:text-slate-200">
             documentation
           </a>{' '}
           or{' '}
-          <a href="#" className="text-blue-400 hover:text-blue-300">
+          <a href="#" className="text-slate-300 hover:text-slate-200">
             contact support
           </a>
         </p>
