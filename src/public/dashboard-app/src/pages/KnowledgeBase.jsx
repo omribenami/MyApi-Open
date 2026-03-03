@@ -142,7 +142,11 @@ function KnowledgeBase() {
     setFilterSource,
     openCreateModal,
     openDeleteConfirmation,
+    openEditor,
   } = useKnowledgeStore();
+
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   useEffect(() => {
     if (masterToken) {
@@ -241,6 +245,57 @@ function KnowledgeBase() {
     return result;
   }, [documents, filterSource, searchQuery, sortBy, sortOrder]);
 
+  const handleUpload = async (file) => {
+    if (!file || !masterToken) return;
+
+    setUploading(true);
+    setUploadProgress(0);
+    clearError();
+    clearSuccess();
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    await new Promise((resolve) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/v1/brain/knowledge-base/upload');
+      xhr.setRequestHeader('Authorization', `Bearer ${masterToken}`);
+
+      xhr.upload.onprogress = (evt) => {
+        if (evt.lengthComputable) {
+          setUploadProgress(Math.round((evt.loaded / evt.total) * 100));
+        }
+      };
+
+      xhr.onload = async () => {
+        try {
+          const data = JSON.parse(xhr.responseText || '{}');
+          if (xhr.status >= 200 && xhr.status < 300) {
+            setSuccess(`Uploaded ${file.name} (${data.documentsCreated || 0} KB document chunks)`);
+            await fetchDocuments();
+          } else {
+            setError(data.error || 'Upload failed');
+          }
+        } catch {
+          setError('Upload failed');
+        } finally {
+          setUploading(false);
+          setUploadProgress(0);
+          resolve();
+        }
+      };
+
+      xhr.onerror = () => {
+        setError('Upload failed due to network error');
+        setUploading(false);
+        setUploadProgress(0);
+        resolve();
+      };
+
+      xhr.send(formData);
+    });
+  };
+
   const handleDelete = (docId) => {
     openDeleteConfirmation(docId);
   };
@@ -255,13 +310,30 @@ function KnowledgeBase() {
             Manage documents that inform AI context and memory
           </p>
         </div>
-        <button
-          onClick={openCreateModal}
-          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors self-start sm:self-auto"
-        >
-          <span>+</span>
-          New Document
-        </button>
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          <label className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg transition-colors cursor-pointer disabled:opacity-60">
+            <span>⬆</span>
+            Upload File
+            <input
+              type="file"
+              accept=".txt,.md,.pdf,text/plain,text/markdown,application/pdf"
+              className="hidden"
+              disabled={uploading}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleUpload(file);
+                e.target.value = '';
+              }}
+            />
+          </label>
+          <button
+            onClick={openCreateModal}
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+          >
+            <span>+</span>
+            New Document
+          </button>
+        </div>
       </div>
 
       {/* Alerts */}
@@ -286,6 +358,18 @@ function KnowledgeBase() {
           <button onClick={clearSuccess} className="text-green-400 hover:text-green-300 text-sm flex-shrink-0">
             Dismiss
           </button>
+        </div>
+      )}
+
+      {uploading && (
+        <div className="rounded-lg bg-slate-800 border border-slate-700 p-4">
+          <div className="flex items-center justify-between text-sm text-slate-300 mb-2">
+            <span>Uploading document…</span>
+            <span>{uploadProgress}%</span>
+          </div>
+          <div className="w-full h-2 bg-slate-700 rounded overflow-hidden">
+            <div className="h-full bg-emerald-500 transition-all" style={{ width: `${uploadProgress}%` }} />
+          </div>
         </div>
       )}
 

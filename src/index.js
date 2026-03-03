@@ -5,6 +5,8 @@ const bcrypt = require("bcrypt");
 const path = require("path");
 const crypto = require("crypto");
 const fs = require("fs");
+const multer = require('multer');
+const pdfParse = require('pdf-parse');
 
 const {
   db,
@@ -58,8 +60,10 @@ const {
   getConversationHistory,
   addKBDocument,
   getKBDocuments,
+  getKBDocumentById,
   deleteKBDocument,
   getPersonaDocuments,
+  getPersonaDocumentContents,
   attachDocumentToPersona,
   detachDocumentFromPersona,
   // Marketplace
@@ -1302,6 +1306,9 @@ app.post("/api/v1/personas/:id/documents", authenticate, (req, res) => {
   
   const persona = getPersonaById(personaId);
   if (!persona) return res.status(404).json({ error: "Persona not found" });
+
+  const doc = getKBDocumentById(documentId);
+  if (!doc) return res.status(404).json({ error: "Document not found" });
   
   attachDocumentToPersona(personaId, documentId);
   res.json({ ok: true });
@@ -1753,6 +1760,11 @@ const knowledgeBase = new KnowledgeBase({
 });
 let llmAdapter = null;
 
+const kbUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+});
+
 function getLLMAdapter() {
   if (!llmAdapter) {
     llmAdapter = new LLMAdapter({ 
@@ -1764,13 +1776,61 @@ function getLLMAdapter() {
   return llmAdapter;
 }
 
+function resolvePersonaScopeForRequest(req, requestedPersonaId) {
+  const parsedRequestedPersonaId = requestedPersonaId !== undefined && requestedPersonaId !== null && requestedPersonaId !== ''
+    ? parseInt(requestedPersonaId, 10)
+    : null;
+
+  if (parsedRequestedPersonaId !== null && Number.isNaN(parsedRequestedPersonaId)) {
+    throw new Error('Invalid personaId. Must be a number.');
+  }
+
+  const allowedPersonas = Array.isArray(req.tokenMeta?.allowedPersonas) ? req.tokenMeta.allowedPersonas : null;
+
+  if (allowedPersonas && allowedPersonas.length > 0) {
+    if (parsedRequestedPersonaId !== null && !allowedPersonas.includes(parsedRequestedPersonaId)) {
+      return { error: 'Requested persona is not allowed for this token', status: 403 };
+    }
+
+    const scopedPersonaId = parsedRequestedPersonaId !== null
+      ? parsedRequestedPersonaId
+      : (allowedPersonas.length === 1 ? allowedPersonas[0] : null);
+
+    if (scopedPersonaId === null) {
+      return {
+        error: 'This token is scoped to multiple personas. Provide personaId in request.',
+        status: 400,
+      };
+    }
+
+    return { personaId: scopedPersonaId, scoped: true };
+  }
+
+  return {
+    personaId: parsedRequestedPersonaId,
+    scoped: parsedRequestedPersonaId !== null,
+  };
+}
+
+function scoreByQuery(content = '', query = '') {
+  const terms = String(query || '').toLowerCase().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return 0;
+  const haystack = String(content || '').toLowerCase();
+  return terms.reduce((acc, term) => acc + (haystack.includes(term) ? 1 : 0), 0);
+}
+
 // POST /api/v1/brain/chat - Chat with context-aware AI
 app.post('/api/v1/brain/chat', authenticate, async (req, res) => {
   try {
-    const { message, conversationId, model, temperature } = req.body;
+    const { message, conversationId, model, temperature, personaId } = req.body;
 
     if (!message) {
       return res.status(400).json({ error: 'message is required' });
+    }
+
+    const personaScope = resolvePersonaScopeForRequest(req, personaId);
+    if (personaScope.error) {
+      return res.status(personaScope.status || 400).json({ error: personaScope.error });
     }
 
     // Get or create conversation
@@ -1783,14 +1843,31 @@ app.post('/api/v1/brain/chat', authenticate, async (req, res) => {
     // Assemble context
     const context = await contextEngine.assembleContext(convId, db);
 
-    // Query knowledge base
+    // Query global knowledge base
     const relevantDocs = knowledgeBase.queryKnowledgeBase(message, 3);
+
+    // Add persona-scoped docs when persona scope is active
+    let personaDocs = [];
+    if (personaScope.personaId !== null && personaScope.personaId !== undefined) {
+      personaDocs = getPersonaDocumentContents(personaScope.personaId);
+    }
+
+    const rankedPersonaDocs = personaDocs
+      .map((doc) => ({ ...doc, score: scoreByQuery(`${doc.title} ${doc.content}`, message) }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5);
 
     // Build system prompt
     let systemPrompt = context.systemPrompt;
     if (relevantDocs.length > 0) {
-      systemPrompt += '\n\nRelevant documents:\n' + 
+      systemPrompt += '\n\nRelevant documents:\n' +
         relevantDocs.map(d => `- ${d.title}`).join('\n');
+    }
+
+    if (rankedPersonaDocs.length > 0) {
+      systemPrompt += '\n\nPersona-attached knowledge:\n' + rankedPersonaDocs
+        .map((doc) => `### ${doc.title}\n${String(doc.content || '').slice(0, 2000)}`)
+        .join('\n\n');
     }
 
     // Get recent messages
@@ -1830,7 +1907,9 @@ app.post('/api/v1/brain/chat', authenticate, async (req, res) => {
         userProfile: !!context.user,
         persona: !!context.persona,
         memory: context.memory?.memories?.length || 0,
-        documents: relevantDocs.length
+        documents: relevantDocs.length,
+        personaDocuments: rankedPersonaDocs.length,
+        personaId: personaScope.personaId ?? null
       }
     });
   } catch (error) {
@@ -1920,6 +1999,71 @@ app.post('/api/v1/brain/knowledge-base', authenticate, async (req, res) => {
   }
 });
 
+// POST /api/v1/brain/knowledge-base/upload - Upload and ingest document
+app.post('/api/v1/brain/knowledge-base/upload', authenticate, kbUpload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'file is required (multipart/form-data, field name: file)' });
+    }
+
+    const originalName = req.file.originalname || 'uploaded-file';
+    const ext = path.extname(originalName).toLowerCase();
+    const mimeType = (req.file.mimetype || '').toLowerCase();
+
+    const isTextLike = ext === '.txt' || ext === '.md' || mimeType === 'text/plain' || mimeType === 'text/markdown';
+    const isPdf = ext === '.pdf' || mimeType === 'application/pdf';
+
+    if (!isTextLike && !isPdf) {
+      return res.status(400).json({ error: 'Unsupported file type. Supported: .txt, .md, .pdf' });
+    }
+
+    let content = '';
+    if (isTextLike) {
+      content = req.file.buffer.toString('utf8');
+    } else {
+      try {
+        const parsed = await pdfParse(req.file.buffer);
+        content = (parsed?.text || '').trim();
+      } catch (err) {
+        return res.status(400).json({
+          error: 'Failed to parse PDF. Please upload a text-based PDF or convert it to .txt/.md.',
+          details: err.message,
+        });
+      }
+    }
+
+    if (!content || !content.trim()) {
+      return res.status(400).json({ error: 'No readable text found in uploaded file' });
+    }
+
+    const docs = await knowledgeBase.addDocument('upload', originalName, content);
+
+    createAuditLog({
+      requesterId: req.tokenMeta.tokenId,
+      action: 'kb_document_uploaded',
+      resource: '/api/v1/brain/knowledge-base/upload',
+      scope: req.tokenMeta.scope,
+      ip: req.ip,
+      details: {
+        filename: originalName,
+        mimeType: req.file.mimetype,
+        bytes: req.file.size,
+        chunks: docs.length,
+      }
+    });
+
+    res.status(201).json({
+      ok: true,
+      file: { name: originalName, size: req.file.size, mimeType: req.file.mimetype },
+      documentsCreated: docs.length,
+      documents: docs.map((d) => ({ id: d.id, title: d.title, source: d.source, createdAt: d.createdAt })),
+    });
+  } catch (error) {
+    console.error('Upload KB document error:', error);
+    res.status(500).json({ error: 'Failed to upload document', message: error.message });
+  }
+});
+
 // GET /api/v1/brain/knowledge-base - List KB documents
 app.get('/api/v1/brain/knowledge-base', authenticate, (req, res) => {
   try {
@@ -1968,8 +2112,13 @@ app.delete('/api/v1/brain/knowledge-base/:id', authenticate, (req, res) => {
 // GET /api/v1/brain/context - Get current assembled context
 app.get('/api/v1/brain/context', authenticate, async (req, res) => {
   try {
-    const { conversationId } = req.query;
-    
+    const { conversationId, personaId } = req.query;
+
+    const personaScope = resolvePersonaScopeForRequest(req, personaId);
+    if (personaScope.error) {
+      return res.status(personaScope.status || 400).json({ error: personaScope.error });
+    }
+
     let context;
     if (conversationId) {
       context = await contextEngine.assembleContext(conversationId, db);
@@ -1988,15 +2137,36 @@ app.get('/api/v1/brain/context', authenticate, async (req, res) => {
       };
     }
 
+    let personaDocuments = [];
+    if (personaScope.personaId !== null && personaScope.personaId !== undefined) {
+      personaDocuments = getPersonaDocumentContents(personaScope.personaId).map((doc) => ({
+        id: doc.id,
+        title: doc.title,
+        source: doc.source,
+        preview: String(doc.content || '').slice(0, 400),
+        metadata: doc.metadata,
+      }));
+    }
+
     createAuditLog({
       requesterId: req.tokenMeta.tokenId,
       action: 'brain_context_query',
       resource: '/api/v1/brain/context',
       scope: req.tokenMeta.scope,
-      ip: req.ip
+      ip: req.ip,
+      details: {
+        personaId: personaScope.personaId ?? null,
+        personaDocumentCount: personaDocuments.length,
+      }
     });
 
-    res.json(context);
+    res.json({
+      ...context,
+      personaContext: {
+        personaId: personaScope.personaId ?? null,
+        documents: personaDocuments,
+      }
+    });
   } catch (error) {
     console.error('Get context error:', error);
     res.status(500).json({ error: 'Failed to get context', message: error.message });

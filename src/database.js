@@ -1339,6 +1339,23 @@ function getPersonaDocuments(personaId) {
   }));
 }
 
+function getPersonaDocumentContents(personaId) {
+  return db.prepare(`
+    SELECT kd.id, kd.title, kd.source, kd.content, kd.metadata, kd.created_at
+    FROM persona_documents pd
+    JOIN kb_documents kd ON pd.document_id = kd.id
+    WHERE pd.persona_id = ?
+    ORDER BY pd.created_at DESC
+  `).all(personaId).map(r => ({
+    id: r.id,
+    title: r.title,
+    source: r.source,
+    content: r.content,
+    metadata: r.metadata ? JSON.parse(r.metadata) : null,
+    createdAt: r.created_at,
+  }));
+}
+
 function attachDocumentToPersona(personaId, documentId) {
   const now = new Date().toISOString();
   try {
@@ -1983,6 +2000,7 @@ module.exports = {
   // Marketplace
   createMarketplaceListing,
   getPersonaDocuments,
+  getPersonaDocumentContents,
   attachDocumentToPersona,
   detachDocumentFromPersona,
   getMarketplaceListings,
