@@ -2007,9 +2007,21 @@ app.get('/api/v1/dashboard/stats', authenticate, (req, res) => {
 function parseGitHubRepoUrl(repoUrl) {
   if (!repoUrl) return null;
   const trimmed = String(repoUrl).trim().replace(/\.git$/, '');
+  
+  const treeMatch = trimmed.match(/^https?:\/\/github\.com\/([^\/]+)\/([^\/\?#]+)\/tree\/([^\/]+)\/(.+)$/i);
+  if (treeMatch) {
+    return {
+      owner: treeMatch[1],
+      repo: treeMatch[2],
+      branch: treeMatch[3],
+      subpath: treeMatch[4],
+      normalized: trimmed
+    };
+  }
+
   const m = trimmed.match(/^https?:\/\/github\.com\/([^\/]+)\/([^\/\?#]+)(?:[\/\?#].*)?$/i);
   if (!m) return null;
-  return { owner: m[1], repo: m[2], normalized: `https://github.com/${m[1]}/${m[2]}` };
+  return { owner: m[1], repo: m[2], branch: null, subpath: null, normalized: `https://github.com/${m[1]}/${m[2]}` };
 }
 
 async function fetchGitHubRepoMetadata(repoUrl) {
@@ -2021,10 +2033,12 @@ async function fetchGitHubRepoMetadata(repoUrl) {
   if (!repoRes.ok) throw new Error('Repository not found or inaccessible');
   const repo = await repoRes.json();
 
-  const defaultBranch = repo.default_branch || 'main';
-  const readmeRes = await fetch(`https://raw.githubusercontent.com/${parsed.owner}/${parsed.repo}/${defaultBranch}/README.md`, { headers });
-  const pkgRes = await fetch(`https://raw.githubusercontent.com/${parsed.owner}/${parsed.repo}/${defaultBranch}/package.json`, { headers });
-  const skillDocRes = await fetch(`https://raw.githubusercontent.com/${parsed.owner}/${parsed.repo}/${defaultBranch}/SKILL.md`, { headers });
+  const defaultBranch = parsed.branch || repo.default_branch || 'main';
+  const subpathPrefix = parsed.subpath ? `${parsed.subpath}/` : '';
+  
+  const readmeRes = await fetch(`https://raw.githubusercontent.com/${parsed.owner}/${parsed.repo}/${defaultBranch}/${subpathPrefix}README.md`, { headers });
+  const pkgRes = await fetch(`https://raw.githubusercontent.com/${parsed.owner}/${parsed.repo}/${defaultBranch}/${subpathPrefix}package.json`, { headers });
+  const skillDocRes = await fetch(`https://raw.githubusercontent.com/${parsed.owner}/${parsed.repo}/${defaultBranch}/${subpathPrefix}SKILL.md`, { headers });
 
   const readme = readmeRes.ok ? await readmeRes.text() : '';
   const skillDoc = skillDocRes.ok ? await skillDocRes.text() : '';
@@ -2033,7 +2047,13 @@ async function fetchGitHubRepoMetadata(repoUrl) {
     try { pkg = JSON.parse(await pkgRes.text()); } catch {}
   }
 
-  const name = pkg?.name || repo.name;
+  let defaultName = repo.name;
+  if (parsed.subpath) {
+    const parts = parsed.subpath.split('/');
+    defaultName = parts[parts.length - 1];
+  }
+
+  const name = pkg?.name || defaultName;
   const description = repo.description || pkg?.description || (readme.split('\n').find((l) => l.trim()) || '').replace(/^#\s*/, '') || 'Imported from repository';
   const version = pkg?.version || '1.0.0';
   const author = (typeof pkg?.author === 'string' ? pkg.author : pkg?.author?.name) || repo.owner?.login || '';
@@ -2371,7 +2391,16 @@ const sendDashboardIndex = (req, res) => {
 
 app.get('/dashboard', sendDashboardIndex);
 app.get('/dashboard/', sendDashboardIndex);
-app.get('/dashboard/*', sendDashboardIndex);
+app.get('/dashboard/*', (req, res) => {
+  const relPath = req.path.replace(/^\/dashboard\/?/, '');
+  const looksLikeStaticAsset = relPath.startsWith('assets/') || relPath === 'vite.svg' || /\.[a-z0-9]+$/i.test(relPath);
+
+  if (looksLikeStaticAsset) {
+    return res.status(404).send('Asset not found');
+  }
+
+  return sendDashboardIndex(req, res);
+});
 
 // --- Start ---
 bootstrap();
