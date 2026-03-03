@@ -2140,6 +2140,19 @@ app.post('/api/v1/skills', authenticate, (req, res) => {
   try {
     const { name, description, version, author, category, script_content, config_json, repo_url } = req.body;
     if (!name) return res.status(400).json({ error: 'Name is required' });
+
+    // Idempotency for marketplace installs
+    const listingId = (config_json && typeof config_json === 'object') ? config_json.marketplace_listing_id : null;
+    if (listingId) {
+      const existing = getSkills().find((s) => {
+        const cfg = s.config_json && typeof s.config_json === 'object' ? s.config_json : null;
+        return String(cfg?.marketplace_listing_id || '') === String(listingId);
+      });
+      if (existing) {
+        return res.status(200).json({ data: existing, already_installed: true });
+      }
+    }
+
     const skill = createSkill(name, description, version, author, category, script_content, config_json, repo_url);
     res.status(201).json({ data: skill });
   } catch (err) {

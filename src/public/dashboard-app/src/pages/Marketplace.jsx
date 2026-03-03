@@ -92,10 +92,42 @@ function RatingWidget({ listingId, onRated, masterToken }) {
 function ListingModal({ listing, onClose, onInstall, masterToken }) {
   const [detail, setDetail] = useState(listing);
   const [installing, setInstalling] = useState(false);
-
+  const [isInstalled, setIsInstalled] = useState(false);
   const [installSuccess, setInstallSuccess] = useState(false);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function checkInstalled() {
+      if (!masterToken) return;
+      try {
+        // For now, enforce idempotency for skills by marketplace listing id
+        if (listing.type === 'skill') {
+          const res = await fetch('/api/v1/skills', {
+            headers: { 'Authorization': `Bearer ${masterToken}` },
+          });
+          if (!res.ok) return;
+          const payload = await res.json();
+          const exists = (payload.data || []).some((s) => {
+            const cfg = s.config_json && typeof s.config_json === 'object' ? s.config_json : null;
+            return String(cfg?.marketplace_listing_id || '') === String(listing.id);
+          });
+          if (!cancelled) {
+            setIsInstalled(exists);
+            if (exists) setInstallSuccess(true);
+          }
+        }
+      } catch {
+        // ignore lookup failures to avoid blocking modal
+      }
+    }
+
+    checkInstalled();
+    return () => { cancelled = true; };
+  }, [listing.id, listing.type, masterToken]);
+
   async function handleInstall() {
+    if (isInstalled) return;
     setInstalling(true);
     try {
       // Track install
@@ -121,6 +153,11 @@ function ListingModal({ listing, onClose, onInstall, masterToken }) {
         }
 
         if (detail.type === 'skill') {
+          const mergedConfig = {
+            ...(content.config_json && typeof content.config_json === 'object' ? content.config_json : {}),
+            marketplace_listing_id: detail.id,
+          };
+
           await fetch('/api/v1/skills', {
             method: 'POST',
             headers: { 'Authorization': `Bearer ${masterToken}`, 'Content-Type': 'application/json' },
@@ -131,13 +168,14 @@ function ListingModal({ listing, onClose, onInstall, masterToken }) {
               author: detail.ownerName,
               category: content.category || 'custom',
               script_content: content.script_content || '',
-              config_json: content.config_json || { marketplace_listing_id: detail.id },
+              config_json: mergedConfig,
               repo_url: content.repo_url || '',
             }),
           });
         }
       }
 
+      setIsInstalled(true);
       setInstallSuccess(true);
       onInstall && onInstall();
       setDetail(d => ({ ...d, installCount: (d.installCount || 0) + 1 }));
@@ -234,16 +272,16 @@ function ListingModal({ listing, onClose, onInstall, masterToken }) {
           {masterToken && !installSuccess && (
             <button
               onClick={handleInstall}
-              disabled={installing}
+              disabled={installing || isInstalled}
               className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 text-white font-semibold rounded-lg transition-all shadow-lg"
             >
-              {installing ? 'Installing...' : `Install / Use (${detail.installCount || 0})`}
+              {installing ? 'Installing...' : isInstalled ? 'Installed' : `Install / Use (${detail.installCount || 0})`}
             </button>
           )}
 
           {installSuccess && (
             <div className="bg-green-900 bg-opacity-30 border border-green-700 rounded-lg p-4 space-y-2">
-              <p className="text-green-300 font-medium">✓ {detail.type === 'persona' ? 'Persona installed!' : 'Added!'}</p>
+              <p className="text-green-300 font-medium">✓ {isInstalled ? 'Installed' : (detail.type === 'persona' ? 'Persona installed!' : 'Added!')}</p>
               {detail.type === 'persona' && (
                 <>
                   <p className="text-sm text-slate-400">This persona is now available in your Personas page.</p>
