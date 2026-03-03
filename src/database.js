@@ -1379,9 +1379,13 @@ function getKBDocumentById(id) {
 }
 
 function deleteKBDocument(id) {
-  const stmt = db.prepare('DELETE FROM kb_documents WHERE id = ?');
-  const result = stmt.run(id);
-  return result.changes > 0;
+  const tx = db.transaction((docId) => {
+    db.prepare('DELETE FROM persona_documents WHERE document_id = ?').run(docId);
+    db.prepare('DELETE FROM persona_skill_documents WHERE document_id = ?').run(docId);
+    const result = db.prepare('DELETE FROM kb_documents WHERE id = ?').run(docId);
+    return result.changes > 0;
+  });
+  return tx(id);
 }
 
 // Persona Documents

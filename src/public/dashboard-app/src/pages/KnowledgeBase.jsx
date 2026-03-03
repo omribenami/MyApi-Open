@@ -312,6 +312,29 @@ function KnowledgeBase() {
     openDeleteConfirmation(docId);
   };
 
+  const handleOpenDocument = async (doc) => {
+    try {
+      const response = await fetch(`/api/v1/brain/knowledge-base/${doc.id}`, {
+        headers: { Authorization: `Bearer ${masterToken}` },
+      });
+
+      if (!response.ok) {
+        openEditor(doc);
+        return;
+      }
+
+      const payload = await response.json();
+      const fullDoc = payload?.data || doc;
+      openEditor({
+        ...doc,
+        ...fullDoc,
+        content: fullDoc.content || doc.content || '',
+      });
+    } catch {
+      openEditor(doc);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -496,7 +519,7 @@ function KnowledgeBase() {
           {viewMode === 'grid' ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {displayDocuments.map((doc) => (
-                <DocumentCard key={doc.id} doc={doc} onDelete={handleDelete} onEdit={() => openEditor(doc)} />
+                <DocumentCard key={doc.id} doc={doc} onDelete={handleDelete} onEdit={() => handleOpenDocument(doc)} />
               ))}
             </div>
           ) : (
@@ -510,7 +533,7 @@ function KnowledgeBase() {
                 <span className="w-8"></span>
               </div>
               {displayDocuments.map((doc) => (
-                <DocumentRow key={doc.id} doc={doc} onDelete={handleDelete} onEdit={() => openEditor(doc)} />
+                <DocumentRow key={doc.id} doc={doc} onDelete={handleDelete} onEdit={() => handleOpenDocument(doc)} />
               ))}
             </div>
           )}

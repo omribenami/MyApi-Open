@@ -2735,6 +2735,28 @@ app.get('/api/v1/brain/knowledge-base', authenticate, (req, res) => {
   }
 });
 
+// GET /api/v1/brain/knowledge-base/:id - Get full KB document
+app.get('/api/v1/brain/knowledge-base/:id', authenticate, (req, res) => {
+  try {
+    const { id } = req.params;
+    const doc = getKBDocumentById(id);
+    if (!doc) return res.status(404).json({ error: 'Document not found' });
+
+    createAuditLog({
+      requesterId: req.tokenMeta.tokenId,
+      action: 'kb_document_viewed',
+      resource: `/api/v1/brain/knowledge-base/${id}`,
+      scope: req.tokenMeta.scope,
+      ip: req.ip,
+    });
+
+    res.json({ data: doc });
+  } catch (error) {
+    console.error('Get KB document error:', error);
+    res.status(500).json({ error: 'Failed to get document' });
+  }
+});
+
 // DELETE /api/v1/brain/knowledge-base/:id - Delete KB document
 app.delete('/api/v1/brain/knowledge-base/:id', authenticate, (req, res) => {
   try {
