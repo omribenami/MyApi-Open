@@ -92,13 +92,40 @@ function AccessTokens() {
     return `${'•'.repeat(token.length - 8)}${token.slice(-8)}`;
   };
 
-  const handleCopyMaster = async () => {
+  const copyText = async (text) => {
+    if (!text) return false;
+
     try {
-      await navigator.clipboard.writeText(masterToken);
+      if (navigator?.clipboard?.writeText && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch {
+      // fall through to legacy copy
+    }
+
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '-1000px';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    } catch {
+      return false;
+    }
+  };
+
+  const handleCopyMaster = async () => {
+    const ok = await copyText(masterToken);
+    if (ok) {
       setMasterCopied(true);
       setTimeout(() => setMasterCopied(false), 2000);
-    } catch {
-      /* clipboard unavailable */
     }
   };
 
@@ -152,11 +179,7 @@ function AccessTokens() {
   };
 
   const handleCopyNew = async (token) => {
-    try {
-      await navigator.clipboard.writeText(token);
-    } catch {
-      /* unavailable */
-    }
+    await copyText(token);
   };
 
   const handleOpenCreate = () => {

@@ -27,13 +27,16 @@ function SourceBadge({ source }) {
   );
 }
 
-function DocumentCard({ doc, onDelete }) {
+function DocumentCard({ doc, onDelete, onEdit }) {
   const wordCount = doc.metadata?.wordCount || 0;
   const section = doc.metadata?.section;
   const chunkIndex = doc.metadata?.chunkIndex;
 
   return (
-    <div className="bg-slate-800 border border-slate-700 hover:border-slate-600 rounded-xl p-5 flex flex-col gap-3 transition-all duration-200 group">
+    <div 
+      onClick={() => onEdit && onEdit(doc)}
+      className="bg-slate-800 border border-slate-700 hover:border-slate-600 rounded-xl p-5 flex flex-col gap-3 transition-all duration-200 group cursor-pointer"
+    >
       {/* Top row */}
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
@@ -47,7 +50,7 @@ function DocumentCard({ doc, onDelete }) {
           )}
         </div>
         <button
-          onClick={() => onDelete(doc.id)}
+          onClick={(e) => { e.stopPropagation(); onDelete(doc.id); }}
           className="flex-shrink-0 text-slate-600 hover:text-red-400 transition-colors p-1 rounded hover:bg-red-900 hover:bg-opacity-20 opacity-0 group-hover:opacity-100"
           title="Delete document"
         >
@@ -74,12 +77,15 @@ function DocumentCard({ doc, onDelete }) {
   );
 }
 
-function DocumentRow({ doc, onDelete }) {
+function DocumentRow({ doc, onDelete, onEdit }) {
   const wordCount = doc.metadata?.wordCount || 0;
   const section = doc.metadata?.section;
 
   return (
-    <div className="bg-slate-800 border border-slate-700 hover:border-slate-600 rounded-lg px-5 py-3.5 flex items-center gap-4 transition-colors group">
+    <div 
+      onClick={() => onEdit && onEdit(doc)}
+      className="bg-slate-800 border border-slate-700 hover:border-slate-600 rounded-lg px-5 py-3.5 flex items-center gap-4 transition-colors group cursor-pointer"
+    >
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-3">
           <span className="font-medium text-white text-sm truncate group-hover:text-blue-300 transition-colors">
@@ -101,7 +107,7 @@ function DocumentRow({ doc, onDelete }) {
       </span>
 
       <button
-        onClick={() => onDelete(doc.id)}
+        onClick={(e) => { e.stopPropagation(); onDelete(doc.id); }}
         className="flex-shrink-0 text-slate-600 hover:text-red-400 transition-colors p-1 rounded hover:bg-red-900 hover:bg-opacity-20 opacity-0 group-hover:opacity-100"
         title="Delete document"
       >
@@ -394,7 +400,7 @@ function KnowledgeBase() {
           {viewMode === 'grid' ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {displayDocuments.map((doc) => (
-                <DocumentCard key={doc.id} doc={doc} onDelete={handleDelete} />
+                <DocumentCard key={doc.id} doc={doc} onDelete={handleDelete} onEdit={() => openEditor(doc)} />
               ))}
             </div>
           ) : (
@@ -408,7 +414,7 @@ function KnowledgeBase() {
                 <span className="w-8"></span>
               </div>
               {displayDocuments.map((doc) => (
-                <DocumentRow key={doc.id} doc={doc} onDelete={handleDelete} />
+                <DocumentRow key={doc.id} doc={doc} onDelete={handleDelete} onEdit={() => openEditor(doc)} />
               ))}
             </div>
           )}
