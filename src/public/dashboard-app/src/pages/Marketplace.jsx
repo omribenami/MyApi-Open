@@ -7,6 +7,17 @@ const TYPE_CONFIG = {
   skill: { label: 'Skill', color: 'bg-green-900 bg-opacity-60 text-green-300 border-green-700' },
 };
 
+function extractScanner(content) {
+  if (!content) return null;
+  const parsed = typeof content === 'string' ? (() => {
+    try { return JSON.parse(content); } catch { return null; }
+  })() : content;
+
+  if (!parsed || typeof parsed !== 'object') return null;
+  const scanner = parsed.scanner || parsed?.config_json?.scanner;
+  return scanner && typeof scanner === 'object' ? scanner : null;
+}
+
 function StarRating({ value, count, size = 'sm' }) {
   const stars = [1, 2, 3, 4, 5];
   const sz = size === 'lg' ? 'text-xl' : 'text-sm';
@@ -91,6 +102,7 @@ function RatingWidget({ listingId, onRated, masterToken }) {
 
 function ListingModal({ listing, onClose, onInstall, masterToken }) {
   const [detail, setDetail] = useState(listing);
+  const scanner = extractScanner(listing?.content) || extractScanner(detail?.content);
   const [installing, setInstalling] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
   const [installSuccess, setInstallSuccess] = useState(false);
@@ -237,6 +249,14 @@ function ListingModal({ listing, onClose, onInstall, masterToken }) {
             <StarRating value={detail.avgRating || 0} count={detail.ratingCount || 0} size="sm" />
             <span>{detail.installCount || 0} installs</span>
             <span className="text-green-400">{detail.price === 'free' ? 'Free' : detail.price}</span>
+            {detail.type === 'skill' && scanner && (
+              <span
+                className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs border ${scanner.safe_to_use ? 'bg-emerald-900/40 text-emerald-300 border-emerald-700' : 'bg-amber-900/40 text-amber-300 border-amber-700'}`}
+                title="Skill scanner checks README/SKILL.md/package.json for risky patterns."
+              >
+                {scanner.safe_to_use ? 'Safe' : 'Review'} · score {scanner.score}
+              </span>
+            )}
           </div>
 
           {/* Tags */}
@@ -363,6 +383,8 @@ function ListingModal({ listing, onClose, onInstall, masterToken }) {
 }
 
 function ListingCard({ listing, onClick }) {
+  const scanner = listing.type === 'skill' ? extractScanner(listing.content) : null;
+
   return (
     <div
       onClick={() => onClick(listing)}
@@ -374,6 +396,14 @@ function ListingCard({ listing, onClick }) {
       </div>
       <h3 className="font-semibold text-white group-hover:text-blue-300 transition-colors line-clamp-1 mb-1">{listing.title}</h3>
       <p className="text-slate-400 text-sm line-clamp-2 mb-3">{listing.description || 'No description.'}</p>
+      {scanner && (
+        <div
+          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs border mb-3 ${scanner.safe_to_use ? 'bg-emerald-900/40 text-emerald-300 border-emerald-700' : 'bg-amber-900/40 text-amber-300 border-amber-700'}`}
+          title="Skill scanner checks README/SKILL.md/package.json for risky patterns."
+        >
+          {scanner.safe_to_use ? 'Safe' : 'Review'} · score {scanner.score}
+        </div>
+      )}
       <div className="flex items-center justify-between text-xs text-slate-500">
         <span>by {listing.ownerName}</span>
         <span>{listing.installCount || 0} installs</span>
