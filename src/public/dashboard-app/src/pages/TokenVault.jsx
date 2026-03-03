@@ -168,6 +168,32 @@ function TokenVault() {
     }
   };
 
+  const copyText = async (text) => {
+    if (!text) return false;
+    try {
+      if (navigator?.clipboard?.writeText && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch {}
+
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '-1000px';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    } catch {
+      return false;
+    }
+  };
+
   const handleCopyToken = async (tokenId) => {
     try {
       let tokenValue = revealedTokens[tokenId];
@@ -183,8 +209,12 @@ function TokenVault() {
         tokenValue = data.data.token;
         setRevealedTokens((prev) => ({ ...prev, [tokenId]: tokenValue }));
       }
-      await navigator.clipboard.writeText(tokenValue);
-      alert('Token copied!');
+      const ok = await copyText(tokenValue);
+      if (ok) {
+        alert('Token copied!');
+      } else {
+        alert('Failed to copy');
+      }
     } catch {
       alert('Failed to copy');
     }
