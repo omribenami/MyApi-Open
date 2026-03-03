@@ -80,9 +80,16 @@ function ProfileTab() {
         credentials: 'include',
         body: JSON.stringify(profileDraft),
       });
-      if (!res.ok) throw new Error('Failed to save profile');
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to save profile');
+      }
+      // Reflect immediately, then re-fetch authoritative state
+      setProfile({
+        ...(profile || {}),
+        identity: { ...(profile?.identity || {}), ...(profileDraft || {}) },
+      });
       setProfileSuccess('Profile saved successfully');
-      // Re-fetch to sync
       await fetchProfile();
     } catch (err) {
       setProfileError(err.message || 'Failed to save profile');
@@ -303,6 +310,9 @@ function PersonaTab() {
 
   const handlePersonaChange = (e) => {
     const id = parseInt(e.target.value);
+    if (soulDirty && !window.confirm('You have unsaved SOUL.md changes. Discard and switch persona?')) {
+      return;
+    }
     setSelectedPersonaId(id);
   };
 

@@ -95,6 +95,7 @@ function ListingModal({ listing, onClose, onInstall, masterToken }) {
   const [isInstalled, setIsInstalled] = useState(false);
   const [installSuccess, setInstallSuccess] = useState(false);
   const [installError, setInstallError] = useState('');
+  const [installInfo, setInstallInfo] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -136,10 +137,11 @@ function ListingModal({ listing, onClose, onInstall, masterToken }) {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${masterToken}` },
       });
+      const installData = await installRes.json().catch(() => ({}));
       if (!installRes.ok) {
-        const data = await installRes.json().catch(() => ({}));
-        throw new Error(data.error || 'Failed to track install');
+        throw new Error(installData.error || 'Failed to install listing');
       }
+      setInstallInfo(installData.provisioned || null);
 
       // Install into local resources based on type
       if (detail.content) {
@@ -318,6 +320,13 @@ function ListingModal({ listing, onClose, onInstall, masterToken }) {
                     <p className="text-xs text-slate-500 mt-1">Use your master token to access this persona via the API.</p>
                   </div>
                 </>
+              )}
+              {detail.type === 'api' && installInfo && (
+                <div className="bg-slate-800 rounded p-3 mt-2 space-y-1">
+                  <p className="text-xs text-slate-400">Local service provisioned:</p>
+                  <p className="text-sm text-slate-200 font-medium">{installInfo.serviceName}</p>
+                  <code className="text-xs text-green-300 font-mono break-all">{installInfo.endpoint}</code>
+                </div>
               )}
             </div>
           )}
