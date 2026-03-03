@@ -99,24 +99,33 @@ function ProfileSection() {
     if (!masterToken) return;
     setProfileLoading(true);
     clearProfileError();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+
     try {
       const res = await fetch('/api/v1/users/me', {
         headers: { Authorization: `Bearer ${masterToken}` },
         credentials: 'include',
+        signal: controller.signal,
       });
       if (!res.ok) throw new Error('Failed to load profile');
       const data = await res.json();
       setProfile(data);
     } catch (err) {
-      setProfileError(err.message || 'Failed to load profile');
+      if (err.name === 'AbortError') {
+        setProfileError('Profile request timed out. Please retry.');
+      } else {
+        setProfileError(err.message || 'Failed to load profile');
+      }
     } finally {
+      clearTimeout(timeout);
       setProfileLoading(false);
     }
   }, [masterToken]);
 
   useEffect(() => {
     if (masterToken) fetchProfile();
-  }, [masterToken]);
+  }, [masterToken, fetchProfile]);
 
   useEffect(() => {
     if (profileSuccess) {
