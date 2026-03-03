@@ -73,6 +73,22 @@ Extensive design and technical documentation can be found in the `/docs` directo
 
 **Strict Isolation:** This repository is dedicated exclusively to the MyApi platform codebase. External workspace environments, agent runtime logs, python environments, and system-level caches (e.g., `.venv`, `__pycache__`, `*.sqlite-shm`) are strictly ignored via `.gitignore` and must never be committed.
 
+## Changelog
+
+### 2026-03-03
+
+- Stabilized dashboard build/deploy flow and fixed dist asset hash mismatches that caused blank page loads.
+- Added Knowledge Base multipart file upload support (txt/md/pdf), improved upload validation, and clearer error handling.
+- Enabled persona-scoped KB context availability and improved persona-document attachment validation.
+- Added AI self-discovery surfaces:
+  - `GET /api/v1/capabilities`
+  - `GET /api/v1/tokens/me/capabilities`
+  - `GET /openapi.json`
+  - `GET /.well-known/ai-plugin.json`
+- Enhanced Vault API intake/discovery flow with website URL metadata and safer discovery error handling.
+- Expanded automated validation with Phase 12A integration checks (discovery + KB upload + persona scope).
+- Applied a professional minimal UI polish (less colorful, reduced emoji-heavy UI, cleaner GitHub-like visual style).
+
 ## License
 
 All rights reserved.
