@@ -2383,18 +2383,158 @@ app.post('/api/v1/marketplace/:id/rate', authenticate, (req, res) => {
   }
 });
 
-// POST /api/v1/marketplace/:id/install - track install/use
+// POST /api/v1/marketplace/:id/install - track install/use and provision local resources
 app.post('/api/v1/marketplace/:id/install', authenticate, (req, res) => {
   try {
-    const listingId = parseInt(req.params.id);
+    const listingId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(listingId)) {
+      return res.status(400).json({ error: 'Invalid listing id' });
+    }
+
     const listing = getMarketplaceListing(listingId);
     if (!listing) return res.status(404).json({ error: 'Listing not found' });
 
+    let provisioned = null;
+
+    // Concrete local provisioning for API listings
+    if (listing.type === 'api') {
+      let content = listing.content;
+      if (typeof content === 'string') {
+        try {
+          content = JSON.parse(content);
+        } catch {
+          content = {};
+        }
+      }
+      if (!content || typeof content !== 'object') {
+        return res.status(400).json({ error: 'API listing content is malformed' });
+      }
+
+      const normalizedName = String(content.service_name || listing.title || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 64);
+      const serviceName = normalizedName || `marketplace_api_${listingId}`;
+      const serviceLabel = String(content.label || listing.title || 'Marketplace API').trim();
+      const apiEndpoint = String(content.endpoint || content.api_endpoint || '').trim();
+      const authType = String(content.auth_type || 'token').trim();
+      const documentationUrl = String(content.documentation_url || content.docs || '').trim() || null;
+      const description = String(content.api_description || listing.description || '').trim() || null;
+
+      if (!apiEndpoint) {
+        return res.status(400).json({ error: 'API listing is missing endpoint and cannot be provisioned locally' });
+      }
+
+      const categoryName = String(content.category || 'dev').trim().toLowerCase();
+      let category = db.prepare('SELECT id FROM service_categories WHERE name = ?').get(categoryName);
+      if (!category) {
+        category = db.prepare('SELECT id FROM service_categories WHERE name = ?').get('dev')
+          || db.prepare('SELECT id FROM service_categories ORDER BY id LIMIT 1').get();
+      }
+      if (!category) {
+        return res.status(500).json({ error: 'No service categories available for API provisioning' });
+      }
+
+      const now = new Date().toISOString();
+      let service = getServiceByName(serviceName);
+
+      if (service) {
+        db.prepare(`
+          UPDATE services
+          SET label = ?, description = ?, auth_type = ?, api_endpoint = ?, documentation_url = ?, active = 1
+          WHERE id = ?
+        `).run(serviceLabel, description, authType, apiEndpoint, documentationUrl, service.id);
+      } else {
+        const result = db.prepare(`
+          INSERT INTO services (name, label, category_id, icon, description, auth_type, api_endpoint, documentation_url, active, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+        `).run(
+          serviceName,
+          serviceLabel,
+          category.id,
+          content.icon || null,
+          description,
+          authType,
+          apiEndpoint,
+          documentationUrl,
+          now
+        );
+        service = db.prepare('SELECT * FROM services WHERE id = ?').get(result.lastInsertRowid);
+      }
+
+      // Provision API methods (idempotent upsert by service_id + method_name)
+      const methods = Array.isArray(content.methods) && content.methods.length > 0
+        ? content.methods
+        : [{
+            method_name: content.method_name || content.operation || 'default',
+            http_method: content.method || 'GET',
+            endpoint: content.operation_endpoint || apiEndpoint,
+            description: content.api_description || listing.description || '',
+            parameters: content.parameters || null,
+            response_example: content.response_example || null,
+          }];
+
+      for (const m of methods) {
+        const methodName = String(m.method_name || m.operation || m.name || '').trim() || 'default';
+        const httpMethod = String(m.http_method || m.method || 'GET').trim().toUpperCase();
+        const endpoint = String(m.endpoint || apiEndpoint).trim();
+        if (!endpoint) continue;
+
+        db.prepare(`
+          INSERT INTO service_api_methods (service_id, method_name, http_method, endpoint, description, parameters, response_example, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(service_id, method_name)
+          DO UPDATE SET
+            http_method = excluded.http_method,
+            endpoint = excluded.endpoint,
+            description = excluded.description,
+            parameters = excluded.parameters,
+            response_example = excluded.response_example
+        `).run(
+          service.id,
+          methodName,
+          httpMethod,
+          endpoint,
+          m.description || '',
+          m.parameters ? JSON.stringify(m.parameters) : null,
+          m.response_example ? JSON.stringify(m.response_example) : null,
+          now
+        );
+      }
+
+      provisioned = {
+        type: 'api_service',
+        serviceName,
+        serviceId: service.id,
+        endpoint: apiEndpoint,
+      };
+    }
+
     incrementInstallCount(listingId);
-    res.json({ success: true });
+    const updated = getMarketplaceListing(listingId);
+
+    createAuditLog({
+      requesterId: req.tokenMeta.tokenId,
+      action: 'marketplace_install',
+      resource: `/api/v1/marketplace/${listingId}/install`,
+      scope: req.tokenMeta.scope,
+      ip: req.ip,
+      details: {
+        listingId,
+        listingType: listing.type,
+        provisioned,
+      },
+    });
+
+    res.json({
+      success: true,
+      installCount: updated?.installCount || undefined,
+      provisioned,
+    });
   } catch (err) {
     console.error('Marketplace install error:', err);
-    res.status(500).json({ error: 'Failed to track install' });
+    res.status(500).json({ error: err.message || 'Failed to install listing locally' });
   }
 });
 
