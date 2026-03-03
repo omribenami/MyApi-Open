@@ -7,7 +7,8 @@ function TokenVault() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
-  const [formData, setFormData] = useState({ name: '', service: '', token: '' });
+  const [formData, setFormData] = useState({ name: '', service: '', token: '', websiteUrl: '', discoveredApiUrl: '', discoveredAuthScheme: '' });
+  const [discovering, setDiscovering] = useState(false);
   // revealedTokens maps id -> decrypted token string (or null if not revealed)
   const [revealedTokens, setRevealedTokens] = useState({});
   const [revealingId, setRevealingId] = useState(null);
@@ -48,9 +49,43 @@ function TokenVault() {
     }
   };
 
+  const handleDiscoverApi = async () => {
+    if (!formData.websiteUrl) {
+      setError('Website URL is required before discovery');
+      return;
+    }
+
+    setDiscovering(true);
+    setError('');
+    try {
+      const response = await fetch('/api/v1/vault/discover-api', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${masterToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ websiteUrl: formData.websiteUrl }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setError(payload.error || 'Failed to discover API URL');
+        return;
+      }
+      setFormData((prev) => ({
+        ...prev,
+        discoveredApiUrl: payload?.data?.apiBaseUrl || '',
+        discoveredAuthScheme: payload?.data?.authScheme || 'unknown',
+      }));
+    } catch {
+      setError('Failed to discover API URL');
+    } finally {
+      setDiscovering(false);
+    }
+  };
+
   const handleAddToken = async () => {
-    if (!formData.name || !formData.service || !formData.token) {
-      setError('All fields required');
+    if (!formData.name || !formData.service || !formData.token || !formData.websiteUrl) {
+      setError('Name, service, token, and website URL are required');
       return;
     }
     setError('');
@@ -66,11 +101,13 @@ function TokenVault() {
           name: formData.name,
           service: formData.service,
           token: formData.token,
+          websiteUrl: formData.websiteUrl,
+          discoverApi: true,
         }),
       });
 
       if (response.ok) {
-        setFormData({ name: '', service: '', token: '' });
+        setFormData({ name: '', service: '', token: '', websiteUrl: '', discoveredApiUrl: '', discoveredAuthScheme: '' });
         setShowAddModal(false);
         await fetchTokens();
       } else {
@@ -253,6 +290,14 @@ function TokenVault() {
                     </div>
                   </div>
 
+                  {token.websiteUrl && (
+                    <p className="mt-2 text-xs text-slate-400 break-all">Website: {token.websiteUrl}</p>
+                  )}
+                  {token.discoveredApiUrl && (
+                    <p className="mt-1 text-xs text-emerald-400 break-all">
+                      API: {token.discoveredApiUrl}{token.discoveredAuthScheme ? ` (${token.discoveredAuthScheme})` : ''}
+                    </p>
+                  )}
                   {token.createdAt && (
                     <p className="mt-2 text-xs text-slate-500">
                       Added {new Date(token.createdAt).toLocaleDateString()}
@@ -312,6 +357,32 @@ function TokenVault() {
               </div>
 
               <div>
+                <label className="block text-sm text-slate-300 mb-2">Website URL</label>
+                <input
+                  type="url"
+                  value={formData.websiteUrl}
+                  onChange={(e) => setFormData({ ...formData, websiteUrl: e.target.value })}
+                  placeholder="https://example.com"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-800 text-white focus:border-blue-500 focus:outline-none"
+                />
+                <div className="mt-2 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleDiscoverApi}
+                    disabled={discovering}
+                    className="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-sm"
+                  >
+                    {discovering ? 'Discovering...' : 'Discover API URL'}
+                  </button>
+                  {formData.discoveredApiUrl && (
+                    <span className="text-xs text-emerald-300 self-center truncate" title={formData.discoveredApiUrl}>
+                      {formData.discoveredApiUrl} {formData.discoveredAuthScheme ? `(${formData.discoveredAuthScheme})` : ''}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div>
                 <label className="block text-sm text-slate-300 mb-2">Token / API Key</label>
                 <textarea
                   value={formData.token}
@@ -327,7 +398,7 @@ function TokenVault() {
               <button
                 onClick={() => {
                   setShowAddModal(false);
-                  setFormData({ name: '', service: '', token: '' });
+                  setFormData({ name: '', service: '', token: '', websiteUrl: '', discoveredApiUrl: '', discoveredAuthScheme: '' });
                   setError('');
                 }}
                 className="flex-1 px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition-colors"

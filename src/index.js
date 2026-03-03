@@ -381,6 +381,208 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok", uptime: process.uptime() });
 });
 
+function parseAndValidateHttpUrl(value) {
+  if (!value || typeof value !== 'string') return null;
+  try {
+    const normalized = String(value).trim();
+    const u = new URL(normalized);
+    if (!['http:', 'https:'].includes(u.protocol)) return null;
+    return u.toString();
+  } catch {
+    return null;
+  }
+}
+
+function getEffectiveScopes(req) {
+  if (req.tokenMeta?.scope === 'full' || String(req.tokenMeta?.tokenId || '').startsWith('sess_')) return ['admin:*'];
+  return getTokenScopes(req.tokenMeta?.tokenId || '');
+}
+
+function buildCapabilitiesForRequest(req) {
+  const scopes = getEffectiveScopes(req);
+  const allowedPersonas = req.tokenMeta?.allowedPersonas || null;
+  const canReadBrain = hasPermission(scopes, ['brain:read']) || hasPermission(scopes, ['admin:*']);
+  const canReadVault = hasPermission(scopes, ['vault:read']) || hasPermission(scopes, ['admin:*']);
+
+  const auth = {
+    style: req.authType === 'session' ? 'session-cookie' : 'bearer-token',
+    requiredHeaders: req.authType === 'session'
+      ? ['Cookie: connect.sid=<session>']
+      : ['Authorization: Bearer <token>'],
+  };
+
+  const endpoints = [
+    {
+      purpose: 'Health check',
+      method: 'GET',
+      url: '/health',
+      params: [],
+      sampleRequest: { method: 'GET', headers: {} },
+      sampleResponse: { status: 'ok', uptime: 123.45 },
+      commonErrors: [],
+    },
+    {
+      purpose: 'List API capabilities visible to current caller',
+      method: 'GET',
+      url: '/api/v1/capabilities',
+      params: [],
+      sampleRequest: { method: 'GET', headers: auth.requiredHeaders },
+      sampleResponse: { auth, scopes, endpoints: ['...'] },
+      commonErrors: [{ status: 401, error: 'Missing session or Authorization: Bearer token' }],
+    },
+    {
+      purpose: 'Upload text knowledge document (.txt/.md/.pdf)',
+      method: 'POST',
+      url: '/api/v1/brain/knowledge-base/upload',
+      params: [
+        { in: 'formData', name: 'file|document|upload|kbFile', required: true, type: 'binary' },
+      ],
+      sampleRequest: {
+        method: 'POST',
+        headers: [...auth.requiredHeaders],
+        body: 'multipart/form-data with file field',
+      },
+      sampleResponse: { ok: true, documentsCreated: 3 },
+      commonErrors: [
+        { status: 400, error: 'Unsupported file type. Supported: .txt, .md, .pdf' },
+        { status: 400, error: 'Failed to parse PDF. Please upload a text-based PDF or convert it to .txt/.md.' },
+      ],
+    },
+  ];
+
+  if (canReadVault) {
+    endpoints.push({
+      purpose: 'Store API token with website URL and optional AI discovery',
+      method: 'POST',
+      url: '/api/v1/vault/tokens',
+      params: [
+        { in: 'body', name: 'name', required: true, type: 'string' },
+        { in: 'body', name: 'service', required: true, type: 'string' },
+        { in: 'body', name: 'token', required: true, type: 'string' },
+        { in: 'body', name: 'websiteUrl', required: true, type: 'url' },
+        { in: 'body', name: 'discoverApi', required: false, type: 'boolean' },
+      ],
+      sampleRequest: { method: 'POST', headers: [...auth.requiredHeaders, 'Content-Type: application/json'] },
+      sampleResponse: { data: { id: 'vt_x', discoveredApiUrl: 'https://api.example.com/v1', discoveredAuthScheme: 'Bearer' } },
+      commonErrors: [{ status: 400, error: 'websiteUrl must be a valid http(s) URL' }],
+    });
+  }
+
+  const filtered = endpoints.filter((e) => {
+    if (e.url.startsWith('/api/v1/brain') && !canReadBrain) return false;
+    if (e.url.startsWith('/api/v1/vault') && !canReadVault) return false;
+    return true;
+  });
+
+  return {
+    auth,
+    scopes,
+    allowedPersonas,
+    endpoints: filtered,
+    tryFlow: [
+      '1) Call GET /api/v1/capabilities to inspect available endpoints for this token/session.',
+      '2) (Optional) POST /api/v1/vault/discover-api with websiteUrl to detect likely API base URL + auth scheme.',
+      '3) POST /api/v1/vault/tokens with name/service/token/websiteUrl/discoverApi=true.',
+      '4) POST /api/v1/brain/knowledge-base/upload using field file (or document/upload/kbFile).',
+      '5) GET /api/v1/tokens/me/capabilities to confirm scope-filtered access.',
+    ],
+  };
+}
+
+async function discoverApiFromWebsite(websiteUrl) {
+  const normalizedWebsiteUrl = parseAndValidateHttpUrl(websiteUrl);
+  if (!normalizedWebsiteUrl) {
+    return { sourceWebsiteUrl: websiteUrl, apiBaseUrl: null, authScheme: 'unknown', confidence: 0, notes: 'invalid website URL' };
+  }
+
+  const fallback = {
+    sourceWebsiteUrl: normalizedWebsiteUrl,
+    apiBaseUrl: `${new URL(normalizedWebsiteUrl).origin}/api`,
+    authScheme: 'unknown',
+    confidence: 0.25,
+    notes: 'fallback heuristic used',
+  };
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return fallback;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+
+  try {
+    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        temperature: 0,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: 'Return strict JSON only: {"apiBaseUrl": string|null, "authScheme": "Bearer"|"Basic"|"ApiKey"|"OAuth2"|"unknown", "confidence": number, "notes": string}. Never include secrets.' },
+          { role: 'user', content: `Website URL: ${normalizedWebsiteUrl}. Infer likely public API base URL and auth scheme.` }
+        ]
+      })
+    });
+
+    if (!resp.ok) return fallback;
+    const data = await resp.json();
+    const raw = data?.choices?.[0]?.message?.content || '{}';
+    const parsed = JSON.parse(raw);
+    const parsedUrl = parseAndValidateHttpUrl(parsed.apiBaseUrl || '') || fallback.apiBaseUrl;
+    return {
+      sourceWebsiteUrl: normalizedWebsiteUrl,
+      apiBaseUrl: parsedUrl,
+      authScheme: ['Bearer', 'Basic', 'ApiKey', 'OAuth2', 'unknown'].includes(parsed.authScheme) ? parsed.authScheme : 'unknown',
+      confidence: typeof parsed.confidence === 'number' ? Math.max(0, Math.min(1, parsed.confidence)) : fallback.confidence,
+      notes: String(parsed.notes || 'AI-assisted discovery'),
+      raw: parsed,
+    };
+  } catch {
+    return fallback;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+app.get('/api/v1/capabilities', authenticate, (req, res) => {
+  res.json(buildCapabilitiesForRequest(req));
+});
+
+app.get('/api/v1/tokens/me/capabilities', authenticate, (req, res) => {
+  res.json(buildCapabilitiesForRequest(req));
+});
+
+app.get('/openapi.json', (req, res) => {
+  res.json({
+    openapi: '3.0.0',
+    info: { title: 'MyApi', version: '0.1.0' },
+    paths: {
+      '/api/v1/capabilities': { get: { summary: 'Scope-aware capability manifest' } },
+      '/api/v1/tokens/me/capabilities': { get: { summary: 'Capability manifest for current token' } },
+      '/api/v1/vault/discover-api': { post: { summary: 'Discover likely API base URL from website URL' } },
+      '/api/v1/brain/knowledge-base/upload': { post: { summary: 'Upload KB document' } },
+    },
+  });
+});
+
+app.get('/.well-known/ai-plugin.json', (req, res) => {
+  const host = req.get('host');
+  const scheme = req.protocol || 'http';
+  res.json({
+    schema_version: 'v1',
+    name_for_human: 'MyApi',
+    name_for_model: 'myapi',
+    description_for_human: 'Self-describing personal API platform',
+    description_for_model: 'Use capabilities endpoints first, then execute scoped API operations.',
+    auth: { type: 'service_http' },
+    api: { type: 'openapi', url: `${scheme}://${host}/openapi.json` },
+  });
+});
+
 // --- IDENTITY ---
 app.get("/api/v1/identity", authenticate, (req, res) => {
   const identity = vault.identityDocs["owner"] || {};
@@ -418,14 +620,35 @@ app.put("/api/v1/preferences", authenticate, (req, res) => {
 });
 
 // --- VAULT TOKENS (encrypted external API keys) ---
-app.post("/api/v1/vault/tokens", authenticate, (req, res) => {
+app.post("/api/v1/vault/tokens", authenticate, async (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can add vault tokens" });
-  const { name, label, description, token, service } = req.body;
+  const { name, label, description, token, service, websiteUrl, discoverApi } = req.body;
   const tokenLabel = name || label;
-  if (!tokenLabel || !token) return res.status(400).json({ error: "name and token are required" });
-  const vaultToken = createVaultToken(tokenLabel, description, token, service);
-  createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "create_vault_token", resource: `/vault/tokens/${vaultToken.id}`, scope: req.tokenMeta.scope, ip: req.ip });
+  if (!tokenLabel || !token || !service) return res.status(400).json({ error: "name, service, and token are required" });
+
+  const normalizedWebsiteUrl = parseAndValidateHttpUrl(websiteUrl);
+  if (!normalizedWebsiteUrl) return res.status(400).json({ error: "websiteUrl must be a valid http(s) URL" });
+
+  const discovery = discoverApi ? await discoverApiFromWebsite(normalizedWebsiteUrl) : null;
+  const vaultToken = createVaultToken(tokenLabel, description, token, service, normalizedWebsiteUrl, discovery);
+  createAuditLog({
+    requesterId: req.tokenMeta.tokenId,
+    action: "create_vault_token",
+    resource: `/vault/tokens/${vaultToken.id}`,
+    scope: req.tokenMeta.scope,
+    ip: req.ip,
+    details: { service, websiteUrl: normalizedWebsiteUrl, discoverApi: !!discoverApi, discoveredApiUrl: discovery?.apiBaseUrl || null }
+  });
   res.status(201).json({ data: vaultToken });
+});
+
+app.post('/api/v1/vault/discover-api', authenticate, async (req, res) => {
+  if (req.tokenMeta.scope !== 'full') return res.status(403).json({ error: 'Only master token can discover API metadata' });
+  const { websiteUrl } = req.body || {};
+  const normalized = parseAndValidateHttpUrl(websiteUrl);
+  if (!normalized) return res.status(400).json({ error: 'websiteUrl must be a valid http(s) URL' });
+  const discovery = await discoverApiFromWebsite(normalized);
+  res.json({ data: discovery });
 });
 
 app.get("/api/v1/vault/tokens", authenticate, (req, res) => {
@@ -1764,6 +1987,12 @@ const kbUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
 });
+const kbUploadFields = kbUpload.fields([
+  { name: 'file', maxCount: 1 },
+  { name: 'document', maxCount: 1 },
+  { name: 'upload', maxCount: 1 },
+  { name: 'kbFile', maxCount: 1 },
+]);
 
 function getLLMAdapter() {
   if (!llmAdapter) {
@@ -2000,15 +2229,18 @@ app.post('/api/v1/brain/knowledge-base', authenticate, async (req, res) => {
 });
 
 // POST /api/v1/brain/knowledge-base/upload - Upload and ingest document
-app.post('/api/v1/brain/knowledge-base/upload', authenticate, kbUpload.single('file'), async (req, res) => {
+app.post('/api/v1/brain/knowledge-base/upload', authenticate, kbUploadFields, async (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'file is required (multipart/form-data, field name: file)' });
+    const uploadedFile = req.files?.file?.[0] || req.files?.document?.[0] || req.files?.upload?.[0] || req.files?.kbFile?.[0];
+    if (!uploadedFile) {
+      return res.status(400).json({
+        error: 'No file received. Use multipart/form-data with one of these field names: file, document, upload, kbFile.',
+      });
     }
 
-    const originalName = req.file.originalname || 'uploaded-file';
+    const originalName = uploadedFile.originalname || 'uploaded-file';
     const ext = path.extname(originalName).toLowerCase();
-    const mimeType = (req.file.mimetype || '').toLowerCase();
+    const mimeType = (uploadedFile.mimetype || '').toLowerCase();
 
     const isTextLike = ext === '.txt' || ext === '.md' || mimeType === 'text/plain' || mimeType === 'text/markdown';
     const isPdf = ext === '.pdf' || mimeType === 'application/pdf';
@@ -2019,10 +2251,10 @@ app.post('/api/v1/brain/knowledge-base/upload', authenticate, kbUpload.single('f
 
     let content = '';
     if (isTextLike) {
-      content = req.file.buffer.toString('utf8');
+      content = uploadedFile.buffer.toString('utf8');
     } else {
       try {
-        const parsed = await pdfParse(req.file.buffer);
+        const parsed = await pdfParse(uploadedFile.buffer);
         content = (parsed?.text || '').trim();
       } catch (err) {
         return res.status(400).json({
@@ -2046,15 +2278,15 @@ app.post('/api/v1/brain/knowledge-base/upload', authenticate, kbUpload.single('f
       ip: req.ip,
       details: {
         filename: originalName,
-        mimeType: req.file.mimetype,
-        bytes: req.file.size,
+        mimeType: uploadedFile.mimetype,
+        bytes: uploadedFile.size,
         chunks: docs.length,
       }
     });
 
     res.status(201).json({
       ok: true,
-      file: { name: originalName, size: req.file.size, mimeType: req.file.mimetype },
+      file: { name: originalName, size: uploadedFile.size, mimeType: uploadedFile.mimetype },
       documentsCreated: docs.length,
       documents: docs.map((d) => ({ id: d.id, title: d.title, source: d.source, createdAt: d.createdAt })),
     });
@@ -2740,6 +2972,23 @@ app.get('/dashboard/*', (req, res) => {
   }
 
   return sendDashboardIndex(req, res);
+});
+
+// Error handler (including multer multipart errors)
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ error: 'File too large. Max allowed size is 10MB.' });
+    }
+    if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+      return res.status(400).json({ error: 'Unexpected upload field. Use one of: file, document, upload, kbFile.' });
+    }
+    return res.status(400).json({ error: `Upload error: ${err.message}` });
+  }
+  if (err) {
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+  next();
 });
 
 // --- Start ---

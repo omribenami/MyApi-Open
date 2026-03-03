@@ -18,6 +18,12 @@ function initDatabase() {
       description TEXT,
       encrypted_token TEXT NOT NULL,
       token_preview TEXT,
+      service TEXT,
+      website_url TEXT,
+      discovered_api_url TEXT,
+      discovered_auth_scheme TEXT,
+      discovered_metadata TEXT,
+      last_discovered_at TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -309,11 +315,21 @@ function initDatabase() {
   seedServiceCategories();
   seedServices();
 
-  // Add service column to vault_tokens if not already present (migration)
-  try {
-    db.exec('ALTER TABLE vault_tokens ADD COLUMN service TEXT');
-  } catch (e) {
-    // Column already exists — ignore
+  // Vault token schema migrations
+  const vaultTokenMigrations = [
+    'ALTER TABLE vault_tokens ADD COLUMN service TEXT',
+    'ALTER TABLE vault_tokens ADD COLUMN website_url TEXT',
+    'ALTER TABLE vault_tokens ADD COLUMN discovered_api_url TEXT',
+    'ALTER TABLE vault_tokens ADD COLUMN discovered_auth_scheme TEXT',
+    'ALTER TABLE vault_tokens ADD COLUMN discovered_metadata TEXT',
+    'ALTER TABLE vault_tokens ADD COLUMN last_discovered_at TEXT'
+  ];
+  for (const migration of vaultTokenMigrations) {
+    try {
+      db.exec(migration);
+    } catch (e) {
+      // Column already exists — ignore
+    }
   }
 
   // Add allowed_personas column to access_tokens if not already present (migration)
@@ -327,7 +343,7 @@ function initDatabase() {
 }
 
 // Vault Tokens
-function createVaultToken(label, description, token, service) {
+function createVaultToken(label, description, token, service, websiteUrl = null, discovery = null) {
   const id = 'vt_' + crypto.randomBytes(16).toString('hex');
   const encryptionKey = process.env.VAULT_KEY || 'default-vault-key-change-me';
 
@@ -344,12 +360,34 @@ function createVaultToken(label, description, token, service) {
   const tokenPreview = token.length > 8 ? token.slice(0, 4) + '***' + token.slice(-4) : '***';
   const now = new Date().toISOString();
 
+  const discoveredApiUrl = discovery?.apiBaseUrl || null;
+  const discoveredAuthScheme = discovery?.authScheme || null;
+  const discoveredMetadata = discovery?.raw ? JSON.stringify(discovery.raw) : null;
+
   const stmt = db.prepare(`
-    INSERT INTO vault_tokens (id, label, description, encrypted_token, token_preview, created_at, updated_at, service)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO vault_tokens (
+      id, label, description, encrypted_token, token_preview,
+      service, website_url, discovered_api_url, discovered_auth_scheme, discovered_metadata, last_discovered_at,
+      created_at, updated_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
-  stmt.run(id, label, description || null, encrypted, tokenPreview, now, now, service || null);
+  stmt.run(
+    id,
+    label,
+    description || null,
+    encrypted,
+    tokenPreview,
+    service || null,
+    websiteUrl || null,
+    discoveredApiUrl,
+    discoveredAuthScheme,
+    discoveredMetadata,
+    discovery ? now : null,
+    now,
+    now
+  );
 
   return {
     id,
@@ -357,6 +395,9 @@ function createVaultToken(label, description, token, service) {
     label,
     description,
     service: service || null,
+    websiteUrl: websiteUrl || null,
+    discoveredApiUrl,
+    discoveredAuthScheme,
     tokenPreview,
     createdAt: now,
   };
@@ -364,7 +405,7 @@ function createVaultToken(label, description, token, service) {
 
 function getVaultTokens() {
   const stmt = db.prepare(`
-    SELECT id, label, description, token_preview, service, created_at, updated_at
+    SELECT id, label, description, token_preview, service, website_url, discovered_api_url, discovered_auth_scheme, created_at, updated_at
     FROM vault_tokens
     ORDER BY created_at DESC
   `);
@@ -374,6 +415,9 @@ function getVaultTokens() {
     label: row.label,
     description: row.description,
     service: row.service,
+    websiteUrl: row.website_url,
+    discoveredApiUrl: row.discovered_api_url,
+    discoveredAuthScheme: row.discovered_auth_scheme,
     tokenPreview: row.token_preview,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -398,6 +442,9 @@ function decryptVaultToken(id) {
       label: row.label,
       description: row.description,
       service: row.service,
+      websiteUrl: row.website_url,
+      discoveredApiUrl: row.discovered_api_url,
+      discoveredAuthScheme: row.discovered_auth_scheme,
       token: decrypted,
       tokenPreview: row.token_preview,
       createdAt: row.created_at,

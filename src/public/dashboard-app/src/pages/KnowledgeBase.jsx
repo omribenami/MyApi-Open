@@ -274,10 +274,11 @@ function KnowledgeBase() {
             setSuccess(`Uploaded ${file.name} (${data.documentsCreated || 0} KB document chunks)`);
             await fetchDocuments();
           } else {
-            setError(data.error || 'Upload failed');
+            const details = data.details ? ` (${data.details})` : '';
+            setError((data.error || 'Upload failed') + details);
           }
         } catch {
-          setError('Upload failed');
+          setError('Upload failed: server returned unreadable response');
         } finally {
           setUploading(false);
           setUploadProgress(0);
