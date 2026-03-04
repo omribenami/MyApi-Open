@@ -48,6 +48,7 @@ function Login() {
   const [loading, setLoading] = useState(false);
   const [showToken, setShowToken] = useState(false);
   const [viewMode, setViewMode] = useState('login'); // 'login' | 'pricing'
+  const [billingPlans, setBillingPlans] = useState([]);
   const { setMasterToken, isAuthenticated } = useAuthStore();
 
   useEffect(() => {
@@ -60,6 +61,18 @@ function Login() {
         window.history.replaceState({}, document.title, '/dashboard/');
       }
     }
+  }, []);
+
+  useEffect(() => {
+    const loadPlans = async () => {
+      try {
+        const res = await fetch('/api/v1/billing/plans');
+        if (!res.ok) return;
+        const data = await res.json();
+        setBillingPlans(Array.isArray(data?.data) ? data.data : []);
+      } catch {}
+    };
+    loadPlans();
   }, []);
 
   if (isAuthenticated) {
@@ -369,99 +382,36 @@ function Login() {
               </>
             ) : (
               /* Pricing Card */
-              <div className="w-full bg-slate-900 bg-opacity-80 backdrop-blur-xl border border-slate-700 border-opacity-50 rounded-2xl shadow-2xl overflow-hidden flex flex-col lg:flex-row relative mt-8 sm:mt-0">
-                {/* Mobile absolute error positioning fix inside container */}
-                
-                {/* Free Tier */}
-                <div className="flex-1 p-6 sm:p-8 border-b lg:border-b-0 lg:border-r border-slate-700 border-opacity-50">
-                  <h3 className="text-xl font-semibold text-white mb-1">Free</h3>
-                  <div className="text-3xl font-bold text-white mb-1">$0 <span className="text-sm text-slate-400 font-normal">/mo</span></div>
-                  <p className="text-sm text-slate-400 mb-6">Perfect for individuals getting started</p>
-                  
-                  <ul className="space-y-3 mb-8 text-sm text-slate-300">
-                    <li className="flex gap-2 items-center"><span className="text-emerald-400">✓</span> 1 AI Persona</li>
-                    <li className="flex gap-2 items-center"><span className="text-emerald-400">✓</span> 3 Service Connections</li>
-                    <li className="flex gap-2 items-center"><span className="text-emerald-400">✓</span> 10 MB Knowledge Base</li>
-                    <li className="flex gap-2 items-center"><span className="text-emerald-400">✓</span> 5 Token Vault</li>
-                  </ul>
-                  
-                  <button 
-                    onClick={() => setViewMode('login')}
-                    className="w-full py-2.5 px-4 border border-slate-600 rounded-lg text-slate-200 hover:bg-slate-800 transition-colors font-medium text-sm mt-auto"
-                  >
-                    Start Free
-                  </button>
-                </div>
-                
-                {/* Pro Tier */}
-                <div className="flex-1 p-6 sm:p-8 bg-gradient-to-br from-blue-900/20 to-indigo-900/20 relative border-b lg:border-b-0 lg:border-r border-slate-700 border-opacity-50 flex flex-col">
-                  <div className="absolute top-0 right-0 bg-blue-600 text-white text-[10px] font-bold uppercase tracking-wider py-1 px-3 rounded-bl-lg rounded-tr-xl">Popular</div>
-                  <h3 className="text-xl font-semibold text-blue-300 mb-1">Pro</h3>
-                  <div className="text-3xl font-bold text-white mb-1">$15 <span className="text-sm text-blue-300 font-normal opacity-70">/mo</span></div>
-                  <p className="text-sm text-blue-200 opacity-80 mb-6">For power users and teams</p>
-                  
-                  <ul className="space-y-3 mb-8 text-sm text-slate-200 flex-1">
-                    <li className="flex gap-2 items-center"><span className="text-blue-400">✓</span> 5 AI Persona</li>
-                    <li className="flex gap-2 items-center"><span className="text-blue-400">✓</span> All Service Connections</li>
-                    <li className="flex gap-2 items-center"><span className="text-blue-400">✓</span> 50 MB Knowledge Base</li>
-                    <li className="flex gap-2 items-center"><span className="text-blue-400">✓</span> Token Vault</li>
-                  </ul>
-                  
-                  <button 
-                    onClick={() => handleCheckout('pro')}
-                    disabled={loading}
-                    className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors font-medium text-sm shadow-lg shadow-blue-600/30 flex justify-center items-center gap-2 mt-auto"
-                  >
-                    {loading ? (
-                      <svg className="animate-spin w-4 h-4 text-white" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                    ) : (
-                      <>
-                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.31-8.86c-1.77-.45-2.34-.94-2.34-1.67 0-.84.79-1.43 2.1-1.43 1.38 0 1.9.66 1.94 1.64h1.71c-.05-1.34-.87-2.57-2.49-2.97V5H10.9v1.69c-1.51.32-2.72 1.3-2.72 2.81 0 1.79 1.49 2.69 3.66 3.21 1.95.46 2.34 1.15 2.34 1.87 0 .53-.39 1.64-2.25 1.64-1.74 0-2.27-.85-2.34-1.76H7.83c.09 1.69 1.16 2.79 3.07 3.16V19h2.34v-1.67c1.52-.3 2.76-1.36 2.76-2.91.01-1.95-1.5-2.72-3.69-3.28z"/>
-                        </svg>
-                        Subscribe
-                      </>
-                    )}
-                  </button>
-                </div>
+              <div className="w-full bg-slate-900 bg-opacity-80 backdrop-blur-xl border border-slate-700 border-opacity-50 rounded-2xl shadow-2xl overflow-hidden grid grid-cols-1 lg:grid-cols-3 mt-8 sm:mt-0">
+                {(billingPlans.length ? billingPlans : [
+                  { id: 'free', name: 'Free', priceMonthly: 0, description: 'Perfect for individuals getting started', features: ['1 AI Persona', '3 Service Connections', '10 MB Knowledge Base', '5 Token Vault'] },
+                  { id: 'pro', name: 'Pro', priceMonthly: 15, description: 'For creators and small teams', features: ['5 AI Persona', 'All Service Connections', '50 MB Knowledge Base', 'Token Vault'] },
+                  { id: 'enterprise', name: 'Enterprise', priceMonthly: 30, description: 'Scale with higher limits and priority', features: ['20 AI Persona', 'All Service Connections', '200 MB Knowledge Base', 'Token Vault'] },
+                ]).map((plan, idx) => (
+                  <div key={plan.id} className={`p-6 sm:p-8 border-slate-700 border-opacity-50 ${idx < 2 ? 'border-b lg:border-b-0 lg:border-r' : ''} ${plan.id === 'pro' ? 'bg-gradient-to-br from-blue-900/20 to-indigo-900/20' : ''}`}>
+                    <div className="flex items-start justify-between mb-2">
+                      <h3 className={`text-xl font-semibold ${plan.id === 'pro' ? 'text-blue-300' : plan.id === 'enterprise' ? 'text-purple-300' : 'text-white'}`}>{plan.name}</h3>
+                      {plan.id === 'pro' && <span className="text-[10px] font-bold uppercase tracking-wider py-1 px-2 rounded bg-blue-600 text-white">Popular</span>}
+                    </div>
 
-                {/* Enterprise Tier */}
-                <div className="flex-1 p-6 sm:p-8 bg-slate-900/50 relative flex flex-col">
-                  <h3 className="text-xl font-semibold text-purple-300 mb-1">Enterprise</h3>
-                  <div className="text-3xl font-bold text-white mb-1">$30 <span className="text-sm text-purple-300 font-normal opacity-70">/mo</span></div>
-                  <p className="text-sm text-purple-200 opacity-80 mb-6">Uncapped scale & priority support</p>
-                  
-                  <ul className="space-y-3 mb-8 text-sm text-slate-200 flex-1">
-                    <li className="flex gap-2 items-center"><span className="text-purple-400">✓</span> 20 AI Persona</li>
-                    <li className="flex gap-2 items-center"><span className="text-purple-400">✓</span> All Service Connections</li>
-                    <li className="flex gap-2 items-center"><span className="text-purple-400">✓</span> 200 MB Knowledge Base</li>
-                    <li className="flex gap-2 items-center"><span className="text-purple-400">✓</span> Token Vault</li>
-                  </ul>
-                  
-                  <button 
-                    onClick={() => handleCheckout('enterprise')}
-                    disabled={loading}
-                    className="w-full py-2.5 px-4 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors font-medium text-sm shadow-lg shadow-purple-600/30 flex justify-center items-center gap-2 mt-auto"
-                  >
-                    {loading ? (
-                      <svg className="animate-spin w-4 h-4 text-white" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                    ) : (
-                      <>
-                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.31-8.86c-1.77-.45-2.34-.94-2.34-1.67 0-.84.79-1.43 2.1-1.43 1.38 0 1.9.66 1.94 1.64h1.71c-.05-1.34-.87-2.57-2.49-2.97V5H10.9v1.69c-1.51.32-2.72 1.3-2.72 2.81 0 1.79 1.49 2.69 3.66 3.21 1.95.46 2.34 1.15 2.34 1.87 0 .53-.39 1.64-2.25 1.64-1.74 0-2.27-.85-2.34-1.76H7.83c.09 1.69 1.16 2.79 3.07 3.16V19h2.34v-1.67c1.52-.3 2.76-1.36 2.76-2.91.01-1.95-1.5-2.72-3.69-3.28z"/>
-                        </svg>
-                        Subscribe
-                      </>
-                    )}
-                  </button>
-                  {error && <p className="text-red-400 text-sm mt-3 text-center w-full">{error}</p>}
-                </div>
+                    <div className="text-3xl font-bold text-white mb-1">${plan.priceMonthly} <span className="text-sm text-slate-400 font-normal">/mo</span></div>
+                    <p className="text-sm text-slate-400 mb-6">{plan.description}</p>
+
+                    <ul className="space-y-3 mb-8 text-sm text-slate-200 min-h-[130px]">
+                      {(plan.features || []).map((feature) => (
+                        <li key={feature} className="flex gap-2 items-center"><span className="text-emerald-400">✓</span> {feature}</li>
+                      ))}
+                    </ul>
+
+                    <button
+                      onClick={() => (plan.id === 'free' ? setViewMode('login') : handleCheckout(plan.id))}
+                      disabled={loading}
+                      className={`w-full py-2.5 px-4 rounded-lg transition-colors font-medium text-sm ${plan.id === 'free' ? 'border border-slate-600 text-slate-200 hover:bg-slate-800' : plan.id === 'enterprise' ? 'bg-purple-600 hover:bg-purple-500 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
+                    >
+                      {plan.id === 'free' ? 'Start Free' : 'Subscribe'}
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
           </div>

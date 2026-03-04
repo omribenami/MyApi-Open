@@ -1342,14 +1342,46 @@ app.post("/api/v1/tokens/validate", (req, res) => {
   });
 });
 
+const BILLING_PLANS = {
+  free: {
+    id: 'free',
+    name: 'Free',
+    priceMonthly: 0,
+    description: 'Perfect for individuals getting started',
+    features: ['1 AI Persona', '3 Service Connections', '10 MB Knowledge Base', '5 Token Vault'],
+    stripePaymentLinkEnv: null,
+  },
+  pro: {
+    id: 'pro',
+    name: 'Pro',
+    priceMonthly: 15,
+    description: 'For creators and small teams',
+    features: ['5 AI Persona', 'All Service Connections', '50 MB Knowledge Base', 'Token Vault'],
+    stripePaymentLinkEnv: 'STRIPE_PAYMENT_LINK_PRO',
+  },
+  enterprise: {
+    id: 'enterprise',
+    name: 'Enterprise',
+    priceMonthly: 30,
+    description: 'Scale with higher limits and priority',
+    features: ['20 AI Persona', 'All Service Connections', '200 MB Knowledge Base', 'Token Vault'],
+    stripePaymentLinkEnv: 'STRIPE_PAYMENT_LINK_ENTERPRISE',
+  },
+};
+
+app.get('/api/v1/billing/plans', (req, res) => {
+  res.json({ data: Object.values(BILLING_PLANS) });
+});
+
 // --- BILLING / STRIPE CHECKOUT ---
 app.post('/api/v1/billing/checkout', (req, res) => {
   try {
     const { plan } = req.body || {};
     const selectedPlan = String(plan || '').toLowerCase().trim();
+    const definition = BILLING_PLANS[selectedPlan];
 
-    if (!selectedPlan || !['free', 'pro', 'enterprise'].includes(selectedPlan)) {
-      return res.status(400).json({ error: 'Invalid plan. Allowed: free, pro, enterprise' });
+    if (!definition) {
+      return res.status(400).json({ error: `Invalid plan. Allowed: ${Object.keys(BILLING_PLANS).join(', ')}` });
     }
 
     if (selectedPlan === 'free') {
@@ -1360,17 +1392,11 @@ app.post('/api/v1/billing/checkout', (req, res) => {
       });
     }
 
-    let paymentLink = '';
-    if (selectedPlan === 'pro') {
-      paymentLink = process.env.STRIPE_PAYMENT_LINK_PRO || process.env.STRIPE_PAYMENT_LINK || '';
-    } else if (selectedPlan === 'enterprise') {
-      paymentLink = process.env.STRIPE_PAYMENT_LINK_ENTERPRISE || '';
-    }
-
+    const paymentLink = process.env[definition.stripePaymentLinkEnv] || (selectedPlan === 'pro' ? process.env.STRIPE_PAYMENT_LINK || '' : '');
     if (!paymentLink) {
       return res.status(503).json({
         error: `Stripe payment link for ${selectedPlan} is not configured`,
-        hint: `Set STRIPE_PAYMENT_LINK_${selectedPlan.toUpperCase()} in src/.env`,
+        hint: `Set ${definition.stripePaymentLinkEnv} in src/.env`,
       });
     }
 

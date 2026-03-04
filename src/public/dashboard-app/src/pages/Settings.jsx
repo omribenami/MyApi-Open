@@ -627,12 +627,75 @@ function DangerZoneSection({ onRequestExport, onRequestDelete }) {
   );
 }
 
+function BillingSection() {
+  const [plans, setPlans] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const loadPlans = async () => {
+      try {
+        const res = await fetch('/api/v1/billing/plans');
+        if (!res.ok) return;
+        const data = await res.json();
+        setPlans(Array.isArray(data?.data) ? data.data : []);
+      } catch {}
+    };
+    loadPlans();
+  }, []);
+
+  const handleCheckout = async (planId) => {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await fetch('/api/v1/billing/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan: planId }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Failed to start checkout');
+      if (data.url) window.location.href = data.url;
+    } catch (e) {
+      setError(e.message || 'Checkout failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <SectionCard title="Plans & Billing" description="Switch plans from your account" icon="💳">
+      {error && <ErrorBanner message={error} onClose={() => setError('')} />}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {plans.map((plan) => (
+          <div key={plan.id} className="bg-slate-900 border border-slate-700 rounded-lg p-4">
+            <h3 className="text-white font-semibold">{plan.name}</h3>
+            <p className="text-slate-300 text-xl mt-1">${plan.priceMonthly}<span className="text-sm text-slate-400">/mo</span></p>
+            <p className="text-slate-400 text-xs mt-2">{plan.description}</p>
+            <ul className="mt-3 space-y-1 text-xs text-slate-300">
+              {(plan.features || []).slice(0, 4).map((f) => <li key={f}>• {f}</li>)}
+            </ul>
+            <button
+              disabled={loading}
+              onClick={() => handleCheckout(plan.id)}
+              className="mt-4 w-full px-3 py-2 rounded bg-blue-600 hover:bg-blue-500 text-white text-sm disabled:opacity-50"
+            >
+              {plan.id === 'free' ? 'Switch to Free' : 'Choose Plan'}
+            </button>
+          </div>
+        ))}
+      </div>
+    </SectionCard>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Settings page — section tabs + content
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SECTIONS = [
   { id: 'profile', label: 'Profile', icon: '👤' },
+  { id: 'billing', label: 'Plans', icon: '💳' },
   { id: 'security', label: 'Security', icon: '🔒' },
   { id: 'privacy', label: 'Privacy', icon: '🔏' },
   { id: 'danger', label: 'Danger Zone', icon: '⚠️' },
@@ -685,6 +748,7 @@ function Settings() {
 
       {/* Section content */}
       {activeSection === 'profile' && <ProfileSection />}
+      {activeSection === 'billing' && <BillingSection />}
       {activeSection === 'security' && <SecuritySection />}
       {activeSection === 'privacy' && <PrivacySection />}
       {activeSection === 'danger' && (

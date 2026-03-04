@@ -7,6 +7,11 @@ function Layout({ children, onLogout }) {
   const { user } = useAuthStore();
   const [menuOpen, setMenuOpen] = useState(false);
 
+  const tokenData = (() => {
+    try { return JSON.parse(localStorage.getItem('tokenData') || '{}'); } catch { return {}; }
+  })();
+  const isPowerUser = tokenData?.scope === 'full';
+
   const navItems = [
     { path: '/', label: 'Dashboard' },
     { path: '/services', label: 'Services' },
@@ -20,7 +25,7 @@ function Layout({ children, onLogout }) {
     { path: '/my-listings', label: 'My Listings' },
     { path: '/platform-docs', label: 'Platform Docs' },
     { path: '/api-docs', label: 'API Docs' },
-    { path: '/users', label: 'Users' },
+    ...(isPowerUser ? [{ path: '/users', label: 'Users' }] : []),
     { path: '/settings', label: 'Settings' },
   ];
 

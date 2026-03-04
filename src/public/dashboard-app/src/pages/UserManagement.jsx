@@ -1,14 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useAuthStore } from '../stores/authStore';
 
-const PLAN_OPTIONS = ['free', 'pro', 'enterprise'];
-
 function UserManagement() {
   const masterToken = useAuthStore((s) => s.masterToken);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [savingUserId, setSavingUserId] = useState(null);
+  const [plans, setPlans] = useState([]);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -28,7 +27,19 @@ function UserManagement() {
   };
 
   useEffect(() => {
-    if (masterToken) fetchUsers();
+    const loadPlans = async () => {
+      try {
+        const res = await fetch('/api/v1/billing/plans');
+        if (!res.ok) return;
+        const data = await res.json();
+        setPlans(Array.isArray(data?.data) ? data.data : []);
+      } catch {}
+    };
+
+    if (masterToken) {
+      fetchUsers();
+      loadPlans();
+    }
   }, [masterToken]);
 
   const updatePlan = async (userId, plan) => {
@@ -91,7 +102,7 @@ function UserManagement() {
                         disabled={savingUserId === user.id}
                         className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-slate-100"
                       >
-                        {PLAN_OPTIONS.map((p) => (
+                        {(plans.length ? plans.map((p) => p.id) : ['free','pro','enterprise']).map((p) => (
                           <option key={p} value={p}>{p}</option>
                         ))}
                       </select>
