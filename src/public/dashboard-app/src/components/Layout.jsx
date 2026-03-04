@@ -37,21 +37,23 @@ function NavDropdown({ label, items, isActiveFn, onMobileClick }) {
       </div>
       
       {open && (
-        <div className="absolute left-0 mt-1 w-48 rounded-lg border border-slate-700 bg-slate-900 shadow-xl py-1 z-50">
-          {items.map((item) => (
-            <Link
-              key={item.path}
-              to={item.path}
-              onClick={() => { setOpen(false); if (onMobileClick) onMobileClick(); }}
-              className={`block px-4 py-2 text-sm transition-all ${
-                isActiveFn(item.path)
-                  ? 'text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.8)]'
-                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              {item.label}
-            </Link>
-          ))}
+        <div className="absolute left-0 top-full pt-1 w-48 z-50">
+          <div className="rounded-xl border border-slate-700 bg-slate-900 shadow-xl py-1">
+            {items.map((item) => (
+              <Link
+                key={item.path}
+                to={item.path}
+                onClick={() => { setOpen(false); if (onMobileClick) onMobileClick(); }}
+                className={`block px-4 py-2 text-sm transition-all ${
+                  isActiveFn(item.path)
+                    ? 'text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.8)] bg-slate-800/50'
+                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </div>
         </div>
       )}
     </div>

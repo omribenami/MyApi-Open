@@ -116,8 +116,8 @@ class GoogleAdapter {
   async verifyToken(token) {
     return new Promise((resolve, reject) => {
       const options = {
-        hostname: 'oauth2.googleapis.com',
-        path: `/tokeninfo?access_token=${token}`,
+        hostname: 'www.googleapis.com',
+        path: `/oauth2/v3/userinfo?access_token=${token}`,
         method: 'GET'
       };
 
