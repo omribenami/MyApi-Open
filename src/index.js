@@ -2052,7 +2052,8 @@ app.post('/api/v1/auth/2fa/setup', authenticate, async (req, res) => {
     const label = `${issuer}:${user.email || user.username}`;
     const secret = speakeasy.generateSecret({ name: label, issuer, length: 32 });
 
-    setUserTotpSecret(userId, secret.base32);
+    const saved = setUserTotpSecret(userId, secret.base32);
+    if (!saved) return res.status(500).json({ error: 'Failed to store 2FA secret' });
     const qrCodeDataUrl = await QRCode.toDataURL(secret.otpauth_url);
 
     createAuditLog({
@@ -2089,12 +2090,13 @@ app.post('/api/v1/auth/2fa/verify', authenticate, (req, res) => {
       secret: state.totpSecret,
       encoding: 'base32',
       token: String(code).replace(/\s+/g, ''),
-      window: 1,
+      window: 2,
     });
 
-    if (!verified) return res.status(400).json({ error: 'Invalid 2FA code' });
+    if (!verified) return res.status(400).json({ error: 'Invalid 2FA code (check phone time sync and try current code)' });
 
-    enableUserTwoFactor(userId);
+    const enabled = enableUserTwoFactor(userId);
+    if (!enabled) return res.status(500).json({ error: 'Failed to enable 2FA for this user' });
     if (req.session?.user) req.session.user.two_factor_enabled = true;
 
     createAuditLog({
@@ -2107,7 +2109,8 @@ app.post('/api/v1/auth/2fa/verify', authenticate, (req, res) => {
 
     return res.json({ ok: true, data: { enabled: true } });
   } catch (error) {
-    return res.status(500).json({ error: 'Failed to verify 2FA code' });
+    console.error("2FA verify error:", error);
+    return res.status(500).json({ error: 'Failed to verify 2FA code: ' + error.message });
   }
 });
 
@@ -2125,7 +2128,7 @@ app.post('/api/v1/auth/2fa/disable', authenticate, (req, res) => {
       secret: state.totpSecret,
       encoding: 'base32',
       token: String(code).replace(/\s+/g, ''),
-      window: 1,
+      window: 2,
     });
 
     if (!verified) return res.status(400).json({ error: 'Invalid 2FA code' });

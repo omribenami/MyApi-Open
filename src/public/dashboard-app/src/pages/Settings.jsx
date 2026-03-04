@@ -542,7 +542,8 @@ function SecuritySection() {
 
           {!twoFactorEnabled && qrCodeDataUrl && (
             <div className="mt-4 rounded-lg border border-slate-700 bg-slate-900 p-4">
-              <p className="text-sm text-slate-300 mb-3">1) Scan this QR code in your authenticator app.</p>
+              <p className="text-sm text-slate-300 mb-1">1) Scan this QR code in your authenticator app.</p>
+              <p className="text-xs text-slate-400 mb-3">The Disable button appears only after successful verification/enabling.</p>
               <img src={qrCodeDataUrl} alt="2FA QR code" className="h-44 w-44 rounded bg-white p-2" />
               <p className="text-xs text-slate-400 mt-3">Can’t scan? Use this secret manually:</p>
               <code className="mt-1 inline-block rounded bg-slate-800 px-2 py-1 text-xs text-blue-300 break-all">{manualSecret}</code>
