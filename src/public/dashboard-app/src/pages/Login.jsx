@@ -381,8 +381,8 @@ function Login() {
                   <ul className="space-y-3 mb-8 text-sm text-slate-300">
                     <li className="flex gap-2 items-center"><span className="text-emerald-400">✓</span> 1 AI Persona</li>
                     <li className="flex gap-2 items-center"><span className="text-emerald-400">✓</span> 3 Service Connections</li>
-                    <li className="flex gap-2 items-center"><span className="text-emerald-400">✓</span> 5MB Knowledge Base</li>
-                    <li className="flex gap-2 items-center"><span className="text-emerald-400">✓</span> Basic Token Vault</li>
+                    <li className="flex gap-2 items-center"><span className="text-emerald-400">✓</span> 10 MB Knowledge Base</li>
+                    <li className="flex gap-2 items-center"><span className="text-emerald-400">✓</span> 5 Token Vault</li>
                   </ul>
                   
                   <button 
@@ -401,10 +401,10 @@ function Login() {
                   <p className="text-sm text-blue-200 opacity-80 mb-6">For power users and teams</p>
                   
                   <ul className="space-y-3 mb-8 text-sm text-slate-200 flex-1">
-                    <li className="flex gap-2 items-center"><span className="text-blue-400">✓</span> Unlimited AI Personas</li>
-                    <li className="flex gap-2 items-center"><span className="text-blue-400">✓</span> 10 Service Connections</li>
-                    <li className="flex gap-2 items-center"><span className="text-blue-400">✓</span> 50MB Knowledge Base</li>
-                    <li className="flex gap-2 items-center"><span className="text-blue-400">✓</span> Full Token Vault</li>
+                    <li className="flex gap-2 items-center"><span className="text-blue-400">✓</span> 5 AI Persona</li>
+                    <li className="flex gap-2 items-center"><span className="text-blue-400">✓</span> All Service Connections</li>
+                    <li className="flex gap-2 items-center"><span className="text-blue-400">✓</span> 50 MB Knowledge Base</li>
+                    <li className="flex gap-2 items-center"><span className="text-blue-400">✓</span> Token Vault</li>
                   </ul>
                   
                   <button 
@@ -435,10 +435,10 @@ function Login() {
                   <p className="text-sm text-purple-200 opacity-80 mb-6">Uncapped scale & priority support</p>
                   
                   <ul className="space-y-3 mb-8 text-sm text-slate-200 flex-1">
-                    <li className="flex gap-2 items-center"><span className="text-purple-400">✓</span> Everything in Pro</li>
-                    <li className="flex gap-2 items-center"><span className="text-purple-400">✓</span> Unlimited Service Connections</li>
-                    <li className="flex gap-2 items-center"><span className="text-purple-400">✓</span> 100MB Knowledge Base</li>
-                    <li className="flex gap-2 items-center"><span className="text-purple-400">✓</span> Dedicated Support</li>
+                    <li className="flex gap-2 items-center"><span className="text-purple-400">✓</span> 20 AI Persona</li>
+                    <li className="flex gap-2 items-center"><span className="text-purple-400">✓</span> All Service Connections</li>
+                    <li className="flex gap-2 items-center"><span className="text-purple-400">✓</span> 200 MB Knowledge Base</li>
+                    <li className="flex gap-2 items-center"><span className="text-purple-400">✓</span> Token Vault</li>
                   </ul>
                   
                   <button 
