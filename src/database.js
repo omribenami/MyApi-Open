@@ -368,6 +368,10 @@ function initDatabase() {
   } catch (e) {
     // Column already exists — ignore
   }
+  // Stripe subscription columns
+  try { db.exec("ALTER TABLE users ADD COLUMN stripe_subscription_status TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE users ADD COLUMN stripe_customer_id TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE users ADD COLUMN stripe_subscription_id TEXT"); } catch (e) {}
 
   // Multi-tenant ownership columns (security isolation)
   const ownerMigrations = [
@@ -764,17 +768,17 @@ function createUser(username, displayName, email, timezone, password, plan = 'fr
 }
 
 function getUsers() {
-  const stmt = db.prepare("SELECT id, username, display_name as displayName, email, avatar_url as avatarUrl, timezone, created_at as createdAt, status, COALESCE(plan, 'free') as plan FROM users ORDER BY created_at DESC");
-  return stmt.all();
+  const stmt = db.prepare("SELECT id, username, display_name as displayName, email, avatar_url as avatarUrl, timezone, created_at as createdAt, status, COALESCE(plan, 'free') as plan, stripe_subscription_status as stripeSubscriptionStatus, stripe_customer_id as stripeCustomerId, stripe_subscription_id as stripeSubscriptionId, CASE WHEN COALESCE(plan, 'free') = 'free' THEN 1 WHEN LOWER(COALESCE(stripe_subscription_status, '')) IN ('active','trialing') THEN 1 ELSE 0 END as planActive FROM users ORDER BY created_at DESC");
+  return stmt.all().map((u) => ({ ...u, planActive: Boolean(u.planActive) }));
 }
 
 function getUserByUsername(username) {
-  const stmt = db.prepare("SELECT id, username, display_name as displayName, email, avatar_url as avatarUrl, timezone, password_hash, created_at as createdAt, status, COALESCE(plan, 'free') as plan FROM users WHERE username = ?");
+  const stmt = db.prepare("SELECT id, username, display_name as displayName, email, avatar_url as avatarUrl, timezone, password_hash, created_at as createdAt, status, COALESCE(plan, 'free') as plan, stripe_subscription_status as stripeSubscriptionStatus, stripe_customer_id as stripeCustomerId, stripe_subscription_id as stripeSubscriptionId FROM users WHERE username = ?");
   return stmt.get(username);
 }
 
 function getUserById(id) {
-  const stmt = db.prepare("SELECT id, username, display_name as displayName, email, avatar_url as avatarUrl, timezone, created_at as createdAt, status, COALESCE(plan, 'free') as plan FROM users WHERE id = ?");
+  const stmt = db.prepare("SELECT id, username, display_name as displayName, email, avatar_url as avatarUrl, timezone, created_at as createdAt, status, COALESCE(plan, 'free') as plan, stripe_subscription_status as stripeSubscriptionStatus, stripe_customer_id as stripeCustomerId, stripe_subscription_id as stripeSubscriptionId FROM users WHERE id = ?");
   return stmt.get(id);
 }
 
@@ -796,6 +800,18 @@ function updateUserOAuthProfile(userId, { displayName, email, avatarUrl } = {}) 
   const nextEmail = (email || '').trim() || current.email || null;
   const nextAvatar = (avatarUrl || '').trim() || current.avatarUrl || null;
   db.prepare('UPDATE users SET display_name = ?, email = ?, avatar_url = ? WHERE id = ?').run(nextDisplay, nextEmail, nextAvatar, userId);
+  return getUserById(userId);
+}
+
+function updateUserSubscriptionStatus(userId, { status, customerId, subscriptionId } = {}) {
+  const normalized = String(status || '').toLowerCase().trim();
+  if (normalized && !['active', 'trialing', 'past_due', 'canceled', 'unpaid', 'incomplete', 'incomplete_expired', 'paused'].includes(normalized)) {
+    throw new Error('Invalid subscription status');
+  }
+  const current = getUserById(userId);
+  if (!current) return null;
+  db.prepare('UPDATE users SET stripe_subscription_status = ?, stripe_customer_id = ?, stripe_subscription_id = ? WHERE id = ?')
+    .run(normalized || null, customerId || null, subscriptionId || null, userId);
   return getUserById(userId);
 }
 
@@ -2192,6 +2208,7 @@ module.exports = {
   getUserById,
   updateUserPlan,
   updateUserOAuthProfile,
+  updateUserSubscriptionStatus,
   createHandshake,
   getHandshakes,
   approveHandshake,

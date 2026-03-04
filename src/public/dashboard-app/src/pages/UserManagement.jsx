@@ -136,8 +136,10 @@ function UserManagement() {
                   <tr>
                     <th className="text-left px-4 py-3">Username</th>
                     <th className="text-left px-4 py-3">Email</th>
-                    <th className="text-left px-4 py-3">Status</th>
+                    <th className="text-left px-4 py-3">Account</th>
                     <th className="text-left px-4 py-3">Plan</th>
+                    <th className="text-left px-4 py-3">Plan Active</th>
+                    <th className="text-left px-4 py-3">Stripe Sub Status</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -158,6 +160,12 @@ function UserManagement() {
                           ))}
                         </select>
                       </td>
+                      <td className="px-4 py-3 text-slate-300">
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${user.planActive ? 'bg-emerald-900/40 text-emerald-300 border border-emerald-700' : 'bg-rose-900/40 text-rose-300 border border-rose-700'}`}>
+                          {user.planActive ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-slate-400">{user.stripeSubscriptionStatus || '-'}</td>
                     </tr>
                   ))}
                 </tbody>

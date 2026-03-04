@@ -37,6 +37,7 @@ const {
   getUserById,
   updateUserPlan,
   updateUserOAuthProfile,
+  updateUserSubscriptionStatus,
   createHandshake,
   getHandshakes,
   approveHandshake,
@@ -427,6 +428,20 @@ function getOAuthUserId(req) {
 
 function getRequestOwnerId(req) {
   return String(req?.tokenMeta?.ownerId || req?.session?.user?.id || 'owner');
+}
+
+function requirePowerUser(req, res) {
+  const allowedEmail = String(process.env.POWER_USER_EMAIL || 'admin@your.domain.com').toLowerCase();
+  let email = String(req?.session?.user?.email || req?.user?.email || '').toLowerCase();
+  if (!email && req?.tokenMeta?.ownerId) {
+    const tokenOwnerUser = getUserById(req.tokenMeta.ownerId);
+    email = String(tokenOwnerUser?.email || '').toLowerCase();
+  }
+  if (!email || email !== allowedEmail) {
+    res.status(403).json({ error: 'Only power user can access user management' });
+    return false;
+  }
+  return true;
 }
 
 // --- Scope Filter (Brain logic) ---
@@ -1974,6 +1989,7 @@ app.post("/api/v1/auth/logout", (req, res) => {
 // ============================
 app.post("/api/v1/users", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can create users" });
+  if (!requirePowerUser(req, res)) return;
   const { username, displayName, email, timezone, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: "username and password are required" });
   try {
@@ -1990,12 +2006,14 @@ app.post("/api/v1/users", authenticate, (req, res) => {
 
 app.get("/api/v1/users", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can list users" });
+  if (!requirePowerUser(req, res)) return;
   createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "list_users", resource: "/users", scope: req.tokenMeta.scope, ip: req.ip });
   res.json({ data: getUsers() });
 });
 
 app.put('/api/v1/users/:id/plan', authenticate, (req, res) => {
   if (req.tokenMeta.scope !== 'full') return res.status(403).json({ error: 'Only master token can manage plans' });
+  if (!requirePowerUser(req, res)) return;
   try {
     const { id } = req.params;
     const { plan } = req.body || {};
@@ -2018,6 +2036,32 @@ app.put('/api/v1/users/:id/plan', authenticate, (req, res) => {
     }
     console.error('Update user plan error:', error);
     res.status(500).json({ error: 'Failed to update user plan' });
+  }
+});
+
+app.put('/api/v1/users/:id/subscription', authenticate, (req, res) => {
+  if (req.tokenMeta.scope !== 'full') return res.status(403).json({ error: 'Only master token can manage subscriptions' });
+  if (!requirePowerUser(req, res)) return;
+  try {
+    const { id } = req.params;
+    const { status, customerId, subscriptionId } = req.body || {};
+    const user = updateUserSubscriptionStatus(id, { status, customerId, subscriptionId });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    createAuditLog({
+      requesterId: req.tokenMeta.tokenId,
+      action: 'update_user_subscription',
+      resource: `/users/${id}/subscription`,
+      scope: req.tokenMeta.scope,
+      ip: req.ip,
+      details: { status, customerId, subscriptionId },
+    });
+    res.json({ data: user });
+  } catch (error) {
+    if (String(error.message || '').includes('Invalid subscription status')) {
+      return res.status(400).json({ error: 'Invalid subscription status' });
+    }
+    console.error('Update user subscription error:', error);
+    res.status(500).json({ error: 'Failed to update user subscription' });
   }
 });
 

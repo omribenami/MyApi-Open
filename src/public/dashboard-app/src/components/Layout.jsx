@@ -13,7 +13,7 @@ function Layout({ children, onLogout }) {
   const tokenData = (() => {
     try { return JSON.parse(localStorage.getItem('tokenData') || '{}'); } catch { return {}; }
   })();
-  const isPowerUser = tokenData?.scope === 'full';
+  const isPowerUser = String(user?.email || '').toLowerCase() === 'admin@your.domain.com';
 
   const navItems = [
     { path: '/', label: 'Dashboard' },
