@@ -20,3 +20,6 @@ backend/venv/
 
 # Local KB uploaded files
 src/uploads/
+
+# Ignore local app env
+src/.env
