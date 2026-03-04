@@ -44,7 +44,7 @@ export default function CookieNotice() {
 
   return (
     <div className="fixed bottom-4 right-4 z-50 w-[92vw] max-w-md rounded-xl border border-blue-200 bg-sky-50 p-3 text-slate-800 shadow-xl">
-      <img src="/cookie-nano.jpg" alt="Nano banana AI with cookie" className="mb-2 h-28 w-full rounded-lg object-cover" />
+      <img src="cookie-nano.jpg" alt="Nano banana AI with cookie" className="mb-2 h-28 w-full rounded-lg object-cover" />
       <p className="text-sm leading-relaxed">
         Choose your cookie mode. <strong>Essential cookies</strong> keep login/session and OAuth working.
       </p>
