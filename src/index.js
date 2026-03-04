@@ -34,6 +34,7 @@ const {
   getUsers,
   getUserByUsername,
   getUserById,
+  updateUserPlan,
   createHandshake,
   getHandshakes,
   approveHandshake,
@@ -1632,6 +1633,33 @@ app.get("/api/v1/users", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can list users" });
   createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "list_users", resource: "/users", scope: req.tokenMeta.scope, ip: req.ip });
   res.json({ data: getUsers() });
+});
+
+app.put('/api/v1/users/:id/plan', authenticate, (req, res) => {
+  if (req.tokenMeta.scope !== 'full') return res.status(403).json({ error: 'Only master token can manage plans' });
+  try {
+    const { id } = req.params;
+    const { plan } = req.body || {};
+    const user = updateUserPlan(id, plan);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    createAuditLog({
+      requesterId: req.tokenMeta.tokenId,
+      action: 'update_user_plan',
+      resource: `/users/${id}/plan`,
+      scope: req.tokenMeta.scope,
+      ip: req.ip,
+      details: { plan }
+    });
+
+    res.json({ data: user });
+  } catch (error) {
+    if (String(error.message || '').includes('Invalid plan')) {
+      return res.status(400).json({ error: 'Invalid plan. Allowed: free, pro, enterprise' });
+    }
+    console.error('Update user plan error:', error);
+    res.status(500).json({ error: 'Failed to update user plan' });
+  }
 });
 
 // ============================

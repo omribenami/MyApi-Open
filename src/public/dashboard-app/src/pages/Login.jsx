@@ -221,7 +221,7 @@ function Login() {
             </h2>
             <p className="text-slate-400 text-base sm:text-lg mb-8 leading-relaxed">
               One dashboard to manage all your APIs, services, tokens, and AI personas.
-              Built by AI, for AI.
+              made by ai for ai.
             </p>
 
             {/* Feature cards grid */}
@@ -369,9 +369,9 @@ function Login() {
               </>
             ) : (
               /* Pricing Card */
-              <div className="w-full bg-slate-900 bg-opacity-80 backdrop-blur-xl border border-slate-700 border-opacity-50 rounded-2xl shadow-2xl overflow-hidden flex flex-col sm:flex-row">
+              <div className="w-full bg-slate-900 bg-opacity-80 backdrop-blur-xl border border-slate-700 border-opacity-50 rounded-2xl shadow-2xl overflow-hidden flex flex-col lg:flex-row">
                 {/* Free Tier */}
-                <div className="flex-1 p-6 sm:p-8 border-b sm:border-b-0 sm:border-r border-slate-700 border-opacity-50">
+                <div className="flex-1 p-6 sm:p-8 border-b lg:border-b-0 lg:border-r border-slate-700 border-opacity-50">
                   <h3 className="text-xl font-semibold text-white mb-1">Free</h3>
                   <div className="text-3xl font-bold text-white mb-1">$0 <span className="text-sm text-slate-400 font-normal">/mo</span></div>
                   <p className="text-sm text-slate-400 mb-6">Perfect for individuals getting started</p>
@@ -392,7 +392,7 @@ function Login() {
                 </div>
                 
                 {/* Pro Tier */}
-                <div className="flex-1 p-6 sm:p-8 bg-gradient-to-br from-blue-900/20 to-indigo-900/20 relative border-b sm:border-b-0 sm:border-r border-slate-700 border-opacity-50">
+                <div className="flex-1 p-6 sm:p-8 bg-gradient-to-br from-blue-900/20 to-indigo-900/20 relative border-b lg:border-b-0 lg:border-r border-slate-700 border-opacity-50">
                   <div className="absolute top-0 right-0 bg-blue-600 text-white text-[10px] font-bold uppercase tracking-wider py-1 px-3 rounded-bl-lg rounded-tr-xl hidden sm:block">Popular</div>
                   <h3 className="text-xl font-semibold text-blue-300 mb-1">Pro</h3>
                   <div className="text-3xl font-bold text-white mb-1">$15 <span className="text-sm text-blue-300 font-normal opacity-70">/mo</span></div>

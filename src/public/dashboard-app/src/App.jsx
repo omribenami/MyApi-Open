@@ -11,6 +11,7 @@ import Personas from './pages/Personas';
 import KnowledgeBase from './pages/KnowledgeBase';
 import Identity from './pages/Identity';
 import Settings from './pages/Settings';
+import UserManagement from './pages/UserManagement';
 import Marketplace from './pages/Marketplace';
 import MyListings from './pages/MyListings';
 import Skills from './pages/Skills';
@@ -113,6 +114,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Settings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/users"
+              element={
+                <ProtectedRoute>
+                  <UserManagement />
                 </ProtectedRoute>
               }
             />

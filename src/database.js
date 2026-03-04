@@ -67,7 +67,8 @@ function initDatabase() {
       timezone TEXT,
       password_hash TEXT NOT NULL,
       created_at TEXT NOT NULL,
-      status TEXT
+      status TEXT,
+      plan TEXT DEFAULT 'free'
     );
 
     CREATE TABLE IF NOT EXISTS handshakes (
@@ -345,6 +346,13 @@ function initDatabase() {
   // Add allowed_personas column to access_tokens if not already present (migration)
   try {
     db.exec('ALTER TABLE access_tokens ADD COLUMN allowed_personas TEXT');
+  } catch (e) {
+    // Column already exists — ignore
+  }
+
+  // Add users.plan column if not already present (migration)
+  try {
+    db.exec("ALTER TABLE users ADD COLUMN plan TEXT DEFAULT 'free'");
   } catch (e) {
     // Column already exists — ignore
   }
@@ -718,28 +726,39 @@ function getAuditLogs(limit = 50, offset = 0) {
 }
 
 // Handshake support (new)
-function createUser(username, displayName, email, timezone, password) {
+function createUser(username, displayName, email, timezone, password, plan = 'free') {
   const id = 'usr_' + crypto.randomBytes(16).toString('hex');
   const now = new Date().toISOString();
   const hash = bcrypt.hashSync(password, 10);
-  const stmt = db.prepare(`INSERT INTO users (id, username, display_name, email, timezone, password_hash, created_at, status) VALUES (?,?,?,?,?,?,?,?)`);
-  stmt.run(id, username, displayName || null, email || null, timezone || null, hash, now, 'active');
-  return { id, username, displayName, email, timezone, createdAt: now };
+  const stmt = db.prepare(`INSERT INTO users (id, username, display_name, email, timezone, password_hash, created_at, status, plan) VALUES (?,?,?,?,?,?,?,?,?)`);
+  stmt.run(id, username, displayName || null, email || null, timezone || null, hash, now, 'active', plan || 'free');
+  return { id, username, displayName, email, timezone, createdAt: now, status: 'active', plan: plan || 'free' };
 }
 
 function getUsers() {
-  const stmt = db.prepare('SELECT id, username, display_name as displayName, email, timezone, created_at as createdAt, status FROM users ORDER BY created_at DESC');
+  const stmt = db.prepare('SELECT id, username, display_name as displayName, email, timezone, created_at as createdAt, status, COALESCE(plan, "free") as plan FROM users ORDER BY created_at DESC');
   return stmt.all();
 }
 
 function getUserByUsername(username) {
-  const stmt = db.prepare('SELECT id, username, display_name as displayName, email, timezone, password_hash, created_at as createdAt, status FROM users WHERE username = ?');
+  const stmt = db.prepare('SELECT id, username, display_name as displayName, email, timezone, password_hash, created_at as createdAt, status, COALESCE(plan, "free") as plan FROM users WHERE username = ?');
   return stmt.get(username);
 }
 
 function getUserById(id) {
-  const stmt = db.prepare('SELECT id, username, display_name as displayName, email, timezone, created_at as createdAt, status FROM users WHERE id = ?');
+  const stmt = db.prepare('SELECT id, username, display_name as displayName, email, timezone, created_at as createdAt, status, COALESCE(plan, "free") as plan FROM users WHERE id = ?');
   return stmt.get(id);
+}
+
+function updateUserPlan(userId, plan) {
+  const allowed = ['free', 'pro', 'enterprise'];
+  const normalizedPlan = String(plan || '').toLowerCase().trim();
+  if (!allowed.includes(normalizedPlan)) {
+    throw new Error('Invalid plan');
+  }
+  const result = db.prepare('UPDATE users SET plan = ? WHERE id = ?').run(normalizedPlan, userId);
+  if (result.changes === 0) return null;
+  return getUserById(userId);
 }
 
 function createHandshake(userId, agentId, requestedScopes, message) {
@@ -2107,6 +2126,7 @@ module.exports = {
   getUsers,
   getUserByUsername,
   getUserById,
+  updateUserPlan,
   createHandshake,
   getHandshakes,
   approveHandshake,
