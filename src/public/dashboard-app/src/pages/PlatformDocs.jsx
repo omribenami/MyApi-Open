@@ -1,87 +1,119 @@
 import React from 'react';
 
+const sections = [
+  { id: 'intro', title: 'Introduction' },
+  { id: 'services', title: 'Services' },
+  { id: 'vault', title: 'Token Vault' },
+  { id: 'access', title: 'Access Tokens' },
+  { id: 'personas', title: 'Personas' },
+  { id: 'skills', title: 'Skills' },
+  { id: 'knowledge', title: 'Knowledge Base' },
+  { id: 'marketplace', title: 'Marketplace' },
+  { id: 'identity', title: 'Identity' },
+  { id: 'users', title: 'User Management' },
+];
+
+function Section({ id, title, children }) {
+  return (
+    <section id={id} className="scroll-mt-24">
+      <h2 className="text-2xl font-bold text-white mb-3">{title}</h2>
+      <div className="text-slate-300 leading-relaxed space-y-3 text-sm sm:text-base">{children}</div>
+    </section>
+  );
+}
+
 function PlatformDocs() {
   return (
-    <div className="space-y-8 max-w-4xl">
-      <div>
-        <h1 className="text-3xl font-bold text-white mb-2">Platform Documentation</h1>
-        <p className="text-slate-400 text-lg">
-          Learn how to use each feature and category within the MyApi platform.
-        </p>
+    <div className="max-w-7xl mx-auto">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-white">Platform Documentation</h1>
+        <p className="text-slate-400 mt-2">Everything you need to use MyApi end-to-end.</p>
       </div>
 
-      <div className="grid gap-6">
-        <section className="bg-slate-900 border border-slate-800 p-6 rounded-xl">
-          <h2 className="text-xl font-bold text-blue-400 mb-3 flex items-center gap-2">
-            <span>🔗</span> Services
-          </h2>
-          <p className="text-slate-300 leading-relaxed">
-            The Services section allows you to connect MyApi to external platforms like Google, GitHub, Slack, and Discord using OAuth. Once connected, your AI personas and agents can act on your behalf across these platforms without needing you to manually copy-paste API keys.
-          </p>
-        </section>
+      <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6">
+        <aside className="lg:sticky lg:top-24 h-max bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <p className="text-xs uppercase tracking-wide text-slate-500 mb-3">Contents</p>
+          <nav className="space-y-1">
+            {sections.map((s) => (
+              <a
+                key={s.id}
+                href={`#${s.id}`}
+                className="block px-3 py-2 rounded-md text-sm text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
+              >
+                {s.title}
+              </a>
+            ))}
+          </nav>
+        </aside>
 
-        <section className="bg-slate-900 border border-slate-800 p-6 rounded-xl">
-          <h2 className="text-xl font-bold text-indigo-400 mb-3 flex items-center gap-2">
-            <span>🗝️</span> Token Vault
-          </h2>
-          <p className="text-slate-300 leading-relaxed">
-            The Token Vault is where you securely store static API keys and credentials (like your OpenAI key, Anthropic key, or custom service tokens). MyApi encrypts these at rest. You can also use the auto-discovery tool here to automatically figure out a service's API endpoint from its website URL.
-          </p>
-        </section>
+        <main className="space-y-10 bg-slate-900 border border-slate-800 rounded-xl p-6 sm:p-8">
+          <Section id="intro" title="Introduction">
+            <p>
+              MyApi is a personal middleware hub that lets you connect services, store credentials safely, configure AI personas,
+              and control access with scoped tokens. The dashboard is split into categories so each responsibility is isolated and easy to manage.
+            </p>
+          </Section>
 
-        <section className="bg-slate-900 border border-slate-800 p-6 rounded-xl">
-          <h2 className="text-xl font-bold text-violet-400 mb-3 flex items-center gap-2">
-            <span>🎟️</span> Access Tokens
-          </h2>
-          <p className="text-slate-300 leading-relaxed">
-            Here you generate Guest Tokens that give external AI agents (like ChatGPT, Claude, or custom scripts) permission to access your MyApi instance. You can limit these tokens to specific "Scopes" (e.g., read-only, or only allowed to talk to specific Personas) so you stay in control of your data.
-          </p>
-        </section>
+          <Section id="services" title="Services">
+            <p>
+              Connect external providers (Google, GitHub, Slack, etc.) via OAuth. Once connected, MyApi can securely call those services
+              through a unified layer so your AI integrations don’t need direct raw credentials in prompts.
+            </p>
+          </Section>
 
-        <section className="bg-slate-900 border border-slate-800 p-6 rounded-xl">
-          <h2 className="text-xl font-bold text-fuchsia-400 mb-3 flex items-center gap-2">
-            <span>🎭</span> Personas
-          </h2>
-          <p className="text-slate-300 leading-relaxed">
-            Personas represent different AI personalities or roles (like "Senior Developer" or "Marketing Assistant"). For each persona, you can define specific rules, system prompts, and attach customized Knowledge Base documents and Skills to specialize their capabilities.
-          </p>
-        </section>
+          <Section id="vault" title="Token Vault">
+            <p>
+              Store API keys and website/API metadata. Vault records are encrypted at rest and can include discovered API URL + auth scheme.
+              Use this for static credentials like OpenAI, Stripe, or custom vendor tokens.
+            </p>
+          </Section>
 
-        <section className="bg-slate-900 border border-slate-800 p-6 rounded-xl">
-          <h2 className="text-xl font-bold text-emerald-400 mb-3 flex items-center gap-2">
-            <span>🧩</span> Skills
-          </h2>
-          <p className="text-slate-300 leading-relaxed">
-            Skills are code snippets or actions your AI can take. You can write custom skills, define configuration JSON, and attach them directly to Personas. Skills expand what your AI is fundamentally able to do (like fetching live weather or running a deployment).
-          </p>
-        </section>
+          <Section id="access" title="Access Tokens">
+            <p>
+              Generate guest tokens with scoped permissions. These tokens are what external agents/apps use to call MyApi safely.
+              You can regenerate/revoke anytime and limit persona access per token.
+            </p>
+          </Section>
 
-        <section className="bg-slate-900 border border-slate-800 p-6 rounded-xl">
-          <h2 className="text-xl font-bold text-cyan-400 mb-3 flex items-center gap-2">
-            <span>📚</span> Knowledge Base
-          </h2>
-          <p className="text-slate-300 leading-relaxed">
-            Upload text files, markdown, or PDFs to give your AI context. These documents form the long-term memory of your AI. You can attach specific documents to specific Personas so they only retrieve the information relevant to their role.
-          </p>
-        </section>
+          <Section id="personas" title="Personas">
+            <p>
+              Build role-based AI behaviors (system prompts, tone, constraints). You can attach skills and knowledge documents per persona
+              so each one has focused context.
+            </p>
+          </Section>
 
-        <section className="bg-slate-900 border border-slate-800 p-6 rounded-xl">
-          <h2 className="text-xl font-bold text-pink-400 mb-3 flex items-center gap-2">
-            <span>🛒</span> Marketplace
-          </h2>
-          <p className="text-slate-300 leading-relaxed">
-            Browse community-created Personas, Skills, and Connectors. You can install them directly into your instance with one click. The marketplace includes a security scanner that evaluates community skills for potentially dangerous code before you install them.
-          </p>
-        </section>
-        
-        <section className="bg-slate-900 border border-slate-800 p-6 rounded-xl">
-          <h2 className="text-xl font-bold text-blue-500 mb-3 flex items-center gap-2">
-            <span>👤</span> Identity
-          </h2>
-          <p className="text-slate-300 leading-relaxed">
-            Your global user profile. This information is passed to all Personas as base context so the AI always knows who it is talking to, regardless of which Persona is currently active.
-          </p>
-        </section>
+          <Section id="skills" title="Skills">
+            <p>
+              Reusable capability packages for personas. Skills define logic/instructions and can be attached/detached to personas without
+              rewriting prompts each time.
+            </p>
+          </Section>
+
+          <Section id="knowledge" title="Knowledge Base">
+            <p>
+              Upload markdown/txt/pdf files and use them as retrieval context. Documents can be global or persona-attached. Use this for SOPs,
+              internal docs, and project memory.
+            </p>
+          </Section>
+
+          <Section id="marketplace" title="Marketplace">
+            <p>
+              Discover/install shared skills and listings. This allows fast reuse while keeping your own token and persona controls local.
+            </p>
+          </Section>
+
+          <Section id="identity" title="Identity">
+            <p>
+              Maintains USER/SOUL profile context used by your active persona and response style. Update this to tune system behavior globally.
+            </p>
+          </Section>
+
+          <Section id="users" title="User Management">
+            <p>
+              Admin area to assign subscription plans per user (free/pro/enterprise). This is used by monetization and future feature-gating.
+            </p>
+          </Section>
+        </main>
       </div>
     </div>
   );
