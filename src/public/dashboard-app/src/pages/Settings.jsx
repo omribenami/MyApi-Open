@@ -523,6 +523,7 @@ function ToggleRow({ label, description, checked, onChange }) {
 }
 
 function PrivacySection() {
+  const masterToken = useAuthStore((state) => state.masterToken);
   const {
     privacy,
     privacySaving,
@@ -540,11 +541,41 @@ function PrivacySection() {
     }
   }, [privacySuccess]);
 
+  useEffect(() => {
+    const headers = masterToken ? { Authorization: `Bearer ${masterToken}` } : {};
+    fetch('/api/v1/privacy/cookies', { headers, credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const mode = d?.data?.mode;
+        if (mode === 'all' || mode === 'essential') {
+          updatePrivacy('cookieMode', mode);
+        }
+      })
+      .catch(() => {});
+  }, [masterToken]);
+
   const handleSave = async () => {
     setPrivacySaving(true);
-    await new Promise((r) => setTimeout(r, 600));
-    setPrivacySaving(false);
-    setPrivacySuccess('Privacy settings saved');
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(masterToken ? { Authorization: `Bearer ${masterToken}` } : {}),
+      };
+      const mode = privacy.cookieMode === 'all' ? 'all' : 'essential';
+      const res = await fetch('/api/v1/privacy/cookies', {
+        method: 'PUT',
+        headers,
+        credentials: 'include',
+        body: JSON.stringify({ mode }),
+      });
+      if (!res.ok) throw new Error('Failed to save cookie preferences');
+      localStorage.setItem('cookie_pref_v1', mode);
+      setPrivacySuccess('Privacy settings saved');
+    } catch (e) {
+      setPrivacySuccess(e.message || 'Failed to save privacy settings');
+    } finally {
+      setPrivacySaving(false);
+    }
   };
 
   return (
@@ -585,6 +616,34 @@ function PrivacySection() {
                   value={opt.value}
                   checked={privacy.profileVisibility === opt.value}
                   onChange={() => updatePrivacy('profileVisibility', opt.value)}
+                  className="accent-blue-500"
+                />
+                <div>
+                  <p className="text-sm font-medium text-white">{opt.label}</p>
+                  <p className="text-xs text-slate-400">{opt.description}</p>
+                </div>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-300 mb-2">Cookie Preferences</label>
+          <div className="space-y-2">
+            {[
+              { value: 'all', label: 'Full cookies', description: 'Allow essential + optional cookies' },
+              { value: 'essential', label: 'Essential only', description: 'Allow only required cookies (recommended for privacy)' },
+            ].map((opt) => (
+              <label
+                key={opt.value}
+                className="flex items-center gap-3 p-3 bg-slate-900 border border-slate-700 rounded-lg cursor-pointer hover:border-slate-600 transition-colors"
+              >
+                <input
+                  type="radio"
+                  name="cookieMode"
+                  value={opt.value}
+                  checked={privacy.cookieMode === opt.value}
+                  onChange={() => updatePrivacy('cookieMode', opt.value)}
                   className="accent-blue-500"
                 />
                 <div>

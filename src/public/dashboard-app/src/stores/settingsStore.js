@@ -33,6 +33,7 @@ export const useSettingsStore = create((set) => ({
     dataSharing: false,
     apiLogging: true,
     profileVisibility: 'private',
+    cookieMode: 'essential',
   },
   privacySaving: false,
   privacySuccess: null,

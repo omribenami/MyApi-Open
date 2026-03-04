@@ -297,6 +297,7 @@ app.put('/api/v1/users/me', authenticate, (req, res) => {
 
 // API Exposure policy
 const EXPOSURE_PATH = path.join(__dirname, 'data', 'exposure_policy.json');
+const COOKIE_PREFS_PATH = path.join(__dirname, 'data', 'cookie_preferences.json');
 const DEFAULT_EXPOSURE = {
   main: { identity: true, vault: true, connectors: true, handshakes: true, audit: true },
   guest: { identity: true, vault: false, connectors: false, handshakes: false, audit: false },
@@ -316,6 +317,41 @@ app.post('/api/v1/api_exposure', (req, res) => {
   fs.mkdirSync(path.dirname(EXPOSURE_PATH), { recursive: true });
   fs.writeFileSync(EXPOSURE_PATH, JSON.stringify(policy, null, 2));
   res.json({ ok: true, policy });
+});
+
+// Cookie preferences (backed, per-user)
+app.get('/api/v1/privacy/cookies', authenticate, (req, res) => {
+  const ownerId = getRequestOwnerId(req);
+  let data = {};
+  try {
+    if (fs.existsSync(COOKIE_PREFS_PATH)) data = JSON.parse(fs.readFileSync(COOKIE_PREFS_PATH, 'utf8'));
+  } catch {}
+  const pref = data[ownerId] || { mode: 'essential', updatedAt: null };
+  res.json({ data: pref });
+});
+
+app.put('/api/v1/privacy/cookies', authenticate, (req, res) => {
+  const ownerId = getRequestOwnerId(req);
+  const mode = String(req.body?.mode || '').toLowerCase();
+  if (!['all', 'essential', 'none'].includes(mode)) {
+    return res.status(400).json({ error: 'Invalid cookie mode. Allowed: all, essential, none' });
+  }
+
+  // Cannot disable essential cookies while authenticated session is active.
+  if (mode === 'none') {
+    return res.status(400).json({ error: 'Essential cookies are required for authentication. Use essential mode to reject optional cookies.' });
+  }
+
+  let data = {};
+  try {
+    if (fs.existsSync(COOKIE_PREFS_PATH)) data = JSON.parse(fs.readFileSync(COOKIE_PREFS_PATH, 'utf8'));
+  } catch {}
+
+  data[ownerId] = { mode, updatedAt: new Date().toISOString() };
+  fs.mkdirSync(path.dirname(COOKIE_PREFS_PATH), { recursive: true });
+  fs.writeFileSync(COOKIE_PREFS_PATH, JSON.stringify(data, null, 2));
+
+  res.json({ ok: true, data: data[ownerId] });
 });
 
 // --- In-Memory Identity (loaded from USER.md) ---
