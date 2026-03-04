@@ -4,7 +4,6 @@ import { startOAuthFlow, handleOAuthCallback } from '../utils/oauth';
 import { AVAILABLE_SERVICES } from '../utils/oauth';
 import BrandLogo from '../components/BrandLogo';
 
-// Brand SVG icons for OAuth providers
 const OAuthIcons = {
   google: (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -24,32 +23,31 @@ const OAuthIcons = {
       <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
     </svg>
   ),
-  slack: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52z" fill="#E01E5A"/>
-      <path d="M6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313z" fill="#E01E5A"/>
-      <path d="M8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834z" fill="#36C5F0"/>
-      <path d="M8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312z" fill="#36C5F0"/>
-      <path d="M18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834z" fill="#2EB67D"/>
-      <path d="M17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312z" fill="#2EB67D"/>
-      <path d="M15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52z" fill="#ECB22E"/>
-      <path d="M15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z" fill="#ECB22E"/>
-    </svg>
-  ),
-  discord: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="#5865F2" xmlns="http://www.w3.org/2000/svg">
-      <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057.1 18.079.11 18.1.132 18.11c2.052 1.507 4.039 2.422 5.993 3.029a.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028c1.961-.607 3.95-1.522 6.002-3.029a.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
-    </svg>
-  ),
 };
+
+const features = [
+  {
+    title: 'Launch faster',
+    desc: 'Unify APIs, tools, and automations in one secure dashboard.',
+  },
+  {
+    title: 'Stay in control',
+    desc: 'Manage token access and service permissions with confidence.',
+  },
+  {
+    title: 'Scale with clarity',
+    desc: 'Grow from solo workflow to team operations without chaos.',
+  },
+];
 
 function Login() {
   const [token, setToken] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showToken, setShowToken] = useState(false);
-  const [viewMode, setViewMode] = useState('pricing'); // 'login' | 'pricing'
+  const [viewMode, setViewMode] = useState('pricing');
   const [billingPlans, setBillingPlans] = useState([]);
+  const [plansLoading, setPlansLoading] = useState(true);
   const { setMasterToken, isAuthenticated } = useAuthStore();
 
   useEffect(() => {
@@ -66,12 +64,20 @@ function Login() {
 
   useEffect(() => {
     const loadPlans = async () => {
+      setPlansLoading(true);
       try {
         const res = await fetch('/api/v1/billing/plans');
-        if (!res.ok) return;
+        if (!res.ok) {
+          setBillingPlans([]);
+          return;
+        }
         const data = await res.json();
         setBillingPlans(Array.isArray(data?.data) ? data.data : []);
-      } catch {}
+      } catch {
+        setBillingPlans([]);
+      } finally {
+        setPlansLoading(false);
+      }
     };
     loadPlans();
   }, []);
@@ -101,7 +107,7 @@ function Login() {
         const errorData = await response.json();
         setError(errorData.error || 'Invalid token. Please check and try again.');
       }
-    } catch (err) {
+    } catch {
       setError('Connection failed. Is the server running?');
     } finally {
       setLoading(false);
@@ -112,55 +118,10 @@ function Login() {
     setError('');
     try {
       await startOAuthFlow(serviceId);
-    } catch (err) {
+    } catch {
       setError(`Failed to start ${serviceId} login. Please try again.`);
     }
   };
-
-  const oauthServices = [
-    AVAILABLE_SERVICES[0], // google
-    AVAILABLE_SERVICES[1], // github
-    AVAILABLE_SERVICES[2], // facebook
-  ].filter(Boolean);
-
-  const features = [
-    {
-      icon: (
-        <svg className="w-5 h-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-        </svg>
-      ),
-      title: 'Connect Services',
-      desc: 'Google, GitHub, Slack & more',
-    },
-    {
-      icon: (
-        <svg className="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-        </svg>
-      ),
-      title: 'Token Vault',
-      desc: 'API keys with fine-grained scopes',
-    },
-    {
-      icon: (
-        <svg className="w-5 h-5 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1 1 .26 2.698-1.31 2.698H4.908c-1.57 0-2.311-1.698-1.31-2.698l1.402-1.402m11.8 0L12 13.5l-4.8 1.8" />
-        </svg>
-      ),
-      title: 'AI Personas',
-      desc: 'Switch between AI personalities',
-    },
-    {
-      icon: (
-        <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
-        </svg>
-      ),
-      title: 'Knowledge Base',
-      desc: 'Personal AI memory & documents',
-    },
-  ];
 
   const handleCheckout = async (plan) => {
     setError('');
@@ -173,228 +134,174 @@ function Login() {
       });
       if (response.ok) {
         const result = await response.json();
-        if (result.url) {
-          window.location.href = result.url; // Redirect to Stripe Checkout
-        }
+        if (result.url) window.location.href = result.url;
       } else {
         const errorData = await response.json();
         setError(errorData.error || 'Failed to initiate checkout.');
       }
-    } catch (err) {
+    } catch {
       setError('Connection failed. Is the server running?');
     } finally {
       setLoading(false);
     }
   };
 
+  const oauthServices = [AVAILABLE_SERVICES[0], AVAILABLE_SERVICES[1], AVAILABLE_SERVICES[2]].filter(Boolean);
+
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col">
-      <div className="flex-1 flex items-center justify-center px-4 py-6 sm:py-10">
-        <div className={`w-full ${viewMode === 'pricing' ? 'max-w-7xl' : 'max-w-5xl'} flex flex-col lg:flex-row gap-8 lg:gap-16 items-center lg:items-start`}>
+    <div className="relative min-h-screen overflow-hidden bg-slate-950 text-white">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -left-28 top-0 h-80 w-80 rounded-full bg-blue-500/20 blur-3xl" />
+        <div className="absolute -right-20 bottom-10 h-96 w-96 rounded-full bg-indigo-500/20 blur-3xl animate-pulse" />
+      </div>
 
-          {/* Left side — Branding & Features */}
-          <div className="flex-1 text-center lg:text-left max-w-lg">
-            {/* Logo */}
-            <BrandLogo size="lg" className="mb-6" />
+      <div className="relative mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-6 sm:px-6 sm:py-8 lg:flex-row lg:items-center lg:gap-10 lg:px-10">
+        <section className="w-full lg:w-1/2 xl:w-[54%]">
+          <div className="max-w-xl">
+            <BrandLogo size="lg" className="mb-7" />
+            <p className="mb-3 text-sm font-semibold uppercase tracking-[0.16em] text-blue-300">MyApi Platform</p>
+            <h1 className="text-3xl font-semibold leading-tight sm:text-4xl">The professional command center for APIs, tokens, and AI workflows.</h1>
+            <p className="mt-4 text-base leading-relaxed text-slate-300 sm:text-lg">Connect providers, protect credentials, and run your automation stack from one focused workspace.</p>
 
-            <h2 className="text-xl sm:text-2xl font-semibold text-white mb-3">
-              Your Personal API Dashboard
-            </h2>
-            <p className="text-slate-400 text-base sm:text-lg mb-8 leading-relaxed">
-              One dashboard to manage your APIs, services, tokens, and AI personas with clarity and control.
-            </p>
+            <div className="mt-8 grid gap-3 sm:grid-cols-3 sm:gap-4">
+              {features.map((item) => (
+                <div key={item.title} className="rounded-xl border border-slate-800/90 bg-slate-900/70 p-4">
+                  <h3 className="text-sm font-semibold text-slate-100">{item.title}</h3>
+                  <p className="mt-1.5 text-xs leading-relaxed text-slate-400">{item.desc}</p>
+                </div>
+              ))}
+            </div>
 
-            {/* Feature cards grid */}
-            {viewMode === 'login' && (
-              <div className="grid grid-cols-2 gap-3 sm:gap-4">
-                {features.map((f, i) => (
-                  <div
-                    key={i}
-                    className="bg-white bg-opacity-5 backdrop-blur-sm border border-white border-opacity-10 rounded-xl p-3 sm:p-4 hover:bg-opacity-10 transition-colors duration-200"
-                  >
-                    <div className="mb-2">{f.icon}</div>
-                    <h3 className="text-sm font-semibold text-white mb-1">{f.title}</h3>
-                    <p className="text-xs text-slate-400 leading-relaxed">{f.desc}</p>
-                  </div>
-                ))}
-              </div>
-            )}
+            <div className="mt-7 flex flex-wrap items-center gap-3 text-xs text-slate-400 sm:text-sm">
+              <span className="rounded-full border border-slate-700/90 bg-slate-900/70 px-3 py-1.5">Encrypted token storage</span>
+              <span className="rounded-full border border-slate-700/90 bg-slate-900/70 px-3 py-1.5">OAuth + Master token access</span>
+              <span className="rounded-full border border-slate-700/90 bg-slate-900/70 px-3 py-1.5">Self-host friendly</span>
+            </div>
           </div>
+        </section>
 
-          {/* Right side — Logic/Pricing Card */}
-          <div className={`w-full ${viewMode === 'pricing' ? 'max-w-6xl' : 'max-w-sm lg:max-w-md'}`}>
-            <div className="mb-4 inline-flex w-full rounded-xl border border-slate-700 bg-slate-900/60 p-1">
+        <section className="mt-7 w-full lg:mt-0 lg:w-1/2 xl:w-[46%]">
+          <div className="rounded-2xl border border-slate-700/70 bg-slate-900/85 p-4 shadow-2xl shadow-black/40 backdrop-blur-xl sm:p-5">
+            <div className="mb-4 inline-flex w-full rounded-xl border border-slate-700 bg-slate-900/80 p-1">
               <button
                 onClick={() => setViewMode('pricing')}
-                className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${viewMode === 'pricing' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}
+                className={`flex-1 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors ${viewMode === 'pricing' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}
               >
-                Pricing Plans
+                Pricing
               </button>
               <button
                 onClick={() => setViewMode('login')}
-                className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${viewMode === 'login' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}
+                className={`flex-1 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors ${viewMode === 'login' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}
               >
                 Login
               </button>
             </div>
+
+            {error && (
+              <div className="mb-4 rounded-xl border border-red-500/35 bg-red-500/10 px-3 py-2.5 text-sm text-red-300">{error}</div>
+            )}
+
             {viewMode === 'login' ? (
-              <>
-                {/* Login Card */}
-                <div className="bg-slate-900 bg-opacity-80 backdrop-blur-xl border border-slate-700 border-opacity-50 rounded-2xl p-6 sm:p-8 shadow-2xl">
-                  <h3 className="text-xl font-semibold text-white mb-1">Welcome back</h3>
-                  <p className="text-sm text-slate-400 mb-6">Sign in to your dashboard</p>
+              <div>
+                <h2 className="text-xl font-semibold">Welcome back</h2>
+                <p className="mb-5 mt-1 text-sm text-slate-400">Sign in securely with OAuth or your master token.</p>
 
-                  {/* Error message */}
-                  {error && (
-                    <div className="mb-4 rounded-xl bg-red-500 bg-opacity-10 border border-red-500 border-opacity-30 p-3 flex items-start gap-2">
-                      <svg className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                      </svg>
-                      <p className="text-sm text-red-300">{error}</p>
-                    </div>
-                  )}
+                <div className="space-y-2.5">
+                  {oauthServices.map((service) => (
+                    <button
+                      key={service.id}
+                      onClick={() => handleOAuthClick(service.id)}
+                      className="flex min-h-[46px] w-full items-center justify-center gap-3 rounded-xl border border-slate-700 bg-slate-800/70 px-4 py-3 text-sm font-medium text-white transition-all hover:border-slate-500 hover:bg-slate-800"
+                    >
+                      <span>{OAuthIcons[service.id] || null}</span>
+                      <span>Continue with {service.name}</span>
+                    </button>
+                  ))}
+                </div>
 
-                  {/* OAuth Buttons */}
-                  <div className="space-y-2.5 mb-6">
-                    {oauthServices.map((service) => (
+                <div className="relative my-5">
+                  <div className="border-t border-slate-700/80" />
+                  <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 bg-slate-900 px-3 text-xs text-slate-500">or use master token</span>
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div>
+                    <label htmlFor="token" className="mb-1.5 block text-sm font-medium text-slate-300">Master Token</label>
+                    <div className="relative">
+                      <input
+                        id="token"
+                        type={showToken ? 'text' : 'password'}
+                        autoComplete="off"
+                        required
+                        value={token}
+                        onChange={(e) => setToken(e.target.value)}
+                        className="min-h-[46px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 pr-12 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
+                        placeholder="Paste your master token"
+                      />
                       <button
-                        key={service.id}
-                        onClick={() => handleOAuthClick(service.id)}
-                        className="w-full flex items-center justify-center gap-3 px-4 py-3 border border-slate-700 rounded-xl text-sm font-medium text-white bg-slate-800 bg-opacity-50 hover:bg-opacity-80 hover:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900 transition-all duration-200 min-h-[44px]"
+                        type="button"
+                        onClick={() => setShowToken(!showToken)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 transition hover:text-white"
+                        aria-label={showToken ? 'Hide token' : 'Show token'}
                       >
-                        <span className="flex-shrink-0">{OAuthIcons[service.id] || null}</span>
-                        <span>Continue with {service.name}</span>
+                        {showToken ? '🙈' : '👁️'}
                       </button>
-                    ))}
-                  </div>
-
-                  {/* Divider */}
-                  <div className="relative mb-6">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-slate-700 border-opacity-50"></div>
-                    </div>
-                    <div className="relative flex justify-center">
-                      <span className="px-3 text-xs text-slate-500 bg-slate-900 bg-opacity-80">or use master token</span>
                     </div>
                   </div>
 
-                  {/* Token Form */}
-                  <form onSubmit={handleSubmit} className="space-y-4">
-                    <div>
-                      <label htmlFor="token" className="block text-sm font-medium text-slate-300 mb-1.5">
-                        Master Token
-                      </label>
-                      <div className="relative">
-                        <input
-                          id="token"
-                          type={showToken ? 'text' : 'password'}
-                          autoComplete="off"
-                          required
-                          value={token}
-                          onChange={(e) => setToken(e.target.value)}
-                          className="w-full px-4 py-3 pr-12 rounded-xl border border-slate-700 bg-slate-800 bg-opacity-50 text-white placeholder-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-30 focus:outline-none transition-all duration-200 text-sm min-h-[44px]"
-                          placeholder="Paste your master token"
-                        />
+                  <button
+                    type="submit"
+                    disabled={loading || !token}
+                    className="min-h-[46px] w-full rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-lg transition hover:from-blue-500 hover:to-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {loading ? 'Verifying...' : 'Sign In'}
+                  </button>
+                </form>
+              </div>
+            ) : (
+              <div>
+                <h2 className="text-xl font-semibold">Choose your plan</h2>
+                <p className="mb-5 mt-1 text-sm text-slate-400">Start free, then upgrade when your automation grows.</p>
+
+                {plansLoading ? (
+                  <div className="rounded-xl border border-slate-700/80 bg-slate-900/60 px-4 py-8 text-center text-sm text-slate-400">Loading plans…</div>
+                ) : billingPlans.length === 0 ? (
+                  <div className="rounded-xl border border-slate-700/80 bg-slate-900/60 px-4 py-8 text-center text-sm text-slate-400">No plans available right now. Please try again shortly.</div>
+                ) : (
+                  <div className="space-y-3">
+                    {billingPlans.map((plan) => (
+                      <div key={plan.id} className={`rounded-xl border p-4 ${plan.id === 'pro' ? 'border-blue-500/60 bg-blue-500/10' : 'border-slate-700/80 bg-slate-900/60'}`}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <h3 className="text-base font-semibold text-white">{plan.name}</h3>
+                            <p className="mt-0.5 text-xs text-slate-400">{plan.description}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-xl font-semibold text-white">${plan.priceMonthly}<span className="text-sm font-normal text-slate-400">/mo</span></p>
+                          </div>
+                        </div>
+
+                        <ul className="mb-4 mt-3 space-y-1.5 text-sm text-slate-300">
+                          {(plan.features || []).map((feature) => (
+                            <li key={feature} className="flex items-start gap-2"><span className="mt-0.5 text-emerald-400">•</span><span>{feature}</span></li>
+                          ))}
+                        </ul>
+
                         <button
-                          type="button"
-                          onClick={() => setShowToken(!showToken)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors p-1"
-                          aria-label={showToken ? 'Hide token' : 'Show token'}
+                          onClick={() => (plan.id === 'free' ? setViewMode('login') : handleCheckout(plan.id))}
+                          disabled={loading}
+                          className={`min-h-[42px] w-full rounded-lg px-4 py-2 text-sm font-semibold transition ${plan.id === 'free' ? 'border border-slate-600 text-slate-200 hover:bg-slate-800' : 'bg-blue-600 text-white hover:bg-blue-500'} disabled:cursor-not-allowed disabled:opacity-50`}
                         >
-                          {showToken ? (
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                            </svg>
-                          ) : (
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                            </svg>
-                          )}
+                          {plan.id === 'free' ? 'Start Free' : 'Subscribe'}
                         </button>
                       </div>
-                    </div>
-
-                    <button
-                      type="submit"
-                      disabled={loading || !token}
-                      className="w-full px-4 py-3 rounded-xl font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 shadow-lg min-h-[44px] text-sm"
-                    >
-                      {loading ? (
-                        <span className="flex items-center justify-center gap-2">
-                          <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          Verifying...
-                        </span>
-                      ) : 'Sign In'}
-                    </button>
-                  </form>
-
-                  {/* Help text */}
-                  <p className="mt-4 text-center text-xs text-slate-500">
-                    New here? Open <button type="button" onClick={() => setViewMode('pricing')} className="text-blue-400 hover:text-blue-300 underline underline-offset-2">Pricing Plans</button> to get started.
-                  </p>
-                </div>
-                
-                {/* Trust badges */}
-                <div className="mt-4 flex items-center justify-center gap-4 text-xs text-slate-600">
-                  <span className="flex items-center gap-1">
-                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-                    </svg>
-                    Encrypted
-                  </span>
-                  <span>•</span>
-                  <span className="flex items-center gap-1">
-                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    Self-hosted
-                  </span>
-                  <span>•</span>
-                  <span>Open Source</span>
-                </div>
-              </>
-            ) : (
-              /* Pricing Card */
-              <div className="w-full bg-slate-900/80 backdrop-blur-xl border border-slate-700/60 rounded-2xl shadow-2xl p-3 sm:p-5 lg:p-6 mt-6 sm:mt-0">
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-5">
-                {(billingPlans.length ? billingPlans : [
-                  { id: 'free', name: 'Free', priceMonthly: 0, description: 'Perfect for individuals getting started', features: ['1 AI Persona', '3 Service Connections', '10 MB Knowledge Base', '5 Token Vault', 'Attach up to 4 Skills'] },
-                  { id: 'pro', name: 'Pro', priceMonthly: 15, description: 'For creators and small teams', features: ['5 AI Persona', 'All Service Connections', '50 MB Knowledge Base', 'Token Vault', 'Attach unlimited Skills'] },
-                  { id: 'enterprise', name: 'Enterprise', priceMonthly: 30, description: 'Scale with higher limits and priority', features: ['20 AI Persona', 'All Service Connections', '200 MB Knowledge Base', 'Token Vault', 'Attach unlimited Skills'] },
-                ]).map((plan) => (
-                  <div key={plan.id} className={`h-full rounded-2xl border ${plan.id === 'pro' ? 'border-blue-500/60 bg-gradient-to-br from-blue-900/30 to-indigo-900/20 shadow-lg shadow-blue-900/40' : plan.id === 'enterprise' ? 'border-purple-500/40 bg-slate-900/70' : 'border-slate-700/70 bg-slate-900/60'} p-5 sm:p-7 flex flex-col`}>
-                    <div className="flex items-start justify-between mb-2">
-                      <h3 className={`text-xl font-semibold ${plan.id === 'pro' ? 'text-blue-300' : plan.id === 'enterprise' ? 'text-purple-300' : 'text-white'}`}>{plan.name}</h3>
-                      {plan.id === 'pro' && <span className="text-[10px] font-bold uppercase tracking-wider py-1 px-2 rounded bg-blue-600 text-white">Popular</span>}
-                    </div>
-
-                    <div className="text-3xl font-bold text-white mb-1">${plan.priceMonthly} <span className="text-sm text-slate-400 font-normal">/mo</span></div>
-                    <p className="text-sm text-slate-400 mb-6">{plan.description}</p>
-
-                    <ul className="space-y-3 mb-6 text-sm text-slate-200 flex-1">
-                      {(plan.features || []).map((feature) => (
-                        <li key={feature} className="flex gap-2 items-start"><span className="text-emerald-400 mt-0.5">•</span> <span>{feature}</span></li>
-                      ))}
-                    </ul>
-
-                    <button
-                      onClick={() => (plan.id === 'free' ? setViewMode('login') : handleCheckout(plan.id))}
-                      disabled={loading}
-                      className={`w-full py-2.5 px-4 rounded-lg transition-colors font-medium text-sm ${plan.id === 'free' ? 'border border-slate-600 text-slate-200 hover:bg-slate-800' : plan.id === 'enterprise' ? 'bg-purple-600 hover:bg-purple-500 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
-                    >
-                      {plan.id === 'free' ? 'Start Free' : 'Subscribe'}
-                    </button>
+                    ))}
                   </div>
-                ))}
-                </div>
+                )}
               </div>
             )}
           </div>
-        </div>
+        </section>
       </div>
     </div>
   );
