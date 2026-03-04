@@ -715,52 +715,68 @@ app.get('/openapi.json', (req, res) => {
     },
     security: [{ bearerAuth: [] }],
     paths: {
-      '/api/v1/capabilities': {
-        get: {
-          summary: 'Scope-aware capability manifest',
-          description: 'Returns only endpoints available to the caller scope.',
-          security: [{ bearerAuth: [] }],
-          responses: {
-            '200': { description: 'Capabilities manifest' },
-            '401': { description: 'Unauthorized', content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } } },
-          },
-        },
-      },
-      '/api/v1/tokens/me/capabilities': {
-        get: {
-          summary: 'Capability manifest for current token',
-          security: [{ bearerAuth: [] }],
-          responses: { '200': { description: 'Token capability manifest' } },
-        },
-      },
-      '/api/v1/vault/discover-api': {
-        post: {
-          summary: 'Discover likely API base URL from website URL',
-          security: [{ bearerAuth: [] }],
-          requestBody: {
-            required: true,
-            content: { 'application/json': { schema: { $ref: '#/components/schemas/DiscoveryRequest' } } },
-          },
-          responses: {
-            '200': { description: 'Discovery metadata' },
-            '400': { description: 'Invalid request', content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } } },
-          },
-        },
-      },
+      '/api/v1/capabilities': { get: { summary: 'Scope-aware capability manifest', security: [{ bearerAuth: [] }], responses: { '200': { description: 'OK' } } } },
+      '/api/v1/tokens/me/capabilities': { get: { summary: 'Current token capabilities', security: [{ bearerAuth: [] }], responses: { '200': { description: 'OK' } } } },
+
+      '/api/v1/auth/register': { post: { summary: 'Register user', responses: { '201': { description: 'Created' } } } },
+      '/api/v1/auth/login': { post: { summary: 'Login', responses: { '200': { description: 'OK' } } } },
+      '/api/v1/auth/logout': { post: { summary: 'Logout', security: [{ bearerAuth: [] }], responses: { '200': { description: 'OK' } } } },
+      '/api/v1/auth/me': { get: { summary: 'Current user', security: [{ bearerAuth: [] }], responses: { '200': { description: 'OK' } } } },
+
+      '/api/v1/identity': { get: { summary: 'Read identity', security: [{ bearerAuth: [] }] } },
+      '/api/v1/identity/professional': { get: { summary: 'Read professional identity', security: [{ bearerAuth: [] }] } },
+      '/api/v1/identity/availability': { get: { summary: 'Read availability identity', security: [{ bearerAuth: [] }] } },
+      '/api/v1/preferences': { get: { summary: 'Get preferences', security: [{ bearerAuth: [] }] }, put: { summary: 'Update preferences', security: [{ bearerAuth: [] }] } },
+
+      '/api/v1/vault/discover-api': { post: { summary: 'Discover API metadata', security: [{ bearerAuth: [] }] } },
       '/api/v1/vault/tokens': {
+        get: { summary: 'List vault tokens', security: [{ bearerAuth: [] }] },
         post: {
           summary: 'Store API token with optional API discovery',
           security: [{ bearerAuth: [] }],
-          requestBody: {
-            required: true,
-            content: { 'application/json': { schema: { $ref: '#/components/schemas/VaultTokenCreateRequest' } } },
-          },
-          responses: {
-            '201': { description: 'Vault token created' },
-            '400': { description: 'Validation error', content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } } },
-          },
+          requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/VaultTokenCreateRequest' } } } },
+          responses: { '201': { description: 'Created' } },
         },
       },
+      '/api/v1/vault/tokens/{id}/reveal': { get: { summary: 'Reveal vault token', security: [{ bearerAuth: [] }] } },
+      '/api/v1/vault/tokens/{id}': { delete: { summary: 'Delete vault token', security: [{ bearerAuth: [] }] } },
+
+      '/api/v1/tokens': { get: { summary: 'List access tokens', security: [{ bearerAuth: [] }] }, post: { summary: 'Create access token', security: [{ bearerAuth: [] }] } },
+      '/api/v1/tokens/{id}': { get: { summary: 'Get token', security: [{ bearerAuth: [] }] }, put: { summary: 'Update token', security: [{ bearerAuth: [] }] }, delete: { summary: 'Revoke token', security: [{ bearerAuth: [] }] } },
+      '/api/v1/tokens/{id}/regenerate': { post: { summary: 'Regenerate token secret', security: [{ bearerAuth: [] }] } },
+      '/api/v1/tokens/master/regenerate': { post: { summary: 'Regenerate master token', security: [{ bearerAuth: [] }] } },
+      '/api/v1/scopes': { get: { summary: 'List scopes', security: [{ bearerAuth: [] }] } },
+
+      '/api/v1/connectors': { get: { summary: 'List connectors', security: [{ bearerAuth: [] }] }, post: { summary: 'Create connector', security: [{ bearerAuth: [] }] } },
+      '/api/v1/gateway/context': { get: { summary: 'Gateway context', security: [{ bearerAuth: [] }] } },
+      '/api/v1/audit/log': { get: { summary: 'Audit logs', security: [{ bearerAuth: [] }] } },
+
+      '/api/v1/users': { get: { summary: 'List users', security: [{ bearerAuth: [] }] }, post: { summary: 'Create user', security: [{ bearerAuth: [] }] } },
+      '/api/v1/users/{id}/plan': { put: { summary: 'Update user plan', security: [{ bearerAuth: [] }] } },
+
+      '/api/v1/handshakes': { get: { summary: 'List handshakes', security: [{ bearerAuth: [] }] }, post: { summary: 'Create handshake', security: [{ bearerAuth: [] }] } },
+      '/api/v1/handshakes/{id}/approve': { post: { summary: 'Approve handshake', security: [{ bearerAuth: [] }] } },
+      '/api/v1/handshakes/{id}/deny': { post: { summary: 'Deny handshake', security: [{ bearerAuth: [] }] } },
+      '/api/v1/handshakes/{id}': { delete: { summary: 'Revoke handshake', security: [{ bearerAuth: [] }] } },
+
+      '/api/v1/personas': { get: { summary: 'List personas', security: [{ bearerAuth: [] }] }, post: { summary: 'Create persona', security: [{ bearerAuth: [] }] } },
+      '/api/v1/personas/{id}': { get: { summary: 'Get persona', security: [{ bearerAuth: [] }] }, put: { summary: 'Update persona', security: [{ bearerAuth: [] }] }, delete: { summary: 'Delete persona', security: [{ bearerAuth: [] }] } },
+      '/api/v1/personas/{id}/activate': { post: { summary: 'Activate persona', security: [{ bearerAuth: [] }] } },
+      '/api/v1/personas/{id}/documents': { get: { summary: 'List persona docs', security: [{ bearerAuth: [] }] }, post: { summary: 'Attach doc to persona', security: [{ bearerAuth: [] }] } },
+      '/api/v1/personas/{id}/documents/{docId}': { delete: { summary: 'Detach persona doc', security: [{ bearerAuth: [] }] } },
+      '/api/v1/personas/{id}/skills': { get: { summary: 'List persona skills', security: [{ bearerAuth: [] }] }, post: { summary: 'Attach skill to persona', security: [{ bearerAuth: [] }] } },
+      '/api/v1/personas/{id}/skills/{skillId}': { delete: { summary: 'Detach skill from persona', security: [{ bearerAuth: [] }] } },
+
+      '/api/v1/skills': { get: { summary: 'List skills', security: [{ bearerAuth: [] }] }, post: { summary: 'Create skill', security: [{ bearerAuth: [] }] } },
+      '/api/v1/skills/{id}': { get: { summary: 'Get skill', security: [{ bearerAuth: [] }] }, put: { summary: 'Update skill', security: [{ bearerAuth: [] }] }, delete: { summary: 'Delete skill', security: [{ bearerAuth: [] }] } },
+      '/api/v1/skills/{id}/activate': { post: { summary: 'Activate skill', security: [{ bearerAuth: [] }] } },
+      '/api/v1/skills/{id}/documents': { get: { summary: 'List skill docs', security: [{ bearerAuth: [] }] }, post: { summary: 'Attach doc to skill', security: [{ bearerAuth: [] }] } },
+      '/api/v1/skills/{id}/documents/{docId}': { delete: { summary: 'Detach doc from skill', security: [{ bearerAuth: [] }] } },
+      '/api/v1/skills/{id}/attachments': { get: { summary: 'List skill persona attachments', security: [{ bearerAuth: [] }] } },
+
+      '/api/v1/brain/knowledge-base': { get: { summary: 'List KB docs', security: [{ bearerAuth: [] }] }, post: { summary: 'Create KB doc', security: [{ bearerAuth: [] }] } },
+      '/api/v1/brain/knowledge-base/{id}': { get: { summary: 'Get KB doc', security: [{ bearerAuth: [] }] }, delete: { summary: 'Delete KB doc', security: [{ bearerAuth: [] }] } },
+      '/api/v1/brain/knowledge-base/{id}/attachments': { get: { summary: 'KB attachment usage', security: [{ bearerAuth: [] }] } },
       '/api/v1/brain/knowledge-base/upload': {
         post: {
           summary: 'Upload KB document',
@@ -781,12 +797,29 @@ app.get('/openapi.json', (req, res) => {
               },
             },
           },
-          responses: {
-            '201': { description: 'Document uploaded and chunked into KB entries' },
-            '400': { description: 'Upload validation error', content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } } },
-          },
+          responses: { '201': { description: 'Created' } },
         },
       },
+
+      '/api/v1/marketplace/listings': { get: { summary: 'List marketplace', security: [{ bearerAuth: [] }] }, post: { summary: 'Create listing', security: [{ bearerAuth: [] }] } },
+      '/api/v1/marketplace/listings/{id}': { get: { summary: 'Get listing', security: [{ bearerAuth: [] }] }, put: { summary: 'Update listing', security: [{ bearerAuth: [] }] }, delete: { summary: 'Delete listing', security: [{ bearerAuth: [] }] } },
+      '/api/v1/marketplace/listings/{id}/rate': { post: { summary: 'Rate listing', security: [{ bearerAuth: [] }] } },
+      '/api/v1/marketplace/listings/{id}/install': { post: { summary: 'Install listing', security: [{ bearerAuth: [] }] } },
+      '/api/v1/marketplace/my-listings': { get: { summary: 'My listings', security: [{ bearerAuth: [] }] } },
+
+      '/api/v1/services/categories': { get: { summary: 'Service categories', security: [{ bearerAuth: [] }] } },
+      '/api/v1/services': { get: { summary: 'List services', security: [{ bearerAuth: [] }] } },
+      '/api/v1/services/{name}': { get: { summary: 'Get service', security: [{ bearerAuth: [] }] } },
+      '/api/v1/services/{serviceId}/methods': { get: { summary: 'Service methods', security: [{ bearerAuth: [] }] } },
+      '/api/v1/services/{serviceName}/execute': { post: { summary: 'Execute service method', security: [{ bearerAuth: [] }] } },
+
+      '/api/v1/oauth/authorize/{service}': { get: { summary: 'OAuth authorize URL', security: [{ bearerAuth: [] }] } },
+      '/api/v1/oauth/callback/{service}': { get: { summary: 'OAuth callback', responses: { '200': { description: 'OK' } } } },
+      '/api/v1/oauth/status': { get: { summary: 'OAuth status', security: [{ bearerAuth: [] }] } },
+      '/api/v1/oauth/disconnect/{service}': { post: { summary: 'Disconnect OAuth service', security: [{ bearerAuth: [] }] } },
+
+      '/api/v1/billing/plans': { get: { summary: 'Billing plans' } },
+      '/api/v1/billing/checkout': { post: { summary: 'Billing checkout' } },
     },
   });
 });
