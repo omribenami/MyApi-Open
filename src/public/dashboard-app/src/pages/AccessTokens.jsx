@@ -101,6 +101,17 @@ function AccessTokens() {
     return `${'•'.repeat(token.length - 8)}${token.slice(-8)}`;
   };
 
+
+  const getExpiryContext = (expiresAt) => {
+    if (!expiresAt) return { label: 'Never', tooltip: 'This token does not expire automatically.' };
+    const expiryDate = new Date(expiresAt);
+    const diffMs = expiryDate.getTime() - Date.now();
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    const label = expiryDate.toLocaleDateString();
+    if (diffDays < 0) return { label, tooltip: `Expired ${Math.abs(diffDays)} day(s) ago` };
+    if (diffDays === 0) return { label, tooltip: 'Expires today' };
+    return { label, tooltip: `Expires in ${diffDays} day(s)` };
+  };
   const copyText = async (text) => {
     if (!text) return false;
 
@@ -285,7 +296,7 @@ function AccessTokens() {
   };
 
   const handleOpenCreate = () => {
-    setShowCreateForm((v) => !v);
+    setShowCreateForm(true);
     setNewlyCreated(null);
     // Reset persona state when toggling form
     setAllowedPersonas([]);
@@ -403,7 +414,7 @@ function AccessTokens() {
             onClick={handleOpenCreate}
             className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors flex-shrink-0"
           >
-            {showCreateForm ? 'Cancel' : '+ New Token'}
++ New Token
           </button>
         </div>
 
@@ -430,7 +441,7 @@ function AccessTokens() {
             <div className="mt-2 flex gap-4 text-xs text-slate-400">
               <span>Label: <span className="text-slate-300">{newlyCreated.label || newlyCreated.name}</span></span>
               {newlyCreated.expiresAt && (
-                <span>Expires: <span className="text-slate-300">{new Date(newlyCreated.expiresAt).toLocaleDateString()}</span></span>
+                <span title={getExpiryContext(newlyCreated.expiresAt).tooltip}>Expires: <span className="text-slate-300">{getExpiryContext(newlyCreated.expiresAt).label}</span></span>
               )}
             </div>
             <button
@@ -444,7 +455,13 @@ function AccessTokens() {
 
         {/* Create Form */}
         {showCreateForm && (
-          <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+            <div className="bg-slate-800 border border-slate-700 rounded-lg p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-white">New Guest Token</h3>
+                <button onClick={() => setShowCreateForm(false)} className="text-slate-400 hover:text-slate-200 text-xl">✕</button>
+              </div>
+
             <h3 className="text-lg font-semibold text-white mb-4">New Guest Token</h3>
             <form onSubmit={handleCreateSubmit} className="space-y-5">
               <div>
@@ -582,8 +599,11 @@ function AccessTokens() {
                 </button>
               </div>
             </form>
+          
+            </div>
           </div>
         )}
+
 
         {/* Guest Tokens List */}
         {isLoading ? (
@@ -643,13 +663,11 @@ function AccessTokens() {
                         {token.createdAt && (
                           <span>Created: {new Date(token.createdAt).toLocaleDateString()}</span>
                         )}
-                        {token.expiresAt ? (
-                          <span className="text-amber-400">
-                            Expires: {new Date(token.expiresAt).toLocaleDateString()}
+                        {(() => { const exp = getExpiryContext(token.expiresAt); return (
+                          <span className={token.expiresAt ? 'text-amber-400' : ''} title={exp.tooltip}>
+                            Expires: {exp.label}
                           </span>
-                        ) : (
-                          <span>Expires: Never</span>
-                        )}
+                        ); })()}
                       </div>
 
                       <div className="mt-3 p-3 bg-slate-900 rounded-lg border border-slate-700">

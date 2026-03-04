@@ -12,6 +12,8 @@ function TokenVault() {
   // revealedTokens maps id -> decrypted token string (or null if not revealed)
   const [revealedTokens, setRevealedTokens] = useState({});
   const [revealingId, setRevealingId] = useState(null);
+  const [editingToken, setEditingToken] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const services = [
     { id: 'openai', name: 'OpenAI', icon: '🤖' },
@@ -83,7 +85,7 @@ function TokenVault() {
     }
   };
 
-  const handleAddToken = async () => {
+  const handleSaveToken = async () => {
     if (!formData.name || !formData.token || !formData.websiteUrl) {
       setError('Name, URL, and token are required');
       return;
@@ -91,8 +93,8 @@ function TokenVault() {
     setError('');
 
     try {
-      const response = await fetch('/api/v1/vault/tokens', {
-        method: 'POST',
+      const response = await fetch(editingToken ? `/api/v1/vault/tokens/${editingToken.id}` : '/api/v1/vault/tokens', {
+        method: editingToken ? 'PUT' : 'POST',
         headers: {
           'Authorization': `Bearer ${masterToken}`,
           'Content-Type': 'application/json',
@@ -110,18 +112,18 @@ function TokenVault() {
       if (response.ok) {
         setFormData({ name: '', token: '', websiteUrl: '', discoveredApiUrl: '', discoveredAuthScheme: '' });
         setShowAddModal(false);
+        setEditingToken(null);
         await fetchTokens();
       } else {
         const errData = await response.json().catch(() => ({}));
-        setError(errData.error || 'Failed to add token');
+        setError(errData.error || `Failed to ${editingToken ? 'update' : 'add'} token`);
       }
     } catch (err) {
-      setError('Error adding token');
+      setError(`Error ${editingToken ? 'updating' : 'adding'} token`);
     }
   };
 
   const handleDeleteToken = async (tokenId) => {
-    if (!window.confirm('Delete this token?')) return;
 
     try {
       const response = await fetch(`/api/v1/vault/tokens/${tokenId}`, {
@@ -335,13 +337,30 @@ function TokenVault() {
                   )}
                 </div>
 
-                {/* Delete Button */}
-                <button
-                  onClick={() => handleDeleteToken(token.id)}
-                  className="text-red-400 hover:text-red-300 hover:bg-red-500/10 px-3 py-2 rounded transition-colors flex-shrink-0"
-                >
-                  Delete
-                </button>
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={() => {
+                      setEditingToken(token);
+                      setFormData({
+                        name: token.name || token.label || '',
+                        token: '',
+                        websiteUrl: token.websiteUrl || '',
+                        discoveredApiUrl: token.discoveredApiUrl || '',
+                        discoveredAuthScheme: token.discoveredAuthScheme || '',
+                      });
+                      setShowAddModal(true);
+                    }}
+                    className="text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 px-3 py-2 rounded transition-colors flex-shrink-0"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => setDeleteTarget(token)}
+                    className="text-red-400 hover:text-red-300 hover:bg-red-500/10 px-3 py-2 rounded transition-colors flex-shrink-0"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             </div>
           ))}
@@ -352,7 +371,7 @@ function TokenVault() {
       {showAddModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-700 rounded-lg p-6 max-w-md w-full">
-            <h2 className="text-xl font-bold text-white mb-4">Add External Token</h2>
+            <h2 className="text-xl font-bold text-white mb-4">{editingToken ? 'Edit External Token' : 'Add External Token'}</h2>
 
             {error && (
               <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-sm">
@@ -428,6 +447,7 @@ function TokenVault() {
               <button
                 onClick={() => {
                   setShowAddModal(false);
+                  setEditingToken(null);
                   setFormData({ name: '', token: '', websiteUrl: '', discoveredApiUrl: '', discoveredAuthScheme: '' });
                   setError('');
                 }}
@@ -436,10 +456,39 @@ function TokenVault() {
                 Cancel
               </button>
               <button
-                onClick={handleAddToken}
+                onClick={handleSaveToken}
                 className="flex-1 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors"
               >
-                Add Token
+                {editingToken ? 'Save Changes' : 'Add Token'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-red-800 rounded-lg max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold text-red-300 mb-2">Delete token?</h3>
+            <p className="text-sm text-slate-300 mb-5">
+              Are you sure you want to delete <span className="font-semibold text-white">{deleteTarget.name || deleteTarget.label}</span>?
+              This action cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                className="flex-1 px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  await handleDeleteToken(deleteTarget.id);
+                  setDeleteTarget(null);
+                }}
+                className="flex-1 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white"
+              >
+                Delete
               </button>
             </div>
           </div>
