@@ -48,6 +48,8 @@ function Login() {
   const [viewMode, setViewMode] = useState('pricing');
   const [billingPlans, setBillingPlans] = useState([]);
   const [plansLoading, setPlansLoading] = useState(true);
+  const [twoFactorRequired, setTwoFactorRequired] = useState(false);
+  const [twoFactorCode, setTwoFactorCode] = useState('');
   const { setMasterToken, setUser, isAuthenticated } = useAuthStore();
 
   useEffect(() => {
@@ -69,6 +71,11 @@ function Login() {
             window.history.replaceState({}, document.title, '/dashboard/');
             window.location.href = '/dashboard/';
           });
+      } else if (callback.status === 'pending_2fa') {
+        setTwoFactorRequired(true);
+        setViewMode('login');
+        setError('Enter your authenticator code to complete sign-in.');
+        window.history.replaceState({}, document.title, '/dashboard/');
       } else if (callback.error) {
         setError(`OAuth error: ${callback.error}`);
         window.history.replaceState({}, document.title, '/dashboard/');
@@ -133,6 +140,35 @@ function Login() {
     const mode = (serviceId === 'google' || serviceId === 'facebook') ? 'login' : 'connect';
     const params = new URLSearchParams({ mode, returnTo: '/dashboard/', redirect: '1' });
     window.location.href = `/api/v1/oauth/authorize/${serviceId}?${params.toString()}`;
+  };
+
+  const handleTwoFactorChallenge = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      const response = await fetch('/api/v1/auth/2fa/challenge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ code: twoFactorCode.trim() }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setError(result.error || 'Invalid 2FA code. Please try again.');
+        return;
+      }
+
+      const sessionUser = result?.data?.user || null;
+      const masterToken = result?.data?.bootstrap?.masterToken || null;
+      if (masterToken) setMasterToken(masterToken);
+      if (sessionUser) setUser(sessionUser);
+      window.location.href = '/dashboard/';
+    } catch {
+      setError('Failed to verify 2FA code. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleCheckout = async (plan) => {
@@ -218,25 +254,50 @@ function Login() {
                   <h2 className="text-2xl font-semibold">Welcome back</h2>
                   <p className="mb-6 mt-2 text-sm text-slate-400 sm:text-base">Sign in securely with OAuth or your master token.</p>
 
-                  <div className="space-y-3">
-                    {oauthServices.map((service) => (
+                  {twoFactorRequired ? (
+                    <form onSubmit={handleTwoFactorChallenge} className="space-y-4">
+                      <div>
+                        <label htmlFor="twoFactorCode" className="mb-2 block text-sm font-medium text-slate-300">Authenticator Code</label>
+                        <input
+                          id="twoFactorCode"
+                          type="text"
+                          autoComplete="one-time-code"
+                          required
+                          value={twoFactorCode}
+                          onChange={(e) => setTwoFactorCode(e.target.value)}
+                          className="min-h-[48px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
+                          placeholder="Enter 6-digit code"
+                        />
+                      </div>
                       <button
-                        key={service.id}
-                        onClick={() => handleOAuthClick(service.id)}
-                        className="flex min-h-[48px] w-full items-center justify-center gap-3 rounded-xl border border-slate-700 bg-slate-800/70 px-4 py-3 text-sm font-medium text-white transition-colors hover:border-slate-500 hover:bg-slate-800"
+                        type="submit"
+                        disabled={loading || !twoFactorCode.trim()}
+                        className="min-h-[48px] w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        <span>{OAuthIcons[service.id] || null}</span>
-                        <span>Continue with {service.name}</span>
+                        {loading ? 'Verifying...' : 'Verify 2FA & Sign In'}
                       </button>
-                    ))}
-                  </div>
+                    </form>
+                  ) : (
+                    <>
+                      <div className="space-y-3">
+                        {oauthServices.map((service) => (
+                          <button
+                            key={service.id}
+                            onClick={() => handleOAuthClick(service.id)}
+                            className="flex min-h-[48px] w-full items-center justify-center gap-3 rounded-xl border border-slate-700 bg-slate-800/70 px-4 py-3 text-sm font-medium text-white transition-colors hover:border-slate-500 hover:bg-slate-800"
+                          >
+                            <span>{OAuthIcons[service.id] || null}</span>
+                            <span>Continue with {service.name}</span>
+                          </button>
+                        ))}
+                      </div>
 
-                  <div className="relative my-6">
-                    <div className="border-t border-slate-700/80" />
-                    <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 bg-slate-900 px-3 text-xs text-slate-500">or use master token</span>
-                  </div>
+                      <div className="relative my-6">
+                        <div className="border-t border-slate-700/80" />
+                        <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 bg-slate-900 px-3 text-xs text-slate-500">or use master token</span>
+                      </div>
 
-                  <form onSubmit={handleSubmit} className="space-y-4">
+                      <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
                       <label htmlFor="token" className="mb-2 block text-sm font-medium text-slate-300">Master Token</label>
                       <div className="relative">
@@ -269,8 +330,10 @@ function Login() {
                       {loading ? 'Verifying...' : 'Sign In'}
                     </button>
                   </form>
-                </div>
-              ) : (
+                </>
+              )}
+            </div>
+          ) : (
                 <div>
                   <h2 className="text-2xl font-semibold">Choose your plan</h2>
                   <p className="mb-6 mt-2 text-sm text-slate-400 sm:text-base">Start free, then upgrade when your automation grows.</p>

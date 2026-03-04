@@ -2158,8 +2158,50 @@ app.get('/api/v1/auth/2fa/status', authenticate, (req, res) => {
   return res.json({ data: { enabled: Boolean(state.twoFactorEnabled) } });
 });
 
+app.post('/api/v1/auth/2fa/challenge', (req, res) => {
+  try {
+    const { code } = req.body || {};
+    const pendingUser = req?.session?.pending_2fa_user;
+    if (!pendingUser?.id) return res.status(401).json({ error: 'No pending 2FA challenge' });
+    if (!code) return res.status(400).json({ error: '2FA code is required' });
+
+    const state = getUserTotpSecret(pendingUser.id);
+    if (!state?.totpSecret || !state?.twoFactorEnabled) {
+      return res.status(400).json({ error: '2FA is not enabled for this account' });
+    }
+
+    const verified = speakeasy.totp.verify({
+      secret: state.totpSecret,
+      encoding: 'base32',
+      token: String(code).replace(/\s+/g, ''),
+      window: 2,
+    });
+    if (!verified) return res.status(401).json({ error: 'Invalid 2FA code' });
+
+    req.session.user = pendingUser;
+    delete req.session.pending_2fa_user;
+
+    if (!req.session.masterTokenRaw) {
+      revokeExistingMasterTokens(pendingUser.id);
+      const rawMasterToken = crypto.randomBytes(32).toString('hex');
+      const hash = bcrypt.hashSync(rawMasterToken, 10);
+      const tokenId = createAccessToken(hash, pendingUser.id, 'full', 'Master Token (OAuth 2FA)', null, null);
+      req.session.masterTokenRaw = rawMasterToken;
+      req.session.masterTokenId = tokenId;
+    }
+
+    createAuditLog({ requesterId: String(pendingUser.id), action: '2fa_challenge_passed', resource: '/auth/2fa/challenge', scope: 'session', ip: req.ip });
+    return req.session.save(() => {
+      res.json({ ok: true, data: { user: req.session.user, bootstrap: { masterToken: req.session.masterTokenRaw, tokenId: req.session.masterTokenId || null } } });
+    });
+  } catch (error) {
+    return res.status(500).json({ error: `2FA challenge failed: ${error.message}` });
+  }
+});
+
 app.post("/api/v1/auth/logout", (req, res) => {
   if (req.session) {
+    delete req.session.pending_2fa_user;
     req.session.destroy(() => {});
   }
 
@@ -2760,6 +2802,23 @@ app.get("/api/v1/oauth/callback/:service", async (req, res) => {
         );
       } else {
         appUser = updateUserOAuthProfile(appUser.id, { displayName: name, email, avatarUrl }) || appUser;
+      }
+
+      if (appUser.twoFactorEnabled) {
+        req.session.pending_2fa_user = {
+          id: appUser.id,
+          username: appUser.username,
+          display_name: appUser.displayName || appUser.username,
+          email: appUser.email || email,
+          avatar_url: appUser.avatarUrl || avatarUrl || null,
+          two_factor_enabled: true,
+          roles: appUser.roles || 'user',
+        };
+        const next = encodeURIComponent(stateMeta.returnTo || '/dashboard/');
+        const redirectUrl = `/dashboard/?oauth_service=${service}&oauth_status=pending_2fa&next=${next}`;
+        return req.session.save(() => {
+          res.redirect(redirectUrl);
+        });
       }
 
       req.session.user = {
