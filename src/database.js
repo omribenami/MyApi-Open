@@ -736,17 +736,17 @@ function createUser(username, displayName, email, timezone, password, plan = 'fr
 }
 
 function getUsers() {
-  const stmt = db.prepare('SELECT id, username, display_name as displayName, email, timezone, created_at as createdAt, status, COALESCE(plan, "free") as plan FROM users ORDER BY created_at DESC');
+  const stmt = db.prepare("SELECT id, username, display_name as displayName, email, timezone, created_at as createdAt, status, COALESCE(plan, 'free') as plan FROM users ORDER BY created_at DESC");
   return stmt.all();
 }
 
 function getUserByUsername(username) {
-  const stmt = db.prepare('SELECT id, username, display_name as displayName, email, timezone, password_hash, created_at as createdAt, status, COALESCE(plan, "free") as plan FROM users WHERE username = ?');
+  const stmt = db.prepare("SELECT id, username, display_name as displayName, email, timezone, password_hash, created_at as createdAt, status, COALESCE(plan, 'free') as plan FROM users WHERE username = ?");
   return stmt.get(username);
 }
 
 function getUserById(id) {
-  const stmt = db.prepare('SELECT id, username, display_name as displayName, email, timezone, created_at as createdAt, status, COALESCE(plan, "free") as plan FROM users WHERE id = ?');
+  const stmt = db.prepare("SELECT id, username, display_name as displayName, email, timezone, created_at as createdAt, status, COALESCE(plan, 'free') as plan FROM users WHERE id = ?");
   return stmt.get(id);
 }
 

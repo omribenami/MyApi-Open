@@ -2360,7 +2360,14 @@ app.get("/api/v1/oauth/callback/:service", async (req, res) => {
 
       let appUser = getUsers().find((u) => (u.email || '').toLowerCase() === email.toLowerCase()) || existing;
       if (!appUser) {
-        appUser = createUser(username, crypto.randomBytes(24).toString('hex'), googleProfile?.data?.name || username, email, 'UTC');
+        appUser = createUser(
+          username,
+          googleProfile?.data?.name || username,
+          email,
+          'UTC',
+          crypto.randomBytes(24).toString('hex'),
+          'free'
+        );
       }
 
       req.session.user = {
