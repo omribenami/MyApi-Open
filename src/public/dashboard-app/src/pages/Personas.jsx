@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import PersonaDetailModal from '../components/PersonaDetailModal';
 import EnhancedPersonaBuilder from '../components/EnhancedPersonaBuilder';
@@ -12,6 +12,9 @@ function Personas() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingPersona, setEditingPersona] = useState(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('updated_desc');
 
   useEffect(() => {
     if (token) fetchPersonas();
@@ -196,6 +199,41 @@ function Personas() {
     }
   };
 
+
+
+  const filteredPersonas = useMemo(() => {
+    let list = [...personas];
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter((p) =>
+        (p.name || '').toLowerCase().includes(q) ||
+        (p.description || '').toLowerCase().includes(q) ||
+        (p.soul_content || '').toLowerCase().includes(q)
+      );
+    }
+
+    if (statusFilter === 'active') list = list.filter((p) => p.active);
+    if (statusFilter === 'inactive') list = list.filter((p) => !p.active);
+
+    const [key, dir] = sortBy.split('_');
+    list.sort((a, b) => {
+      let av;
+      let bv;
+      if (key === 'name') {
+        av = (a.name || '').toLowerCase();
+        bv = (b.name || '').toLowerCase();
+      } else {
+        av = new Date(a.updated_at || a.created_at).getTime();
+        bv = new Date(b.updated_at || b.created_at).getTime();
+      }
+      if (av < bv) return dir === 'asc' ? -1 : 1;
+      if (av > bv) return dir === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return list;
+  }, [personas, searchQuery, statusFilter, sortBy]);
   return (
     <div className="min-h-screen bg-slate-900 p-6 md:p-8">
       <div className="max-w-7xl mx-auto space-y-8">
@@ -230,22 +268,51 @@ function Personas() {
           </button>
         </div>
 
+        <div className="flex flex-col sm:flex-row gap-3">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search personas..."
+            className="flex-1 px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+          />
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+          >
+            <option value="all">All statuses</option>
+            <option value="active">Active only</option>
+            <option value="inactive">Inactive only</option>
+          </select>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:border-blue-500 focus:outline-none"
+          >
+            <option value="updated_desc">Recently updated</option>
+            <option value="updated_asc">Oldest updated</option>
+            <option value="name_asc">Name A-Z</option>
+            <option value="name_desc">Name Z-A</option>
+          </select>
+        </div>
+
         {/* Personas Grid */}
         {isLoading ? (
           <div className="text-center py-12">
             <p className="text-slate-400">Loading personas...</p>
           </div>
-        ) : personas.length === 0 ? (
+        ) : filteredPersonas.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-slate-400">No personas yet. Create one to get started!</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {personas.map((persona) => (
+            {filteredPersonas.map((persona) => (
               <div
                 key={persona.id}
                 onClick={() => handleSelectPersona(persona)}
-                className="bg-slate-800/90 border border-slate-700 rounded-lg p-5 hover:border-slate-500 cursor-pointer transition-colors duration-200"
+                className="bg-slate-800/90 border border-slate-700 rounded-lg p-5 hover:border-blue-500/70 hover:bg-slate-800 cursor-pointer transition-all duration-200 shadow-sm hover:shadow-blue-900/20"
               >
                 {/* Header */}
                 <div className="mb-3 flex items-center justify-between gap-3">

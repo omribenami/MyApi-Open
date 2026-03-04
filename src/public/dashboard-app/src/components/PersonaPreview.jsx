@@ -5,105 +5,12 @@ function PersonaPreview({ persona, showEditButton = false, onEdit = null }) {
 
   if (!persona) return null;
 
-  // Parse markdown-style content
-  const renderContent = (content) => {
-    if (!content) return null;
-
-    const lines = content.split('\n');
-    const elements = [];
-    let i = 0;
-
-    while (i < lines.length) {
-      const line = lines[i];
-
-      // Headings
-      if (line.startsWith('## ')) {
-        const title = line.substring(3).trim();
-        elements.push(
-          <div key={i} className="mt-6 mb-3 first:mt-0">
-            <h2 className="text-xl font-semibold text-slate-200 pb-1 border-b border-slate-700/50">
-              {title}
-            </h2>
-          </div>
-        );
-      } else if (line.startsWith('# ')) {
-        const title = line.substring(2).trim();
-        elements.push(
-          <h1 key={i} className="text-2xl font-semibold text-white mb-2">
-            {title}
-          </h1>
-        );
-      } else if (line.startsWith('### ')) {
-        const title = line.substring(4).trim();
-        elements.push(
-          <h3 key={i} className="text-md font-medium text-slate-300 mt-4 mb-2">
-            {title}
-          </h3>
-        );
-      }
-      // Bold text with definition (e.g., **Tone:** value)
-      else if (line.includes('**') && line.includes(':')) {
-        const parts = line.split(/\*\*(.*?)\*\:/).filter(Boolean);
-
-        if (parts.length >= 2) {
-          const label = parts[0];
-          const value = line.substring(line.indexOf(':') + 1).trim();
-
-          elements.push(
-            <div key={i} className="mb-2 ml-4">
-              <p className="text-slate-300 text-sm">
-                <span className="font-medium text-slate-200">{label}:</span>{' '}
-                <span>{value}</span>
-              </p>
-            </div>
-          );
-        } else {
-          elements.push(
-            <p key={i} className="text-slate-300 text-sm mb-2 leading-relaxed">
-              {line}
-            </p>
-          );
-        }
-      }
-      // Bullet points
-      else if (line.startsWith('- ')) {
-        const bulletText = line.substring(2).trim();
-        elements.push(
-          <div key={i} className="flex gap-2 mb-1.5 ml-4">
-            <span className="text-slate-500 flex-shrink-0">•</span>
-            <p className="text-slate-300 text-sm">{bulletText}</p>
-          </div>
-        );
-      }
-      // Empty lines (spacing)
-      else if (line.trim() === '') {
-        elements.push(<div key={i} className="h-1.5" />);
-      }
-      // Regular text
-      else if (line.trim()) {
-        elements.push(
-          <p key={i} className="text-slate-300 text-sm mb-2 leading-relaxed">
-            {line}
-          </p>
-        );
-      }
-
-      i++;
-    }
-
-    return elements;
-  };
 
   const soulContent = persona.soul_content || '';
   const shouldCollapse = soulContent.length > 420 || soulContent.split('\n').length > 14;
   const templateData = persona.template_data && typeof persona.template_data === 'object' ? persona.template_data : null;
 
-  const toLabel = (key) => key
-    .replace(/_/g, ' ')
-    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-
-  const renderValue = (value) => {
+    const renderValue = (value) => {
     if (value === null || value === undefined || value === '') return '—';
     if (Array.isArray(value)) {
       if (value.length === 0) return '—';
@@ -167,7 +74,9 @@ function PersonaPreview({ persona, showEditButton = false, onEdit = null }) {
           <div className="prose prose-invert max-w-none">
             <div className={`text-slate-300 overflow-hidden relative ${shouldCollapse && !showFullContent ? 'max-h-48' : ''}`}>
               <div className="rounded-md border border-slate-700/60 bg-slate-900/40 p-4">
-                {renderContent(soulContent)}
+                <pre className="whitespace-pre-wrap break-words font-mono text-sm text-slate-300 leading-relaxed">
+                  {soulContent}
+                </pre>
               </div>
               {shouldCollapse && !showFullContent && (
                 <div className="absolute bottom-0 left-0 w-full h-24 bg-gradient-to-t from-slate-800/90 to-transparent pointer-events-none"></div>
@@ -199,7 +108,7 @@ function PersonaPreview({ persona, showEditButton = false, onEdit = null }) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {Object.entries(templateData).map(([key, value]) => (
                 <div key={key} className="bg-slate-800/80 p-3 rounded-md border border-slate-700/50">
-                  <p className="text-slate-500 text-xs uppercase tracking-wider mb-1">{toLabel(key)}</p>
+                  <p className="text-slate-500 text-xs font-mono mb-1">{key}</p>
                   {typeof value === 'object' && value !== null ? (
                     <pre className="text-slate-300 text-xs whitespace-pre-wrap font-mono leading-relaxed">
                       {renderValue(value)}
