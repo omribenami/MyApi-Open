@@ -1951,6 +1951,13 @@ app.post("/api/v1/auth/token-login", (req, res) => {
 app.get("/api/v1/auth/me", (req, res) => {
   // Cookie-session auth (OAuth login path)
   if (req.session && req.session.user) {
+    if (!req.session.masterTokenRaw && req.session.user?.id) {
+      const rawMasterToken = crypto.randomBytes(32).toString('hex');
+      const hash = bcrypt.hashSync(rawMasterToken, 10);
+      const tokenId = createAccessToken(hash, req.session.user.id, 'full', 'Master Token (Session Bootstrap)', null, null);
+      req.session.masterTokenRaw = rawMasterToken;
+      req.session.masterTokenId = tokenId;
+    }
     return res.json({
       ...req.session.user,
       bootstrap: req.session.masterTokenRaw
@@ -2522,7 +2529,10 @@ app.get("/api/v1/oauth/callback/:service", async (req, res) => {
     });
 
     const next = encodeURIComponent(stateMeta.returnTo || '/dashboard/');
-    res.redirect(`/dashboard/?oauth_service=${service}&oauth_status=connected&mode=${encodeURIComponent(stateMeta.mode || 'connect')}&next=${next}`);
+    const redirectUrl = `/dashboard/?oauth_service=${service}&oauth_status=connected&mode=${encodeURIComponent(stateMeta.mode || 'connect')}&next=${next}`;
+    return req.session.save(() => {
+      res.redirect(redirectUrl);
+    });
   } catch (error) {
     createAuditLog({
       requesterId: req.ip,
