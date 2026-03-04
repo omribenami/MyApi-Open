@@ -52,7 +52,7 @@ function Layout({ children, onLogout }) {
               {/* Hamburger button - mobile only */}
               <button
                 onClick={() => setMenuOpen(!menuOpen)}
-                className="md:hidden p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                className="xl:hidden p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
                 aria-label="Toggle menu"
               >
                 {menuOpen ? (
@@ -73,7 +73,7 @@ function Layout({ children, onLogout }) {
             </div>
 
             {/* Desktop Navigation */}
-            <div className="hidden md:flex md:items-center md:gap-1 flex-1 min-w-0 mx-4 overflow-x-auto no-scrollbar">
+            <div className="hidden xl:flex xl:items-center xl:gap-1 flex-1 min-w-0 mx-4">
               {navItems.map((item) => (
                 <Link
                   key={item.path}
@@ -108,7 +108,7 @@ function Layout({ children, onLogout }) {
 
         {/* Mobile dropdown menu */}
         {menuOpen && (
-          <div className="md:hidden border-t border-slate-800 bg-slate-900 bg-opacity-95 backdrop-blur-sm">
+          <div className="xl:hidden border-t border-slate-800 bg-slate-900 bg-opacity-95 backdrop-blur-sm">
             <div className="max-w-7xl mx-auto px-4 py-2 space-y-1">
               {navItems.map((item) => (
                 <Link
