@@ -62,6 +62,18 @@ function AccessTokens() {
     if (masterToken) fetchTokens(masterToken);
   }, [masterToken, fetchTokens]);
 
+  // OAuth session fallback: lazily bootstrap master token if missing.
+  useEffect(() => {
+    if (masterToken) return;
+    fetch('/api/v1/auth/me', { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((payload) => {
+        const t = payload?.bootstrap?.masterToken;
+        if (t) setMasterToken(t);
+      })
+      .catch(() => {});
+  }, [masterToken, setMasterToken]);
+
   // Fetch personas when the 'personas' scope is toggled on
   useEffect(() => {
     if (createForm.scopes.includes('personas:read') && personas.length === 0 && !personasLoading) {
