@@ -372,7 +372,7 @@ function Login() {
               <div className="w-full bg-slate-900 bg-opacity-80 backdrop-blur-xl border border-slate-700 border-opacity-50 rounded-2xl shadow-2xl overflow-hidden flex flex-col sm:flex-row">
                 {/* Free Tier */}
                 <div className="flex-1 p-6 sm:p-8 border-b sm:border-b-0 sm:border-r border-slate-700 border-opacity-50">
-                  <h3 className="text-xl font-semibold text-white mb-1">Free Tier</h3>
+                  <h3 className="text-xl font-semibold text-white mb-1">Free</h3>
                   <div className="text-3xl font-bold text-white mb-1">$0 <span className="text-sm text-slate-400 font-normal">/mo</span></div>
                   <p className="text-sm text-slate-400 mb-6">Perfect for individuals getting started</p>
                   
@@ -392,9 +392,9 @@ function Login() {
                 </div>
                 
                 {/* Pro Tier */}
-                <div className="flex-1 p-6 sm:p-8 bg-gradient-to-br from-blue-900/20 to-indigo-900/20 relative">
-                  <div className="absolute top-0 right-0 bg-blue-600 text-white text-[10px] font-bold uppercase tracking-wider py-1 px-3 rounded-bl-lg rounded-tr-xl">Popular</div>
-                  <h3 className="text-xl font-semibold text-blue-300 mb-1">Pro Tier</h3>
+                <div className="flex-1 p-6 sm:p-8 bg-gradient-to-br from-blue-900/20 to-indigo-900/20 relative border-b sm:border-b-0 sm:border-r border-slate-700 border-opacity-50">
+                  <div className="absolute top-0 right-0 bg-blue-600 text-white text-[10px] font-bold uppercase tracking-wider py-1 px-3 rounded-bl-lg rounded-tr-xl hidden sm:block">Popular</div>
+                  <h3 className="text-xl font-semibold text-blue-300 mb-1">Pro</h3>
                   <div className="text-3xl font-bold text-white mb-1">$15 <span className="text-sm text-blue-300 font-normal opacity-70">/mo</span></div>
                   <p className="text-sm text-blue-200 opacity-80 mb-6">For power users and teams</p>
                   
@@ -420,11 +420,45 @@ function Login() {
                         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                           <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.31-8.86c-1.77-.45-2.34-.94-2.34-1.67 0-.84.79-1.43 2.1-1.43 1.38 0 1.9.66 1.94 1.64h1.71c-.05-1.34-.87-2.57-2.49-2.97V5H10.9v1.69c-1.51.32-2.72 1.3-2.72 2.81 0 1.79 1.49 2.69 3.66 3.21 1.95.46 2.34 1.15 2.34 1.87 0 .53-.39 1.64-2.25 1.64-1.74 0-2.27-.85-2.34-1.76H7.83c.09 1.69 1.16 2.79 3.07 3.16V19h2.34v-1.67c1.52-.3 2.76-1.36 2.76-2.91.01-1.95-1.5-2.72-3.69-3.28z"/>
                         </svg>
-                        Subscribe with Stripe
+                        Subscribe
                       </>
                     )}
                   </button>
-                  {error && <p className="text-red-400 text-xs mt-3 text-center">{error}</p>}
+                </div>
+
+                {/* Enterprise Tier */}
+                <div className="flex-1 p-6 sm:p-8 bg-slate-900/50 relative">
+                  <h3 className="text-xl font-semibold text-purple-300 mb-1">Enterprise</h3>
+                  <div className="text-3xl font-bold text-white mb-1">$30 <span className="text-sm text-purple-300 font-normal opacity-70">/mo</span></div>
+                  <p className="text-sm text-purple-200 opacity-80 mb-6">Uncapped scale & priority support</p>
+                  
+                  <ul className="space-y-3 mb-8 text-sm text-slate-200">
+                    <li className="flex gap-2 items-center"><span className="text-purple-400">✓</span> Everything in Pro</li>
+                    <li className="flex gap-2 items-center"><span className="text-purple-400">✓</span> Unlimited Knowledge Base</li>
+                    <li className="flex gap-2 items-center"><span className="text-purple-400">✓</span> Priority API Processing</li>
+                    <li className="flex gap-2 items-center"><span className="text-purple-400">✓</span> Dedicated Support</li>
+                  </ul>
+                  
+                  <button 
+                    onClick={() => handleCheckout('enterprise')}
+                    disabled={loading}
+                    className="w-full py-2.5 px-4 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors font-medium text-sm shadow-lg shadow-purple-600/30 flex justify-center items-center gap-2"
+                  >
+                    {loading ? (
+                      <svg className="animate-spin w-4 h-4 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.31-8.86c-1.77-.45-2.34-.94-2.34-1.67 0-.84.79-1.43 2.1-1.43 1.38 0 1.9.66 1.94 1.64h1.71c-.05-1.34-.87-2.57-2.49-2.97V5H10.9v1.69c-1.51.32-2.72 1.3-2.72 2.81 0 1.79 1.49 2.69 3.66 3.21 1.95.46 2.34 1.15 2.34 1.87 0 .53-.39 1.64-2.25 1.64-1.74 0-2.27-.85-2.34-1.76H7.83c.09 1.69 1.16 2.79 3.07 3.16V19h2.34v-1.67c1.52-.3 2.76-1.36 2.76-2.91.01-1.95-1.5-2.72-3.69-3.28z"/>
+                        </svg>
+                        Subscribe
+                      </>
+                    )}
+                  </button>
+                  {error && <p className="text-red-400 text-xs mt-3 text-center absolute -bottom-6 left-0 right-0">{error}</p>}
                 </div>
               </div>
             )}

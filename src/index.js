@@ -1318,8 +1318,8 @@ app.post('/api/v1/billing/checkout', (req, res) => {
     const { plan } = req.body || {};
     const selectedPlan = String(plan || '').toLowerCase().trim();
 
-    if (!selectedPlan || !['free', 'pro'].includes(selectedPlan)) {
-      return res.status(400).json({ error: 'Invalid plan. Allowed: free, pro' });
+    if (!selectedPlan || !['free', 'pro', 'enterprise'].includes(selectedPlan)) {
+      return res.status(400).json({ error: 'Invalid plan. Allowed: free, pro, enterprise' });
     }
 
     if (selectedPlan === 'free') {
@@ -1330,17 +1330,23 @@ app.post('/api/v1/billing/checkout', (req, res) => {
       });
     }
 
-    const proPaymentLink = process.env.STRIPE_PAYMENT_LINK_PRO || process.env.STRIPE_PAYMENT_LINK || '';
-    if (!proPaymentLink) {
+    let paymentLink = '';
+    if (selectedPlan === 'pro') {
+      paymentLink = process.env.STRIPE_PAYMENT_LINK_PRO || process.env.STRIPE_PAYMENT_LINK || '';
+    } else if (selectedPlan === 'enterprise') {
+      paymentLink = process.env.STRIPE_PAYMENT_LINK_ENTERPRISE || '';
+    }
+
+    if (!paymentLink) {
       return res.status(503).json({
-        error: 'Stripe payment link is not configured',
-        hint: 'Set STRIPE_PAYMENT_LINK_PRO in src/.env',
+        error: `Stripe payment link for ${selectedPlan} is not configured`,
+        hint: `Set STRIPE_PAYMENT_LINK_${selectedPlan.toUpperCase()} in src/.env`,
       });
     }
 
     return res.json({
-      url: proPaymentLink,
-      plan: 'pro',
+      url: paymentLink,
+      plan: selectedPlan,
       provider: 'stripe',
     });
   } catch (error) {
