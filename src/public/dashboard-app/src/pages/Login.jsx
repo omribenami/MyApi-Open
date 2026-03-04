@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '../stores/authStore';
-import { startOAuthFlow, handleOAuthCallback } from '../utils/oauth';
+import { handleOAuthCallback } from '../utils/oauth';
 import { AVAILABLE_SERVICES } from '../utils/oauth';
 import BrandLogo from '../components/BrandLogo';
 
@@ -130,14 +130,9 @@ function Login() {
 
   const handleOAuthClick = async (serviceId) => {
     setError('');
-    try {
-      await startOAuthFlow(serviceId, {
-        mode: (serviceId === 'google' || serviceId === 'facebook') ? 'login' : 'connect',
-        returnTo: '/dashboard/',
-      });
-    } catch {
-      setError(`Failed to start ${serviceId} login. Please try again.`);
-    }
+    const mode = (serviceId === 'google' || serviceId === 'facebook') ? 'login' : 'connect';
+    const params = new URLSearchParams({ mode, returnTo: '/dashboard/', redirect: '1' });
+    window.location.href = `/api/v1/oauth/authorize/${serviceId}?${params.toString()}`;
   };
 
   const handleCheckout = async (plan) => {

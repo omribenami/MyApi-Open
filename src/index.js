@@ -2521,11 +2521,19 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
   const { service } = req.params;
   const mode = (req.query.mode || 'connect').toString();
 
+  const wantsRedirect = String(req.query.redirect || '') === '1';
   if (!OAUTH_SERVICES.includes(service)) {
+    if (wantsRedirect) {
+      return res.redirect(`/dashboard/?oauth_service=${encodeURIComponent(service)}&oauth_status=error&error=${encodeURIComponent('Invalid OAuth service')}`);
+    }
     return res.status(400).json({ error: "Invalid OAuth service" });
   }
   if (!isOAuthServiceEnabled(service)) {
-    return res.status(400).json({ error: `OAuth service '${service}' is not enabled or configured` });
+    const msg = `OAuth service '${service}' is not enabled or configured`;
+    if (wantsRedirect) {
+      return res.redirect(`/dashboard/?oauth_service=${encodeURIComponent(service)}&oauth_status=error&error=${encodeURIComponent(msg)}`);
+    }
+    return res.status(400).json({ error: msg });
   }
 
   const state = createStateToken(service, 10);
@@ -2546,6 +2554,10 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
     ip: req.ip,
     details: { service, mode, state: state.substring(0, 10) + '...' }
   });
+
+  if (wantsRedirect) {
+    return res.redirect(authUrl);
+  }
 
   res.json({ ok: true, authUrl, state });
 });
