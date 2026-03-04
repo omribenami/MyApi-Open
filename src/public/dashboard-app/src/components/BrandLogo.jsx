@@ -8,7 +8,7 @@ function BrandLogo({ size = 'md', withWordmark = true, className = '' }) {
   return (
     <div className={`inline-flex items-center gap-3 ${className}`.trim()}>
       <img
-        src="/myapi-logo.svg"
+        src="/dashboard/myapi-logo.svg"
         alt="MyApi"
         className={`${sizeClasses[size] || sizeClasses.md} shadow-lg ring-1 ring-white/10`}
       />
