@@ -673,7 +673,7 @@ function BillingSection() {
             <p className="text-slate-300 text-xl mt-1">${plan.priceMonthly}<span className="text-sm text-slate-400">/mo</span></p>
             <p className="text-slate-400 text-xs mt-2">{plan.description}</p>
             <ul className="mt-3 space-y-1 text-xs text-slate-300">
-              {(plan.features || []).slice(0, 4).map((f) => <li key={f}>• {f}</li>)}
+              {(plan.features || []).map((f) => <li key={f}>• {f}</li>)}
             </ul>
             <button
               disabled={loading}

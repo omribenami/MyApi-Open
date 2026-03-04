@@ -384,9 +384,9 @@ function Login() {
               /* Pricing Card */
               <div className="w-full bg-slate-900 bg-opacity-80 backdrop-blur-xl border border-slate-700 border-opacity-50 rounded-2xl shadow-2xl overflow-hidden grid grid-cols-1 lg:grid-cols-3 mt-8 sm:mt-0">
                 {(billingPlans.length ? billingPlans : [
-                  { id: 'free', name: 'Free', priceMonthly: 0, description: 'Perfect for individuals getting started', features: ['1 AI Persona', '3 Service Connections', '10 MB Knowledge Base', '5 Token Vault'] },
-                  { id: 'pro', name: 'Pro', priceMonthly: 15, description: 'For creators and small teams', features: ['5 AI Persona', 'All Service Connections', '50 MB Knowledge Base', 'Token Vault'] },
-                  { id: 'enterprise', name: 'Enterprise', priceMonthly: 30, description: 'Scale with higher limits and priority', features: ['20 AI Persona', 'All Service Connections', '200 MB Knowledge Base', 'Token Vault'] },
+                  { id: 'free', name: 'Free', priceMonthly: 0, description: 'Perfect for individuals getting started', features: ['1 AI Persona', '3 Service Connections', '10 MB Knowledge Base', '5 Token Vault', 'Attach up to 4 Skills'] },
+                  { id: 'pro', name: 'Pro', priceMonthly: 15, description: 'For creators and small teams', features: ['5 AI Persona', 'All Service Connections', '50 MB Knowledge Base', 'Token Vault', 'Attach unlimited Skills'] },
+                  { id: 'enterprise', name: 'Enterprise', priceMonthly: 30, description: 'Scale with higher limits and priority', features: ['20 AI Persona', 'All Service Connections', '200 MB Knowledge Base', 'Token Vault', 'Attach unlimited Skills'] },
                 ]).map((plan, idx) => (
                   <div key={plan.id} className={`p-6 sm:p-8 border-slate-700 border-opacity-50 ${idx < 2 ? 'border-b lg:border-b-0 lg:border-r' : ''} ${plan.id === 'pro' ? 'bg-gradient-to-br from-blue-900/20 to-indigo-900/20' : ''}`}>
                     <div className="flex items-start justify-between mb-2">

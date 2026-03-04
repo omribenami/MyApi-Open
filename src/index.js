@@ -1373,7 +1373,7 @@ const BILLING_PLANS = {
     name: 'Free',
     priceMonthly: 0,
     description: 'Perfect for individuals getting started',
-    features: ['1 AI Persona', '3 Service Connections', '10 MB Knowledge Base', '5 Token Vault'],
+    features: ['1 AI Persona', '3 Service Connections', '10 MB Knowledge Base', '5 Token Vault', 'Attach up to 4 Skills'],
     stripePaymentLinkEnv: null,
   },
   pro: {
@@ -1381,7 +1381,7 @@ const BILLING_PLANS = {
     name: 'Pro',
     priceMonthly: 15,
     description: 'For creators and small teams',
-    features: ['5 AI Persona', 'All Service Connections', '50 MB Knowledge Base', 'Token Vault'],
+    features: ['5 AI Persona', 'All Service Connections', '50 MB Knowledge Base', 'Token Vault', 'Attach unlimited Skills'],
     stripePaymentLinkEnv: 'STRIPE_PAYMENT_LINK_PRO',
   },
   enterprise: {
@@ -1389,7 +1389,7 @@ const BILLING_PLANS = {
     name: 'Enterprise',
     priceMonthly: 30,
     description: 'Scale with higher limits and priority',
-    features: ['20 AI Persona', 'All Service Connections', '200 MB Knowledge Base', 'Token Vault'],
+    features: ['20 AI Persona', 'All Service Connections', '200 MB Knowledge Base', 'Token Vault', 'Attach unlimited Skills'],
     stripePaymentLinkEnv: 'STRIPE_PAYMENT_LINK_ENTERPRISE',
   },
 };
