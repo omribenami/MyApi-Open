@@ -791,6 +791,35 @@ app.get('/openapi.json', (req, res) => {
   });
 });
 
+app.get('/api-docs-ui', (req, res) => {
+  const host = req.get('host');
+  const scheme = req.protocol || 'http';
+  const specUrl = `${scheme}://${host}/openapi.json`;
+
+  res.type('html').send(`<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MyApi API Docs</title>
+    <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist/swagger-ui.css" />
+    <style>html,body,#swagger-ui{height:100%;margin:0;} body{background:#fff;}</style>
+  </head>
+  <body>
+    <div id="swagger-ui"></div>
+    <script src="https://unpkg.com/swagger-ui-dist/swagger-ui-bundle.js"></script>
+    <script>
+      window.ui = SwaggerUIBundle({
+        url: ${JSON.stringify(specUrl)},
+        dom_id: '#swagger-ui',
+        docExpansion: 'none',
+        defaultModelsExpandDepth: -1,
+      });
+    </script>
+  </body>
+</html>`);
+});
+
 app.get('/.well-known/ai-plugin.json', (req, res) => {
   const host = req.get('host');
   const scheme = req.protocol || 'http';
