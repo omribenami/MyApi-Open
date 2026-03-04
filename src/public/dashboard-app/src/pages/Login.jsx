@@ -189,22 +189,24 @@ function Login() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950 flex flex-col">
       {/* Header Nav for Toggle */}
-      <div className="absolute top-4 right-4 sm:top-6 sm:right-6 z-20">
-        {viewMode === 'login' ? (
-          <button 
-            onClick={() => setViewMode('pricing')}
-            className="text-slate-300 hover:text-white text-sm font-medium transition-colors bg-slate-900/50 backdrop-blur-md border border-slate-700/50 rounded-full px-4 py-2"
-          >
-            View Pricing Plans
-          </button>
-        ) : (
-          <button 
-            onClick={() => setViewMode('login')}
-            className="text-slate-300 hover:text-white text-sm font-medium transition-colors bg-slate-900/50 backdrop-blur-md border border-slate-700/50 rounded-full px-4 py-2"
-          >
-            Back to Login
-          </button>
-        )}
+      <div className="relative z-20 w-full px-4 pt-4 sm:px-6 sm:pt-6">
+        <div className="flex justify-center sm:justify-end">
+          {viewMode === 'login' ? (
+            <button 
+              onClick={() => setViewMode('pricing')}
+              className="text-slate-300 hover:text-white text-sm font-medium transition-colors bg-slate-900/50 backdrop-blur-md border border-slate-700/50 rounded-full px-4 py-2"
+            >
+              View Pricing Plans
+            </button>
+          ) : (
+            <button 
+              onClick={() => setViewMode('login')}
+              className="text-slate-300 hover:text-white text-sm font-medium transition-colors bg-slate-900/50 backdrop-blur-md border border-slate-700/50 rounded-full px-4 py-2"
+            >
+              Back to Login
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Ambient glow orbs - CSS only, no JS */}
@@ -214,7 +216,7 @@ function Login() {
         <div className="absolute top-2/3 left-1/2 w-64 h-64 bg-violet-600 rounded-full opacity-5 blur-3xl"></div>
       </div>
 
-      <div className="flex-1 flex items-center justify-center px-4 py-8 sm:py-12 relative z-10">
+      <div className="flex-1 flex items-center justify-center px-4 py-6 sm:py-10 relative z-10">
         <div className="w-full max-w-5xl flex flex-col lg:flex-row gap-8 lg:gap-16 items-center">
 
           {/* Left side — Branding & Features */}
@@ -382,13 +384,13 @@ function Login() {
               </>
             ) : (
               /* Pricing Card */
-              <div className="w-full bg-slate-900 bg-opacity-80 backdrop-blur-xl border border-slate-700 border-opacity-50 rounded-2xl shadow-2xl overflow-hidden grid grid-cols-1 lg:grid-cols-3 mt-8 sm:mt-0">
+              <div className="w-full bg-slate-900 bg-opacity-80 backdrop-blur-xl border border-slate-700 border-opacity-50 rounded-2xl shadow-2xl overflow-hidden grid grid-cols-1 lg:grid-cols-3 divide-y divide-slate-700/50 lg:divide-y-0 lg:divide-x mt-6 sm:mt-0">
                 {(billingPlans.length ? billingPlans : [
                   { id: 'free', name: 'Free', priceMonthly: 0, description: 'Perfect for individuals getting started', features: ['1 AI Persona', '3 Service Connections', '10 MB Knowledge Base', '5 Token Vault', 'Attach up to 4 Skills'] },
                   { id: 'pro', name: 'Pro', priceMonthly: 15, description: 'For creators and small teams', features: ['5 AI Persona', 'All Service Connections', '50 MB Knowledge Base', 'Token Vault', 'Attach unlimited Skills'] },
                   { id: 'enterprise', name: 'Enterprise', priceMonthly: 30, description: 'Scale with higher limits and priority', features: ['20 AI Persona', 'All Service Connections', '200 MB Knowledge Base', 'Token Vault', 'Attach unlimited Skills'] },
-                ]).map((plan, idx) => (
-                  <div key={plan.id} className={`p-6 sm:p-8 border-slate-700 border-opacity-50 ${idx < 2 ? 'border-b lg:border-b-0 lg:border-r' : ''} ${plan.id === 'pro' ? 'bg-gradient-to-br from-blue-900/20 to-indigo-900/20' : ''}`}>
+                ]).map((plan) => (
+                  <div key={plan.id} className={`p-5 sm:p-7 lg:p-8 ${plan.id === 'pro' ? 'bg-gradient-to-br from-blue-900/20 to-indigo-900/20' : ''}`}>
                     <div className="flex items-start justify-between mb-2">
                       <h3 className={`text-xl font-semibold ${plan.id === 'pro' ? 'text-blue-300' : plan.id === 'enterprise' ? 'text-purple-300' : 'text-white'}`}>{plan.name}</h3>
                       {plan.id === 'pro' && <span className="text-[10px] font-bold uppercase tracking-wider py-1 px-2 rounded bg-blue-600 text-white">Popular</span>}
@@ -397,7 +399,7 @@ function Login() {
                     <div className="text-3xl font-bold text-white mb-1">${plan.priceMonthly} <span className="text-sm text-slate-400 font-normal">/mo</span></div>
                     <p className="text-sm text-slate-400 mb-6">{plan.description}</p>
 
-                    <ul className="space-y-3 mb-8 text-sm text-slate-200 min-h-[130px]">
+                    <ul className="space-y-3 mb-6 sm:mb-8 text-sm text-slate-200 min-h-0 lg:min-h-[130px]">
                       {(plan.features || []).map((feature) => (
                         <li key={feature} className="flex gap-2 items-center"><span className="text-emerald-400">✓</span> {feature}</li>
                       ))}
