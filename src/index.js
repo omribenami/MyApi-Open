@@ -1936,7 +1936,12 @@ app.post("/api/v1/auth/token-login", (req, res) => {
 app.get("/api/v1/auth/me", (req, res) => {
   // Cookie-session auth (OAuth login path)
   if (req.session && req.session.user) {
-    return res.json(req.session.user);
+    return res.json({
+      ...req.session.user,
+      bootstrap: req.session.masterTokenRaw
+        ? { masterToken: req.session.masterTokenRaw, tokenId: req.session.masterTokenId || null }
+        : null,
+    });
   }
 
   // Legacy bearer session-token auth
@@ -2453,6 +2458,15 @@ app.get("/api/v1/oauth/callback/:service", async (req, res) => {
         avatar_url: appUser.avatarUrl || avatarUrl || null,
         roles: appUser.roles || 'user',
       };
+
+      // Ensure each OAuth-logged-in user receives a full master token for dashboard/API actions.
+      if (!req.session.masterTokenRaw) {
+        const rawMasterToken = crypto.randomBytes(32).toString('hex');
+        const hash = bcrypt.hashSync(rawMasterToken, 10);
+        const tokenId = createAccessToken(hash, appUser.id, 'full', 'Master Token (OAuth)', null, null);
+        req.session.masterTokenRaw = rawMasterToken;
+        req.session.masterTokenId = tokenId;
+      }
     }
 
     createAuditLog({

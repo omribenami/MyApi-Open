@@ -60,7 +60,12 @@ function Login() {
             return res.json();
           })
           .then((sessionUser) => {
-            if (sessionUser) setUser(sessionUser);
+            if (sessionUser) {
+              if (sessionUser?.bootstrap?.masterToken) {
+                setMasterToken(sessionUser.bootstrap.masterToken);
+              }
+              setUser(sessionUser);
+            }
             window.history.replaceState({}, document.title, '/dashboard/');
             window.location.href = '/dashboard/';
           });

@@ -23,7 +23,17 @@ export const useAuthStore = create((set) => ({
       if (res.ok) {
         const payload = await res.json();
         const user = payload?.data || payload;
-        set({ user, isAuthenticated: true, error: null, isInitialized: true });
+        const bootstrapToken = payload?.bootstrap?.masterToken;
+        if (bootstrapToken) {
+          localStorage.setItem('masterToken', bootstrapToken);
+        }
+        set({
+          user,
+          masterToken: bootstrapToken || masterToken || null,
+          isAuthenticated: true,
+          error: null,
+          isInitialized: true,
+        });
         return;
       }
     } catch {
