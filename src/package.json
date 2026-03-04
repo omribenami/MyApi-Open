@@ -8,7 +8,7 @@
     "dev": "nodemon index.js",
     "build:frontend": "cd public/dashboard-app && npm run build",
     "init": "node scripts/init-db.js",
-    "test": "sh -c 'NODE_ENV=test PORT=4789 node index.js >/tmp/myapi-qa-server.log 2>&1 & PID=$!; sleep 2; BASE_URL=http://127.0.0.1:4789 node ../../../tests/run-all-tests.js; CODE=$?; if [ $CODE -eq 0 ]; then BASE_URL=http://127.0.0.1:4789 node scripts/test-phase12a-discovery-kb.js; CODE=$?; fi; kill $PID >/dev/null 2>&1 || true; wait $PID 2>/dev/null || true; exit $CODE'",
+    "test": "sh -c 'NODE_ENV=test PORT=4789 node index.js >/tmp/myapi-qa-server.log 2>&1 & PID=$!; sleep 2; BASE_URL=http://127.0.0.1:4789 node ../../../tests/run-all-tests.js; CODE=$?; if [ $CODE -eq 0 ]; then BASE_URL=http://127.0.0.1:4789 node scripts/test-phase12a-discovery-kb.js; CODE=$?; fi; node scripts/cleanup-test-users.js || true; kill $PID >/dev/null 2>&1 || true; wait $PID 2>/dev/null || true; exit $CODE'",
     "test:phase5": "cd ../../../tests && node test-phase5-gateway-context.js",
     "test:phase6": "cd ../../../tests && node test-phase6-persona-manager.js",
     "test:phase7": "cd ../../../tests && node test-phase7-oauth.js",

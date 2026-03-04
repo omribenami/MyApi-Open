@@ -2112,6 +2112,75 @@ app.put('/api/v1/users/:id/subscription', authenticate, (req, res) => {
   }
 });
 
+app.delete('/api/v1/users/:id', authenticate, (req, res) => {
+  if (req.tokenMeta.scope !== 'full') return res.status(403).json({ error: 'Only master token can delete users' });
+  if (!requirePowerUser(req, res)) return;
+
+  try {
+    const { id } = req.params;
+    const user = getUserById(id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (String(user.email || '').toLowerCase() === 'admin@your.domain.com') {
+      return res.status(400).json({ error: 'Cannot delete power user account' });
+    }
+
+    const tx = db.transaction((userId) => {
+      db.prepare('DELETE FROM oauth_tokens WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM access_tokens WHERE owner_id = ?').run(userId);
+      db.prepare('DELETE FROM handshakes WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)').run(userId);
+      db.prepare('DELETE FROM conversations WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM persona_documents WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)').run(userId);
+      db.prepare('DELETE FROM persona_skills WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)').run(userId);
+      db.prepare('DELETE FROM skills WHERE owner_id = ?').run(userId);
+      db.prepare('DELETE FROM personas WHERE owner_id = ?').run(userId);
+      db.prepare('DELETE FROM kb_documents WHERE owner_id = ?').run(userId);
+      db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+    });
+    tx(id);
+
+    createAuditLog({ requesterId: req.tokenMeta.tokenId, action: 'delete_user', resource: `/users/${id}`, scope: req.tokenMeta.scope, ip: req.ip, details: { email: user.email || null } });
+    res.json({ ok: true, deletedUserId: id });
+  } catch (error) {
+    console.error('Delete user error:', error);
+    res.status(500).json({ error: 'Failed to delete user' });
+  }
+});
+
+app.post('/api/v1/users/cleanup-test-users', authenticate, (req, res) => {
+  if (req.tokenMeta.scope !== 'full') return res.status(403).json({ error: 'Only master token can cleanup users' });
+  if (!requirePowerUser(req, res)) return;
+
+  const prefix = String(req.body?.prefix || 'phase12a_');
+  try {
+    const users = db.prepare('SELECT id, email, username FROM users WHERE username LIKE ?').all(`${prefix}%`);
+    let deleted = 0;
+    const tx = db.transaction((list) => {
+      for (const u of list) {
+        db.prepare('DELETE FROM oauth_tokens WHERE user_id = ?').run(u.id);
+        db.prepare('DELETE FROM access_tokens WHERE owner_id = ?').run(u.id);
+        db.prepare('DELETE FROM handshakes WHERE user_id = ?').run(u.id);
+        db.prepare('DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)').run(u.id);
+        db.prepare('DELETE FROM conversations WHERE user_id = ?').run(u.id);
+        db.prepare('DELETE FROM persona_documents WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)').run(u.id);
+        db.prepare('DELETE FROM persona_skills WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)').run(u.id);
+        db.prepare('DELETE FROM skills WHERE owner_id = ?').run(u.id);
+        db.prepare('DELETE FROM personas WHERE owner_id = ?').run(u.id);
+        db.prepare('DELETE FROM kb_documents WHERE owner_id = ?').run(u.id);
+        const r = db.prepare('DELETE FROM users WHERE id = ?').run(u.id);
+        if (r.changes > 0) deleted += 1;
+      }
+    });
+    tx(users);
+
+    createAuditLog({ requesterId: req.tokenMeta.tokenId, action: 'cleanup_test_users', resource: '/users/cleanup-test-users', scope: req.tokenMeta.scope, ip: req.ip, details: { prefix, deleted } });
+    res.json({ ok: true, prefix, deleted });
+  } catch (error) {
+    console.error('Cleanup test users error:', error);
+    res.status(500).json({ error: 'Failed to cleanup test users' });
+  }
+});
+
 // ============================
 // NEW: HANDSHAKES (AI Agent Access Requests)
 // ============================
