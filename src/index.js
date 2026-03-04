@@ -8,6 +8,8 @@ const crypto = require("crypto");
 const fs = require("fs");
 const multer = require('multer');
 const pdfParse = require('pdf-parse');
+const speakeasy = require('speakeasy');
+const QRCode = require('qrcode');
 
 const {
   db,
@@ -38,6 +40,10 @@ const {
   updateUserPlan,
   updateUserOAuthProfile,
   updateUserSubscriptionStatus,
+  getUserTotpSecret,
+  setUserTotpSecret,
+  enableUserTwoFactor,
+  disableUserTwoFactor,
   createHandshake,
   getHandshakes,
   approveHandshake,
@@ -1928,19 +1934,35 @@ app.post("/api/v1/auth/register", (req, res) => {
 });
 
 app.post("/api/v1/auth/login", (req, res) => {
-  const { username, password } = req.body;
+  const { username, password, totpCode } = req.body;
   if (!username || !password) return res.status(400).json({ error: "username and password are required" });
   const user = getUserByUsername(username);
   if (!user) return res.status(401).json({ error: "Invalid credentials" });
   const valid = bcrypt.compareSync(password, user.password_hash);
   if (!valid) return res.status(401).json({ error: "Invalid credentials" });
+
+  if (user.twoFactorEnabled) {
+    if (!totpCode) {
+      return res.status(401).json({ error: "2FA code required", requires2FA: true });
+    }
+    const verified = speakeasy.totp.verify({
+      secret: user.totpSecret,
+      encoding: 'base32',
+      token: String(totpCode).replace(/\s+/g, ''),
+      window: 1,
+    });
+    if (!verified) {
+      return res.status(401).json({ error: "Invalid 2FA code", requires2FA: true });
+    }
+  }
+
   // Generate a session token
   const sessionToken = crypto.randomBytes(32).toString('hex');
   // Store session in memory (simple approach)
   if (!global.sessions) global.sessions = {};
   global.sessions[sessionToken] = { userId: user.id, username: user.username, createdAt: Date.now() };
   createAuditLog({ requesterId: user.id, action: "user_login", resource: `/users/${user.id}`, scope: "session", ip: req.ip });
-  res.json({ data: { token: sessionToken, user: { id: user.id, username: user.username, displayName: user.displayName, email: user.email, timezone: user.timezone } } });
+  res.json({ data: { token: sessionToken, user: { id: user.id, username: user.username, displayName: user.displayName, email: user.email, timezone: user.timezone, twoFactorEnabled: Boolean(user.twoFactorEnabled) } } });
 });
 
 // Token-based login (for API access tokens)
@@ -2016,6 +2038,121 @@ app.get("/api/v1/auth/me", (req, res) => {
     if (user) return res.json({ data: user });
   }
   res.status(401).json({ error: "Invalid session" });
+});
+
+app.post('/api/v1/auth/2fa/setup', authenticate, async (req, res) => {
+  try {
+    const userId = req?.user?.id || req?.tokenMeta?.ownerId;
+    if (!userId) return res.status(401).json({ error: 'Not authenticated' });
+
+    const user = getUserById(userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const issuer = process.env.TOTP_ISSUER || 'MyApi';
+    const label = `${issuer}:${user.email || user.username}`;
+    const secret = speakeasy.generateSecret({ name: label, issuer, length: 32 });
+
+    setUserTotpSecret(userId, secret.base32);
+    const qrCodeDataUrl = await QRCode.toDataURL(secret.otpauth_url);
+
+    createAuditLog({
+      requesterId: String(userId),
+      action: '2fa_setup_started',
+      resource: `/users/${userId}/2fa`,
+      scope: req?.tokenMeta?.scope || 'session',
+      ip: req.ip,
+    });
+
+    return res.json({
+      data: {
+        secret: secret.base32,
+        otpauthUrl: secret.otpauth_url,
+        qrCodeDataUrl,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to initialize 2FA setup' });
+  }
+});
+
+app.post('/api/v1/auth/2fa/verify', authenticate, (req, res) => {
+  try {
+    const userId = req?.user?.id || req?.tokenMeta?.ownerId;
+    const { code } = req.body || {};
+    if (!userId) return res.status(401).json({ error: 'Not authenticated' });
+    if (!code) return res.status(400).json({ error: '2FA code is required' });
+
+    const state = getUserTotpSecret(userId);
+    if (!state?.totpSecret) return res.status(400).json({ error: '2FA setup not initialized' });
+
+    const verified = speakeasy.totp.verify({
+      secret: state.totpSecret,
+      encoding: 'base32',
+      token: String(code).replace(/\s+/g, ''),
+      window: 1,
+    });
+
+    if (!verified) return res.status(400).json({ error: 'Invalid 2FA code' });
+
+    enableUserTwoFactor(userId);
+    if (req.session?.user) req.session.user.two_factor_enabled = true;
+
+    createAuditLog({
+      requesterId: String(userId),
+      action: '2fa_enabled',
+      resource: `/users/${userId}/2fa`,
+      scope: req?.tokenMeta?.scope || 'session',
+      ip: req.ip,
+    });
+
+    return res.json({ ok: true, data: { enabled: true } });
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to verify 2FA code' });
+  }
+});
+
+app.post('/api/v1/auth/2fa/disable', authenticate, (req, res) => {
+  try {
+    const userId = req?.user?.id || req?.tokenMeta?.ownerId;
+    const { code } = req.body || {};
+    if (!userId) return res.status(401).json({ error: 'Not authenticated' });
+
+    const state = getUserTotpSecret(userId);
+    if (!state?.twoFactorEnabled) return res.status(400).json({ error: '2FA is not enabled' });
+    if (!code) return res.status(400).json({ error: '2FA code is required' });
+
+    const verified = speakeasy.totp.verify({
+      secret: state.totpSecret,
+      encoding: 'base32',
+      token: String(code).replace(/\s+/g, ''),
+      window: 1,
+    });
+
+    if (!verified) return res.status(400).json({ error: 'Invalid 2FA code' });
+
+    disableUserTwoFactor(userId);
+    if (req.session?.user) req.session.user.two_factor_enabled = false;
+
+    createAuditLog({
+      requesterId: String(userId),
+      action: '2fa_disabled',
+      resource: `/users/${userId}/2fa`,
+      scope: req?.tokenMeta?.scope || 'session',
+      ip: req.ip,
+    });
+
+    return res.json({ ok: true, data: { enabled: false } });
+  } catch (error) {
+    return res.status(500).json({ error: 'Failed to disable 2FA' });
+  }
+});
+
+app.get('/api/v1/auth/2fa/status', authenticate, (req, res) => {
+  const userId = req?.user?.id || req?.tokenMeta?.ownerId;
+  if (!userId) return res.status(401).json({ error: 'Not authenticated' });
+  const state = getUserTotpSecret(userId);
+  if (!state) return res.status(404).json({ error: 'User not found' });
+  return res.json({ data: { enabled: Boolean(state.twoFactorEnabled) } });
 });
 
 app.post("/api/v1/auth/logout", (req, res) => {
@@ -2628,6 +2765,7 @@ app.get("/api/v1/oauth/callback/:service", async (req, res) => {
         display_name: appUser.displayName || appUser.username,
         email: appUser.email || email,
         avatar_url: appUser.avatarUrl || avatarUrl || null,
+        two_factor_enabled: Boolean(appUser.twoFactorEnabled),
         roles: appUser.roles || 'user',
       };
 

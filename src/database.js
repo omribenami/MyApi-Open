@@ -372,6 +372,10 @@ function initDatabase() {
   try { db.exec("ALTER TABLE users ADD COLUMN stripe_subscription_status TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE users ADD COLUMN stripe_customer_id TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE users ADD COLUMN stripe_subscription_id TEXT"); } catch (e) {}
+  
+  // 2FA columns
+  try { db.exec("ALTER TABLE users ADD COLUMN totp_secret TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE users ADD COLUMN two_factor_enabled INTEGER DEFAULT 0"); } catch (e) {}
 
   // Multi-tenant ownership columns (security isolation)
   const ownerMigrations = [
@@ -768,18 +772,22 @@ function createUser(username, displayName, email, timezone, password, plan = 'fr
 }
 
 function getUsers() {
-  const stmt = db.prepare("SELECT id, username, display_name as displayName, email, avatar_url as avatarUrl, timezone, created_at as createdAt, status, COALESCE(plan, 'free') as plan, stripe_subscription_status as stripeSubscriptionStatus, stripe_customer_id as stripeCustomerId, stripe_subscription_id as stripeSubscriptionId, CASE WHEN COALESCE(plan, 'free') = 'free' THEN 1 WHEN LOWER(COALESCE(stripe_subscription_status, '')) IN ('active','trialing') THEN 1 ELSE 0 END as planActive FROM users ORDER BY created_at DESC");
-  return stmt.all().map((u) => ({ ...u, planActive: Boolean(u.planActive) }));
+  const stmt = db.prepare("SELECT id, username, display_name as displayName, email, avatar_url as avatarUrl, timezone, created_at as createdAt, status, COALESCE(plan, 'free') as plan, stripe_subscription_status as stripeSubscriptionStatus, stripe_customer_id as stripeCustomerId, stripe_subscription_id as stripeSubscriptionId, COALESCE(two_factor_enabled, 0) as twoFactorEnabled, CASE WHEN COALESCE(plan, 'free') = 'free' THEN 1 WHEN LOWER(COALESCE(stripe_subscription_status, '')) IN ('active','trialing') THEN 1 ELSE 0 END as planActive FROM users ORDER BY created_at DESC");
+  return stmt.all().map((u) => ({ ...u, twoFactorEnabled: Boolean(u.twoFactorEnabled), planActive: Boolean(u.planActive) }));
 }
 
 function getUserByUsername(username) {
-  const stmt = db.prepare("SELECT id, username, display_name as displayName, email, avatar_url as avatarUrl, timezone, password_hash, created_at as createdAt, status, COALESCE(plan, 'free') as plan, stripe_subscription_status as stripeSubscriptionStatus, stripe_customer_id as stripeCustomerId, stripe_subscription_id as stripeSubscriptionId FROM users WHERE username = ?");
-  return stmt.get(username);
+  const stmt = db.prepare("SELECT id, username, display_name as displayName, email, avatar_url as avatarUrl, timezone, password_hash, COALESCE(totp_secret, '') as totpSecret, COALESCE(two_factor_enabled, 0) as twoFactorEnabled, created_at as createdAt, status, COALESCE(plan, 'free') as plan, stripe_subscription_status as stripeSubscriptionStatus, stripe_customer_id as stripeCustomerId, stripe_subscription_id as stripeSubscriptionId FROM users WHERE username = ?");
+  const u = stmt.get(username);
+  if (!u) return null;
+  return { ...u, twoFactorEnabled: Boolean(u.twoFactorEnabled) };
 }
 
 function getUserById(id) {
-  const stmt = db.prepare("SELECT id, username, display_name as displayName, email, avatar_url as avatarUrl, timezone, created_at as createdAt, status, COALESCE(plan, 'free') as plan, stripe_subscription_status as stripeSubscriptionStatus, stripe_customer_id as stripeCustomerId, stripe_subscription_id as stripeSubscriptionId FROM users WHERE id = ?");
-  return stmt.get(id);
+  const stmt = db.prepare("SELECT id, username, display_name as displayName, email, avatar_url as avatarUrl, timezone, COALESCE(two_factor_enabled, 0) as twoFactorEnabled, created_at as createdAt, status, COALESCE(plan, 'free') as plan, stripe_subscription_status as stripeSubscriptionStatus, stripe_customer_id as stripeCustomerId, stripe_subscription_id as stripeSubscriptionId FROM users WHERE id = ?");
+  const u = stmt.get(id);
+  if (!u) return null;
+  return { ...u, twoFactorEnabled: Boolean(u.twoFactorEnabled) };
 }
 
 function updateUserPlan(userId, plan) {
@@ -813,6 +821,27 @@ function updateUserSubscriptionStatus(userId, { status, customerId, subscription
   db.prepare('UPDATE users SET stripe_subscription_status = ?, stripe_customer_id = ?, stripe_subscription_id = ? WHERE id = ?')
     .run(normalized || null, customerId || null, subscriptionId || null, userId);
   return getUserById(userId);
+}
+
+function getUserTotpSecret(userId) {
+  const row = db.prepare('SELECT COALESCE(totp_secret, "") as totpSecret, COALESCE(two_factor_enabled, 0) as twoFactorEnabled FROM users WHERE id = ?').get(userId);
+  if (!row) return null;
+  return { totpSecret: row.totpSecret || '', twoFactorEnabled: Boolean(row.twoFactorEnabled) };
+}
+
+function setUserTotpSecret(userId, secret) {
+  const result = db.prepare('UPDATE users SET totp_secret = ?, two_factor_enabled = 0 WHERE id = ?').run(secret || null, userId);
+  return result.changes > 0;
+}
+
+function enableUserTwoFactor(userId) {
+  const result = db.prepare('UPDATE users SET two_factor_enabled = 1 WHERE id = ?').run(userId);
+  return result.changes > 0;
+}
+
+function disableUserTwoFactor(userId) {
+  const result = db.prepare('UPDATE users SET two_factor_enabled = 0, totp_secret = NULL WHERE id = ?').run(userId);
+  return result.changes > 0;
 }
 
 function createHandshake(userId, agentId, requestedScopes, message) {
@@ -2209,6 +2238,10 @@ module.exports = {
   updateUserPlan,
   updateUserOAuthProfile,
   updateUserSubscriptionStatus,
+  getUserTotpSecret,
+  setUserTotpSecret,
+  enableUserTwoFactor,
+  disableUserTwoFactor,
   createHandshake,
   getHandshakes,
   approveHandshake,

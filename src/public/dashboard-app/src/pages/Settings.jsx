@@ -302,12 +302,12 @@ const MOCK_SESSIONS = [
 ];
 
 function SecuritySection() {
+  const masterToken = useAuthStore((state) => state.masterToken);
   const {
     passwordDraft,
     passwordSaving,
     passwordError,
     passwordSuccess,
-    twoFactorEnabled,
     updatePasswordDraft,
     clearPasswordDraft,
     setPasswordSaving,
@@ -315,10 +315,17 @@ function SecuritySection() {
     clearPasswordError,
     setPasswordSuccess,
     clearPasswordSuccess,
-    toggleTwoFactor,
   } = useSettingsStore();
 
   const [sessions, setSessions] = useState(MOCK_SESSIONS);
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  const [twoFactorLoading, setTwoFactorLoading] = useState(false);
+  const [twoFactorCode, setTwoFactorCode] = useState('');
+  const [disableCode, setDisableCode] = useState('');
+  const [twoFactorError, setTwoFactorError] = useState('');
+  const [twoFactorSuccess, setTwoFactorSuccess] = useState('');
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState('');
+  const [manualSecret, setManualSecret] = useState('');
 
   useEffect(() => {
     if (passwordSuccess) {
@@ -326,6 +333,23 @@ function SecuritySection() {
       return () => clearTimeout(t);
     }
   }, [passwordSuccess]);
+
+  useEffect(() => {
+    let active = true;
+    const loadTwoFactorStatus = async () => {
+      try {
+        const authHeaders = masterToken ? { Authorization: `Bearer ${masterToken}` } : {};
+        const res = await fetch('/api/v1/auth/2fa/status', { headers: authHeaders, credentials: 'include' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (active) setTwoFactorEnabled(Boolean(data?.data?.enabled));
+      } catch {
+        // ignore
+      }
+    };
+    loadTwoFactorStatus();
+    return () => { active = false; };
+  }, [masterToken]);
 
   const handleChangePassword = async (e) => {
     e.preventDefault();
@@ -354,6 +378,85 @@ function SecuritySection() {
 
   const handleRevokeSession = (id) => {
     setSessions((prev) => prev.filter((s) => s.id !== id));
+  };
+
+  const startTwoFactorSetup = async () => {
+    setTwoFactorError('');
+    setTwoFactorSuccess('');
+    setTwoFactorLoading(true);
+    try {
+      const authHeaders = masterToken ? { Authorization: `Bearer ${masterToken}` } : {};
+      const res = await fetch('/api/v1/auth/2fa/setup', { method: 'POST', headers: authHeaders, credentials: 'include' });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload?.error || 'Failed to start 2FA setup');
+      setQrCodeDataUrl(payload?.data?.qrCodeDataUrl || '');
+      setManualSecret(payload?.data?.secret || '');
+      setTwoFactorSuccess('Scan the QR code with Google Authenticator/Authy, then enter the 6-digit code to enable 2FA.');
+    } catch (err) {
+      setTwoFactorError(err.message || 'Failed to start 2FA setup');
+    } finally {
+      setTwoFactorLoading(false);
+    }
+  };
+
+  const verifyTwoFactorSetup = async () => {
+    setTwoFactorError('');
+    setTwoFactorSuccess('');
+    if (!twoFactorCode.trim()) {
+      setTwoFactorError('Enter the 6-digit code from your authenticator app');
+      return;
+    }
+    setTwoFactorLoading(true);
+    try {
+      const authHeaders = { 'Content-Type': 'application/json', ...(masterToken ? { Authorization: `Bearer ${masterToken}` } : {}) };
+      const res = await fetch('/api/v1/auth/2fa/verify', {
+        method: 'POST',
+        headers: authHeaders,
+        credentials: 'include',
+        body: JSON.stringify({ code: twoFactorCode.trim() }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload?.error || 'Invalid 2FA code');
+      setTwoFactorEnabled(true);
+      setTwoFactorCode('');
+      setQrCodeDataUrl('');
+      setManualSecret('');
+      setTwoFactorSuccess('2FA enabled successfully. You will be prompted for a code on password login.');
+    } catch (err) {
+      setTwoFactorError(err.message || 'Failed to verify 2FA code');
+    } finally {
+      setTwoFactorLoading(false);
+    }
+  };
+
+  const disableTwoFactor = async () => {
+    setTwoFactorError('');
+    setTwoFactorSuccess('');
+    if (!disableCode.trim()) {
+      setTwoFactorError('Enter your current 2FA code to disable it');
+      return;
+    }
+    setTwoFactorLoading(true);
+    try {
+      const authHeaders = { 'Content-Type': 'application/json', ...(masterToken ? { Authorization: `Bearer ${masterToken}` } : {}) };
+      const res = await fetch('/api/v1/auth/2fa/disable', {
+        method: 'POST',
+        headers: authHeaders,
+        credentials: 'include',
+        body: JSON.stringify({ code: disableCode.trim() }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload?.error || 'Failed to disable 2FA');
+      setTwoFactorEnabled(false);
+      setDisableCode('');
+      setQrCodeDataUrl('');
+      setManualSecret('');
+      setTwoFactorSuccess('2FA has been disabled.');
+    } catch (err) {
+      setTwoFactorError(err.message || 'Failed to disable 2FA');
+    } finally {
+      setTwoFactorLoading(false);
+    }
   };
 
   return (
@@ -415,36 +518,73 @@ function SecuritySection() {
 
         {/* 2FA */}
         <div className="border-t border-slate-700 pt-6">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             <div>
-              <h3 className="text-base font-medium text-white">Two-Factor Authentication</h3>
-              <p className="text-slate-400 text-sm mt-1">
-                Add an extra layer of security to your account
-              </p>
-              {twoFactorEnabled && (
-                <span className="inline-block mt-2 px-2 py-0.5 bg-green-900 bg-opacity-40 text-green-400 text-xs rounded border border-green-800">
-                  Enabled
-                </span>
-              )}
+              <h3 className="text-base font-medium text-white">Two-Factor Authentication (TOTP)</h3>
+              <p className="text-slate-400 text-sm mt-1">Use Google Authenticator, Authy, or 1Password to secure password logins.</p>
+              <span className={`inline-block mt-2 px-2 py-0.5 text-xs rounded border ${twoFactorEnabled ? 'bg-green-900/40 text-green-400 border-green-800' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>
+                {twoFactorEnabled ? 'Enabled' : 'Disabled'}
+              </span>
             </div>
-            <button
-              onClick={toggleTwoFactor}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-800 ${
-                twoFactorEnabled ? 'bg-blue-600' : 'bg-slate-600'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  twoFactorEnabled ? 'translate-x-6' : 'translate-x-1'
-                }`}
-              />
-            </button>
+            {!twoFactorEnabled ? (
+              <button
+                onClick={startTwoFactorSetup}
+                disabled={twoFactorLoading}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg"
+              >
+                {twoFactorLoading ? 'Preparing...' : 'Enable 2FA'}
+              </button>
+            ) : null}
           </div>
+
+          {twoFactorError ? <ErrorBanner message={twoFactorError} onClose={() => setTwoFactorError('')} /> : null}
+          {twoFactorSuccess ? <SuccessBanner message={twoFactorSuccess} onClose={() => setTwoFactorSuccess('')} /> : null}
+
+          {!twoFactorEnabled && qrCodeDataUrl && (
+            <div className="mt-4 rounded-lg border border-slate-700 bg-slate-900 p-4">
+              <p className="text-sm text-slate-300 mb-3">1) Scan this QR code in your authenticator app.</p>
+              <img src={qrCodeDataUrl} alt="2FA QR code" className="h-44 w-44 rounded bg-white p-2" />
+              <p className="text-xs text-slate-400 mt-3">Can’t scan? Use this secret manually:</p>
+              <code className="mt-1 inline-block rounded bg-slate-800 px-2 py-1 text-xs text-blue-300 break-all">{manualSecret}</code>
+
+              <div className="mt-4 flex flex-col sm:flex-row gap-2">
+                <input
+                  type="text"
+                  value={twoFactorCode}
+                  onChange={(e) => setTwoFactorCode(e.target.value)}
+                  placeholder="Enter 6-digit code"
+                  className="w-full sm:w-52 px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+                <button
+                  onClick={verifyTwoFactorSetup}
+                  disabled={twoFactorLoading}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg"
+                >
+                  {twoFactorLoading ? 'Verifying...' : 'Verify & Enable'}
+                </button>
+              </div>
+            </div>
+          )}
+
           {twoFactorEnabled && (
-            <div className="mt-4 p-4 bg-blue-900 bg-opacity-20 border border-blue-800 rounded-lg">
-              <p className="text-sm text-blue-300">
-                2FA setup via authenticator app coming soon. This toggle is a UI placeholder for the MVP.
-              </p>
+            <div className="mt-4 rounded-lg border border-amber-700/50 bg-amber-900/10 p-4">
+              <p className="text-sm text-amber-200">To disable 2FA, enter a current authenticator code.</p>
+              <div className="mt-3 flex flex-col sm:flex-row gap-2">
+                <input
+                  type="text"
+                  value={disableCode}
+                  onChange={(e) => setDisableCode(e.target.value)}
+                  placeholder="Current 6-digit code"
+                  className="w-full sm:w-52 px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+                <button
+                  onClick={disableTwoFactor}
+                  disabled={twoFactorLoading}
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg"
+                >
+                  {twoFactorLoading ? 'Disabling...' : 'Disable 2FA'}
+                </button>
+              </div>
             </div>
           )}
         </div>
