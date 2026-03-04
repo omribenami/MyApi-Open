@@ -1,8 +1,62 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import BrandLogo from './BrandLogo';
 import CookieNotice from './CookieNotice';
+
+function NavDropdown({ label, items, isActiveFn, onMobileClick }) {
+  const [open, setOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const hasActive = items.some(i => isActiveFn(i.path));
+  
+  const baseClasses = "inline-flex items-center px-2.5 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-all cursor-pointer";
+  const activeClasses = "text-blue-400 drop-shadow-[0_0_10px_rgba(96,165,250,0.8)]";
+  const inactiveClasses = "text-slate-400 hover:text-slate-200";
+
+  return (
+    <div className="relative" ref={dropdownRef} onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+      <div 
+        className={`${baseClasses} ${hasActive ? activeClasses : inactiveClasses}`}
+        onClick={() => setOpen(!open)}
+      >
+        {label}
+        <svg className={`ml-1 h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </div>
+      
+      {open && (
+        <div className="absolute left-0 mt-1 w-48 rounded-lg border border-slate-700 bg-slate-900 shadow-xl py-1 z-50">
+          {items.map((item) => (
+            <Link
+              key={item.path}
+              to={item.path}
+              onClick={() => { setOpen(false); if (onMobileClick) onMobileClick(); }}
+              className={`block px-4 py-2 text-sm transition-all ${
+                isActiveFn(item.path)
+                  ? 'text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.8)]'
+                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function Layout({ children, onLogout }) {
   const location = useLocation();
@@ -15,27 +69,57 @@ function Layout({ children, onLogout }) {
   })();
   const isPowerUser = String(user?.email || '').toLowerCase() === 'admin@your.domain.com';
 
-  const navItems = [
-    { path: '/', label: 'Dashboard' },
-    { path: '/services', label: 'Services' },
-    { path: '/tokens', label: 'Token Vault' },
-    { path: '/access-tokens', label: 'Access Tokens' },
-    { path: '/personas', label: 'Personas' },
-    { path: '/skills', label: 'Skills' },
-    { path: '/identity', label: 'Identity' },
-    { path: '/knowledge', label: 'Knowledge' },
-    { path: '/marketplace', label: 'Marketplace' },
-    { path: '/platform-docs', label: 'Platform Docs' },
-    { path: '/api-docs', label: 'API Docs' },
-    ...(isPowerUser ? [{ path: '/users', label: 'Users' }] : []),
+  const isActive = (path) => (path === '/' ? location.pathname === path : location.pathname.startsWith(path));
+
+  const navGroups = [
+    {
+      label: 'Core',
+      items: [
+        { path: '/', label: 'Dashboard' },
+        { path: '/services', label: 'Services' },
+        { path: '/marketplace', label: 'Marketplace' },
+      ]
+    },
+    {
+      label: 'Security',
+      items: [
+        { path: '/tokens', label: 'Token Vault' },
+        { path: '/access-tokens', label: 'Access Tokens' },
+        { path: '/identity', label: 'Identity' },
+      ]
+    },
+    {
+      label: 'AI & Data',
+      items: [
+        { path: '/personas', label: 'Personas' },
+        { path: '/skills', label: 'Skills' },
+        { path: '/knowledge', label: 'Knowledge' },
+      ]
+    },
+    {
+      label: 'Resources',
+      items: [
+        { path: '/platform-docs', label: 'Platform Docs' },
+        { path: '/api-docs', label: 'API Docs' },
+      ]
+    }
   ];
+
+  if (isPowerUser) {
+    navGroups.push({
+      label: 'Admin',
+      items: [{ path: '/users', label: 'Users' }]
+    });
+  }
 
   const avatarUrl = useMemo(() => {
     const fromStorage = localStorage.getItem('profileAvatarUrl');
     return fromStorage || user?.avatarUrl || user?.avatar_url || '';
   }, [user]);
 
-  const isActive = (path) => (path === '/' ? location.pathname === path : location.pathname.startsWith(path));
+  const displayName = useMemo(() => {
+    return user?.display_name || user?.displayName || user?.name || user?.username || 'User';
+  }, [user]);
 
   const handleLogout = () => {
     if (window.confirm('Are you sure you want to log out?')) {
@@ -64,54 +148,90 @@ function Layout({ children, onLogout }) {
               </Link>
             </div>
 
-            <div className="hidden xl:flex xl:items-center xl:gap-1.5 flex-1 min-w-0 mx-6">
-              {navItems.map((item) => (
-                <Link key={item.path} to={item.path} className={`inline-flex items-center px-2.5 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-colors ${isActive(item.path) ? 'text-white bg-blue-600 border border-blue-500' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'}`}>
-                  {item.label}
-                </Link>
+            {/* Desktop Navigation */}
+            <div className="hidden xl:flex xl:items-center xl:gap-3 flex-1 min-w-0 mx-6">
+              {navGroups.map((group) => (
+                <NavDropdown 
+                  key={group.label} 
+                  label={group.label} 
+                  items={group.items} 
+                  isActiveFn={isActive} 
+                />
               ))}
             </div>
 
+            {/* User Profile Menu */}
             <div className="relative flex items-center">
               <button
                 onClick={() => setAvatarMenuOpen((v) => !v)}
-                className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-900 px-2 py-1.5 hover:border-slate-700"
+                className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900 p-1 pr-3 hover:border-slate-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900"
               >
                 {avatarUrl ? (
-                  <img src={avatarUrl} alt="avatar" className="h-8 w-8 rounded-full object-cover" />
+                  <img src={avatarUrl} alt="avatar" className="h-8 w-8 rounded-full object-cover border border-slate-700" />
                 ) : (
-                  <div className="h-8 w-8 rounded-full bg-slate-700 text-slate-200 grid place-items-center text-xs font-semibold">
-                    {(user?.username || user?.email || 'U').slice(0, 1).toUpperCase()}
+                  <div className="h-8 w-8 rounded-full bg-slate-700 text-slate-200 flex items-center justify-center text-sm font-bold border border-slate-600">
+                    {(displayName).slice(0, 1).toUpperCase()}
                   </div>
                 )}
-                <span className="hidden sm:inline text-sm text-slate-200 max-w-[160px] truncate">{user?.email || user?.username || 'User'}</span>
+                <span className="hidden sm:inline text-sm font-medium text-slate-200 max-w-[120px] truncate">
+                  {displayName}
+                </span>
+                <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
               </button>
 
               {avatarMenuOpen && (
-                <div className="absolute right-0 top-12 w-52 rounded-lg border border-slate-700 bg-slate-900 p-1.5 shadow-xl">
+                <div className="absolute right-0 top-12 w-56 rounded-xl border border-slate-700 bg-slate-900 shadow-2xl py-2 z-50">
+                  <div className="px-4 py-3 border-b border-slate-800 mb-2">
+                    <p className="text-sm font-medium text-white truncate">{displayName}</p>
+                    <p className="text-xs text-slate-400 truncate">{user?.email || user?.username}</p>
+                  </div>
+                  
                   {userMenuItems.map((item) => (
-                    <Link key={item.path} to={item.path} onClick={() => setAvatarMenuOpen(false)} className={`block rounded-md px-3 py-2 text-sm ${isActive(item.path) ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}>
+                    <Link 
+                      key={item.path} 
+                      to={item.path} 
+                      onClick={() => setAvatarMenuOpen(false)} 
+                      className={`block px-4 py-2 text-sm transition-all ${isActive(item.path) ? 'text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.8)] bg-slate-800/50' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}
+                    >
                       {item.label}
                     </Link>
                   ))}
-                  <button onClick={handleLogout} className="mt-1 block w-full rounded-md px-3 py-2 text-left text-sm text-rose-300 hover:bg-slate-800">
-                    Logout
-                  </button>
+                  
+                  <div className="border-t border-slate-800 mt-2 pt-2">
+                    <button 
+                      onClick={handleLogout} 
+                      className="w-full text-left px-4 py-2 text-sm text-rose-400 hover:bg-slate-800 hover:text-rose-300 transition-colors"
+                    >
+                      Log out
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
           </div>
         </div>
 
+        {/* Mobile Navigation */}
         {menuOpen && (
-          <div className="xl:hidden border-t border-slate-800 bg-slate-900 bg-opacity-95 backdrop-blur-sm">
-            <div className="max-w-7xl mx-auto px-4 py-2 space-y-1">
-              {navItems.concat(userMenuItems).map((item) => (
-                <Link key={item.path} to={item.path} onClick={() => setMenuOpen(false)} className={`flex items-center px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${isActive(item.path) ? 'text-white bg-blue-600 border border-blue-500' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}>
-                  {item.label}
-                </Link>
+          <div className="xl:hidden border-t border-slate-800 bg-slate-900 bg-opacity-95 backdrop-blur-sm shadow-xl max-h-[80vh] overflow-y-auto">
+            <div className="max-w-7xl mx-auto px-4 py-4 space-y-4">
+              {navGroups.map((group) => (
+                <div key={group.label} className="space-y-1">
+                  <h3 className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">{group.label}</h3>
+                  {group.items.map((item) => (
+                    <Link 
+                      key={item.path} 
+                      to={item.path} 
+                      onClick={() => setMenuOpen(false)} 
+                      className={`flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-all ${isActive(item.path) ? 'text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.8)] bg-blue-900/20 border border-blue-500/30' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+                    >
+                      {item.label}
+                    </Link>
+                  ))}
+                </div>
               ))}
-              <button onClick={handleLogout} className="w-full text-left px-3 py-2.5 rounded-md text-sm font-medium text-rose-300 hover:bg-slate-800">Logout</button>
             </div>
           </div>
         )}
@@ -119,8 +239,10 @@ function Layout({ children, onLogout }) {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6"><div className="rounded-lg">{children}</div></main>
 
-      <footer className="border-t border-slate-800 mt-12 py-6">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"><div className="text-center text-sm text-slate-500"><p>MyApi Dashboard v1.0 · © 2026</p></div></div>
+      <footer className="border-t border-slate-800 mt-12 py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <p className="text-sm text-slate-500 font-medium">MyApi Dashboard v1.0 · © 2026</p>
+        </div>
       </footer>
       <CookieNotice />
     </div>
