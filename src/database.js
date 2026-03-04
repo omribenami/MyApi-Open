@@ -824,7 +824,7 @@ function updateUserSubscriptionStatus(userId, { status, customerId, subscription
 }
 
 function getUserTotpSecret(userId) {
-  const row = db.prepare('SELECT COALESCE(totp_secret, "") as totpSecret, COALESCE(two_factor_enabled, 0) as twoFactorEnabled FROM users WHERE id = ?').get(userId);
+  const row = db.prepare("SELECT COALESCE(totp_secret, '') as totpSecret, COALESCE(two_factor_enabled, 0) as twoFactorEnabled FROM users WHERE id = ?").get(userId);
   if (!row) return null;
   return { totpSecret: row.totpSecret || '', twoFactorEnabled: Boolean(row.twoFactorEnabled) };
 }
