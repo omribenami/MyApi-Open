@@ -669,6 +669,10 @@ app.get('/openapi.json', (req, res) => {
   const host = req.get('host');
   const scheme = req.protocol || 'http';
 
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+
   res.json({
     openapi: '3.0.0',
     info: {
@@ -827,7 +831,11 @@ app.get('/openapi.json', (req, res) => {
 app.get('/api-docs-ui', (req, res) => {
   const host = req.get('host');
   const scheme = req.protocol || 'http';
-  const specUrl = `${scheme}://${host}/openapi.json`;
+  const specUrl = `${scheme}://${host}/openapi.json?v=${Date.now()}`;
+
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
 
   res.type('html').send(`<!doctype html>
 <html>

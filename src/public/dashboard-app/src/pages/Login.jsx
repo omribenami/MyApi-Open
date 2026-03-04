@@ -47,7 +47,7 @@ function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showToken, setShowToken] = useState(false);
-  const [viewMode, setViewMode] = useState('login'); // 'login' | 'pricing'
+  const [viewMode, setViewMode] = useState('pricing'); // 'login' | 'pricing'
   const [billingPlans, setBillingPlans] = useState([]);
   const { setMasterToken, isAuthenticated } = useAuthStore();
 
@@ -188,26 +188,6 @@ function Login() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950 flex flex-col">
-      {/* Header Nav for Toggle */}
-      <div className="relative z-20 w-full px-4 pt-4 sm:px-6 sm:pt-6">
-        <div className="flex justify-center sm:justify-end">
-          {viewMode === 'login' ? (
-            <button 
-              onClick={() => setViewMode('pricing')}
-              className="text-slate-300 hover:text-white text-sm font-medium transition-colors bg-slate-900/50 backdrop-blur-md border border-slate-700/50 rounded-full px-4 py-2"
-            >
-              View Pricing Plans
-            </button>
-          ) : (
-            <button 
-              onClick={() => setViewMode('login')}
-              className="text-slate-300 hover:text-white text-sm font-medium transition-colors bg-slate-900/50 backdrop-blur-md border border-slate-700/50 rounded-full px-4 py-2"
-            >
-              Back to Login
-            </button>
-          )}
-        </div>
-      </div>
 
       {/* Ambient glow orbs - CSS only, no JS */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
@@ -258,6 +238,20 @@ function Login() {
 
           {/* Right side — Logic/Pricing Card */}
           <div className="w-full max-w-sm lg:max-w-md">
+            <div className="mb-4 inline-flex w-full rounded-xl border border-slate-700 bg-slate-900/60 p-1">
+              <button
+                onClick={() => setViewMode('pricing')}
+                className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${viewMode === 'pricing' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}
+              >
+                Pricing Plans
+              </button>
+              <button
+                onClick={() => setViewMode('login')}
+                className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${viewMode === 'login' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}
+              >
+                Login
+              </button>
+            </div>
             {viewMode === 'login' ? (
               <>
                 {/* Login Card */}
