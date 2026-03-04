@@ -246,44 +246,26 @@ function DashboardHome() {
           <p className="text-sm text-slate-400 mb-4">
             Learn how to use MyApi to connect services, build custom AI personas, and manage access tokens.
           </p>
-          <ul className="space-y-2 text-sm">
-            <li>
-              <a href="https://github.com/omribenami/MyApi" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">GitHub Repository</a>
-            </li>
-            <li>
-              <a href="https://github.com/omribenami/MyApi/tree/main/docs" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">Design & Architecture Docs</a>
-            </li>
-            <li>
-              <Link to="/personas" className="text-blue-400 hover:underline">How to build AI Personas</Link>
-            </li>
-            <li>
-              <Link to="/tokens" className="text-blue-400 hover:underline">Managing the Token Vault</Link>
-            </li>
-          </ul>
+          <div className="mt-4">
+            <Link to="/platform-docs" className="inline-block px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded transition-colors">
+              Read Platform Docs
+            </Link>
+          </div>
         </div>
 
         {/* API Docs */}
         <div className="bg-slate-900 border border-slate-800 rounded-md p-6">
           <h2 className="text-lg font-semibold text-slate-100 mb-2 flex items-center gap-2">
-            <span className="text-emerald-400">⚡</span> API Reference
+            <span className="text-emerald-400">⚡</span> API Docs
           </h2>
           <p className="text-sm text-slate-400 mb-4">
-            Integrate MyApi directly into your apps. Explore the OpenAPI specs and endpoints.
+            Integrate MyApi directly into your apps. Explore the OpenAPI specs and test endpoints.
           </p>
-          <ul className="space-y-2 text-sm">
-            <li>
-              <a href="/openapi.json" target="_blank" className="text-emerald-400 hover:underline">OpenAPI Specification (swagger)</a>
-            </li>
-            <li>
-              <a href="/api/v1/capabilities" target="_blank" className="text-emerald-400 hover:underline">System Capabilities JSON</a>
-            </li>
-            <li>
-              <a href="/.well-known/ai-plugin.json" target="_blank" className="text-emerald-400 hover:underline">ChatGPT Plugin Manifest</a>
-            </li>
-            <li>
-              <a href="/api/v1/tokens/me/capabilities" target="_blank" className="text-emerald-400 hover:underline">My Active Scopes (JSON)</a>
-            </li>
-          </ul>
+          <div className="mt-4">
+            <Link to="/api-docs" className="inline-block px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded transition-colors">
+              View API Docs
+            </Link>
+          </div>
         </div>
       </div>
 

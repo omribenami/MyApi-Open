@@ -18,6 +18,8 @@ function Layout({ children, onLogout }) {
     { path: '/knowledge', label: 'Knowledge' },
     { path: '/marketplace', label: 'Marketplace' },
     { path: '/my-listings', label: 'My Listings' },
+    { path: '/platform-docs', label: 'Platform Docs' },
+    { path: '/api-docs', label: 'API Docs' },
     { path: '/users', label: 'Users' },
     { path: '/settings', label: 'Settings' },
   ];

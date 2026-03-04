@@ -12,6 +12,8 @@ import KnowledgeBase from './pages/KnowledgeBase';
 import Identity from './pages/Identity';
 import Settings from './pages/Settings';
 import UserManagement from './pages/UserManagement';
+import PlatformDocs from './pages/PlatformDocs';
+import ApiDocs from './pages/ApiDocs';
 import Marketplace from './pages/Marketplace';
 import MyListings from './pages/MyListings';
 import Skills from './pages/Skills';
@@ -122,6 +124,22 @@ function App() {
               element={
                 <ProtectedRoute>
                   <UserManagement />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/platform-docs"
+              element={
+                <ProtectedRoute>
+                  <PlatformDocs />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/api-docs"
+              element={
+                <ProtectedRoute>
+                  <ApiDocs />
                 </ProtectedRoute>
               }
             />
