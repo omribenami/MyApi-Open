@@ -48,7 +48,7 @@ function Layout({ children, onLogout }) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             {/* Logo & Hamburger */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 flex-shrink-0">
               {/* Hamburger button - mobile only */}
               <button
                 onClick={() => setMenuOpen(!menuOpen)}
@@ -73,12 +73,12 @@ function Layout({ children, onLogout }) {
             </div>
 
             {/* Desktop Navigation */}
-            <div className="hidden md:flex md:items-center md:gap-1">
+            <div className="hidden md:flex md:items-center md:gap-1 flex-1 min-w-0 mx-4 overflow-x-auto no-scrollbar">
               {navItems.map((item) => (
                 <Link
                   key={item.path}
                   to={item.path}
-                  className={`inline-flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors duration-150 ${
+                  className={`inline-flex items-center px-2.5 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-colors duration-150 ${
                     isActive(item.path)
                       ? 'bg-slate-800 text-slate-100 border border-slate-700'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
@@ -90,10 +90,10 @@ function Layout({ children, onLogout }) {
             </div>
 
             {/* Right Section */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 flex-shrink-0">
               {user && (
-                <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-md border border-slate-800 bg-slate-900">
-                  <span className="text-sm text-slate-300">{user.email || 'User'}</span>
+                <div className="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-md border border-slate-800 bg-slate-900 max-w-[220px]">
+                  <span className="text-sm text-slate-300 truncate">{user.email || 'User'}</span>
                 </div>
               )}
               <button

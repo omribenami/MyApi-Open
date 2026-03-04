@@ -1,4 +1,22 @@
 import { useState, useEffect } from 'react';
+
+const formatUptime = (uptime) => {
+  if (uptime === null || uptime === undefined || uptime === '') return '';
+  if (typeof uptime === 'string' && Number.isNaN(Number(uptime))) return uptime;
+
+  const totalSeconds = Math.max(0, Math.floor(Number(uptime)));
+  if (!Number.isFinite(totalSeconds)) return String(uptime);
+
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+
+  const parts = [];
+  if (days) parts.push(`${days}d`);
+  if (hours) parts.push(`${hours}h`);
+  if (minutes || parts.length === 0) parts.push(`${minutes}m`);
+  return parts.join(' ');
+};
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 
@@ -79,7 +97,7 @@ function DashboardHome() {
 
         if (kbRes.ok) {
           const kbData = await kbRes.json();
-          const docs = kbData.data || kbData.documents || [];
+          const docs = Array.isArray(kbData) ? kbData : (kbData.data || kbData.documents || []);
           setStats((s) => ({ ...s, kbDocs: docs.length }));
         }
       } catch (err) {
@@ -170,13 +188,13 @@ function DashboardHome() {
             <span className="inline-flex items-center px-2 py-0.5 rounded text-xs border border-emerald-700 text-emerald-300 bg-emerald-900/20">Operational</span>
           </div>
           <p className="text-xs text-slate-400 mt-2">
-            {health.uptime && `Uptime: ${health.uptime}`}
+            {health.uptime && `Uptime: ${formatUptime(health.uptime)}`}
           </p>
         </div>
       )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {statCards.map((card) => (
           <Link
             key={card.label}

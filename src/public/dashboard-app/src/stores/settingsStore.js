@@ -45,7 +45,7 @@ export const useSettingsStore = create((set) => ({
       profile: data,
       profileDraft: {
         displayName: data.identity?.Name || data.user?.username || '',
-        email: data.user?.email || '',
+        email: data.user?.email || data.identity?.Email || '',
         timezone: data.identity?.Timezone || 'UTC',
         language: 'en',
       },
@@ -70,7 +70,7 @@ export const useSettingsStore = create((set) => ({
       profileDraft: state.profile
         ? {
             displayName: state.profile.identity?.Name || state.profile.user?.username || '',
-            email: state.profile.user?.email || '',
+            email: state.profile.user?.email || state.profile.identity?.Email || '',
             timezone: state.profile.identity?.Timezone || 'UTC',
             language: 'en',
           }

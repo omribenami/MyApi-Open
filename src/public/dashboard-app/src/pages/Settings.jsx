@@ -76,6 +76,7 @@ const LANGUAGES = [
 
 function ProfileSection() {
   const masterToken = useAuthStore((state) => state.masterToken);
+  const user = useAuthStore((state) => state.user);
   const {
     profile,
     profileDraft,
@@ -112,6 +113,21 @@ function ProfileSection() {
       const data = await res.json();
       setProfile(data);
     } catch (err) {
+      const tokenData = (() => {
+        try { return JSON.parse(localStorage.getItem('tokenData') || '{}'); } catch { return {}; }
+      })();
+      setProfile({
+        user: {
+          email: user?.email || tokenData?.email || tokenData?.user?.email || '',
+          username: user?.username || tokenData?.username || tokenData?.user?.username || '',
+        },
+        identity: {
+          Name: user?.username || tokenData?.username || '',
+          Email: user?.email || tokenData?.email || tokenData?.user?.email || '',
+          Timezone: 'UTC',
+        },
+      });
+
       if (err.name === 'AbortError') {
         setProfileError('Profile request timed out. Please retry.');
       } else {
@@ -628,6 +644,10 @@ function DangerZoneSection({ onRequestExport, onRequestDelete }) {
 }
 
 function BillingSection() {
+  const tokenData = (() => {
+    try { return JSON.parse(localStorage.getItem('tokenData') || '{}'); } catch { return {}; }
+  })();
+  const currentPlanId = (tokenData?.plan || tokenData?.subscription?.plan || 'free').toLowerCase();
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -668,19 +688,26 @@ function BillingSection() {
       {error && <ErrorBanner message={error} onClose={() => setError('')} />}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {plans.map((plan) => (
-          <div key={plan.id} className="bg-slate-900 border border-slate-700 rounded-lg p-4">
-            <h3 className="text-white font-semibold">{plan.name}</h3>
+          <div key={plan.id} className={`bg-slate-900 border rounded-lg p-4 ${currentPlanId === String(plan.id).toLowerCase() ? 'border-blue-500 ring-1 ring-blue-500/40' : 'border-slate-700'}`}>
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-white font-semibold">{plan.name}</h3>
+              {currentPlanId === String(plan.id).toLowerCase() && (
+                <span className="text-[10px] uppercase tracking-wide font-semibold px-2 py-1 rounded bg-blue-600 text-white">
+                  Current Plan
+                </span>
+              )}
+            </div>
             <p className="text-slate-300 text-xl mt-1">${plan.priceMonthly}<span className="text-sm text-slate-400">/mo</span></p>
             <p className="text-slate-400 text-xs mt-2">{plan.description}</p>
             <ul className="mt-3 space-y-1 text-xs text-slate-300">
               {(plan.features || []).map((f) => <li key={f}>• {f}</li>)}
             </ul>
             <button
-              disabled={loading}
+              disabled={loading || currentPlanId === String(plan.id).toLowerCase()}
               onClick={() => handleCheckout(plan.id)}
               className="mt-4 w-full px-3 py-2 rounded bg-blue-600 hover:bg-blue-500 text-white text-sm disabled:opacity-50"
             >
-              {plan.id === 'free' ? 'Switch to Free' : 'Choose Plan'}
+              {currentPlanId === String(plan.id).toLowerCase() ? 'Current Plan' : (plan.id === 'free' ? 'Switch to Free' : 'Choose Plan')}
             </button>
           </div>
         ))}
