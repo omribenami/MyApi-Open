@@ -325,7 +325,7 @@ function TokenVault() {
                   )}
                   {token.discoveredApiUrl && (
                     <p className="mt-1 text-xs text-emerald-400 break-all">
-                      API: {token.discoveredApiUrl}{token.discoveredAuthScheme ? ` (${token.discoveredAuthScheme})` : ''}
+                      API: {token.discoveredApiUrl}{token.discoveredAuthScheme && token.discoveredAuthScheme !== 'unknown' ? ` (${token.discoveredAuthScheme})` : ''}
                     </p>
                   )}
                   {token.createdAt && (
@@ -386,24 +386,26 @@ function TokenVault() {
 
               <div>
                 <label className="block text-sm text-slate-300 mb-2">API URL (Optional)</label>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                   <input
                     type="url"
                     value={formData.discoveredApiUrl}
                     onChange={(e) => setFormData({ ...formData, discoveredApiUrl: e.target.value })}
                     placeholder="https://api.example.com"
-                    className="flex-1 px-3 py-2 ui-input focus:border-slate-500 focus:outline-none"
+                    className="flex-1 w-full px-3 py-2 ui-input focus:border-slate-500 focus:outline-none"
                   />
-                  <span className="text-slate-500 text-xs font-semibold uppercase tracking-wider">or</span>
-                  <button
-                    type="button"
-                    onClick={handleDiscoverApi}
-                    disabled={discovering || !formData.websiteUrl}
-                    className="px-4 py-2 rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-60 text-slate-100 text-sm border border-slate-600 whitespace-nowrap transition-colors"
-                    title="Scan Website URL for API endpoint"
-                  >
-                    {discovering ? 'Scanning...' : 'Scan Website'}
-                  </button>
+                  <div className="flex items-center gap-3 w-full sm:w-auto">
+                    <span className="text-slate-500 text-xs font-semibold uppercase tracking-wider hidden sm:inline">or</span>
+                    <button
+                      type="button"
+                      onClick={handleDiscoverApi}
+                      disabled={discovering || !formData.websiteUrl}
+                      className="w-full sm:w-auto px-4 py-2 rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-60 text-slate-100 text-sm border border-slate-600 whitespace-nowrap transition-colors"
+                      title="Scan Website URL for API endpoint"
+                    >
+                      {discovering ? 'Scanning...' : 'Scan Website'}
+                    </button>
+                  </div>
                 </div>
                 {formData.discoveredAuthScheme && formData.discoveredAuthScheme !== 'unknown' && (
                   <p className="mt-2 text-xs text-emerald-400">✓ Detected Auth: {formData.discoveredAuthScheme}</p>
