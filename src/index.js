@@ -244,15 +244,18 @@ function rateLimit(windowMs = 60000, maxRequests = (process.env.NODE_ENV === 'te
     if (!rateLimitMap[key]) rateLimitMap[key] = [];
     rateLimitMap[key] = rateLimitMap[key].filter(t => now - t < windowMs);
     if (rateLimitMap[key].length >= maxRequests) {
-      return res.status(429).json({ error: "Rate limit exceeded" });
+      const retryAfterSeconds = Math.max(1, Math.ceil((windowMs - (now - rateLimitMap[key][0])) / 1000));
+      res.set('Retry-After', String(retryAfterSeconds));
+      return res.status(429).json({ error: 'Rate limit exceeded', retryAfterSeconds });
     }
     rateLimitMap[key].push(now);
-    res.set("X-RateLimit-Limit", String(maxRequests));
-    res.set("X-RateLimit-Remaining", String(maxRequests - rateLimitMap[key].length));
+    res.set('X-RateLimit-Limit', String(maxRequests));
+    res.set('X-RateLimit-Remaining', String(maxRequests - rateLimitMap[key].length));
     next();
   };
 }
-app.use(rateLimit());
+// Apply limiter only to API routes so dashboard pages still render and can show graceful UI errors.
+app.use('/api/v1', rateLimit());
 
 // --- Auth Middleware ---
 // NOTE: We are transitioning from Bearer master-token login to session-based login.

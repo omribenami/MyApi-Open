@@ -14,6 +14,37 @@ const PROFILE_FIELDS = [
   { key: 'Bio', label: 'Bio', placeholder: 'A short description about yourself', type: 'textarea' },
 ];
 
+async function apiRequest(url, options = {}) {
+  const res = await fetch(url, options);
+  const contentType = res.headers.get('content-type') || '';
+  const payload = contentType.includes('application/json')
+    ? await res.json().catch(() => ({}))
+    : await res.text().catch(() => '');
+
+  if (!res.ok) {
+    const baseMessage = typeof payload === 'object' ? payload?.error : payload;
+    const err = new Error(baseMessage || `Request failed (${res.status})`);
+    err.status = res.status;
+    err.payload = payload;
+    throw err;
+  }
+
+  return payload;
+}
+
+function getReadableError(err, fallback) {
+  if (err?.status === 429) {
+    const retryAfterSeconds = err?.payload?.retryAfterSeconds;
+    return retryAfterSeconds
+      ? `Too many requests. Please wait ${retryAfterSeconds}s and try again.`
+      : 'Too many requests right now. Please wait a moment and retry.';
+  }
+  if (err?.status >= 500) {
+    return 'Server error. Please try again.';
+  }
+  return err?.message || fallback;
+}
+
 function ProfileTab() {
   const masterToken = useAuthStore((state) => state.masterToken);
   const {
@@ -39,15 +70,13 @@ function ProfileTab() {
     setProfileLoading(true);
     clearProfileError();
     try {
-      const res = await fetch('/api/v1/users/me', {
+      const data = await apiRequest('/api/v1/users/me', {
         headers: { Authorization: `Bearer ${masterToken}` },
         credentials: 'include',
       });
-      if (!res.ok) throw new Error('Failed to load profile');
-      const data = await res.json();
       setProfile(data);
     } catch (err) {
-      setProfileError(err.message || 'Failed to load profile');
+      setProfileError(getReadableError(err, 'Failed to load profile'));
     } finally {
       setProfileLoading(false);
     }
@@ -71,7 +100,7 @@ function ProfileTab() {
     setProfileSaving(true);
     clearProfileError();
     try {
-      const res = await fetch('/api/v1/users/me', {
+      await apiRequest('/api/v1/users/me', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -80,10 +109,6 @@ function ProfileTab() {
         credentials: 'include',
         body: JSON.stringify(profileDraft),
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || 'Failed to save profile');
-      }
       // Reflect immediately, then re-fetch authoritative state
       setProfile({
         ...(profile || {}),
@@ -92,7 +117,7 @@ function ProfileTab() {
       setProfileSuccess('Profile saved successfully');
       await fetchProfile();
     } catch (err) {
-      setProfileError(err.message || 'Failed to save profile');
+      setProfileError(getReadableError(err, 'Failed to save profile'));
     } finally {
       setProfileSaving(false);
     }
@@ -111,7 +136,16 @@ function ProfileTab() {
       {/* Alerts */}
       {profileError && (
         <div className="bg-red-900 bg-opacity-30 border border-red-700 rounded-lg p-4 flex items-start justify-between gap-4">
-          <p className="text-red-200 text-sm">{profileError}</p>
+          <div className="space-y-2">
+            <p className="text-red-200 text-sm">{profileError}</p>
+            <button
+              type="button"
+              onClick={fetchProfile}
+              className="px-3 py-1.5 rounded border border-red-600 text-red-200 hover:bg-red-800/30 text-xs"
+            >
+              Retry
+            </button>
+          </div>
           <button onClick={clearProfileError} className="text-red-400 hover:text-red-300 flex-shrink-0">
             ✕
           </button>
@@ -257,9 +291,7 @@ function PersonaTab() {
     setPersonaLoading(true);
     clearPersonaError();
     try {
-      const res = await fetch('/api/v1/personas', { headers });
-      if (!res.ok) throw new Error('Failed to load personas');
-      const data = await res.json();
+      const data = await apiRequest('/api/v1/personas', { headers });
       const list = data.data || [];
       setPersonas(list);
       // Auto-select active persona
@@ -268,7 +300,7 @@ function PersonaTab() {
         setSelectedPersonaId(active.id);
       }
     } catch (err) {
-      setPersonaError(err.message || 'Failed to load personas');
+      setPersonaError(getReadableError(err, 'Failed to load personas'));
     } finally {
       setPersonaLoading(false);
     }
@@ -279,12 +311,10 @@ function PersonaTab() {
     setPersonaLoading(true);
     clearPersonaError();
     try {
-      const res = await fetch(`/api/v1/personas/${personaId}`, { headers });
-      if (!res.ok) throw new Error('Failed to load persona content');
-      const data = await res.json();
+      const data = await apiRequest(`/api/v1/personas/${personaId}`, { headers });
       setSoulContent(data.data?.soul_content || '');
     } catch (err) {
-      setPersonaError(err.message || 'Failed to load persona content');
+      setPersonaError(getReadableError(err, 'Failed to load persona content'));
     } finally {
       setPersonaLoading(false);
     }
@@ -322,19 +352,15 @@ function PersonaTab() {
     setPersonaSaving(true);
     clearPersonaError();
     try {
-      const res = await fetch(`/api/v1/personas/${selectedPersonaId}`, {
+      await apiRequest(`/api/v1/personas/${selectedPersonaId}`, {
         method: 'PUT',
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify({ soul_content: soulDraft }),
       });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Failed to save persona');
-      }
       setSoulContent(soulDraft);
       setPersonaSuccess('AI persona saved successfully');
     } catch (err) {
-      setPersonaError(err.message || 'Failed to save persona');
+      setPersonaError(getReadableError(err, 'Failed to save persona'));
     } finally {
       setPersonaSaving(false);
     }
@@ -367,7 +393,20 @@ function PersonaTab() {
       {/* Alerts */}
       {personaError && (
         <div className="bg-red-900 bg-opacity-30 border border-red-700 rounded-lg p-4 flex items-start justify-between gap-4">
-          <p className="text-red-200 text-sm">{personaError}</p>
+          <div className="space-y-2">
+            <p className="text-red-200 text-sm">{personaError}</p>
+            <button
+              type="button"
+              onClick={() => {
+                clearPersonaError();
+                if (selectedPersonaId) fetchSoulContent(selectedPersonaId);
+                else fetchPersonas();
+              }}
+              className="px-3 py-1.5 rounded border border-red-600 text-red-200 hover:bg-red-800/30 text-xs"
+            >
+              Retry
+            </button>
+          </div>
           <button onClick={clearPersonaError} className="text-red-400 hover:text-red-300 flex-shrink-0">
             ✕
           </button>

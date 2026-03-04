@@ -128,7 +128,7 @@ function DashboardHome() {
     {
       label: 'Knowledge Base',
       value: stats.kbDocs,
-      link: '/knowledge-base',
+      link: '/knowledge',
       description: 'Documents & memory',
     },
     {
