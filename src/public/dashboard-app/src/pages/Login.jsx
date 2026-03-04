@@ -176,18 +176,18 @@ function Login() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950 flex flex-col">
       {/* Header Nav for Toggle */}
-      <div className="absolute top-0 right-0 p-6 z-20">
+      <div className="absolute top-4 right-4 sm:top-6 sm:right-6 z-20">
         {viewMode === 'login' ? (
           <button 
             onClick={() => setViewMode('pricing')}
-            className="text-slate-300 hover:text-white text-sm font-medium transition-colors"
+            className="text-slate-300 hover:text-white text-sm font-medium transition-colors bg-slate-900/50 backdrop-blur-md border border-slate-700/50 rounded-full px-4 py-2"
           >
             View Pricing Plans
           </button>
         ) : (
           <button 
             onClick={() => setViewMode('login')}
-            className="text-slate-300 hover:text-white text-sm font-medium transition-colors"
+            className="text-slate-300 hover:text-white text-sm font-medium transition-colors bg-slate-900/50 backdrop-blur-md border border-slate-700/50 rounded-full px-4 py-2"
           >
             Back to Login
           </button>
@@ -369,7 +369,9 @@ function Login() {
               </>
             ) : (
               /* Pricing Card */
-              <div className="w-full bg-slate-900 bg-opacity-80 backdrop-blur-xl border border-slate-700 border-opacity-50 rounded-2xl shadow-2xl overflow-hidden flex flex-col lg:flex-row">
+              <div className="w-full bg-slate-900 bg-opacity-80 backdrop-blur-xl border border-slate-700 border-opacity-50 rounded-2xl shadow-2xl overflow-hidden flex flex-col lg:flex-row relative mt-8 sm:mt-0">
+                {/* Mobile absolute error positioning fix inside container */}
+                
                 {/* Free Tier */}
                 <div className="flex-1 p-6 sm:p-8 border-b lg:border-b-0 lg:border-r border-slate-700 border-opacity-50">
                   <h3 className="text-xl font-semibold text-white mb-1">Free</h3>
@@ -385,30 +387,30 @@ function Login() {
                   
                   <button 
                     onClick={() => setViewMode('login')}
-                    className="w-full py-2.5 px-4 border border-slate-600 rounded-lg text-slate-200 hover:bg-slate-800 transition-colors font-medium text-sm"
+                    className="w-full py-2.5 px-4 border border-slate-600 rounded-lg text-slate-200 hover:bg-slate-800 transition-colors font-medium text-sm mt-auto"
                   >
                     Start Free
                   </button>
                 </div>
                 
                 {/* Pro Tier */}
-                <div className="flex-1 p-6 sm:p-8 bg-gradient-to-br from-blue-900/20 to-indigo-900/20 relative border-b lg:border-b-0 lg:border-r border-slate-700 border-opacity-50">
-                  <div className="absolute top-0 right-0 bg-blue-600 text-white text-[10px] font-bold uppercase tracking-wider py-1 px-3 rounded-bl-lg rounded-tr-xl hidden sm:block">Popular</div>
+                <div className="flex-1 p-6 sm:p-8 bg-gradient-to-br from-blue-900/20 to-indigo-900/20 relative border-b lg:border-b-0 lg:border-r border-slate-700 border-opacity-50 flex flex-col">
+                  <div className="absolute top-0 right-0 bg-blue-600 text-white text-[10px] font-bold uppercase tracking-wider py-1 px-3 rounded-bl-lg rounded-tr-xl">Popular</div>
                   <h3 className="text-xl font-semibold text-blue-300 mb-1">Pro</h3>
                   <div className="text-3xl font-bold text-white mb-1">$15 <span className="text-sm text-blue-300 font-normal opacity-70">/mo</span></div>
                   <p className="text-sm text-blue-200 opacity-80 mb-6">For power users and teams</p>
                   
-                  <ul className="space-y-3 mb-8 text-sm text-slate-200">
+                  <ul className="space-y-3 mb-8 text-sm text-slate-200 flex-1">
                     <li className="flex gap-2 items-center"><span className="text-blue-400">✓</span> Unlimited AI Personas</li>
-                    <li className="flex gap-2 items-center"><span className="text-blue-400">✓</span> Unlimited Connections</li>
+                    <li className="flex gap-2 items-center"><span className="text-blue-400">✓</span> 10 Service Connections</li>
                     <li className="flex gap-2 items-center"><span className="text-blue-400">✓</span> 50MB Knowledge Base</li>
-                    <li className="flex gap-2 items-center"><span className="text-blue-400">✓</span> Advanced Token Scopes</li>
+                    <li className="flex gap-2 items-center"><span className="text-blue-400">✓</span> Full Token Vault</li>
                   </ul>
                   
                   <button 
                     onClick={() => handleCheckout('pro')}
                     disabled={loading}
-                    className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors font-medium text-sm shadow-lg shadow-blue-600/30 flex justify-center items-center gap-2"
+                    className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors font-medium text-sm shadow-lg shadow-blue-600/30 flex justify-center items-center gap-2 mt-auto"
                   >
                     {loading ? (
                       <svg className="animate-spin w-4 h-4 text-white" fill="none" viewBox="0 0 24 24">
@@ -427,22 +429,22 @@ function Login() {
                 </div>
 
                 {/* Enterprise Tier */}
-                <div className="flex-1 p-6 sm:p-8 bg-slate-900/50 relative">
+                <div className="flex-1 p-6 sm:p-8 bg-slate-900/50 relative flex flex-col">
                   <h3 className="text-xl font-semibold text-purple-300 mb-1">Enterprise</h3>
                   <div className="text-3xl font-bold text-white mb-1">$30 <span className="text-sm text-purple-300 font-normal opacity-70">/mo</span></div>
                   <p className="text-sm text-purple-200 opacity-80 mb-6">Uncapped scale & priority support</p>
                   
-                  <ul className="space-y-3 mb-8 text-sm text-slate-200">
+                  <ul className="space-y-3 mb-8 text-sm text-slate-200 flex-1">
                     <li className="flex gap-2 items-center"><span className="text-purple-400">✓</span> Everything in Pro</li>
-                    <li className="flex gap-2 items-center"><span className="text-purple-400">✓</span> Unlimited Knowledge Base</li>
-                    <li className="flex gap-2 items-center"><span className="text-purple-400">✓</span> Priority API Processing</li>
+                    <li className="flex gap-2 items-center"><span className="text-purple-400">✓</span> Unlimited Service Connections</li>
+                    <li className="flex gap-2 items-center"><span className="text-purple-400">✓</span> 100MB Knowledge Base</li>
                     <li className="flex gap-2 items-center"><span className="text-purple-400">✓</span> Dedicated Support</li>
                   </ul>
                   
                   <button 
                     onClick={() => handleCheckout('enterprise')}
                     disabled={loading}
-                    className="w-full py-2.5 px-4 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors font-medium text-sm shadow-lg shadow-purple-600/30 flex justify-center items-center gap-2"
+                    className="w-full py-2.5 px-4 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors font-medium text-sm shadow-lg shadow-purple-600/30 flex justify-center items-center gap-2 mt-auto"
                   >
                     {loading ? (
                       <svg className="animate-spin w-4 h-4 text-white" fill="none" viewBox="0 0 24 24">
@@ -458,7 +460,7 @@ function Login() {
                       </>
                     )}
                   </button>
-                  {error && <p className="text-red-400 text-xs mt-3 text-center absolute -bottom-6 left-0 right-0">{error}</p>}
+                  {error && <p className="text-red-400 text-sm mt-3 text-center w-full">{error}</p>}
                 </div>
               </div>
             )}
