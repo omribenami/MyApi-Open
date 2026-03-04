@@ -207,10 +207,10 @@ function AccessTokens() {
   };
 
   const handleRegenerateToken = async (token) => {
-    setRegeneratingTokenId(token.id);
+    setRegeneratingTokenId(token.tokenId);
     clearError();
     try {
-      const res = await fetch(`/api/v1/tokens/${token.id}/regenerate`, {
+      const res = await fetch(`/api/v1/tokens/${token.tokenId}/regenerate`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${masterToken}` },
       });
@@ -218,8 +218,8 @@ function AccessTokens() {
       if (!res.ok) throw new Error(data.error || 'Failed to regenerate token');
 
       if (data?.data?.token) {
-        setRevealedTokens((prev) => ({ ...prev, [token.id]: data.data.token }));
-        setVisibleTokenIds((prev) => ({ ...prev, [token.id]: true }));
+        setRevealedTokens((prev) => ({ ...prev, [token.tokenId]: data.data.token }));
+        setVisibleTokenIds((prev) => ({ ...prev, [token.tokenId]: true }));
       }
       await fetchTokens(masterToken);
     } catch (err) {
@@ -542,7 +542,7 @@ function AccessTokens() {
               const personaLabel = getPersonaLabel(token);
               return (
                 <div
-                  key={token.id}
+                  key={token.tokenId || token.id}
                   className="bg-slate-800 border border-slate-700 rounded-lg p-5 hover:border-slate-600 transition-colors"
                 >
                   <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
@@ -591,11 +591,11 @@ function AccessTokens() {
 
                       <div className="mt-3 p-3 bg-slate-900 rounded-lg border border-slate-700">
                         <code className="text-xs text-slate-300 font-mono break-all">
-                          {revealedTokens[token.id] && visibleTokenIds[token.id]
-                            ? revealedTokens[token.id]
-                            : maskToken(revealedTokens[token.id] || token.id || token.tokenId || '')}
+                          {revealedTokens[token.tokenId] && visibleTokenIds[token.tokenId]
+                            ? revealedTokens[token.tokenId]
+                            : maskToken(revealedTokens[token.tokenId] || token.tokenId || token.tokenId || '')}
                         </code>
-                        {!revealedTokens[token.id] && (
+                        {!revealedTokens[token.tokenId] && (
                           <p className="mt-2 text-[11px] text-slate-500">Token secret is hidden until creation/regeneration.</p>
                         )}
                       </div>
@@ -610,27 +610,27 @@ function AccessTokens() {
                         Edit
                       </button>
                       <button
-                        onClick={() => setVisibleTokenIds((prev) => ({ ...prev, [token.id]: !prev[token.id] }))}
+                        onClick={() => setVisibleTokenIds((prev) => ({ ...prev, [token.tokenId]: !prev[token.tokenId] }))}
                         className="px-3 py-1.5 text-sm text-slate-200 hover:text-white bg-slate-700 hover:bg-slate-600 rounded transition-colors"
-                        disabled={!revealedTokens[token.id]}
-                        title={revealedTokens[token.id] ? 'Toggle hide/reveal' : 'Regenerate token first to reveal/copy'}
+                        disabled={!revealedTokens[token.tokenId]}
+                        title={revealedTokens[token.tokenId] ? 'Toggle hide/reveal' : 'Regenerate token first to reveal/copy'}
                       >
-                        {visibleTokenIds[token.id] ? 'Hide' : 'Reveal'}
+                        {visibleTokenIds[token.tokenId] ? 'Hide' : 'Reveal'}
                       </button>
                       <button
-                        onClick={() => handleCopyGuestToken(token.id)}
+                        onClick={() => handleCopyGuestToken(token.tokenId)}
                         className="px-3 py-1.5 text-sm text-cyan-300 hover:text-cyan-200 bg-slate-700 hover:bg-slate-600 rounded transition-colors disabled:opacity-50"
-                        disabled={!revealedTokens[token.id]}
-                        title={revealedTokens[token.id] ? 'Copy token' : 'Regenerate token first to copy'}
+                        disabled={!revealedTokens[token.tokenId]}
+                        title={revealedTokens[token.tokenId] ? 'Copy token' : 'Regenerate token first to copy'}
                       >
-                        {copiedTokenId === token.id ? 'Copied!' : 'Copy'}
+                        {copiedTokenId === token.tokenId ? 'Copied!' : 'Copy'}
                       </button>
                       <button
                         onClick={() => handleRegenerateToken(token)}
                         className="px-3 py-1.5 text-sm text-amber-300 hover:text-amber-200 bg-slate-700 hover:bg-slate-600 rounded transition-colors disabled:opacity-50"
-                        disabled={regeneratingTokenId === token.id}
+                        disabled={regeneratingTokenId === token.tokenId}
                       >
-                        {regeneratingTokenId === token.id ? 'Regenerating…' : 'Regenerate'}
+                        {regeneratingTokenId === token.tokenId ? 'Regenerating…' : 'Regenerate'}
                       </button>
                       <button
                         onClick={() => { selectToken(token); setShowRevokeModal(true); }}
