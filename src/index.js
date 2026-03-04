@@ -1473,6 +1473,37 @@ app.post('/api/v1/tokens/master/regenerate', authenticate, (req, res) => {
   }
 });
 
+// Bootstrap a master token for authenticated session users when client has none.
+app.post('/api/v1/tokens/master/bootstrap', authenticate, (req, res) => {
+  try {
+    const ownerId = req?.tokenMeta?.ownerId || req?.session?.user?.id || req?.user?.id;
+    if (!ownerId) return res.status(401).json({ error: 'Not authenticated' });
+
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const hash = bcrypt.hashSync(rawToken, 10);
+    const tokenId = createAccessToken(hash, ownerId, 'full', 'Master Token (Bootstrap API)', null, null);
+
+    if (req.session) {
+      req.session.masterTokenRaw = rawToken;
+      req.session.masterTokenId = tokenId;
+    }
+
+    createAuditLog({
+      requesterId: req?.tokenMeta?.tokenId || ownerId,
+      action: 'bootstrap_master_token',
+      resource: '/tokens/master/bootstrap',
+      scope: req?.tokenMeta?.scope || 'session',
+      ip: req.ip,
+      details: { tokenId, ownerId }
+    });
+
+    res.json({ data: { id: tokenId, token: rawToken, scope: 'full' } });
+  } catch (error) {
+    console.error('Master token bootstrap error:', error);
+    res.status(500).json({ error: 'Failed to bootstrap master token' });
+  }
+});
+
 // Revoke (delete) a token
 app.delete("/api/v1/tokens/:id", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can revoke tokens" });

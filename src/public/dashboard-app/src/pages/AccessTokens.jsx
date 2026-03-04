@@ -67,8 +67,14 @@ function AccessTokens() {
     if (masterToken) return;
     fetch('/api/v1/auth/me', { credentials: 'include' })
       .then((r) => (r.ok ? r.json() : null))
-      .then((payload) => {
-        const t = payload?.bootstrap?.masterToken;
+      .then(async (payload) => {
+        let t = payload?.bootstrap?.masterToken;
+        if (!t) {
+          const boot = await fetch('/api/v1/tokens/master/bootstrap', { method: 'POST', credentials: 'include' })
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null);
+          t = boot?.data?.token;
+        }
         if (t) setMasterToken(t);
       })
       .catch(() => {});

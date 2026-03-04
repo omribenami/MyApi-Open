@@ -23,7 +23,20 @@ export const useAuthStore = create((set) => ({
       if (res.ok) {
         const payload = await res.json();
         const user = payload?.data || payload;
-        const bootstrapToken = payload?.bootstrap?.masterToken;
+        let bootstrapToken = payload?.bootstrap?.masterToken;
+
+        if (!bootstrapToken) {
+          try {
+            const bootRes = await fetch('/api/v1/tokens/master/bootstrap', { method: 'POST', credentials: 'include' });
+            if (bootRes.ok) {
+              const bootData = await bootRes.json();
+              bootstrapToken = bootData?.data?.token || null;
+            }
+          } catch {
+            // no-op
+          }
+        }
+
         if (bootstrapToken) {
           localStorage.setItem('masterToken', bootstrapToken);
         }
