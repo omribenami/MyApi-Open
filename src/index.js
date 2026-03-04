@@ -914,6 +914,12 @@ app.post("/api/v1/vault/tokens", authenticate, async (req, res) => {
       }
     })();
 
+    const vaultCount = getVaultTokens().length;
+    const vaultLimitErr = enforcePlanLimit(req, 'vaultTokens', vaultCount, 1);
+    if (vaultLimitErr) {
+      return res.status(403).json(vaultLimitErr);
+    }
+
     const shouldDiscoverApi = parseFlexibleBoolean(discoverApi);
     let discovery = shouldDiscoverApi ? await discoverApiFromWebsite(normalizedWebsiteUrl) : null;
     
@@ -1394,6 +1400,86 @@ const BILLING_PLANS = {
   },
 };
 
+const PLAN_ENFORCEMENT_ENABLED = process.env.NODE_ENV === 'test'
+  ? false
+  : process.env.ENFORCE_PLAN_LIMITS !== 'false';
+
+const PLAN_LIMITS = {
+  free: {
+    personas: 1,
+    serviceConnections: 3,
+    knowledgeBytes: 10 * 1024 * 1024,
+    vaultTokens: 5,
+    skillsPerPersona: 4,
+  },
+  pro: {
+    personas: 5,
+    serviceConnections: Infinity,
+    knowledgeBytes: 50 * 1024 * 1024,
+    vaultTokens: Infinity,
+    skillsPerPersona: Infinity,
+  },
+  enterprise: {
+    personas: 20,
+    serviceConnections: Infinity,
+    knowledgeBytes: 200 * 1024 * 1024,
+    vaultTokens: Infinity,
+    skillsPerPersona: Infinity,
+  },
+};
+
+function resolveRequesterPlan(req) {
+  try {
+    if (req?.user?.id) {
+      const user = getUserById(req.user.id);
+      if (user?.plan) return String(user.plan).toLowerCase();
+    }
+
+    const ownerId = req?.tokenMeta?.ownerId;
+    if (ownerId) {
+      const owner = getUserById(ownerId);
+      if (owner?.plan) return String(owner.plan).toLowerCase();
+    }
+
+    if (req?.tokenMeta?.scope === 'full') return 'enterprise';
+    return 'free';
+  } catch {
+    return 'free';
+  }
+}
+
+function planLimitError(plan, key, limit) {
+  const labels = {
+    personas: 'persona limit',
+    serviceConnections: 'service connection limit',
+    knowledgeBytes: 'knowledge base storage limit',
+    vaultTokens: 'vault token limit',
+    skillsPerPersona: 'skills-per-persona limit',
+  };
+  return {
+    error: `Plan limit reached: ${labels[key] || key}`,
+    plan,
+    limit,
+    upgradeHint: 'Upgrade your plan to increase limits',
+  };
+}
+
+function enforcePlanLimit(req, key, currentValue, increment = 0) {
+  if (!PLAN_ENFORCEMENT_ENABLED) return null;
+  const plan = resolveRequesterPlan(req);
+  const limit = PLAN_LIMITS?.[plan]?.[key];
+  if (limit === undefined || limit === null || limit === Infinity) return null;
+  if ((currentValue + increment) > limit) {
+    return planLimitError(plan, key, limit);
+  }
+  return null;
+}
+
+function getKnowledgeBaseBytesUsed() {
+  const docs = getKBDocuments();
+  return docs.reduce((sum, doc) => sum + Buffer.byteLength(String(doc.content || ''), 'utf8'), 0);
+}
+
 app.get('/api/v1/billing/plans', (req, res) => {
   res.json({ data: Object.values(BILLING_PLANS) });
 });
@@ -1447,6 +1533,11 @@ app.post("/api/v1/connectors", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Insufficient scope" });
   const { type, config, label } = req.body;
   if (!type || !label) return res.status(400).json({ error: "type and label are required" });
+
+  const connectorCount = getConnectors().length;
+  const connectorLimitErr = enforcePlanLimit(req, 'serviceConnections', connectorCount, 1);
+  if (connectorLimitErr) return res.status(403).json(connectorLimitErr);
+
   const connector = createConnector(type, label, config || {});
   createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "add_connector", resource: `/connectors/${connector.id}`, scope: req.tokenMeta.scope, ip: req.ip });
   res.status(201).json({ data: connector });
@@ -1839,6 +1930,10 @@ app.post("/api/v1/personas", authenticate, (req, res) => {
   if (typeof soul_content !== 'string' || soul_content.trim().length === 0) {
     return res.status(400).json({ error: "soul_content must be non-empty markdown text" });
   }
+
+  const personaCount = getPersonas().length;
+  const personaLimitErr = enforcePlanLimit(req, 'personas', personaCount, 1);
+  if (personaLimitErr) return res.status(403).json(personaLimitErr);
   
   const persona = createPersona(name, soul_content, description, templateData);
   createAuditLog({ 
@@ -2045,6 +2140,10 @@ app.post('/api/v1/personas/:id/skills', authenticate, (req, res) => {
 
   const skill = getSkillById(skillId);
   if (!skill) return res.status(404).json({ error: 'Skill not found' });
+
+  const currentSkillCount = getPersonaSkills(personaId).length;
+  const skillsLimitErr = enforcePlanLimit(req, 'skillsPerPersona', currentSkillCount, 1);
+  if (skillsLimitErr) return res.status(403).json(skillsLimitErr);
 
   attachSkillToPersona(personaId, skillId);
   res.json({ ok: true });
@@ -2787,6 +2886,11 @@ app.post('/api/v1/brain/knowledge-base', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'source, title, and content are required' });
     }
 
+    const currentBytes = getKnowledgeBaseBytesUsed();
+    const incomingBytes = Buffer.byteLength(String(content || ''), 'utf8');
+    const kbLimitErr = enforcePlanLimit(req, 'knowledgeBytes', currentBytes, incomingBytes);
+    if (kbLimitErr) return res.status(403).json(kbLimitErr);
+
     const docs = await knowledgeBase.addDocument(source, title, content);
 
     createAuditLog({
@@ -2848,6 +2952,11 @@ app.post('/api/v1/brain/knowledge-base/upload', authenticate, kbUploadFields, as
     if (!content || !content.trim()) {
       return res.status(400).json({ error: 'No readable text found in uploaded file' });
     }
+
+    const currentBytes = getKnowledgeBaseBytesUsed();
+    const incomingBytes = Buffer.byteLength(String(content || ''), 'utf8');
+    const kbLimitErr = enforcePlanLimit(req, 'knowledgeBytes', currentBytes, incomingBytes);
+    if (kbLimitErr) return res.status(403).json(kbLimitErr);
 
     const persisted = await persistUploadFile(uploadedFile);
     const docs = await knowledgeBase.addDocument('upload', originalName, content);
