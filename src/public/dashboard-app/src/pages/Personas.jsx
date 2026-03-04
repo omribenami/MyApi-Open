@@ -262,9 +262,9 @@ function Personas() {
         <div>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+            className="ui-button-primary px-6 py-3"
           >
-            + Create New Persona
+            Create New Persona
           </button>
         </div>
 

@@ -347,7 +347,7 @@ function AccessTokens() {
       <section className="space-y-4">
         <div>
           <h2 className="text-xl font-semibold text-white flex items-center gap-2">
-            <span className="text-amber-400">★</span> Master Token
+            Master Token
           </h2>
           <p className="mt-1 text-sm text-slate-400">
             Your primary platform token. Used for AI and API access. Keep it secure — do not share it.
@@ -404,7 +404,7 @@ function AccessTokens() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-xl font-semibold text-white flex items-center gap-2">
-              <span className="text-blue-400">🎟</span> Guest Tokens
+              Guest Tokens
             </h2>
             <p className="mt-1 text-sm text-slate-400">
               Limited-access tokens you can share with external parties. Assign specific scopes and expiry dates.
@@ -414,7 +414,7 @@ function AccessTokens() {
             onClick={handleOpenCreate}
             className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors flex-shrink-0"
           >
-+ New Token
+New Token
           </button>
         </div>
 
@@ -612,8 +612,7 @@ function AccessTokens() {
           </div>
         ) : guestTokens.length === 0 ? (
           <div className="rounded-lg bg-slate-800 border-2 border-dashed border-slate-700 p-10 text-center">
-            <div className="text-4xl mb-3">🎟️</div>
-            <h3 className="text-base font-semibold text-white mb-1">No guest tokens</h3>
+                        <h3 className="text-base font-semibold text-white mb-1">No guest tokens</h3>
             <p className="text-sm text-slate-400">
               Create a token to grant limited, scoped access to external parties
             </p>

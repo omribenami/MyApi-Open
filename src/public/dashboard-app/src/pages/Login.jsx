@@ -188,16 +188,8 @@ function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950 flex flex-col">
-
-      {/* Ambient glow orbs - CSS only, no JS */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-600 rounded-full opacity-10 blur-3xl"></div>
-        <div className="absolute bottom-1/3 right-1/4 w-80 h-80 bg-indigo-600 rounded-full opacity-10 blur-3xl"></div>
-        <div className="absolute top-2/3 left-1/2 w-64 h-64 bg-violet-600 rounded-full opacity-5 blur-3xl"></div>
-      </div>
-
-      <div className="flex-1 flex items-center justify-center px-4 py-6 sm:py-10 relative z-10">
+    <div className="min-h-screen bg-slate-950 flex flex-col">
+      <div className="flex-1 flex items-center justify-center px-4 py-6 sm:py-10">
         <div className={`w-full ${viewMode === 'pricing' ? 'max-w-7xl' : 'max-w-5xl'} flex flex-col lg:flex-row gap-8 lg:gap-16 items-center lg:items-start`}>
 
           {/* Left side — Branding & Features */}
@@ -389,7 +381,7 @@ function Login() {
 
                     <ul className="space-y-3 mb-6 text-sm text-slate-200 flex-1">
                       {(plan.features || []).map((feature) => (
-                        <li key={feature} className="flex gap-2 items-start"><span className="text-emerald-400 mt-0.5">✓</span> <span>{feature}</span></li>
+                        <li key={feature} className="flex gap-2 items-start"><span className="text-emerald-400 mt-0.5">•</span> <span>{feature}</span></li>
                       ))}
                     </ul>
 

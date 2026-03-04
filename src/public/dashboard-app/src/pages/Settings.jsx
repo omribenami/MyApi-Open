@@ -8,7 +8,7 @@ import ExportDataModal from '../components/ExportDataModal';
 // Shared UI helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-function SectionCard({ title, description, icon, children, danger }) {
+function SectionCard({ title, description, children, danger }) {
   return (
     <div
       className={`rounded-lg p-6 ${
@@ -17,13 +17,12 @@ function SectionCard({ title, description, icon, children, danger }) {
           : 'bg-slate-800 border border-slate-700'
       }`}
     >
-      <div className="flex items-center gap-3 mb-1">
-        <span className="text-xl">{icon}</span>
+      <div className="mb-1">
         <h2 className={`text-lg font-semibold ${danger ? 'text-red-400' : 'text-white'}`}>
           {title}
         </h2>
       </div>
-      {description && <p className="text-slate-400 text-sm mb-6 ml-9">{description}</p>}
+      {description && <p className="text-slate-400 text-sm mb-6">{description}</p>}
       <div className="ml-0">{children}</div>
     </div>
   );
@@ -189,7 +188,7 @@ function ProfileSection() {
   }
 
   return (
-    <SectionCard title="Profile Settings" description="Update your display name, contact details, and preferences" icon="👤">
+    <SectionCard title="Profile Settings" description="Update your display name, contact details, and preferences">
       <div className="space-y-4">
         <ErrorBanner message={profileError} onClose={clearProfileError} />
         <SuccessBanner message={profileSuccess} onClose={clearProfileSuccess} />
@@ -348,7 +347,7 @@ function SecuritySection() {
   };
 
   return (
-    <SectionCard title="Security" description="Manage your password, 2FA, and active sessions" icon="🔒">
+    <SectionCard title="Security" description="Manage your password, 2FA, and active sessions">
       <div className="space-y-8">
 
         {/* Change Password */}
@@ -450,8 +449,8 @@ function SecuritySection() {
                 className="flex items-center justify-between p-4 bg-slate-900 border border-slate-700 rounded-lg"
               >
                 <div className="flex items-start gap-3">
-                  <span className="text-2xl mt-0.5">
-                    {session.device.includes('iPhone') || session.device.includes('Android') ? '📱' : '💻'}
+                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-700 bg-slate-800 text-[11px] text-slate-300 font-semibold">
+                    {session.device.includes('iPhone') || session.device.includes('Android') ? 'MOB' : 'WEB'}
                   </span>
                   <div>
                     <div className="flex items-center gap-2">
@@ -539,7 +538,7 @@ function PrivacySection() {
   };
 
   return (
-    <SectionCard title="Privacy Controls" description="Control how your data is used and who can see your profile" icon="🔏">
+    <SectionCard title="Privacy Controls" description="Control how your data is used and who can see your profile">
       <div className="space-y-4">
         {privacySuccess && <SuccessBanner message={privacySuccess} onClose={clearPrivacySuccess} />}
 
@@ -605,7 +604,7 @@ function PrivacySection() {
 
 function DangerZoneSection({ onRequestExport, onRequestDelete }) {
   return (
-    <SectionCard title="Danger Zone" description="Irreversible account actions" icon="⚠️" danger>
+    <SectionCard title="Danger Zone" description="Irreversible account actions" danger>
       <div className="space-y-4">
         {/* Export */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 bg-slate-900 border border-slate-700 rounded-lg">
@@ -684,7 +683,7 @@ function BillingSection() {
   };
 
   return (
-    <SectionCard title="Plans & Billing" description="Switch plans from your account" icon="💳">
+    <SectionCard title="Plans & Billing" description="Switch plans from your account">
       {error && <ErrorBanner message={error} onClose={() => setError('')} />}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {plans.map((plan) => (
@@ -721,11 +720,11 @@ function BillingSection() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SECTIONS = [
-  { id: 'profile', label: 'Profile', icon: '👤' },
-  { id: 'billing', label: 'Plans', icon: '💳' },
-  { id: 'security', label: 'Security', icon: '🔒' },
-  { id: 'privacy', label: 'Privacy', icon: '🔏' },
-  { id: 'danger', label: 'Danger Zone', icon: '⚠️' },
+  { id: 'profile', label: 'Profile' },
+  { id: 'billing', label: 'Plans' },
+  { id: 'security', label: 'Security' },
+  { id: 'privacy', label: 'Privacy' },
+  { id: 'danger', label: 'Danger Zone' },
 ];
 
 function Settings() {
@@ -759,15 +758,14 @@ function Settings() {
           <button
             key={s.id}
             onClick={() => setActiveSection(s.id)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+            className={`ui-tab ${
               activeSection === s.id
                 ? s.id === 'danger'
-                  ? 'bg-red-700 text-white shadow-sm'
-                  : 'bg-blue-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-700 hover:bg-opacity-50'
+                  ? 'bg-red-700 text-white'
+                  : 'ui-tab-active'
+                : ''
             }`}
           >
-            <span>{s.icon}</span>
             <span>{s.label}</span>
           </button>
         ))}

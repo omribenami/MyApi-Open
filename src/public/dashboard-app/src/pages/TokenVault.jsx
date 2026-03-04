@@ -16,14 +16,14 @@ function TokenVault() {
   const [deleteTarget, setDeleteTarget] = useState(null);
 
   const services = [
-    { id: 'openai', name: 'OpenAI', icon: '🤖' },
-    { id: 'stripe', name: 'Stripe', icon: '💳' },
-    { id: 'aws', name: 'AWS', icon: '☁️' },
-    { id: 'github', name: 'GitHub', icon: '🐙' },
-    { id: 'slack', name: 'Slack', icon: '💬' },
-    { id: 'twilio', name: 'Twilio', icon: '📱' },
-    { id: 'sendgrid', name: 'SendGrid', icon: '✉️' },
-    { id: 'other', name: 'Other', icon: '🔑' },
+    { id: 'openai', name: 'OpenAI' },
+    { id: 'stripe', name: 'Stripe' },
+    { id: 'aws', name: 'AWS' },
+    { id: 'github', name: 'GitHub' },
+    { id: 'slack', name: 'Slack' },
+    { id: 'twilio', name: 'Twilio' },
+    { id: 'sendgrid', name: 'SendGrid' },
+    { id: 'other', name: 'Other' },
   ];
 
   useEffect(() => {
@@ -230,7 +230,7 @@ function TokenVault() {
 
   const getServiceIcon = (serviceId) => {
     const service = services.find(s => s.id === serviceId);
-    return service?.icon || '🔑';
+    return service?.name?.charAt(0)?.toUpperCase() || 'K';
   };
 
   const getServiceName = (serviceId) => {
@@ -285,7 +285,7 @@ function TokenVault() {
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-3">
-                    <span className="text-2xl">{getServiceIcon(token.service)}</span>
+                    <span className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-700 bg-slate-900 text-sm font-semibold text-slate-200">{getServiceIcon(token.service)}</span>
                     <div>
                       <h3 className="font-medium text-white">{token.name || token.label}</h3>
                       <p className="text-sm text-slate-400">{getServiceName(token.service)}</p>
@@ -427,7 +427,7 @@ function TokenVault() {
                   </div>
                 </div>
                 {formData.discoveredAuthScheme && formData.discoveredAuthScheme !== 'unknown' && (
-                  <p className="mt-2 text-xs text-emerald-400">✓ Detected Auth: {formData.discoveredAuthScheme}</p>
+                  <p className="mt-2 text-xs text-emerald-400">Detected auth: {formData.discoveredAuthScheme}</p>
                 )}
               </div>
 

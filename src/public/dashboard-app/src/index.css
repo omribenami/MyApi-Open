@@ -17,39 +17,87 @@ code {
 }
 
 @layer base {
+  :root {
+    color-scheme: dark;
+  }
+
   h1, h2, h3 {
     letter-spacing: -0.01em;
   }
 
-  button {
-    border-radius: 0.375rem;
+  body {
+    @apply bg-slate-950 text-slate-100;
   }
 
   input,
   textarea,
   select {
-    border-color: rgb(51 65 85);
+    @apply border-slate-700;
   }
 }
 
 @layer components {
-  .ui-card {
-    @apply bg-slate-900 border border-slate-800 rounded-md;
+  .ui-page {
+    @apply space-y-6;
   }
 
-  .ui-button {
-    @apply px-3 py-2 rounded-md border border-slate-700 bg-slate-800 text-slate-100 hover:bg-slate-700 transition-colors;
+  .ui-page-header {
+    @apply flex flex-col gap-2;
+  }
+
+  .ui-title {
+    @apply text-3xl font-semibold tracking-tight text-slate-100;
+  }
+
+  .ui-subtitle {
+    @apply text-sm text-slate-400;
+  }
+
+  .ui-card {
+    @apply rounded-xl border border-slate-800 bg-slate-900;
+  }
+
+  .ui-card-muted {
+    @apply rounded-xl border border-slate-800 bg-slate-900/60;
   }
 
   .ui-input {
-    @apply bg-slate-900 border border-slate-700 rounded-md text-slate-100 placeholder-slate-500;
+    @apply rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500;
   }
 
   .ui-badge {
-    @apply inline-flex items-center px-2 py-0.5 rounded text-xs border border-slate-700 text-slate-300 bg-slate-900;
+    @apply inline-flex items-center rounded-md border border-slate-700 bg-slate-800 px-2 py-0.5 text-xs font-medium text-slate-300;
+  }
+
+  .ui-badge-success {
+    @apply inline-flex items-center rounded-md border border-emerald-700/60 bg-emerald-900/30 px-2 py-0.5 text-xs font-medium text-emerald-300;
   }
 
   .ui-toast {
-    @apply rounded-md border px-3 py-2 text-sm;
+    @apply rounded-lg border px-3 py-2 text-sm;
+  }
+
+  .ui-button {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-medium text-slate-100 transition-colors hover:bg-slate-700;
+  }
+
+  .ui-button-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-500 disabled:opacity-60;
+  }
+
+  .ui-button-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-medium text-slate-100 transition-colors hover:bg-slate-700;
+  }
+
+  .ui-button-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-500 disabled:opacity-60;
+  }
+
+  .ui-tab {
+    @apply inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium text-slate-400 transition-colors hover:text-slate-200 hover:bg-slate-700/50;
+  }
+
+  .ui-tab-active {
+    @apply bg-blue-600 text-white;
   }
 }

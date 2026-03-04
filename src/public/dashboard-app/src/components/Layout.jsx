@@ -79,10 +79,10 @@ function Layout({ children, onLogout }) {
                 <Link
                   key={item.path}
                   to={item.path}
-                  className={`inline-flex items-center px-2.5 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-all duration-150 ${
+                  className={`inline-flex items-center px-2.5 py-2 rounded-md text-sm font-medium whitespace-nowrap transition-colors ${
                     isActive(item.path)
-                      ? 'text-white bg-blue-600/25 border border-blue-400/50 shadow-[0_0_12px_rgba(59,130,246,0.45)]'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                      ? 'text-white bg-blue-600 border border-blue-500'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
                   }`}
                 >
                   {item.label}
@@ -116,10 +116,10 @@ function Layout({ children, onLogout }) {
                   key={item.path}
                   to={item.path}
                   onClick={() => setMenuOpen(false)}
-                  className={`flex items-center px-3 py-2.5 rounded-md text-sm font-medium transition-all ${
+                  className={`flex items-center px-3 py-2.5 rounded-md text-sm font-medium transition-colors ${
                     isActive(item.path)
-                      ? 'text-white bg-blue-600/25 border border-blue-400/50 shadow-[0_0_12px_rgba(59,130,246,0.35)]'
-                      : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
+                      ? 'text-white bg-blue-600 border border-blue-500'
+                      : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
                   }`}
                 >
                   {item.label}

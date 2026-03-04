@@ -5,13 +5,13 @@ import { useSkillStore } from '../stores/skillStore';
 import SkillDetailModal from '../components/SkillDetailModal';
 
 const CATEGORIES = [
-  { value: 'automation', label: '⚡ Automation' },
-  { value: 'integration', label: '🔗 Integration' },
-  { value: 'analytics', label: '📊 Analytics' },
-  { value: 'security', label: '🔒 Security' },
-  { value: 'communication', label: '💬 Communication' },
-  { value: 'productivity', label: '📈 Productivity' },
-  { value: 'custom', label: '🛠️ Custom' },
+  { value: 'automation', label: 'Automation' },
+  { value: 'integration', label: 'Integration' },
+  { value: 'analytics', label: 'Analytics' },
+  { value: 'security', label: 'Security' },
+  { value: 'communication', label: 'Communication' },
+  { value: 'productivity', label: 'Productivity' },
+  { value: 'custom', label: 'Custom' },
 ];
 
 function CreateEditModal({ isEdit, skill, onSave, onClose, masterToken }) {
@@ -86,7 +86,7 @@ function CreateEditModal({ isEdit, skill, onSave, onClose, masterToken }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
       <div className="bg-slate-800 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[85vh] overflow-y-auto">
         <div className="sticky top-0 flex items-center justify-between p-6 border-b border-slate-700 bg-slate-800 z-10">
-          <h2 className="text-xl font-bold text-white">{isEdit ? '✏️ Edit Skill' : '➕ Add Skill from Git Repo'}</h2>
+          <h2 className="text-xl font-bold text-white">{isEdit ? 'Edit Skill' : 'Add Skill from Git Repo'}</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-white text-2xl">✕</button>
         </div>
 
@@ -113,7 +113,7 @@ function CreateEditModal({ isEdit, skill, onSave, onClose, masterToken }) {
           {scanner && (
             <div className={`rounded-lg p-3 border ${scanner.safe_to_use ? 'bg-green-900/30 border-green-700 text-green-200' : 'bg-amber-900/30 border-amber-700 text-amber-200'}`}>
               <p className="font-medium">
-                {scanner.safe_to_use ? '✅ Safe to use' : '⚠️ Scanner found potential risks'}
+                {scanner.safe_to_use ? 'Safe to use' : 'Scanner found potential risks'}
                 <span className="ml-2 text-xs opacity-80">
                   score: {scanner.score}
                   <span
@@ -145,7 +145,7 @@ function CreateEditModal({ isEdit, skill, onSave, onClose, masterToken }) {
 
           <div className="flex gap-3 pt-4 border-t border-slate-700">
             <button type="button" onClick={onClose} className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors font-medium">Cancel</button>
-            <button type="submit" disabled={saving} className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium disabled:opacity-50">{saving ? '⏳ Saving...' : isEdit ? 'Update Skill' : 'Create Skill'}</button>
+            <button type="submit" disabled={saving} className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium disabled:opacity-50">{saving ? 'Saving...' : isEdit ? 'Update Skill' : 'Create Skill'}</button>
           </div>
         </form>
       </div>
@@ -162,7 +162,7 @@ function DeleteConfirmModal({ onConfirm, onClose, usage }) {
         <p className="text-slate-400 text-sm mb-3">This action cannot be undone.</p>
         {usage?.total > 0 && (
           <div className="mb-4 rounded-lg border border-amber-700 bg-amber-900/20 p-3">
-            <p className="text-amber-300 text-sm font-medium">⚠️ This skill is attached to {usage.total} persona{usage.total !== 1 ? 's' : ''}.</p>
+            <p className="text-amber-300 text-sm font-medium">This skill is attached to {usage.total} persona{usage.total !== 1 ? 's' : ''}.</p>
             {(usage.personas || []).slice(0, 4).map((p) => (
               <p key={p.personaId} className="text-amber-200 text-xs mt-1">• {p.personaName}</p>
             ))}
@@ -181,7 +181,7 @@ function DeleteConfirmModal({ onConfirm, onClose, usage }) {
             disabled={deleting}
             className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium disabled:opacity-50"
           >
-            {deleting ? '⏳ Deleting...' : '🗑️ Delete'}
+            {deleting ? 'Deleting...' : 'Delete'}
           </button>
         </div>
       </div>
@@ -402,14 +402,14 @@ function Skills() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white">🧩 Skills</h1>
+          <h1 className="text-3xl font-bold text-white">Skills</h1>
           <p className="text-slate-400 mt-1">Create and manage agent skills</p>
         </div>
         <button
           onClick={openCreateModal}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors whitespace-nowrap"
+          className="ui-button-primary whitespace-nowrap"
         >
-          ➕ Create Skill
+          Create Skill
         </button>
       </div>
 
@@ -427,14 +427,13 @@ function Skills() {
       {/* Skills grid */}
       {skills.length === 0 ? (
         <div className="text-center py-16">
-          <p className="text-4xl mb-4">🧩</p>
-          <h2 className="text-2xl font-bold text-white mb-2">No Skills Yet</h2>
+                    <h2 className="text-2xl font-bold text-white mb-2">No Skills Yet</h2>
           <p className="text-slate-400 mb-6">Create your first agent skill to get started</p>
           <button
             onClick={openCreateModal}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+            className="ui-button-primary px-6 py-3"
           >
-            ➕ Create Your First Skill
+            Create your first skill
           </button>
         </div>
       ) : (
@@ -460,12 +459,12 @@ function Skills() {
                     )}
                     {skill.active && (
                       <span className="inline-block px-2 py-0.5 bg-green-600 text-green-100 text-xs font-medium rounded">
-                        ✓ Active
+                        Active
                       </span>
                     )}
                     {skill?.config_json?.scanner?.safe_to_use && (
                       <span className="inline-block px-2 py-0.5 bg-emerald-700 text-emerald-100 text-xs font-medium rounded border border-emerald-500">
-                        🛡 Safe to use
+                        Safe to use
                       </span>
                     )}
                   </div>
@@ -492,7 +491,7 @@ function Skills() {
                       onClick={() => handleCopyToken(skill.id)}
                       className="px-3 py-1.5 text-xs text-blue-400 hover:text-blue-300 bg-slate-700 rounded flex-shrink-0"
                     >
-                      {skillTokens[skill.id].copied ? '✓ Copied!' : '📋 Copy'}
+                      {skillTokens[skill.id].copied ? 'Copied' : 'Copy'}
                     </button>
                   </div>
                 </div>
@@ -504,19 +503,19 @@ function Skills() {
                   onClick={() => openDetailModal(skill)}
                   className="flex-1 px-3 py-2 text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded transition-colors"
                 >
-                  👁 View
+                  View
                 </button>
                 <button
                   onClick={() => openEditModal(skill)}
                   className="flex-1 px-3 py-2 text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded transition-colors"
                 >
-                  ✏️ Edit
+                  Edit
                 </button>
                 <button
                   onClick={() => openDeleteConfirmation(skill.id)}
                   className="flex-1 px-3 py-2 text-sm font-medium text-red-400 hover:text-red-200 hover:bg-red-900 hover:bg-opacity-30 rounded transition-colors"
                 >
-                  🗑️ Delete
+                  Delete
                 </button>
               </div>
 
@@ -526,14 +525,14 @@ function Skills() {
                   disabled={publishingId === skill.id}
                   className="flex-1 px-3 py-2 text-sm font-medium text-purple-400 hover:text-purple-200 hover:bg-purple-900 hover:bg-opacity-30 rounded transition-colors border border-transparent hover:border-purple-700 disabled:opacity-50"
                 >
-                  {publishingId === skill.id ? '⏳ Publishing...' : '🏪 Publish'}
+                  {publishingId === skill.id ? 'Publishing...' : 'Publish'}
                 </button>
                 <button
                   onClick={() => handleGenerateToken(skill)}
                   disabled={generatingTokenId === skill.id}
                   className="flex-1 px-3 py-2 text-sm font-medium text-amber-400 hover:text-amber-200 hover:bg-amber-900 hover:bg-opacity-30 rounded transition-colors border border-transparent hover:border-amber-700 disabled:opacity-50"
                 >
-                  {generatingTokenId === skill.id ? '⏳ Generating...' : '🔑 Get Token'}
+                  {generatingTokenId === skill.id ? 'Generating...' : 'Get Token'}
                 </button>
               </div>
 
@@ -542,7 +541,7 @@ function Skills() {
                   onClick={() => handleActivate(skill.id)}
                   className="w-full mt-2 px-3 py-2 text-sm font-medium text-green-400 hover:text-green-200 hover:bg-green-900 hover:bg-opacity-30 rounded transition-colors border border-transparent hover:border-green-700"
                 >
-                  ⭐ Set as Active
+                  Set as active
                 </button>
               )}
             </div>
