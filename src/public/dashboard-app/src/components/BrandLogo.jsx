@@ -9,11 +9,11 @@ function BrandLogo({ size = 'md', withWordmark = true, className = '' }) {
 
   return (
     <div className={`inline-flex items-center gap-3 ${className}`.trim()}>
-      <div className={`${iconSize} bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/35 ring-1 ring-white/10`}>
-        <svg className="w-1/2 h-1/2 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-        </svg>
-      </div>
+      <img
+        src="/dashboard/myapi-logo.svg"
+        alt="MyApi"
+        className={`${iconSize} shadow-[0_8px_18px_rgba(74,140,255,0.45)] ring-1 ring-white/10 object-contain`}
+      />
       {withWordmark && <span className="text-2xl sm:text-3xl font-bold tracking-tight text-white">MyApi</span>}
     </div>
   );
