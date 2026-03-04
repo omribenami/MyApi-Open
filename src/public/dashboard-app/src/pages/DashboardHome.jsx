@@ -236,45 +236,54 @@ function DashboardHome() {
         </div>
       </div>
 
-      {/* Getting Started */}
-      <div className="bg-slate-900 border border-slate-800 rounded-md p-6">
-        <h2 className="text-lg font-semibold text-slate-100 mb-4">Getting Started</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-slate-700 text-slate-100 text-xs font-bold">
-                1
-              </span>
-              <span className="font-medium text-slate-100">Connect Services</span>
-            </div>
-            <p className="text-slate-400">
-              Start by connecting to external services like Google, GitHub, or Slack using OAuth.
-            </p>
-          </div>
+      {/* Documentation & Resources */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+        {/* Platform Docs */}
+        <div className="bg-slate-900 border border-slate-800 rounded-md p-6">
+          <h2 className="text-lg font-semibold text-slate-100 mb-2 flex items-center gap-2">
+            <span className="text-blue-400">📚</span> Platform Documentation
+          </h2>
+          <p className="text-sm text-slate-400 mb-4">
+            Learn how to use MyApi to connect services, build custom AI personas, and manage access tokens.
+          </p>
+          <ul className="space-y-2 text-sm">
+            <li>
+              <a href="https://github.com/omribenami/MyApi" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">GitHub Repository</a>
+            </li>
+            <li>
+              <a href="https://github.com/omribenami/MyApi/tree/main/docs" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">Design & Architecture Docs</a>
+            </li>
+            <li>
+              <Link to="/personas" className="text-blue-400 hover:underline">How to build AI Personas</Link>
+            </li>
+            <li>
+              <Link to="/tokens" className="text-blue-400 hover:underline">Managing the Token Vault</Link>
+            </li>
+          </ul>
+        </div>
 
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-slate-700 text-slate-100 text-xs font-bold">
-                2
-              </span>
-              <span className="font-medium text-slate-100">Create Tokens</span>
-            </div>
-            <p className="text-slate-400">
-              Generate API tokens with specific scopes and permissions for secure access.
-            </p>
-          </div>
-
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-slate-700 text-slate-100 text-xs font-bold">
-                3
-              </span>
-              <span className="font-medium text-slate-100">Manage & Monitor</span>
-            </div>
-            <p className="text-slate-400">
-              Track all API usage, audit logs, and manage permissions from one dashboard.
-            </p>
-          </div>
+        {/* API Docs */}
+        <div className="bg-slate-900 border border-slate-800 rounded-md p-6">
+          <h2 className="text-lg font-semibold text-slate-100 mb-2 flex items-center gap-2">
+            <span className="text-emerald-400">⚡</span> API Reference
+          </h2>
+          <p className="text-sm text-slate-400 mb-4">
+            Integrate MyApi directly into your apps. Explore the OpenAPI specs and endpoints.
+          </p>
+          <ul className="space-y-2 text-sm">
+            <li>
+              <a href="/openapi.json" target="_blank" className="text-emerald-400 hover:underline">OpenAPI Specification (swagger)</a>
+            </li>
+            <li>
+              <a href="/api/v1/capabilities" target="_blank" className="text-emerald-400 hover:underline">System Capabilities JSON</a>
+            </li>
+            <li>
+              <a href="/.well-known/ai-plugin.json" target="_blank" className="text-emerald-400 hover:underline">ChatGPT Plugin Manifest</a>
+            </li>
+            <li>
+              <a href="/api/v1/tokens/me/capabilities" target="_blank" className="text-emerald-400 hover:underline">My Active Scopes (JSON)</a>
+            </li>
+          </ul>
         </div>
       </div>
 
@@ -282,12 +291,8 @@ function DashboardHome() {
       <div className="text-center text-sm text-slate-500 pt-8 border-t border-slate-800">
         <p>
           Need help? Check our{' '}
-          <a href="#" className="text-slate-300 hover:text-slate-200">
+          <a href="https://github.com/omribenami/MyApi" className="text-slate-300 hover:text-slate-200">
             documentation
-          </a>{' '}
-          or{' '}
-          <a href="#" className="text-slate-300 hover:text-slate-200">
-            contact support
           </a>
         </p>
       </div>
