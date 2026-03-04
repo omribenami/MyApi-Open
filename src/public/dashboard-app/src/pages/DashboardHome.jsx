@@ -38,10 +38,8 @@ function DashboardHome() {
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!masterToken) return;
-
       try {
-        const headers = { 'Authorization': `Bearer ${masterToken}` };
+        const headers = masterToken ? { 'Authorization': `Bearer ${masterToken}` } : {};
 
         const [healthRes, tokensRes, vaultRes, connectorsRes, myListingsRes, personasRes, skillsRes, kbRes] = await Promise.all([
           fetch('/health'),
