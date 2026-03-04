@@ -14,7 +14,6 @@ function Layout({ children, onLogout }) {
   const isPowerUser = tokenData?.scope === 'full';
 
   const navItems = [
-    { path: '/', label: 'Dashboard' },
     { path: '/services', label: 'Services' },
     { path: '/tokens', label: 'Token Vault' },
     { path: '/access-tokens', label: 'Access Tokens' },
