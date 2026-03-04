@@ -109,6 +109,7 @@ const DiscordAdapter = require("./services/discord-adapter");
 const WhatsAppAdapter = require("./services/whatsapp-adapter");
 
 const app = express();
+app.set('trust proxy', true);
 const PORT = process.env.PORT || 4500;
 const WORKSPACE_ROOT = path.join(__dirname, '..', '..', '..');
 const USER_MD_PATH = path.join(WORKSPACE_ROOT, 'USER.md');
@@ -832,9 +833,7 @@ app.get('/openapi.json', (req, res) => {
 });
 
 app.get('/api-docs-ui', (req, res) => {
-  const host = req.get('host');
-  const scheme = req.protocol || 'http';
-  const specUrl = `${scheme}://${host}/openapi.json?v=${Date.now()}`;
+  const specUrl = `/openapi.json?v=${Date.now()}`;
 
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.set('Pragma', 'no-cache');
