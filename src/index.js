@@ -208,12 +208,16 @@ const oauthAdapters = {
 };
 
 const OAUTH_SERVICES = Object.keys(oauthAdapters);
+const isAdapterConfigured = (adapter) => {
+  if (!adapter) return false;
+  if (typeof adapter.isConfigured === 'function') return adapter.isConfigured();
+  return Boolean(adapter.clientId && adapter.clientSecret && adapter.redirectUri);
+};
 const OAUTH_ENABLED = Object.fromEntries(
   OAUTH_SERVICES.map((service) => {
     const adapter = oauthAdapters[service];
-    const hasConfig = typeof adapter.isConfigured === 'function' ? adapter.isConfigured() : true;
     const enabledByConfig = oauthConfig[service]?.enabled !== false;
-    return [service, Boolean(enabledByConfig && hasConfig)];
+    return [service, Boolean(enabledByConfig && isAdapterConfigured(adapter))];
   })
 );
 
