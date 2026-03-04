@@ -381,6 +381,10 @@ function getOAuthUserId(req) {
   return req?.session?.user?.id ? String(req.session.user.id) : 'oauth_user';
 }
 
+function getRequestOwnerId(req) {
+  return String(req?.tokenMeta?.ownerId || req?.session?.user?.id || 'owner');
+}
+
 // --- Scope Filter (Brain logic) ---
 function filterByScope(data, scope) {
   if (scope === "full") return data;
@@ -1599,9 +1603,10 @@ function enforcePlanLimit(req, key, currentValue, increment = 0) {
   return null;
 }
 
-function getKnowledgeBaseBytesUsed() {
-  const docs = getKBDocuments();
-  return docs.reduce((sum, doc) => sum + Buffer.byteLength(String(doc.content || ''), 'utf8'), 0);
+function getKnowledgeBaseBytesUsed(req) {
+  const ownerId = getRequestOwnerId(req);
+  const rows = db.prepare('SELECT content FROM kb_documents WHERE owner_id = ?').all(ownerId);
+  return rows.reduce((sum, row) => sum + Buffer.byteLength(String(row.content || ''), 'utf8'), 0);
 }
 
 app.get('/api/v1/billing/plans', (req, res) => {
@@ -1737,7 +1742,7 @@ app.get("/api/v1/gateway/context", authenticate, (req, res) => {
     }));
     
     // Get all personas (for meta)
-    const allPersonas = getPersonas();
+    const allPersonas = getPersonas(getRequestOwnerId(req));
     const personaList = allPersonas.map(p => ({
       id: p.id,
       name: p.name,
@@ -2055,11 +2060,12 @@ app.post("/api/v1/personas", authenticate, (req, res) => {
     return res.status(400).json({ error: "soul_content must be non-empty markdown text" });
   }
 
-  const personaCount = getPersonas().length;
+  const ownerId = getRequestOwnerId(req);
+  const personaCount = getPersonas(ownerId).length;
   const personaLimitErr = enforcePlanLimit(req, 'personas', personaCount, 1);
   if (personaLimitErr) return res.status(403).json(personaLimitErr);
   
-  const persona = createPersona(name, soul_content, description, templateData);
+  const persona = createPersona(name, soul_content, description, templateData, ownerId);
   createAuditLog({ 
     requesterId: req.tokenMeta.tokenId, 
     action: "create_persona", 
@@ -2082,7 +2088,8 @@ app.post("/api/v1/personas", authenticate, (req, res) => {
 // GET /api/v1/personas — List all personas
 app.get("/api/v1/personas", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can list personas" });
-  const personas = getPersonas();
+  const ownerId = getRequestOwnerId(req);
+  const personas = getPersonas(ownerId);
   createAuditLog({ 
     requesterId: req.tokenMeta.tokenId, 
     action: "list_personas", 
@@ -2107,7 +2114,8 @@ app.get("/api/v1/personas", authenticate, (req, res) => {
 // GET /api/v1/personas/:id — Get specific persona (including soul_content)
 app.get("/api/v1/personas/:id", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can view personas" });
-  const persona = getPersonaById(parseInt(req.params.id));
+  const ownerId = getRequestOwnerId(req);
+  const persona = getPersonaById(parseInt(req.params.id), ownerId);
   if (!persona) return res.status(404).json({ error: "Persona not found" });
   
   createAuditLog({ 
@@ -2136,14 +2144,15 @@ app.get("/api/v1/personas/:id", authenticate, (req, res) => {
 app.put("/api/v1/personas/:id", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can update personas" });
   const personaId = parseInt(req.params.id);
-  const persona = getPersonaById(personaId);
+  const ownerId = getRequestOwnerId(req);
+  const persona = getPersonaById(personaId, ownerId);
   if (!persona) return res.status(404).json({ error: "Persona not found" });
   
   const { name, soul_content, description, active } = req.body;
   
   // If setting as active
   if (active === true) {
-    const updated = setActivePersona(personaId);
+    const updated = setActivePersona(personaId, ownerId);
     syncActivePersonaToSoulFile();
     createAuditLog({ 
       requesterId: req.tokenMeta.tokenId, 
@@ -2166,7 +2175,7 @@ app.put("/api/v1/personas/:id", authenticate, (req, res) => {
     });
   } else {
     // Update persona fields
-    const updated = updatePersona(personaId, { name, soul_content, description });
+    const updated = updatePersona(personaId, { name, soul_content, description }, ownerId);
     if (updated.active) syncActivePersonaToSoulFile();
     createAuditLog({ 
       requesterId: req.tokenMeta.tokenId, 
@@ -2194,7 +2203,8 @@ app.put("/api/v1/personas/:id", authenticate, (req, res) => {
 app.delete("/api/v1/personas/:id", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can delete personas" });
   const personaId = parseInt(req.params.id);
-  const deleted = deletePersona(personaId);
+  const ownerId = getRequestOwnerId(req);
+  const deleted = deletePersona(personaId, ownerId);
   if (deleted === null) return res.status(400).json({ error: "Cannot delete the last remaining persona" });
   if (!deleted) return res.status(404).json({ error: "Persona not found" });
   
@@ -2215,7 +2225,8 @@ app.delete("/api/v1/personas/:id", authenticate, (req, res) => {
 // GET /api/v1/personas/:id/documents — Get attached KB documents
 app.get("/api/v1/personas/:id/documents", authenticate, (req, res) => {
   const personaId = parseInt(req.params.id);
-  const docs = getPersonaDocuments(personaId);
+  const ownerId = getRequestOwnerId(req);
+  const docs = getPersonaDocuments(personaId, ownerId);
   res.json({ data: docs });
 });
 
@@ -2226,10 +2237,11 @@ app.post("/api/v1/personas/:id/documents", authenticate, (req, res) => {
   const { documentId } = req.body;
   if (!documentId) return res.status(400).json({ error: "documentId required" });
   
-  const persona = getPersonaById(personaId);
+  const ownerId = getRequestOwnerId(req);
+  const persona = getPersonaById(personaId, ownerId);
   if (!persona) return res.status(404).json({ error: "Persona not found" });
 
-  const doc = getKBDocumentById(documentId);
+  const doc = getKBDocumentById(documentId, ownerId);
   if (!doc) return res.status(404).json({ error: "Document not found" });
   
   attachDocumentToPersona(personaId, documentId);
@@ -2248,7 +2260,8 @@ app.delete("/api/v1/personas/:id/documents/:docId", authenticate, (req, res) => 
 // --- Persona Skills ---
 app.get('/api/v1/personas/:id/skills', authenticate, (req, res) => {
   const personaId = parseInt(req.params.id);
-  const skills = getPersonaSkills(personaId);
+  const ownerId = getRequestOwnerId(req);
+  const skills = getPersonaSkills(personaId, ownerId);
   res.json({ data: skills });
 });
 
@@ -2259,13 +2272,14 @@ app.post('/api/v1/personas/:id/skills', authenticate, (req, res) => {
 
   if (!skillId) return res.status(400).json({ error: 'skillId required' });
 
-  const persona = getPersonaById(personaId);
+  const ownerId = getRequestOwnerId(req);
+  const persona = getPersonaById(personaId, ownerId);
   if (!persona) return res.status(404).json({ error: 'Persona not found' });
 
-  const skill = getSkillById(skillId);
+  const skill = getSkillById(skillId, ownerId);
   if (!skill) return res.status(404).json({ error: 'Skill not found' });
 
-  const currentSkillCount = getPersonaSkills(personaId).length;
+  const currentSkillCount = getPersonaSkills(personaId, ownerId).length;
   const skillsLimitErr = enforcePlanLimit(req, 'skillsPerPersona', currentSkillCount, 1);
   if (skillsLimitErr) return res.status(403).json(skillsLimitErr);
 
@@ -2846,14 +2860,15 @@ app.post('/api/v1/brain/chat', authenticate, async (req, res) => {
     const context = await contextEngine.assembleContext(convId, db);
 
     // Query global knowledge base
-    const relevantDocs = knowledgeBase.queryKnowledgeBase(message, 3);
+    const relevantDocs = knowledgeBase.queryKnowledgeBase(message, 3, getRequestOwnerId(req));
 
     // Add persona-scoped docs + skills package when persona scope is active
     let personaDocs = [];
     let personaSkillPackages = [];
     if (personaScope.personaId !== null && personaScope.personaId !== undefined) {
-      personaDocs = getPersonaDocumentContents(personaScope.personaId);
-      personaSkillPackages = Object.values(getPersonaSkillPackages(personaScope.personaId));
+      const ownerId = getRequestOwnerId(req);
+      personaDocs = getPersonaDocumentContents(personaScope.personaId, ownerId);
+      personaSkillPackages = Object.values(getPersonaSkillPackages(personaScope.personaId, ownerId));
     }
 
     const rankedPersonaDocs = personaDocs
@@ -3004,12 +3019,12 @@ app.post('/api/v1/brain/knowledge-base', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'source, title, and content are required' });
     }
 
-    const currentBytes = getKnowledgeBaseBytesUsed();
+    const currentBytes = getKnowledgeBaseBytesUsed(req);
     const incomingBytes = Buffer.byteLength(String(content || ''), 'utf8');
     const kbLimitErr = enforcePlanLimit(req, 'knowledgeBytes', currentBytes, incomingBytes);
     if (kbLimitErr) return res.status(403).json(kbLimitErr);
 
-    const docs = await knowledgeBase.addDocument(source, title, content);
+    const docs = await knowledgeBase.addDocument(source, title, content, getRequestOwnerId(req));
 
     createAuditLog({
       requesterId: req.tokenMeta.tokenId,
@@ -3071,13 +3086,13 @@ app.post('/api/v1/brain/knowledge-base/upload', authenticate, kbUploadFields, as
       return res.status(400).json({ error: 'No readable text found in uploaded file' });
     }
 
-    const currentBytes = getKnowledgeBaseBytesUsed();
+    const currentBytes = getKnowledgeBaseBytesUsed(req);
     const incomingBytes = Buffer.byteLength(String(content || ''), 'utf8');
     const kbLimitErr = enforcePlanLimit(req, 'knowledgeBytes', currentBytes, incomingBytes);
     if (kbLimitErr) return res.status(403).json(kbLimitErr);
 
     const persisted = await persistUploadFile(uploadedFile);
-    const docs = await knowledgeBase.addDocument('upload', originalName, content);
+    const docs = await knowledgeBase.addDocument('upload', originalName, content, getRequestOwnerId(req));
 
     createAuditLog({
       requesterId: req.tokenMeta.tokenId,
@@ -3116,7 +3131,8 @@ app.post('/api/v1/brain/knowledge-base/upload', authenticate, kbUploadFields, as
 // GET /api/v1/brain/knowledge-base - List KB documents
 app.get('/api/v1/brain/knowledge-base', authenticate, (req, res) => {
   try {
-    const documents = getKBDocuments();
+    const ownerId = getRequestOwnerId(req);
+    const documents = getKBDocuments(ownerId);
 
     createAuditLog({
       requesterId: req.tokenMeta.tokenId,
@@ -3137,7 +3153,8 @@ app.get('/api/v1/brain/knowledge-base', authenticate, (req, res) => {
 app.get('/api/v1/brain/knowledge-base/:id', authenticate, (req, res) => {
   try {
     const { id } = req.params;
-    const doc = getKBDocumentById(id);
+    const ownerId = getRequestOwnerId(req);
+    const doc = getKBDocumentById(id, ownerId);
     if (!doc) return res.status(404).json({ error: 'Document not found' });
 
     createAuditLog({
@@ -3186,7 +3203,8 @@ app.get('/api/v1/brain/knowledge-base/:id/attachments', authenticate, (req, res)
 app.delete('/api/v1/brain/knowledge-base/:id', authenticate, (req, res) => {
   try {
     const { id } = req.params;
-    const success = deleteKBDocument(id);
+    const ownerId = getRequestOwnerId(req);
+    const success = deleteKBDocument(id, ownerId);
 
     if (!success) {
       return res.status(404).json({ error: 'Document not found' });
@@ -3238,14 +3256,15 @@ app.get('/api/v1/brain/context', authenticate, async (req, res) => {
     let personaDocuments = [];
     let personaSkills = [];
     if (personaScope.personaId !== null && personaScope.personaId !== undefined) {
-      personaDocuments = getPersonaDocumentContents(personaScope.personaId).map((doc) => ({
+      const ownerId = getRequestOwnerId(req);
+      personaDocuments = getPersonaDocumentContents(personaScope.personaId, ownerId).map((doc) => ({
         id: doc.id,
         title: doc.title,
         source: doc.source,
         preview: String(doc.content || '').slice(0, 400),
         metadata: doc.metadata,
       }));
-      personaSkills = Object.values(getPersonaSkillPackages(personaScope.personaId)).map((pkg) => ({
+      personaSkills = Object.values(getPersonaSkillPackages(personaScope.personaId, ownerId)).map((pkg) => ({
         skillId: pkg.skillId,
         name: pkg.name,
         description: pkg.description,
@@ -3292,9 +3311,10 @@ app.get('/api/v1/brain/context', authenticate, async (req, res) => {
 // ===== DASHBOARD STATS =====
 app.get('/api/v1/dashboard/stats', authenticate, (req, res) => {
   try {
-    const personas = getPersonas();
-    const skills = getSkills();
-    const kbDocs = getKBDocuments();
+    const ownerId = getRequestOwnerId(req);
+    const personas = getPersonas(ownerId);
+    const skills = getSkills(ownerId);
+    const kbDocs = getKBDocuments(ownerId);
     res.json({
       personas: { total: personas.length, active: personas.filter(p => p.active).length },
       skills: { total: skills.length, active: skills.filter(s => s.active).length },
@@ -3420,7 +3440,8 @@ function runSkillScanner({ readme = '', skillDoc = '', pkg = null, repo = null }
 
 app.get('/api/v1/skills', authenticate, (req, res) => {
   try {
-    const skills = getSkills();
+    const ownerId = getRequestOwnerId(req);
+    const skills = getSkills(ownerId);
     res.json({ data: skills });
   } catch (err) {
     console.error('Skills list error:', err);
@@ -3430,7 +3451,8 @@ app.get('/api/v1/skills', authenticate, (req, res) => {
 
 app.get('/api/v1/skills/:id', authenticate, (req, res) => {
   try {
-    const skill = getSkillById(req.params.id);
+    const ownerId = getRequestOwnerId(req);
+    const skill = getSkillById(req.params.id, ownerId);
     if (!skill) return res.status(404).json({ error: 'Skill not found' });
     res.json({ data: skill });
   } catch (err) {
@@ -3447,7 +3469,7 @@ app.post('/api/v1/skills', authenticate, (req, res) => {
     // Idempotency for marketplace installs
     const listingId = (config_json && typeof config_json === 'object') ? config_json.marketplace_listing_id : null;
     if (listingId) {
-      const existing = getSkills().find((s) => {
+      const existing = getSkills(getRequestOwnerId(req)).find((s) => {
         const cfg = s.config_json && typeof s.config_json === 'object' ? s.config_json : null;
         return String(cfg?.marketplace_listing_id || '') === String(listingId);
       });
@@ -3456,7 +3478,8 @@ app.post('/api/v1/skills', authenticate, (req, res) => {
       }
     }
 
-    const skill = createSkill(name, description, version, author, category, script_content, config_json, repo_url);
+    const ownerId = getRequestOwnerId(req);
+    const skill = createSkill(name, description, version, author, category, script_content, config_json, repo_url, ownerId);
     res.status(201).json({ data: skill });
   } catch (err) {
     console.error('Skill create error:', err);
@@ -3481,6 +3504,7 @@ app.post('/api/v1/skills/from-repo', authenticate, async (req, res) => {
     const { repo_url } = req.body || {};
     if (!repo_url) return res.status(400).json({ error: 'repo_url is required' });
     const { metadata, scanner } = await fetchGitHubRepoMetadata(repo_url);
+    const ownerId = getRequestOwnerId(req);
     const skill = createSkill(
       metadata.name,
       metadata.description,
@@ -3489,7 +3513,8 @@ app.post('/api/v1/skills/from-repo', authenticate, async (req, res) => {
       metadata.category,
       metadata.script_content,
       metadata.config_json,
-      metadata.repo_url
+      metadata.repo_url,
+      ownerId
     );
     res.status(201).json({ data: skill, scanner });
   } catch (err) {
@@ -3500,7 +3525,8 @@ app.post('/api/v1/skills/from-repo', authenticate, async (req, res) => {
 
 app.put('/api/v1/skills/:id', authenticate, (req, res) => {
   try {
-    const skill = updateSkill(req.params.id, req.body);
+    const ownerId = getRequestOwnerId(req);
+    const skill = updateSkill(req.params.id, req.body, ownerId);
     if (!skill) return res.status(404).json({ error: 'Skill not found' });
     res.json({ data: skill });
   } catch (err) {
@@ -3511,13 +3537,15 @@ app.put('/api/v1/skills/:id', authenticate, (req, res) => {
 
 app.get('/api/v1/skills/:id/attachments', authenticate, (req, res) => {
   try {
+    const ownerId = getRequestOwnerId(req);
     const personaRefs = db.prepare(`
       SELECT p.id as personaId, p.name as personaName
       FROM persona_skills ps
       JOIN personas p ON p.id = ps.persona_id
-      WHERE ps.skill_id = ?
+      JOIN skills s ON s.id = ps.skill_id
+      WHERE ps.skill_id = ? AND p.owner_id = ? AND s.owner_id = ?
       ORDER BY p.name ASC
-    `).all(req.params.id);
+    `).all(req.params.id, ownerId, ownerId);
     res.json({ data: { personas: personaRefs, total: personaRefs.length } });
   } catch (err) {
     console.error('Skill attachment inspection error:', err);
@@ -3527,7 +3555,8 @@ app.get('/api/v1/skills/:id/attachments', authenticate, (req, res) => {
 
 app.delete('/api/v1/skills/:id', authenticate, (req, res) => {
   try {
-    const result = deleteSkill(req.params.id);
+    const ownerId = getRequestOwnerId(req);
+    const result = deleteSkill(req.params.id, ownerId);
     if (!result) return res.status(404).json({ error: 'Skill not found' });
     res.json({ success: true });
   } catch (err) {
@@ -3538,7 +3567,8 @@ app.delete('/api/v1/skills/:id', authenticate, (req, res) => {
 
 app.put('/api/v1/skills/:id/activate', authenticate, (req, res) => {
   try {
-    const skill = setActiveSkill(req.params.id);
+    const ownerId = getRequestOwnerId(req);
+    const skill = setActiveSkill(req.params.id, ownerId);
     if (!skill) return res.status(404).json({ error: 'Skill not found' });
     res.json({ data: skill });
   } catch (err) {
@@ -3549,7 +3579,8 @@ app.put('/api/v1/skills/:id/activate', authenticate, (req, res) => {
 
 app.get('/api/v1/skills/:id/documents', authenticate, (req, res) => {
   try {
-    const docs = getSkillDocuments(req.params.id);
+    const ownerId = getRequestOwnerId(req);
+    const docs = getSkillDocuments(req.params.id, ownerId);
     res.json({ data: docs });
   } catch (err) {
     console.error('Skill docs error:', err);
@@ -3559,8 +3590,13 @@ app.get('/api/v1/skills/:id/documents', authenticate, (req, res) => {
 
 app.post('/api/v1/skills/:id/documents', authenticate, (req, res) => {
   try {
+    const ownerId = getRequestOwnerId(req);
     const { document_id } = req.body;
     if (!document_id) return res.status(400).json({ error: 'document_id is required' });
+    const skill = getSkillById(req.params.id, ownerId);
+    if (!skill) return res.status(404).json({ error: 'Skill not found' });
+    const doc = getKBDocumentById(document_id, ownerId);
+    if (!doc) return res.status(404).json({ error: 'Document not found' });
     const result = attachDocumentToSkill(req.params.id, document_id);
     res.status(201).json({ data: result });
   } catch (err) {
@@ -3571,6 +3607,9 @@ app.post('/api/v1/skills/:id/documents', authenticate, (req, res) => {
 
 app.delete('/api/v1/skills/:id/documents/:docId', authenticate, (req, res) => {
   try {
+    const ownerId = getRequestOwnerId(req);
+    const skill = getSkillById(req.params.id, ownerId);
+    if (!skill) return res.status(404).json({ error: 'Skill not found' });
     detachDocumentFromSkill(req.params.id, req.params.docId);
     res.json({ success: true });
   } catch (err) {

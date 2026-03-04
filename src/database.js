@@ -6,6 +6,11 @@ const bcrypt = require('bcrypt');
 const dbPath = path.join(__dirname, 'db.sqlite');
 const db = new Database(dbPath);
 
+function normalizeOwnerId(ownerId) {
+  const v = String(ownerId || '').trim();
+  return v || 'owner';
+}
+
 // Enable WAL mode for better concurrency
 db.pragma('journal_mode = WAL');
 
@@ -356,6 +361,22 @@ function initDatabase() {
   } catch (e) {
     // Column already exists — ignore
   }
+
+  // Multi-tenant ownership columns (security isolation)
+  const ownerMigrations = [
+    "ALTER TABLE personas ADD COLUMN owner_id TEXT",
+    "ALTER TABLE skills ADD COLUMN owner_id TEXT",
+    "ALTER TABLE kb_documents ADD COLUMN owner_id TEXT"
+  ];
+  for (const migration of ownerMigrations) {
+    try { db.exec(migration); } catch (e) {}
+  }
+  db.exec("UPDATE personas SET owner_id = COALESCE(owner_id, 'owner') WHERE owner_id IS NULL OR owner_id = ''");
+  db.exec("UPDATE skills SET owner_id = COALESCE(owner_id, 'owner') WHERE owner_id IS NULL OR owner_id = ''");
+  db.exec("UPDATE kb_documents SET owner_id = COALESCE(owner_id, 'owner') WHERE owner_id IS NULL OR owner_id = ''");
+  db.exec('CREATE INDEX IF NOT EXISTS idx_personas_owner ON personas(owner_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_skills_owner ON skills(owner_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_kb_documents_owner ON kb_documents(owner_id)');
 
   console.log('Database initialized at:', dbPath);
 }
@@ -825,13 +846,14 @@ function revokeHandshake(handshakeId) {
 }
 
 // Personas
-function createPersona(name, soulContent, description, templateData = null) {
+function createPersona(name, soulContent, description, templateData = null, ownerId = 'owner') {
   const now = new Date().toISOString();
+  const owner = normalizeOwnerId(ownerId);
   const stmt = db.prepare(`
-    INSERT INTO personas (name, soul_content, description, active, created_at, updated_at, template_data)
-    VALUES (?, ?, ?, 0, ?, ?, ?)
+    INSERT INTO personas (name, soul_content, description, active, created_at, updated_at, template_data, owner_id)
+    VALUES (?, ?, ?, 0, ?, ?, ?, ?)
   `);
-  const result = stmt.run(name, soulContent, description || null, now, now, templateData ? JSON.stringify(templateData) : null);
+  const result = stmt.run(name, soulContent, description || null, now, now, templateData ? JSON.stringify(templateData) : null, owner);
   return {
     id: result.lastInsertRowid,
     name,
@@ -844,13 +866,15 @@ function createPersona(name, soulContent, description, templateData = null) {
   };
 }
 
-function getPersonas() {
+function getPersonas(ownerId = 'owner') {
+  const owner = normalizeOwnerId(ownerId);
   const stmt = db.prepare(`
     SELECT id, name, soul_content, description, active, created_at, updated_at, template_data
     FROM personas
+    WHERE owner_id = ?
     ORDER BY created_at DESC
   `);
-  return stmt.all().map(row => ({
+  return stmt.all(owner).map(row => ({
     id: row.id,
     name: row.name,
     soul_content: row.soul_content,
@@ -862,13 +886,14 @@ function getPersonas() {
   }));
 }
 
-function getPersonaById(id) {
+function getPersonaById(id, ownerId = 'owner') {
+  const owner = normalizeOwnerId(ownerId);
   const stmt = db.prepare(`
     SELECT id, name, soul_content, description, active, created_at, updated_at, template_data
     FROM personas
-    WHERE id = ?
+    WHERE id = ? AND owner_id = ?
   `);
-  const row = stmt.get(id);
+  const row = stmt.get(id, owner);
   if (!row) return null;
   return {
     id: row.id,
@@ -882,14 +907,15 @@ function getPersonaById(id) {
   };
 }
 
-function getActivePersona() {
+function getActivePersona(ownerId = 'owner') {
+  const owner = normalizeOwnerId(ownerId);
   const stmt = db.prepare(`
     SELECT id, name, soul_content, description, active, created_at, updated_at, template_data
     FROM personas
-    WHERE active = 1
+    WHERE active = 1 AND owner_id = ?
     LIMIT 1
   `);
-  const row = stmt.get();
+  const row = stmt.get(owner);
   if (!row) return null;
   return {
     id: row.id,
@@ -903,8 +929,9 @@ function getActivePersona() {
   };
 }
 
-function updatePersona(id, updates) {
-  const persona = getPersonaById(id);
+function updatePersona(id, updates, ownerId = 'owner') {
+  const owner = normalizeOwnerId(ownerId);
+  const persona = getPersonaById(id, owner);
   if (!persona) return null;
   
   const now = new Date().toISOString();
@@ -916,9 +943,9 @@ function updatePersona(id, updates) {
   const stmt = db.prepare(`
     UPDATE personas
     SET name = ?, soul_content = ?, description = ?, updated_at = ?, template_data = ?
-    WHERE id = ?
+    WHERE id = ? AND owner_id = ?
   `);
-  stmt.run(name, soulContent, description, now, templateData ? JSON.stringify(templateData) : null, id);
+  stmt.run(name, soulContent, description, now, templateData ? JSON.stringify(templateData) : null, id, owner);
   
   return {
     id,
@@ -932,18 +959,19 @@ function updatePersona(id, updates) {
   };
 }
 
-function setActivePersona(id) {
-  const persona = getPersonaById(id);
+function setActivePersona(id, ownerId = 'owner') {
+  const owner = normalizeOwnerId(ownerId);
+  const persona = getPersonaById(id, owner);
   if (!persona) return null;
   
   // Deactivate all other personas
-  const deactivate = db.prepare('UPDATE personas SET active = 0 WHERE id != ?');
-  deactivate.run(id);
+  const deactivate = db.prepare('UPDATE personas SET active = 0 WHERE owner_id = ? AND id != ?');
+  deactivate.run(owner, id);
   
   // Activate the selected persona
   const now = new Date().toISOString();
-  const activate = db.prepare('UPDATE personas SET active = 1, updated_at = ? WHERE id = ?');
-  activate.run(now, id);
+  const activate = db.prepare('UPDATE personas SET active = 1, updated_at = ? WHERE id = ? AND owner_id = ?');
+  activate.run(now, id, owner);
   
   return {
     id,
@@ -956,16 +984,17 @@ function setActivePersona(id) {
   };
 }
 
-function deletePersona(id) {
+function deletePersona(id, ownerId = 'owner') {
+  const owner = normalizeOwnerId(ownerId);
   // Check if this is the only persona
-  const countStmt = db.prepare('SELECT COUNT(*) as count FROM personas');
-  const { count } = countStmt.get();
+  const countStmt = db.prepare('SELECT COUNT(*) as count FROM personas WHERE owner_id = ?');
+  const { count } = countStmt.get(owner);
   if (count <= 1) return null; // Cannot delete the only persona
   
   db.prepare('DELETE FROM persona_documents WHERE persona_id = ?').run(id);
   db.prepare('DELETE FROM persona_skills WHERE persona_id = ?').run(id);
-  const stmt = db.prepare('DELETE FROM personas WHERE id = ?');
-  const result = stmt.run(id);
+  const stmt = db.prepare('DELETE FROM personas WHERE id = ? AND owner_id = ?');
+  const result = stmt.run(id, owner);
   return result.changes > 0;
 }
 
@@ -1340,16 +1369,17 @@ function purgeExpiredCache() {
 }
 
 // Brain - Knowledge Base Documents
-function addKBDocument(source, title, content, embeddingVector = null, metadata = null) {
+function addKBDocument(source, title, content, embeddingVector = null, metadata = null, ownerId = 'owner') {
   const id = 'kbdoc_' + crypto.randomBytes(16).toString('hex');
   const now = new Date().toISOString();
+  const owner = normalizeOwnerId(ownerId);
   
   const stmt = db.prepare(`
-    INSERT INTO kb_documents (id, source, title, content, embedding_vector, metadata, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO kb_documents (id, source, title, content, embedding_vector, metadata, created_at, owner_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
   
-  stmt.run(id, source, title, content, embeddingVector, metadata ? JSON.stringify(metadata) : null, now);
+  stmt.run(id, source, title, content, embeddingVector, metadata ? JSON.stringify(metadata) : null, now, owner);
   
   return {
     id,
@@ -1362,14 +1392,16 @@ function addKBDocument(source, title, content, embeddingVector = null, metadata 
   };
 }
 
-function getKBDocuments() {
+function getKBDocuments(ownerId = 'owner') {
+  const owner = normalizeOwnerId(ownerId);
   const stmt = db.prepare(`
     SELECT id, source, title, metadata, created_at
     FROM kb_documents
+    WHERE owner_id = ?
     ORDER BY created_at DESC
   `);
   
-  return stmt.all().map(row => ({
+  return stmt.all(owner).map(row => ({
     id: row.id,
     source: row.source,
     title: row.title,
@@ -1378,12 +1410,13 @@ function getKBDocuments() {
   }));
 }
 
-function getKBDocumentById(id) {
+function getKBDocumentById(id, ownerId = 'owner') {
+  const owner = normalizeOwnerId(ownerId);
   const stmt = db.prepare(`
-    SELECT * FROM kb_documents WHERE id = ?
+    SELECT * FROM kb_documents WHERE id = ? AND owner_id = ?
   `);
   
-  const row = stmt.get(id);
+  const row = stmt.get(id, owner);
   if (!row) return null;
   
   return {
@@ -1397,25 +1430,28 @@ function getKBDocumentById(id) {
   };
 }
 
-function deleteKBDocument(id) {
-  const tx = db.transaction((docId) => {
-    db.prepare('DELETE FROM persona_documents WHERE document_id = ?').run(docId);
-    db.prepare('DELETE FROM persona_skill_documents WHERE document_id = ?').run(docId);
-    const result = db.prepare('DELETE FROM kb_documents WHERE id = ?').run(docId);
+function deleteKBDocument(id, ownerId = 'owner') {
+  const owner = normalizeOwnerId(ownerId);
+  const tx = db.transaction((docId, docOwner) => {
+    db.prepare('DELETE FROM persona_documents WHERE document_id = ? AND persona_id IN (SELECT id FROM personas WHERE owner_id = ?)').run(docId, docOwner);
+    db.prepare('DELETE FROM skill_documents WHERE document_id = ? AND skill_id IN (SELECT id FROM skills WHERE owner_id = ?)').run(docId, docOwner);
+    const result = db.prepare('DELETE FROM kb_documents WHERE id = ? AND owner_id = ?').run(docId, docOwner);
     return result.changes > 0;
   });
-  return tx(id);
+  return tx(id, owner);
 }
 
 // Persona Documents
-function getPersonaDocuments(personaId) {
+function getPersonaDocuments(personaId, ownerId = 'owner') {
+  const owner = normalizeOwnerId(ownerId);
   return db.prepare(`
     SELECT pd.document_id, kd.title, kd.source, kd.content, kd.created_at
     FROM persona_documents pd
     JOIN kb_documents kd ON pd.document_id = kd.id
-    WHERE pd.persona_id = ?
+    JOIN personas p ON p.id = pd.persona_id
+    WHERE pd.persona_id = ? AND p.owner_id = ? AND kd.owner_id = ?
     ORDER BY pd.created_at DESC
-  `).all(personaId).map(r => ({
+  `).all(personaId, owner, owner).map(r => ({
     documentId: r.document_id,
     title: r.title,
     source: r.source,
@@ -1424,14 +1460,16 @@ function getPersonaDocuments(personaId) {
   }));
 }
 
-function getPersonaDocumentContents(personaId) {
+function getPersonaDocumentContents(personaId, ownerId = 'owner') {
+  const owner = normalizeOwnerId(ownerId);
   return db.prepare(`
     SELECT kd.id, kd.title, kd.source, kd.content, kd.metadata, kd.created_at
     FROM persona_documents pd
     JOIN kb_documents kd ON pd.document_id = kd.id
-    WHERE pd.persona_id = ?
+    JOIN personas p ON p.id = pd.persona_id
+    WHERE pd.persona_id = ? AND p.owner_id = ? AND kd.owner_id = ?
     ORDER BY pd.created_at DESC
-  `).all(personaId).map(r => ({
+  `).all(personaId, owner, owner).map(r => ({
     id: r.id,
     title: r.title,
     source: r.source,
@@ -1457,14 +1495,16 @@ function detachDocumentFromPersona(personaId, documentId) {
   return result.changes > 0;
 }
 
-function getPersonaSkills(personaId) {
+function getPersonaSkills(personaId, ownerId = 'owner') {
+  const owner = normalizeOwnerId(ownerId);
   return db.prepare(`
     SELECT ps.skill_id, s.name, s.description, s.version, s.category, s.author, s.active, s.created_at, s.updated_at
     FROM persona_skills ps
     JOIN skills s ON ps.skill_id = s.id
-    WHERE ps.persona_id = ?
+    JOIN personas p ON p.id = ps.persona_id
+    WHERE ps.persona_id = ? AND p.owner_id = ? AND s.owner_id = ?
     ORDER BY ps.created_at DESC
-  `).all(personaId).map((r) => ({
+  `).all(personaId, owner, owner).map((r) => ({
     skillId: r.skill_id,
     name: r.name,
     description: r.description,
@@ -1492,7 +1532,8 @@ function detachSkillFromPersona(personaId, skillId) {
   return db.prepare('DELETE FROM persona_skills WHERE persona_id = ? AND skill_id = ?').run(personaId, skillId).changes > 0;
 }
 
-function getPersonaSkillPackages(personaId) {
+function getPersonaSkillPackages(personaId, ownerId = 'owner') {
+  const owner = normalizeOwnerId(ownerId);
   return db.prepare(`
     SELECT
       s.id as skill_id,
@@ -1510,11 +1551,12 @@ function getPersonaSkillPackages(personaId) {
       kd.metadata as document_metadata
     FROM persona_skills ps
     JOIN skills s ON ps.skill_id = s.id
+    JOIN personas p ON p.id = ps.persona_id
     LEFT JOIN skill_documents sd ON sd.skill_id = s.id
     LEFT JOIN kb_documents kd ON kd.id = sd.document_id
-    WHERE ps.persona_id = ?
+    WHERE ps.persona_id = ? AND p.owner_id = ? AND s.owner_id = ? AND (kd.owner_id = ? OR kd.owner_id IS NULL)
     ORDER BY s.id DESC, sd.created_at DESC
-  `).all(personaId).reduce((acc, row) => {
+  `).all(personaId, owner, owner, owner).reduce((acc, row) => {
     if (!acc[row.skill_id]) {
       acc[row.skill_id] = {
         skillId: row.skill_id,
@@ -1544,26 +1586,29 @@ function getPersonaSkillPackages(personaId) {
 }
 
 // Skills
-function createSkill(name, description, version, author, category, scriptContent, configJson, repoUrl) {
+function createSkill(name, description, version, author, category, scriptContent, configJson, repoUrl, ownerId = 'owner') {
   const now = new Date().toISOString();
+  const owner = normalizeOwnerId(ownerId);
   const stmt = db.prepare(`
-    INSERT INTO skills (name, description, version, author, category, script_content, config_json, repo_url, active, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+    INSERT INTO skills (name, description, version, author, category, script_content, config_json, repo_url, active, created_at, updated_at, owner_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
   `);
   const configValue = typeof configJson === 'object' ? JSON.stringify(configJson) : (configJson || null);
-  const result = stmt.run(name, description || null, version || '1.0.0', author || null, category || 'custom', scriptContent || null, configValue, repoUrl || null, now, now);
-  return getSkillById(result.lastInsertRowid);
+  const result = stmt.run(name, description || null, version || '1.0.0', author || null, category || 'custom', scriptContent || null, configValue, repoUrl || null, now, now, owner);
+  return getSkillById(result.lastInsertRowid, owner);
 }
 
-function getSkills() {
-  return db.prepare('SELECT * FROM skills ORDER BY created_at DESC').all().map(row => ({
+function getSkills(ownerId = 'owner') {
+  const owner = normalizeOwnerId(ownerId);
+  return db.prepare('SELECT * FROM skills WHERE owner_id = ? ORDER BY created_at DESC').all(owner).map(row => ({
     ...row, active: Boolean(row.active),
     config_json: row.config_json ? (() => { try { return JSON.parse(row.config_json); } catch { return row.config_json; } })() : null,
   }));
 }
 
-function getSkillById(id) {
-  const row = db.prepare('SELECT * FROM skills WHERE id = ?').get(id);
+function getSkillById(id, ownerId = 'owner') {
+  const owner = normalizeOwnerId(ownerId);
+  const row = db.prepare('SELECT * FROM skills WHERE id = ? AND owner_id = ?').get(id, owner);
   if (!row) return null;
   return {
     ...row, active: Boolean(row.active),
@@ -1571,8 +1616,9 @@ function getSkillById(id) {
   };
 }
 
-function updateSkill(id, updates) {
-  const skill = getSkillById(id);
+function updateSkill(id, updates, ownerId = 'owner') {
+  const owner = normalizeOwnerId(ownerId);
+  const skill = getSkillById(id, owner);
   if (!skill) return null;
   const now = new Date().toISOString();
   const name = updates.name !== undefined ? updates.name : skill.name;
@@ -1587,34 +1633,38 @@ function updateSkill(id, updates) {
     : (typeof skill.config_json === 'object' ? JSON.stringify(skill.config_json) : skill.config_json);
 
   db.prepare(`
-    UPDATE skills SET name=?, description=?, version=?, author=?, category=?, script_content=?, config_json=?, repo_url=?, updated_at=? WHERE id=?
-  `).run(name, description, version, author, category, scriptContent, configJson, repoUrl, now, id);
-  return getSkillById(id);
+    UPDATE skills SET name=?, description=?, version=?, author=?, category=?, script_content=?, config_json=?, repo_url=?, updated_at=? WHERE id=? AND owner_id=?
+  `).run(name, description, version, author, category, scriptContent, configJson, repoUrl, now, id, owner);
+  return getSkillById(id, owner);
 }
 
-function deleteSkill(id) {
+function deleteSkill(id, ownerId = 'owner') {
+  const owner = normalizeOwnerId(ownerId);
   db.prepare('DELETE FROM skill_documents WHERE skill_id = ?').run(id);
-  const result = db.prepare('DELETE FROM skills WHERE id = ?').run(id);
+  const result = db.prepare('DELETE FROM skills WHERE id = ? AND owner_id = ?').run(id, owner);
   return result.changes > 0;
 }
 
-function setActiveSkill(id) {
-  const skill = getSkillById(id);
+function setActiveSkill(id, ownerId = 'owner') {
+  const owner = normalizeOwnerId(ownerId);
+  const skill = getSkillById(id, owner);
   if (!skill) return null;
   const now = new Date().toISOString();
-  db.prepare('UPDATE skills SET active = 0 WHERE id != ?').run(id);
-  db.prepare('UPDATE skills SET active = 1, updated_at = ? WHERE id = ?').run(now, id);
-  return getSkillById(id);
+  db.prepare('UPDATE skills SET active = 0 WHERE owner_id = ? AND id != ?').run(owner, id);
+  db.prepare('UPDATE skills SET active = 1, updated_at = ? WHERE id = ? AND owner_id = ?').run(now, id, owner);
+  return getSkillById(id, owner);
 }
 
-function getSkillDocuments(skillId) {
+function getSkillDocuments(skillId, ownerId = 'owner') {
+  const owner = normalizeOwnerId(ownerId);
   return db.prepare(`
     SELECT sd.document_id, kd.title, kd.source, kd.created_at
     FROM skill_documents sd
     JOIN kb_documents kd ON sd.document_id = kd.id
-    WHERE sd.skill_id = ?
+    JOIN skills s ON s.id = sd.skill_id
+    WHERE sd.skill_id = ? AND s.owner_id = ? AND kd.owner_id = ?
     ORDER BY sd.created_at DESC
-  `).all(skillId).map(r => ({
+  `).all(skillId, owner, owner).map(r => ({
     documentId: r.document_id, title: r.title, source: r.source, createdAt: r.created_at,
   }));
 }

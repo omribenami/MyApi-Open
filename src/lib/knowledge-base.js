@@ -51,7 +51,7 @@ class KnowledgeBase {
   /**
    * Add a document to knowledge base
    */
-  async addDocument(source, title, content) {
+  async addDocument(source, title, content, ownerId = 'owner') {
     try {
       // Parse markdown into chunks
       const chunks = this._parseMarkdown(content);
@@ -71,7 +71,8 @@ class KnowledgeBase {
             chunkIndex: chunk.index,
             section: chunk.section,
             wordCount: chunk.text.split(/\s+/).length
-          }
+          },
+          ownerId
         );
 
         results.push(doc);
@@ -87,9 +88,9 @@ class KnowledgeBase {
   /**
    * Query knowledge base for relevant documents
    */
-  queryKnowledgeBase(query, topK = 3) {
+  queryKnowledgeBase(query, topK = 3, ownerId = 'owner') {
     try {
-      const allDocs = getKBDocuments();
+      const allDocs = getKBDocuments(ownerId);
       
       if (allDocs.length === 0) {
         return [];
@@ -128,9 +129,9 @@ class KnowledgeBase {
   /**
    * Remove document from knowledge base
    */
-  removeDocument(documentId) {
+  removeDocument(documentId, ownerId = 'owner') {
     try {
-      return deleteKBDocument(documentId);
+      return deleteKBDocument(documentId, ownerId);
     } catch (error) {
       console.error('Error removing document:', error);
       throw error;
@@ -140,9 +141,9 @@ class KnowledgeBase {
   /**
    * Get all documents
    */
-  getAllDocuments() {
+  getAllDocuments(ownerId = 'owner') {
     try {
-      return getKBDocuments();
+      return getKBDocuments(ownerId);
     } catch (error) {
       console.error('Error getting documents:', error);
       return [];
@@ -152,9 +153,9 @@ class KnowledgeBase {
   /**
    * Get document content
    */
-  getDocument(documentId) {
+  getDocument(documentId, ownerId = 'owner') {
     try {
-      return getKBDocumentById(documentId);
+      return getKBDocumentById(documentId, ownerId);
     } catch (error) {
       console.error('Error getting document:', error);
       return null;
