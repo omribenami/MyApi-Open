@@ -234,10 +234,28 @@ const isOAuthServiceEnabled = (service) => {
 
 // --- Middleware ---
 const session = require('express-session');
-app.use(helmet({ contentSecurityPolicy: false }));
-app.use(cors({ origin: process.env.CORS_ORIGIN || "*", credentials: true }));
-app.use(express.json({ limit: "100kb" }));
 const isProd = process.env.NODE_ENV === 'production';
+
+app.use(helmet({ contentSecurityPolicy: false }));
+
+const devOrigins = ['http://localhost:3001', 'http://127.0.0.1:3001', 'http://localhost:5173', 'http://127.0.0.1:5173'];
+const envOrigins = String(process.env.CORS_ORIGIN || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+const allowedOrigins = envOrigins.length > 0 ? envOrigins : (isProd ? [] : devOrigins);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow same-origin/non-browser requests (no Origin header)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+}));
+
+app.use(express.json({ limit: "100kb" }));
 const secureCookie = process.env.SESSION_COOKIE_SECURE
   ? String(process.env.SESSION_COOKIE_SECURE).toLowerCase() === 'true'
   : isProd;
@@ -437,13 +455,18 @@ function getRequestOwnerId(req) {
 }
 
 function requirePowerUser(req, res) {
-  const allowedEmail = String(process.env.POWER_USER_EMAIL || 'admin@your.domain.com').toLowerCase();
+  const configuredEmail = String(process.env.POWER_USER_EMAIL || process.env.OWNER_EMAIL || '').trim().toLowerCase();
+  if (!configuredEmail) {
+    res.status(503).json({ error: 'Power-user access is not configured' });
+    return false;
+  }
+
   let email = String(req?.session?.user?.email || req?.user?.email || '').toLowerCase();
   if (!email && req?.tokenMeta?.ownerId) {
     const tokenOwnerUser = getUserById(req.tokenMeta.ownerId);
     email = String(tokenOwnerUser?.email || '').toLowerCase();
   }
-  if (!email || email !== allowedEmail) {
+  if (!email || email !== configuredEmail) {
     res.status(403).json({ error: 'Only power user can access user management' });
     return false;
   }
@@ -501,7 +524,7 @@ function bootstrap() {
     const hash = bcrypt.hashSync(rawMaster, 10);
     createAccessToken(hash, "owner", "full", "Master Token");
     console.log("=== MyApi Platform Started ===");
-    console.log(`Master Token (SAVE THIS): ${rawMaster}`);
+    console.log("Master token created for bootstrap (hidden in logs for security)");
   } else {
     console.log("=== MyApi Platform Started ===");
     console.log("Master token already exists");
@@ -1949,7 +1972,7 @@ app.post("/api/v1/auth/login", (req, res) => {
       secret: user.totpSecret,
       encoding: 'base32',
       token: String(totpCode).replace(/\s+/g, ''),
-      window: 1,
+      window: 2,
     });
     if (!verified) {
       return res.status(401).json({ error: "Invalid 2FA code", requires2FA: true });
