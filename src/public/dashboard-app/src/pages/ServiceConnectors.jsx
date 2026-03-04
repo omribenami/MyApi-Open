@@ -3,7 +3,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useServicesStore } from '../stores/servicesStore';
 import ServiceCard from '../components/ServiceCard';
 import ServiceDetailModal from '../components/ServiceDetailModal';
-import { startOAuthFlow, AVAILABLE_SERVICES } from '../utils/oauth';
+import { startOAuthFlow } from '../utils/oauth';
 import { oauth } from '../utils/apiClient';
 
 function ServiceConnectors() {
@@ -50,26 +50,36 @@ function ServiceConnectors() {
     setError(null);
 
     try {
-      // Fetch all services from the API (38+ services with logos)
-      const response = await fetch('/api/v1/services');
-      if (!response.ok) throw new Error('Failed to fetch services');
-      
-      const data = await response.json();
-      const allServices = data.data || [];
+      const [servicesRes, oauthStatusRes] = await Promise.all([
+        fetch('/api/v1/services', { credentials: 'include' }),
+        fetch('/api/v1/oauth/status', {
+          credentials: 'include',
+          headers: masterToken ? { Authorization: `Bearer ${masterToken}` } : {},
+        }),
+      ]);
+      if (!servicesRes.ok) throw new Error('Failed to fetch services');
 
-      // Transform API services to frontend format
-      const transformed = allServices.map((svc) => ({
-        name: svc.name,
-        label: svc.label,
-        icon: svc.icon, // URL from simpleicons.org
-        description: svc.description || `Connect to ${svc.label}`,
-        auth_type: svc.auth_type,
-        api_endpoint: svc.api_endpoint,
-        documentation_url: svc.documentation_url,
-        category: svc.category_name,
-        status: 'disconnected', // Default - can be enhanced with OAuth status
-        enabled: true,
-      }));
+      const data = await servicesRes.json();
+      const allServices = data.data || [];
+      const oauthData = oauthStatusRes.ok ? await oauthStatusRes.json() : { services: [] };
+      const oauthMap = Object.fromEntries((oauthData.services || []).map((s) => [s.name, s]));
+
+      const transformed = allServices.map((svc) => {
+        const oauthMeta = oauthMap[svc.name];
+        return {
+          name: svc.name,
+          label: svc.label,
+          icon: svc.icon,
+          description: svc.description || `Connect to ${svc.label}`,
+          auth_type: svc.auth_type,
+          api_endpoint: svc.api_endpoint,
+          documentation_url: svc.documentation_url,
+          category: svc.category_name,
+          status: oauthMeta?.status || 'disconnected',
+          enabled: oauthMeta?.enabled !== false,
+          notConfigured: oauthMeta?.enabled === false,
+        };
+      });
 
       setServices(transformed);
     } catch (err) {
@@ -92,7 +102,7 @@ function ServiceConnectors() {
 
     setError(null);
     try {
-      await startOAuthFlow(service.name);
+      await startOAuthFlow(service.name, { mode: 'connect', returnTo: '/dashboard/services' });
     } catch (err) {
       console.error('OAuth flow error:', err);
       setError(`Failed to connect ${service.name}. Please try again.`);

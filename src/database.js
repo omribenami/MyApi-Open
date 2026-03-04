@@ -1978,10 +1978,12 @@ You are Luna, a certified wellness coach and mindfulness practitioner with 8 yea
 function seedServices() {
   const services = [
     // Social Media - with official logos
-    { name: 'twitter', label: 'Twitter/X', category: 'social', icon: 'https://cdn.simpleicons.org/x/000000', auth: 'oauth2', endpoint: 'https://api.twitter.com/2', docs: 'https://developer.twitter.com' },
+    { name: 'twitter', label: 'X (Twitter)', category: 'social', icon: 'https://cdn.simpleicons.org/x/000000', auth: 'oauth2', endpoint: 'https://api.twitter.com/2', docs: 'https://developer.twitter.com' },
+    { name: 'facebook', label: 'Facebook', category: 'social', icon: 'https://cdn.simpleicons.org/facebook/1877F2', auth: 'oauth2', endpoint: 'https://graph.facebook.com', docs: 'https://developers.facebook.com/docs/graph-api' },
     { name: 'linkedin', label: 'LinkedIn', category: 'social', icon: 'https://cdn.simpleicons.org/linkedin/0A66C2', auth: 'oauth2', endpoint: 'https://api.linkedin.com/v2', docs: 'https://docs.microsoft.com/en-us/linkedin' },
     { name: 'instagram', label: 'Instagram', category: 'social', icon: 'https://cdn.simpleicons.org/instagram/E4405F', auth: 'oauth2', endpoint: 'https://graph.instagram.com', docs: 'https://developers.facebook.com/docs/instagram' },
     { name: 'tiktok', label: 'TikTok', category: 'social', icon: 'https://cdn.simpleicons.org/tiktok/000000', auth: 'oauth2', endpoint: 'https://open.tiktok.com/v1', docs: 'https://developers.tiktok.com' },
+    { name: 'reddit', label: 'Reddit', category: 'social', icon: 'https://cdn.simpleicons.org/reddit/FF4500', auth: 'oauth2', endpoint: 'https://oauth.reddit.com', docs: 'https://www.reddit.com/dev/api' },
     { name: 'youtube', label: 'YouTube', category: 'social', icon: 'https://cdn.simpleicons.org/youtube/FF0000', auth: 'oauth2', endpoint: 'https://www.googleapis.com/youtube/v3', docs: 'https://developers.google.com/youtube' },
     { name: 'twitch', label: 'Twitch', category: 'social', icon: 'https://cdn.simpleicons.org/twitch/9146FF', auth: 'oauth2', endpoint: 'https://api.twitch.tv/helix', docs: 'https://dev.twitch.tv/docs/api' },
     { name: 'bluesky', label: 'Bluesky', category: 'social', icon: 'https://cdn.simpleicons.org/bluesky/1185FE', auth: 'jwt', endpoint: 'https://bsky.social/xrpc', docs: 'https://docs.bsky.app' },
@@ -2030,22 +2032,17 @@ function seedServices() {
     { name: 'googleanalytics', label: 'Google Analytics', category: 'analytics', icon: 'https://cdn.simpleicons.org/googleanalytics/E37400', auth: 'oauth2', endpoint: 'https://www.googleapis.com/analytics/v3', docs: 'https://developers.google.com/analytics' },
   ];
 
-  const checkStmt = db.prepare('SELECT COUNT(*) as count FROM services');
-  const result = checkStmt.get();
-  
-  if (result.count === 0) {
-    const getCategoryId = db.prepare('SELECT id FROM service_categories WHERE name = ?');
-    const now = new Date().toISOString();
-    const insertStmt = db.prepare(`
-      INSERT INTO services (name, label, category_id, icon, auth_type, api_endpoint, documentation_url, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `);
+  const getCategoryId = db.prepare('SELECT id FROM service_categories WHERE name = ?');
+  const now = new Date().toISOString();
+  const insertStmt = db.prepare(`
+    INSERT OR IGNORE INTO services (name, label, category_id, icon, auth_type, api_endpoint, documentation_url, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
 
-    for (const srv of services) {
-      const catId = getCategoryId.get(srv.category).id;
-      insertStmt.run(srv.name, srv.label, catId, srv.icon, srv.auth, srv.endpoint, srv.docs, now);
-    }
-    console.log('Seeded services');
+  for (const srv of services) {
+    const cat = getCategoryId.get(srv.category);
+    if (!cat) continue;
+    insertStmt.run(srv.name, srv.label, cat.id, srv.icon, srv.auth, srv.endpoint, srv.docs, now);
   }
 }
 

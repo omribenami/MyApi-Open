@@ -107,6 +107,7 @@ const GitHubAdapter = require("./services/github-adapter");
 const SlackAdapter = require("./services/slack-adapter");
 const DiscordAdapter = require("./services/discord-adapter");
 const WhatsAppAdapter = require("./services/whatsapp-adapter");
+const GenericOAuthAdapter = require("./services/generic-oauth-adapter");
 
 const app = express();
 app.set('trust proxy', true);
@@ -139,12 +140,81 @@ const oauthAdapters = {
   github: new GitHubAdapter(oauthConfig.github || {}),
   slack: new SlackAdapter(oauthConfig.slack || {}),
   discord: new DiscordAdapter(oauthConfig.discord || {}),
-  whatsapp: new WhatsAppAdapter(oauthConfig.whatsapp || {})
+  whatsapp: new WhatsAppAdapter(oauthConfig.whatsapp || {}),
+  facebook: new GenericOAuthAdapter({
+    serviceName: 'facebook',
+    authUrl: 'https://www.facebook.com/v19.0/dialog/oauth',
+    tokenUrl: 'https://graph.facebook.com/v19.0/oauth/access_token',
+    verifyUrl: 'https://graph.facebook.com/me?fields=id,name',
+    scope: 'public_profile,email,pages_show_list,pages_manage_posts',
+    redirectUri: process.env.FACEBOOK_REDIRECT_URI || oauthConfig.facebook?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/facebook`,
+    clientId: process.env.FACEBOOK_CLIENT_ID || oauthConfig.facebook?.clientId,
+    clientSecret: process.env.FACEBOOK_CLIENT_SECRET || oauthConfig.facebook?.clientSecret,
+  }),
+  instagram: new GenericOAuthAdapter({
+    serviceName: 'instagram',
+    authUrl: 'https://api.instagram.com/oauth/authorize',
+    tokenUrl: 'https://api.instagram.com/oauth/access_token',
+    verifyUrl: 'https://graph.instagram.com/me?fields=id,username',
+    scope: 'user_profile,user_media',
+    redirectUri: process.env.INSTAGRAM_REDIRECT_URI || oauthConfig.instagram?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/instagram`,
+    clientId: process.env.INSTAGRAM_CLIENT_ID || oauthConfig.instagram?.clientId,
+    clientSecret: process.env.INSTAGRAM_CLIENT_SECRET || oauthConfig.instagram?.clientSecret,
+    extraAuthParams: { force_reauth: true },
+  }),
+  tiktok: new GenericOAuthAdapter({
+    serviceName: 'tiktok',
+    authUrl: 'https://www.tiktok.com/v2/auth/authorize/',
+    tokenUrl: 'https://open.tiktokapis.com/v2/oauth/token/',
+    scope: 'user.info.basic,video.list',
+    redirectUri: process.env.TIKTOK_REDIRECT_URI || oauthConfig.tiktok?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/tiktok`,
+    clientId: process.env.TIKTOK_CLIENT_ID || oauthConfig.tiktok?.clientId,
+    clientSecret: process.env.TIKTOK_CLIENT_SECRET || oauthConfig.tiktok?.clientSecret,
+    extraAuthParams: { response_type: 'code' },
+    extraTokenParams: { grant_type: 'authorization_code' },
+  }),
+  twitter: new GenericOAuthAdapter({
+    serviceName: 'twitter',
+    authUrl: 'https://twitter.com/i/oauth2/authorize',
+    tokenUrl: 'https://api.twitter.com/2/oauth2/token',
+    verifyUrl: 'https://api.twitter.com/2/users/me',
+    scope: 'tweet.read users.read offline.access',
+    redirectUri: process.env.TWITTER_REDIRECT_URI || oauthConfig.twitter?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/twitter`,
+    clientId: process.env.TWITTER_CLIENT_ID || oauthConfig.twitter?.clientId,
+    clientSecret: process.env.TWITTER_CLIENT_SECRET || oauthConfig.twitter?.clientSecret,
+    tokenAuthStyle: 'basic',
+  }),
+  reddit: new GenericOAuthAdapter({
+    serviceName: 'reddit',
+    authUrl: 'https://www.reddit.com/api/v1/authorize',
+    tokenUrl: 'https://www.reddit.com/api/v1/access_token',
+    verifyUrl: 'https://oauth.reddit.com/api/v1/me',
+    scope: 'identity read submit',
+    redirectUri: process.env.REDDIT_REDIRECT_URI || oauthConfig.reddit?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/reddit`,
+    clientId: process.env.REDDIT_CLIENT_ID || oauthConfig.reddit?.clientId,
+    clientSecret: process.env.REDDIT_CLIENT_SECRET || oauthConfig.reddit?.clientSecret,
+    tokenAuthStyle: 'basic',
+    extraAuthParams: { duration: 'permanent' },
+  }),
+  linkedin: new GenericOAuthAdapter({
+    serviceName: 'linkedin',
+    authUrl: 'https://www.linkedin.com/oauth/v2/authorization',
+    tokenUrl: 'https://www.linkedin.com/oauth/v2/accessToken',
+    scope: 'r_liteprofile r_emailaddress w_member_social',
+    redirectUri: process.env.LINKEDIN_REDIRECT_URI || oauthConfig.linkedin?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/linkedin`,
+    clientId: process.env.LINKEDIN_CLIENT_ID || oauthConfig.linkedin?.clientId,
+    clientSecret: process.env.LINKEDIN_CLIENT_SECRET || oauthConfig.linkedin?.clientSecret,
+  }),
 };
 
-const OAUTH_SERVICES = ['google', 'github', 'slack', 'discord', 'whatsapp'];
+const OAUTH_SERVICES = Object.keys(oauthAdapters);
 const OAUTH_ENABLED = Object.fromEntries(
-  OAUTH_SERVICES.map(service => [service, oauthConfig[service]?.enabled !== false])
+  OAUTH_SERVICES.map((service) => {
+    const adapter = oauthAdapters[service];
+    const hasConfig = typeof adapter.isConfigured === 'function' ? adapter.isConfigured() : true;
+    const enabledByConfig = oauthConfig[service]?.enabled !== false;
+    return [service, Boolean(enabledByConfig && hasConfig)];
+  })
 );
 
 // --- Middleware ---
@@ -298,6 +368,10 @@ function authenticate(req, res, next) {
   req.tokenMeta = matched;
   req.authType = 'bearer';
   next();
+}
+
+function getOAuthUserId(req) {
+  return req?.session?.user?.id ? String(req.session.user.id) : 'oauth_user';
 }
 
 // --- Scope Filter (Brain logic) ---
@@ -2205,115 +2279,103 @@ app.delete('/api/v1/personas/:id/skills/:skillId', authenticate, (req, res) => {
 // GET /api/v1/oauth/authorize/:service — Start OAuth flow
 app.get("/api/v1/oauth/authorize/:service", (req, res) => {
   const { service } = req.params;
-  
-  // Validate service
+  const mode = (req.query.mode || 'connect').toString();
+
   if (!OAUTH_SERVICES.includes(service)) {
     return res.status(400).json({ error: "Invalid OAuth service" });
   }
-  
   if (!OAUTH_ENABLED[service]) {
-    return res.status(400).json({ error: `OAuth service '${service}' is not enabled` });
+    return res.status(400).json({ error: `OAuth service '${service}' is not enabled or configured` });
   }
-  
-  // Create state token for CSRF protection
+
   const state = createStateToken(service, 10);
-  
-  // Get authorization URL from adapter
+  req.session.oauthStateMeta = req.session.oauthStateMeta || {};
+  req.session.oauthStateMeta[state] = {
+    mode,
+    returnTo: String(req.query.returnTo || '/dashboard/'),
+    createdAt: Date.now(),
+  };
+
   const adapter = oauthAdapters[service];
   const authUrl = adapter.getAuthorizationUrl(state);
-  
-  // Log the authorization request
+
   createAuditLog({
     requesterId: req.ip,
     action: "oauth_authorize_start",
     resource: `/oauth/authorize/${service}`,
     ip: req.ip,
-    details: { service, state: state.substring(0, 10) + '...' }
+    details: { service, mode, state: state.substring(0, 10) + '...' }
   });
-  
-  res.json({
-    ok: true,
-    authUrl: authUrl,
-    state: state
-  });
+
+  res.json({ ok: true, authUrl, state });
 });
 
 // GET /api/v1/oauth/callback/:service — Handle OAuth callback
 app.get("/api/v1/oauth/callback/:service", async (req, res) => {
   const { service } = req.params;
   const { code, state } = req.query;
-  
-  // Validate service
+
   if (!OAUTH_SERVICES.includes(service)) {
-    createAuditLog({
-      requesterId: req.ip,
-      action: "oauth_callback_error",
-      resource: `/oauth/callback/${service}`,
-      ip: req.ip,
-      details: { error: "Invalid service", service }
-    });
     return res.status(400).json({ error: "Invalid OAuth service" });
   }
-  
-  // Validate state token for CSRF protection
   if (!state || !validateStateToken(service, state)) {
-    createAuditLog({
-      requesterId: req.ip,
-      action: "oauth_callback_error",
-      resource: `/oauth/callback/${service}`,
-      ip: req.ip,
-      details: { error: "Invalid or expired state token", service }
-    });
     return res.status(400).json({ error: "Invalid or expired state token" });
   }
-  
   if (!code) {
-    createAuditLog({
-      requesterId: req.ip,
-      action: "oauth_callback_error",
-      resource: `/oauth/callback/${service}`,
-      ip: req.ip,
-      details: { error: "Missing authorization code", service }
-    });
     return res.status(400).json({ error: "Missing authorization code" });
   }
-  
+
+  const stateMeta = req.session?.oauthStateMeta?.[state] || { mode: 'connect', returnTo: '/dashboard/' };
+  if (req.session?.oauthStateMeta) delete req.session.oauthStateMeta[state];
+
   try {
     const adapter = oauthAdapters[service];
     const tokenData = await adapter.exchangeCodeForToken(code);
-    
-    // Store token in database
-    const userId = "oauth_user"; // In production, this would be the actual user ID
-    const expiresAt = tokenData.expiresIn 
+
+    const userId = getOAuthUserId(req);
+    const expiresAt = tokenData.expiresIn
       ? new Date(Date.now() + tokenData.expiresIn * 1000).toISOString()
       : null;
-    
-    storeOAuthToken(
-      service,
-      userId,
-      tokenData.accessToken,
-      tokenData.refreshToken || null,
-      expiresAt,
-      tokenData.scope
-    );
-    
-    // Update OAuth status
+
+    storeOAuthToken(service, userId, tokenData.accessToken, tokenData.refreshToken || null, expiresAt, tokenData.scope);
     updateOAuthStatus(service, "connected");
-    
-    // Log successful callback
+
+    if (service === 'google' && stateMeta.mode === 'login') {
+      const googleProfile = await oauthAdapters.google.verifyToken(tokenData.accessToken).catch(() => ({ valid: false, data: {} }));
+      const email = googleProfile?.data?.email || `google_${Date.now()}@local.myapi`;
+      const usernameBase = email.split('@')[0].replace(/[^a-zA-Z0-9_.-]/g, '').slice(0, 30) || `google_${Date.now()}`;
+      let username = usernameBase;
+      let existing = getUserByUsername(username);
+      if (existing && existing.email !== email) {
+        username = `${usernameBase}_${Date.now().toString().slice(-6)}`;
+        existing = getUserByUsername(username);
+      }
+
+      let appUser = getUsers().find((u) => (u.email || '').toLowerCase() === email.toLowerCase()) || existing;
+      if (!appUser) {
+        appUser = createUser(username, crypto.randomBytes(24).toString('hex'), googleProfile?.data?.name || username, email, 'UTC');
+      }
+
+      req.session.user = {
+        id: appUser.id,
+        username: appUser.username,
+        display_name: appUser.displayName || appUser.username,
+        email: appUser.email || email,
+        roles: appUser.roles || 'user',
+      };
+    }
+
     createAuditLog({
       requesterId: req.ip,
       action: "oauth_callback_success",
       resource: `/oauth/callback/${service}`,
       ip: req.ip,
-      details: { service, scope: tokenData.scope }
+      details: { service, mode: stateMeta.mode || 'connect', scope: tokenData.scope }
     });
-    
-    // Redirect back to dashboard with success message
-    res.redirect(`/dashboard/?oauth_service=${service}&oauth_status=connected`);
+
+    const next = encodeURIComponent(stateMeta.returnTo || '/dashboard/');
+    res.redirect(`/dashboard/?oauth_service=${service}&oauth_status=connected&mode=${encodeURIComponent(stateMeta.mode || 'connect')}&next=${next}`);
   } catch (error) {
-    console.error(`OAuth callback error for ${service}:`, error.message);
-    
     createAuditLog({
       requesterId: req.ip,
       action: "oauth_callback_error",
@@ -2321,7 +2383,6 @@ app.get("/api/v1/oauth/callback/:service", async (req, res) => {
       ip: req.ip,
       details: { service, error: error.message }
     });
-    
     res.redirect(`/dashboard/?oauth_service=${service}&oauth_status=error&error=${encodeURIComponent(error.message)}`);
   }
 });
@@ -2332,7 +2393,7 @@ app.get("/api/v1/oauth/status", authenticate, (req, res) => {
   
   const services = OAUTH_SERVICES.map(service => {
     const status = statuses.find(s => s.serviceName === service);
-    const token = getOAuthToken(service, "oauth_user");
+    const token = getOAuthToken(service, getOAuthUserId(req));
     
     return {
       name: service,
@@ -2364,7 +2425,7 @@ app.post("/api/v1/oauth/disconnect/:service", authenticate, async (req, res) => 
   }
   
   try {
-    const userId = "oauth_user";
+    const userId = getOAuthUserId(req);
     const token = getOAuthToken(service, userId);
     
     if (!token) {
@@ -2418,7 +2479,7 @@ app.get("/api/v1/oauth/test/:service", authenticate, async (req, res) => {
   }
   
   try {
-    const userId = "oauth_user";
+    const userId = getOAuthUserId(req);
     const token = getOAuthToken(service, userId);
     
     if (!token) {

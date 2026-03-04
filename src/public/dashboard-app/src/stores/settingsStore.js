@@ -11,6 +11,7 @@ export const useSettingsStore = create((set) => ({
     email: '',
     timezone: 'UTC',
     language: 'en',
+    avatarUrl: '',
   },
   profileLoading: false,
   profileSaving: false,
@@ -48,6 +49,7 @@ export const useSettingsStore = create((set) => ({
         email: data.user?.email || data.identity?.Email || '',
         timezone: data.identity?.Timezone || 'UTC',
         language: 'en',
+        avatarUrl: data.identity?.AvatarUrl || '',
       },
       profileDirty: false,
     })),
@@ -73,8 +75,9 @@ export const useSettingsStore = create((set) => ({
             email: state.profile.user?.email || state.profile.identity?.Email || '',
             timezone: state.profile.identity?.Timezone || 'UTC',
             language: 'en',
+            avatarUrl: state.profile.identity?.AvatarUrl || '',
           }
-        : { displayName: '', email: '', timezone: 'UTC', language: 'en' },
+        : { displayName: '', email: '', timezone: 'UTC', language: 'en', avatarUrl: '' },
       profileDirty: false,
     })),
 

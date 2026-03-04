@@ -96,15 +96,15 @@ function ProfileSection() {
   } = useSettingsStore();
 
   const fetchProfile = useCallback(async () => {
-    if (!masterToken) return;
     setProfileLoading(true);
     clearProfileError();
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8000);
 
     try {
+      const authHeaders = masterToken ? { Authorization: `Bearer ${masterToken}` } : {};
       const res = await fetch('/api/v1/users/me', {
-        headers: { Authorization: `Bearer ${masterToken}` },
+        headers: authHeaders,
         credentials: 'include',
         signal: controller.signal,
       });
@@ -139,7 +139,7 @@ function ProfileSection() {
   }, [masterToken]);
 
   useEffect(() => {
-    if (masterToken) fetchProfile();
+    fetchProfile();
   }, [masterToken, fetchProfile]);
 
   useEffect(() => {
@@ -159,17 +159,20 @@ function ProfileSection() {
         Name: profileDraft.displayName,
         Email: profileDraft.email,
         Timezone: profileDraft.timezone,
+        AvatarUrl: profileDraft.avatarUrl,
       };
+      const authHeaders = masterToken ? { Authorization: `Bearer ${masterToken}` } : {};
       const res = await fetch('/api/v1/users/me', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${masterToken}`,
+          ...authHeaders,
         },
         credentials: 'include',
         body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error('Failed to save profile');
+      localStorage.setItem('profileAvatarUrl', profileDraft.avatarUrl || '');
       setProfileSuccess('Profile updated successfully');
       await fetchProfile();
     } catch (err) {
@@ -193,17 +196,24 @@ function ProfileSection() {
         <ErrorBanner message={profileError} onClose={clearProfileError} />
         <SuccessBanner message={profileSuccess} onClose={clearProfileSuccess} />
 
-        {/* Avatar placeholder */}
         <div className="flex items-center gap-4 pb-4 border-b border-slate-700">
-          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center text-2xl font-bold text-white flex-shrink-0">
-            {(profileDraft?.displayName || 'U').charAt(0).toUpperCase()}
-          </div>
-          <div>
+          {profileDraft?.avatarUrl ? (
+            <img src={profileDraft.avatarUrl} alt="avatar" className="w-16 h-16 rounded-full object-cover border border-slate-600" />
+          ) : (
+            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center text-2xl font-bold text-white flex-shrink-0">
+              {(profileDraft?.displayName || 'U').charAt(0).toUpperCase()}
+            </div>
+          )}
+          <div className="w-full">
             <p className="text-white font-medium">{profileDraft?.displayName || 'User'}</p>
-            <p className="text-slate-400 text-sm">{profileDraft?.email || ''}</p>
-            <button className="mt-1 text-xs text-blue-400 hover:text-blue-300 transition-colors">
-              Change avatar (coming soon)
-            </button>
+            <p className="text-slate-400 text-sm mb-2">{profileDraft?.email || ''}</p>
+            <input
+              type="url"
+              value={profileDraft?.avatarUrl || ''}
+              onChange={(e) => updateProfileDraft('avatarUrl', e.target.value)}
+              placeholder="https://.../avatar.png"
+              className="w-full sm:max-w-md px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            />
           </div>
         </div>
 

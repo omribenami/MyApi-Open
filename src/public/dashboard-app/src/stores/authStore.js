@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export const useAuthStore = create((set, get) => ({
+export const useAuthStore = create((set) => ({
   user: null,
   masterToken: null,
   sessionToken: null,
@@ -8,77 +8,63 @@ export const useAuthStore = create((set, get) => ({
   isLoading: false,
   error: null,
 
-  // Initialize auth from localStorage
-  initialize: () => {
+  initialize: async () => {
     const masterToken = localStorage.getItem('masterToken');
     const sessionToken = sessionStorage.getItem('sessionToken');
-    
+
     if (masterToken) {
-      set({
-        masterToken,
-        sessionToken,
-        isAuthenticated: true,
-      });
+      set({ masterToken, sessionToken, isAuthenticated: true });
+    }
+
+    // Session-cookie fallback for OAuth login (e.g. Google Workspace)
+    try {
+      const res = await fetch('/api/v1/auth/me', { credentials: 'include' });
+      if (res.ok) {
+        const user = await res.json();
+        set({ user, isAuthenticated: true, error: null });
+      }
+    } catch {
+      // no-op
     }
   },
 
-  // Set master token (from username/password or OAuth)
   setMasterToken: (token) => {
     localStorage.setItem('masterToken', token);
-    set({
-      masterToken: token,
-      isAuthenticated: true,
-      error: null,
-    });
+    set({ masterToken: token, isAuthenticated: true, error: null });
   },
 
-  // Set session token (optional, for API calls)
   setSessionToken: (token) => {
     sessionStorage.setItem('sessionToken', token);
     set({ sessionToken: token });
   },
 
-  // Set user info
   setUser: (user) => {
     set({ user });
   },
 
-  // Set loading state
   setLoading: (isLoading) => {
     set({ isLoading });
   },
 
-  // Set error
   setError: (error) => {
     set({ error });
   },
 
-  // Logout
   logout: () => {
     localStorage.removeItem('masterToken');
     sessionStorage.removeItem('sessionToken');
-    set({
-      user: null,
-      masterToken: null,
-      sessionToken: null,
-      isAuthenticated: false,
-      error: null,
-    });
+    fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
+    set({ user: null, masterToken: null, sessionToken: null, isAuthenticated: false, error: null });
   },
 
-  // OAuth flow start
-  startOAuthFlow: (service) => {
+  startOAuthFlow: () => {
     set({ isLoading: true });
-    // The actual OAuth flow will be handled by the component
   },
 
-  // OAuth flow complete
-  completeOAuthFlow: (service, token) => {
+  completeOAuthFlow: () => {
     set({ isLoading: false });
-    // Token is stored in sessionStorage by the OAuth callback handler
   },
 
-  // Clear error
   clearError: () => {
     set({ error: null });
   },

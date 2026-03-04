@@ -36,8 +36,8 @@ apiClient.interceptors.response.use(
 // OAuth endpoints
 export const oauth = {
   // Get authorization URL for a service
-  getAuthorizationUrl: (service) => 
-    apiClient.get(`/oauth/authorize/${service}`),
+  getAuthorizationUrl: (service, options = {}) =>
+    apiClient.get(`/oauth/authorize/${service}`, { params: options }),
 
   // Get status of all connected services
   getStatus: () => 

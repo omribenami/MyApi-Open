@@ -48,13 +48,22 @@ function Login() {
   const [viewMode, setViewMode] = useState('pricing');
   const [billingPlans, setBillingPlans] = useState([]);
   const [plansLoading, setPlansLoading] = useState(true);
-  const { setMasterToken, isAuthenticated } = useAuthStore();
+  const { setMasterToken, setUser, isAuthenticated } = useAuthStore();
 
   useEffect(() => {
     const callback = handleOAuthCallback();
     if (callback) {
       if (callback.status === 'connected') {
-        window.history.replaceState({}, document.title, '/dashboard/');
+        fetch('/api/v1/auth/me', { credentials: 'include' })
+          .then(async (res) => {
+            if (!res.ok) return null;
+            return res.json();
+          })
+          .then((sessionUser) => {
+            if (sessionUser) setUser(sessionUser);
+            window.history.replaceState({}, document.title, '/dashboard/');
+            window.location.href = '/dashboard/';
+          });
       } else if (callback.error) {
         setError(`OAuth error: ${callback.error}`);
         window.history.replaceState({}, document.title, '/dashboard/');
@@ -117,7 +126,10 @@ function Login() {
   const handleOAuthClick = async (serviceId) => {
     setError('');
     try {
-      await startOAuthFlow(serviceId);
+      await startOAuthFlow(serviceId, {
+        mode: serviceId === 'google' ? 'login' : 'connect',
+        returnTo: '/dashboard/',
+      });
     } catch {
       setError(`Failed to start ${serviceId} login. Please try again.`);
     }
