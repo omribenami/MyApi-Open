@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { startOAuthFlow, handleOAuthCallback } from '../utils/oauth';
 import { AVAILABLE_SERVICES } from '../utils/oauth';
+import BrandLogo from '../components/BrandLogo';
 
 // Brand SVG icons for OAuth providers
 const OAuthIcons = {
@@ -197,26 +198,18 @@ function Login() {
       </div>
 
       <div className="flex-1 flex items-center justify-center px-4 py-6 sm:py-10 relative z-10">
-        <div className="w-full max-w-5xl flex flex-col lg:flex-row gap-8 lg:gap-16 items-center">
+        <div className={`w-full ${viewMode === 'pricing' ? 'max-w-7xl' : 'max-w-5xl'} flex flex-col lg:flex-row gap-8 lg:gap-16 items-center lg:items-start`}>
 
           {/* Left side — Branding & Features */}
           <div className="flex-1 text-center lg:text-left max-w-lg">
             {/* Logo */}
-            <div className="inline-flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500 shadow-opacity-25">
-                <svg className="w-7 h-7 sm:w-8 sm:h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-              </div>
-              <span className="text-3xl sm:text-4xl font-bold text-white tracking-tight">MyApi</span>
-            </div>
+            <BrandLogo size="lg" className="mb-6" />
 
             <h2 className="text-xl sm:text-2xl font-semibold text-white mb-3">
               Your Personal API Dashboard
             </h2>
             <p className="text-slate-400 text-base sm:text-lg mb-8 leading-relaxed">
-              One dashboard to manage all your APIs, services, tokens, and AI personas.
-              made by ai for ai.
+              One dashboard to manage your APIs, services, tokens, and AI personas with clarity and control.
             </p>
 
             {/* Feature cards grid */}
@@ -237,7 +230,7 @@ function Login() {
           </div>
 
           {/* Right side — Logic/Pricing Card */}
-          <div className="w-full max-w-sm lg:max-w-md">
+          <div className={`w-full ${viewMode === 'pricing' ? 'max-w-6xl' : 'max-w-sm lg:max-w-md'}`}>
             <div className="mb-4 inline-flex w-full rounded-xl border border-slate-700 bg-slate-900/60 p-1">
               <button
                 onClick={() => setViewMode('pricing')}
@@ -378,13 +371,14 @@ function Login() {
               </>
             ) : (
               /* Pricing Card */
-              <div className="w-full bg-slate-900 bg-opacity-80 backdrop-blur-xl border border-slate-700 border-opacity-50 rounded-2xl shadow-2xl overflow-hidden grid grid-cols-1 lg:grid-cols-3 divide-y divide-slate-700/50 lg:divide-y-0 lg:divide-x mt-6 sm:mt-0">
+              <div className="w-full bg-slate-900/80 backdrop-blur-xl border border-slate-700/60 rounded-2xl shadow-2xl p-3 sm:p-5 lg:p-6 mt-6 sm:mt-0">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-5">
                 {(billingPlans.length ? billingPlans : [
                   { id: 'free', name: 'Free', priceMonthly: 0, description: 'Perfect for individuals getting started', features: ['1 AI Persona', '3 Service Connections', '10 MB Knowledge Base', '5 Token Vault', 'Attach up to 4 Skills'] },
                   { id: 'pro', name: 'Pro', priceMonthly: 15, description: 'For creators and small teams', features: ['5 AI Persona', 'All Service Connections', '50 MB Knowledge Base', 'Token Vault', 'Attach unlimited Skills'] },
                   { id: 'enterprise', name: 'Enterprise', priceMonthly: 30, description: 'Scale with higher limits and priority', features: ['20 AI Persona', 'All Service Connections', '200 MB Knowledge Base', 'Token Vault', 'Attach unlimited Skills'] },
                 ]).map((plan) => (
-                  <div key={plan.id} className={`p-5 sm:p-7 lg:p-8 ${plan.id === 'pro' ? 'bg-gradient-to-br from-blue-900/20 to-indigo-900/20' : ''}`}>
+                  <div key={plan.id} className={`h-full rounded-2xl border ${plan.id === 'pro' ? 'border-blue-500/60 bg-gradient-to-br from-blue-900/30 to-indigo-900/20 shadow-lg shadow-blue-900/40' : plan.id === 'enterprise' ? 'border-purple-500/40 bg-slate-900/70' : 'border-slate-700/70 bg-slate-900/60'} p-5 sm:p-7 flex flex-col`}>
                     <div className="flex items-start justify-between mb-2">
                       <h3 className={`text-xl font-semibold ${plan.id === 'pro' ? 'text-blue-300' : plan.id === 'enterprise' ? 'text-purple-300' : 'text-white'}`}>{plan.name}</h3>
                       {plan.id === 'pro' && <span className="text-[10px] font-bold uppercase tracking-wider py-1 px-2 rounded bg-blue-600 text-white">Popular</span>}
@@ -393,9 +387,9 @@ function Login() {
                     <div className="text-3xl font-bold text-white mb-1">${plan.priceMonthly} <span className="text-sm text-slate-400 font-normal">/mo</span></div>
                     <p className="text-sm text-slate-400 mb-6">{plan.description}</p>
 
-                    <ul className="space-y-3 mb-6 sm:mb-8 text-sm text-slate-200 min-h-0 lg:min-h-[130px]">
+                    <ul className="space-y-3 mb-6 text-sm text-slate-200 flex-1">
                       {(plan.features || []).map((feature) => (
-                        <li key={feature} className="flex gap-2 items-center"><span className="text-emerald-400">✓</span> {feature}</li>
+                        <li key={feature} className="flex gap-2 items-start"><span className="text-emerald-400 mt-0.5">✓</span> <span>{feature}</span></li>
                       ))}
                     </ul>
 
@@ -408,6 +402,7 @@ function Login() {
                     </button>
                   </div>
                 ))}
+                </div>
               </div>
             )}
           </div>

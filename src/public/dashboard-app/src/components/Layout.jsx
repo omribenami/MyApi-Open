@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
+import BrandLogo from './BrandLogo';
 
 function Layout({ children, onLogout }) {
   const location = useLocation();
@@ -67,6 +68,7 @@ function Layout({ children, onLogout }) {
               </button>
 
               <Link to="/" className="flex-shrink-0 flex items-center gap-2">
+                <BrandLogo size="sm" withWordmark={false} className="gap-2" />
                 <span className="text-lg font-semibold tracking-tight text-slate-100">MyApi</span>
                 <span className="text-xs px-2 py-0.5 rounded border border-slate-700 text-slate-400">Dashboard</span>
               </Link>
