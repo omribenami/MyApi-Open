@@ -127,7 +127,7 @@ function Login() {
     setError('');
     try {
       await startOAuthFlow(serviceId, {
-        mode: serviceId === 'google' ? 'login' : 'connect',
+        mode: (serviceId === 'google' || serviceId === 'facebook') ? 'login' : 'connect',
         returnTo: '/dashboard/',
       });
     } catch {

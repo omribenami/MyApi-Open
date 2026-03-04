@@ -36,6 +36,7 @@ const {
   getUserByUsername,
   getUserById,
   updateUserPlan,
+  updateUserOAuthProfile,
   createHandshake,
   getHandshakes,
   approveHandshake,
@@ -146,7 +147,7 @@ const oauthAdapters = {
     serviceName: 'facebook',
     authUrl: 'https://www.facebook.com/v19.0/dialog/oauth',
     tokenUrl: 'https://graph.facebook.com/v19.0/oauth/access_token',
-    verifyUrl: 'https://graph.facebook.com/me?fields=id,name',
+    verifyUrl: 'https://graph.facebook.com/me?fields=id,name,email,picture.type(large)',
     scope: 'public_profile,email,pages_show_list,pages_manage_posts',
     redirectUri: process.env.FACEBOOK_REDIRECT_URI || oauthConfig.facebook?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/facebook`,
     clientId: process.env.FACEBOOK_CLIENT_ID || oauthConfig.facebook?.clientId,
@@ -1890,6 +1891,12 @@ app.post("/api/v1/auth/token-login", (req, res) => {
 });
 
 app.get("/api/v1/auth/me", (req, res) => {
+  // Cookie-session auth (OAuth login path)
+  if (req.session && req.session.user) {
+    return res.json(req.session.user);
+  }
+
+  // Legacy bearer session-token auth
   const authHeader = req.headers.authorization;
   if (!authHeader) return res.status(401).json({ error: "Not authenticated" });
   const token = authHeader.replace("Bearer ", "");
@@ -1902,6 +1909,10 @@ app.get("/api/v1/auth/me", (req, res) => {
 });
 
 app.post("/api/v1/auth/logout", (req, res) => {
+  if (req.session) {
+    req.session.destroy(() => {});
+  }
+
   const authHeader = req.headers.authorization;
   if (authHeader) {
     const token = authHeader.replace("Bearer ", "");
@@ -2361,10 +2372,14 @@ app.get("/api/v1/oauth/callback/:service", async (req, res) => {
     storeOAuthToken(service, userId, tokenData.accessToken, tokenData.refreshToken || null, expiresAt, tokenData.scope);
     updateOAuthStatus(service, "connected");
 
-    if (service === 'google' && stateMeta.mode === 'login') {
-      const googleProfile = await oauthAdapters.google.verifyToken(tokenData.accessToken).catch(() => ({ valid: false, data: {} }));
-      const email = googleProfile?.data?.email || `google_${Date.now()}@local.myapi`;
-      const usernameBase = email.split('@')[0].replace(/[^a-zA-Z0-9_.-]/g, '').slice(0, 30) || `google_${Date.now()}`;
+    if ((service === 'google' || service === 'facebook') && stateMeta.mode === 'login') {
+      const profileResp = await oauthAdapters[service].verifyToken(tokenData.accessToken).catch(() => ({ valid: false, data: {} }));
+      const p = profileResp?.data || {};
+      const email = p.email || `${service}_${Date.now()}@local.myapi`;
+      const name = p.name || p.given_name || email.split('@')[0] || `${service}_user`;
+      const avatarUrl = p.picture?.data?.url || p.picture || null;
+
+      const usernameBase = email.split('@')[0].replace(/[^a-zA-Z0-9_.-]/g, '').slice(0, 30) || `${service}_${Date.now()}`;
       let username = usernameBase;
       let existing = getUserByUsername(username);
       if (existing && existing.email !== email) {
@@ -2376,12 +2391,15 @@ app.get("/api/v1/oauth/callback/:service", async (req, res) => {
       if (!appUser) {
         appUser = createUser(
           username,
-          googleProfile?.data?.name || username,
+          name,
           email,
           'UTC',
           crypto.randomBytes(24).toString('hex'),
-          'free'
+          'free',
+          avatarUrl
         );
+      } else {
+        appUser = updateUserOAuthProfile(appUser.id, { displayName: name, email, avatarUrl }) || appUser;
       }
 
       req.session.user = {
@@ -2389,6 +2407,7 @@ app.get("/api/v1/oauth/callback/:service", async (req, res) => {
         username: appUser.username,
         display_name: appUser.displayName || appUser.username,
         email: appUser.email || email,
+        avatar_url: appUser.avatarUrl || avatarUrl || null,
         roles: appUser.roles || 'user',
       };
     }

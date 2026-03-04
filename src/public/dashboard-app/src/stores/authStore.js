@@ -16,11 +16,12 @@ export const useAuthStore = create((set) => ({
       set({ masterToken, sessionToken, isAuthenticated: true });
     }
 
-    // Session-cookie fallback for OAuth login (e.g. Google Workspace)
+    // Session-cookie fallback for OAuth login (e.g. Google/Facebook)
     try {
       const res = await fetch('/api/v1/auth/me', { credentials: 'include' });
       if (res.ok) {
-        const user = await res.json();
+        const payload = await res.json();
+        const user = payload?.data || payload;
         set({ user, isAuthenticated: true, error: null });
       }
     } catch {
@@ -39,7 +40,7 @@ export const useAuthStore = create((set) => ({
   },
 
   setUser: (user) => {
-    set({ user });
+    set({ user, isAuthenticated: !!user });
   },
 
   setLoading: (isLoading) => {

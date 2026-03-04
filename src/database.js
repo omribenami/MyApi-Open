@@ -69,6 +69,7 @@ function initDatabase() {
       username TEXT UNIQUE NOT NULL,
       display_name TEXT,
       email TEXT,
+      avatar_url TEXT,
       timezone TEXT,
       password_hash TEXT NOT NULL,
       created_at TEXT NOT NULL,
@@ -358,6 +359,12 @@ function initDatabase() {
   // Add users.plan column if not already present (migration)
   try {
     db.exec("ALTER TABLE users ADD COLUMN plan TEXT DEFAULT 'free'");
+  } catch (e) {
+    // Column already exists — ignore
+  }
+  // Add users.avatar_url column if not already present (migration)
+  try {
+    db.exec("ALTER TABLE users ADD COLUMN avatar_url TEXT");
   } catch (e) {
     // Column already exists — ignore
   }
@@ -747,27 +754,27 @@ function getAuditLogs(limit = 50, offset = 0) {
 }
 
 // Handshake support (new)
-function createUser(username, displayName, email, timezone, password, plan = 'free') {
+function createUser(username, displayName, email, timezone, password, plan = 'free', avatarUrl = null) {
   const id = 'usr_' + crypto.randomBytes(16).toString('hex');
   const now = new Date().toISOString();
   const hash = bcrypt.hashSync(password, 10);
-  const stmt = db.prepare(`INSERT INTO users (id, username, display_name, email, timezone, password_hash, created_at, status, plan) VALUES (?,?,?,?,?,?,?,?,?)`);
-  stmt.run(id, username, displayName || null, email || null, timezone || null, hash, now, 'active', plan || 'free');
-  return { id, username, displayName, email, timezone, createdAt: now, status: 'active', plan: plan || 'free' };
+  const stmt = db.prepare(`INSERT INTO users (id, username, display_name, email, avatar_url, timezone, password_hash, created_at, status, plan) VALUES (?,?,?,?,?,?,?,?,?,?)`);
+  stmt.run(id, username, displayName || null, email || null, avatarUrl || null, timezone || null, hash, now, 'active', plan || 'free');
+  return { id, username, displayName, email, avatarUrl: avatarUrl || null, timezone, createdAt: now, status: 'active', plan: plan || 'free' };
 }
 
 function getUsers() {
-  const stmt = db.prepare("SELECT id, username, display_name as displayName, email, timezone, created_at as createdAt, status, COALESCE(plan, 'free') as plan FROM users ORDER BY created_at DESC");
+  const stmt = db.prepare("SELECT id, username, display_name as displayName, email, avatar_url as avatarUrl, timezone, created_at as createdAt, status, COALESCE(plan, 'free') as plan FROM users ORDER BY created_at DESC");
   return stmt.all();
 }
 
 function getUserByUsername(username) {
-  const stmt = db.prepare("SELECT id, username, display_name as displayName, email, timezone, password_hash, created_at as createdAt, status, COALESCE(plan, 'free') as plan FROM users WHERE username = ?");
+  const stmt = db.prepare("SELECT id, username, display_name as displayName, email, avatar_url as avatarUrl, timezone, password_hash, created_at as createdAt, status, COALESCE(plan, 'free') as plan FROM users WHERE username = ?");
   return stmt.get(username);
 }
 
 function getUserById(id) {
-  const stmt = db.prepare("SELECT id, username, display_name as displayName, email, timezone, created_at as createdAt, status, COALESCE(plan, 'free') as plan FROM users WHERE id = ?");
+  const stmt = db.prepare("SELECT id, username, display_name as displayName, email, avatar_url as avatarUrl, timezone, created_at as createdAt, status, COALESCE(plan, 'free') as plan FROM users WHERE id = ?");
   return stmt.get(id);
 }
 
@@ -779,6 +786,16 @@ function updateUserPlan(userId, plan) {
   }
   const result = db.prepare('UPDATE users SET plan = ? WHERE id = ?').run(normalizedPlan, userId);
   if (result.changes === 0) return null;
+  return getUserById(userId);
+}
+
+function updateUserOAuthProfile(userId, { displayName, email, avatarUrl } = {}) {
+  const current = getUserById(userId);
+  if (!current) return null;
+  const nextDisplay = (displayName || '').trim() || current.displayName || current.username;
+  const nextEmail = (email || '').trim() || current.email || null;
+  const nextAvatar = (avatarUrl || '').trim() || current.avatarUrl || null;
+  db.prepare('UPDATE users SET display_name = ?, email = ?, avatar_url = ? WHERE id = ?').run(nextDisplay, nextEmail, nextAvatar, userId);
   return getUserById(userId);
 }
 
@@ -2174,6 +2191,7 @@ module.exports = {
   getUserByUsername,
   getUserById,
   updateUserPlan,
+  updateUserOAuthProfile,
   createHandshake,
   getHandshakes,
   approveHandshake,

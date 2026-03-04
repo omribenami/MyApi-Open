@@ -37,6 +37,7 @@ function DashboardHome() {
   const [health, setHealth] = useState(null);
 
   useEffect(() => {
+    const guard = setTimeout(() => setLoading(false), 8000);
     const fetchData = async () => {
       try {
         const headers = masterToken ? { 'Authorization': `Bearer ${masterToken}` } : {};
@@ -101,13 +102,17 @@ function DashboardHome() {
       } catch (err) {
         console.error('Failed to fetch dashboard data:', err);
       } finally {
+        clearTimeout(guard);
         setLoading(false);
       }
     };
 
     fetchData();
     const interval = setInterval(fetchData, 30000); // Refresh every 30s
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(guard);
+      clearInterval(interval);
+    };
   }, [masterToken]);
 
   const statCards = [
