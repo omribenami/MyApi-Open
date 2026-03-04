@@ -47,6 +47,7 @@ function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showToken, setShowToken] = useState(false);
+  const [viewMode, setViewMode] = useState('login'); // 'login' | 'pricing'
   const { setMasterToken, isAuthenticated } = useAuthStore();
 
   useEffect(() => {
@@ -147,8 +148,52 @@ function Login() {
     },
   ];
 
+  const handleCheckout = async (plan) => {
+    setError('');
+    setLoading(true);
+    try {
+      const response = await fetch('/api/v1/billing/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan }),
+      });
+      if (response.ok) {
+        const result = await response.json();
+        if (result.url) {
+          window.location.href = result.url; // Redirect to Stripe Checkout
+        }
+      } else {
+        const errorData = await response.json();
+        setError(errorData.error || 'Failed to initiate checkout.');
+      }
+    } catch (err) {
+      setError('Connection failed. Is the server running?');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950 flex flex-col">
+      {/* Header Nav for Toggle */}
+      <div className="absolute top-0 right-0 p-6 z-20">
+        {viewMode === 'login' ? (
+          <button 
+            onClick={() => setViewMode('pricing')}
+            className="text-slate-300 hover:text-white text-sm font-medium transition-colors"
+          >
+            View Pricing Plans
+          </button>
+        ) : (
+          <button 
+            onClick={() => setViewMode('login')}
+            className="text-slate-300 hover:text-white text-sm font-medium transition-colors"
+          >
+            Back to Login
+          </button>
+        )}
+      </div>
+
       {/* Ambient glow orbs - CSS only, no JS */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-600 rounded-full opacity-10 blur-3xl"></div>
@@ -180,143 +225,209 @@ function Login() {
             </p>
 
             {/* Feature cards grid */}
-            <div className="grid grid-cols-2 gap-3 sm:gap-4">
-              {features.map((f, i) => (
-                <div
-                  key={i}
-                  className="bg-white bg-opacity-5 backdrop-blur-sm border border-white border-opacity-10 rounded-xl p-3 sm:p-4 hover:bg-opacity-10 transition-colors duration-200"
-                >
-                  <div className="mb-2">{f.icon}</div>
-                  <h3 className="text-sm font-semibold text-white mb-1">{f.title}</h3>
-                  <p className="text-xs text-slate-400 leading-relaxed">{f.desc}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Right side — Login Card */}
-          <div className="w-full max-w-sm lg:max-w-md">
-            {/* Card with glassmorphism */}
-            <div className="bg-slate-900 bg-opacity-80 backdrop-blur-xl border border-slate-700 border-opacity-50 rounded-2xl p-6 sm:p-8 shadow-2xl">
-              <h3 className="text-xl font-semibold text-white mb-1">Welcome back</h3>
-              <p className="text-sm text-slate-400 mb-6">Sign in to your dashboard</p>
-
-              {/* Error message */}
-              {error && (
-                <div className="mb-4 rounded-xl bg-red-500 bg-opacity-10 border border-red-500 border-opacity-30 p-3 flex items-start gap-2">
-                  <svg className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                  </svg>
-                  <p className="text-sm text-red-300">{error}</p>
-                </div>
-              )}
-
-              {/* OAuth Buttons */}
-              <div className="space-y-2.5 mb-6">
-                {oauthServices.map((service) => (
-                  <button
-                    key={service.id}
-                    onClick={() => handleOAuthClick(service.id)}
-                    className="w-full flex items-center justify-center gap-3 px-4 py-3 border border-slate-700 rounded-xl text-sm font-medium text-white bg-slate-800 bg-opacity-50 hover:bg-opacity-80 hover:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900 transition-all duration-200 min-h-[44px]"
+            {viewMode === 'login' && (
+              <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                {features.map((f, i) => (
+                  <div
+                    key={i}
+                    className="bg-white bg-opacity-5 backdrop-blur-sm border border-white border-opacity-10 rounded-xl p-3 sm:p-4 hover:bg-opacity-10 transition-colors duration-200"
                   >
-                    <span className="flex-shrink-0">{OAuthIcons[service.id] || null}</span>
-                    <span>Continue with {service.name}</span>
-                  </button>
+                    <div className="mb-2">{f.icon}</div>
+                    <h3 className="text-sm font-semibold text-white mb-1">{f.title}</h3>
+                    <p className="text-xs text-slate-400 leading-relaxed">{f.desc}</p>
+                  </div>
                 ))}
               </div>
+            )}
+          </div>
 
-              {/* Divider */}
-              <div className="relative mb-6">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-slate-700 border-opacity-50"></div>
-                </div>
-                <div className="relative flex justify-center">
-                  <span className="px-3 text-xs text-slate-500 bg-slate-900 bg-opacity-80">or use master token</span>
-                </div>
-              </div>
+          {/* Right side — Logic/Pricing Card */}
+          <div className="w-full max-w-sm lg:max-w-md">
+            {viewMode === 'login' ? (
+              <>
+                {/* Login Card */}
+                <div className="bg-slate-900 bg-opacity-80 backdrop-blur-xl border border-slate-700 border-opacity-50 rounded-2xl p-6 sm:p-8 shadow-2xl">
+                  <h3 className="text-xl font-semibold text-white mb-1">Welcome back</h3>
+                  <p className="text-sm text-slate-400 mb-6">Sign in to your dashboard</p>
 
-              {/* Token Form */}
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  <label htmlFor="token" className="block text-sm font-medium text-slate-300 mb-1.5">
-                    Master Token
-                  </label>
-                  <div className="relative">
-                    <input
-                      id="token"
-                      type={showToken ? 'text' : 'password'}
-                      autoComplete="off"
-                      required
-                      value={token}
-                      onChange={(e) => setToken(e.target.value)}
-                      className="w-full px-4 py-3 pr-12 rounded-xl border border-slate-700 bg-slate-800 bg-opacity-50 text-white placeholder-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-30 focus:outline-none transition-all duration-200 text-sm min-h-[44px]"
-                      placeholder="Paste your master token"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowToken(!showToken)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors p-1"
-                      aria-label={showToken ? 'Hide token' : 'Show token'}
-                    >
-                      {showToken ? (
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                        </svg>
-                      ) : (
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                        </svg>
-                      )}
-                    </button>
+                  {/* Error message */}
+                  {error && (
+                    <div className="mb-4 rounded-xl bg-red-500 bg-opacity-10 border border-red-500 border-opacity-30 p-3 flex items-start gap-2">
+                      <svg className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                      </svg>
+                      <p className="text-sm text-red-300">{error}</p>
+                    </div>
+                  )}
+
+                  {/* OAuth Buttons */}
+                  <div className="space-y-2.5 mb-6">
+                    {oauthServices.map((service) => (
+                      <button
+                        key={service.id}
+                        onClick={() => handleOAuthClick(service.id)}
+                        className="w-full flex items-center justify-center gap-3 px-4 py-3 border border-slate-700 rounded-xl text-sm font-medium text-white bg-slate-800 bg-opacity-50 hover:bg-opacity-80 hover:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900 transition-all duration-200 min-h-[44px]"
+                      >
+                        <span className="flex-shrink-0">{OAuthIcons[service.id] || null}</span>
+                        <span>Continue with {service.name}</span>
+                      </button>
+                    ))}
                   </div>
-                </div>
 
-                <button
-                  type="submit"
-                  disabled={loading || !token}
-                  className="w-full px-4 py-3 rounded-xl font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 shadow-lg min-h-[44px] text-sm"
-                >
-                  {loading ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                  {/* Divider */}
+                  <div className="relative mb-6">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-slate-700 border-opacity-50"></div>
+                    </div>
+                    <div className="relative flex justify-center">
+                      <span className="px-3 text-xs text-slate-500 bg-slate-900 bg-opacity-80">or use master token</span>
+                    </div>
+                  </div>
+
+                  {/* Token Form */}
+                  <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                      <label htmlFor="token" className="block text-sm font-medium text-slate-300 mb-1.5">
+                        Master Token
+                      </label>
+                      <div className="relative">
+                        <input
+                          id="token"
+                          type={showToken ? 'text' : 'password'}
+                          autoComplete="off"
+                          required
+                          value={token}
+                          onChange={(e) => setToken(e.target.value)}
+                          className="w-full px-4 py-3 pr-12 rounded-xl border border-slate-700 bg-slate-800 bg-opacity-50 text-white placeholder-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-30 focus:outline-none transition-all duration-200 text-sm min-h-[44px]"
+                          placeholder="Paste your master token"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowToken(!showToken)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors p-1"
+                          aria-label={showToken ? 'Hide token' : 'Show token'}
+                        >
+                          {showToken ? (
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                            </svg>
+                          ) : (
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={loading || !token}
+                      className="w-full px-4 py-3 rounded-xl font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 shadow-lg min-h-[44px] text-sm"
+                    >
+                      {loading ? (
+                        <span className="flex items-center justify-center gap-2">
+                          <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Verifying...
+                        </span>
+                      ) : 'Sign In'}
+                    </button>
+                  </form>
+
+                  {/* Help text */}
+                  <p className="mt-4 text-center text-xs text-slate-500">
+                    New here? Check the{' '}
+                    <a href="https://github.com/omribenami/MyApi" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline underline-offset-2">
+                      docs
+                    </a>
+                    {' '}to get started
+                  </p>
+                </div>
+                
+                {/* Trust badges */}
+                <div className="mt-4 flex items-center justify-center gap-4 text-xs text-slate-600">
+                  <span className="flex items-center gap-1">
+                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                    </svg>
+                    Encrypted
+                  </span>
+                  <span>•</span>
+                  <span className="flex items-center gap-1">
+                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                    Self-hosted
+                  </span>
+                  <span>•</span>
+                  <span>Open Source</span>
+                </div>
+              </>
+            ) : (
+              /* Pricing Card */
+              <div className="w-full bg-slate-900 bg-opacity-80 backdrop-blur-xl border border-slate-700 border-opacity-50 rounded-2xl shadow-2xl overflow-hidden flex flex-col sm:flex-row">
+                {/* Free Tier */}
+                <div className="flex-1 p-6 sm:p-8 border-b sm:border-b-0 sm:border-r border-slate-700 border-opacity-50">
+                  <h3 className="text-xl font-semibold text-white mb-1">Free Tier</h3>
+                  <div className="text-3xl font-bold text-white mb-1">$0 <span className="text-sm text-slate-400 font-normal">/mo</span></div>
+                  <p className="text-sm text-slate-400 mb-6">Perfect for individuals getting started</p>
+                  
+                  <ul className="space-y-3 mb-8 text-sm text-slate-300">
+                    <li className="flex gap-2 items-center"><span className="text-emerald-400">✓</span> 1 AI Persona</li>
+                    <li className="flex gap-2 items-center"><span className="text-emerald-400">✓</span> 3 Service Connections</li>
+                    <li className="flex gap-2 items-center"><span className="text-emerald-400">✓</span> 5MB Knowledge Base</li>
+                    <li className="flex gap-2 items-center"><span className="text-emerald-400">✓</span> Basic Token Vault</li>
+                  </ul>
+                  
+                  <button 
+                    onClick={() => setViewMode('login')}
+                    className="w-full py-2.5 px-4 border border-slate-600 rounded-lg text-slate-200 hover:bg-slate-800 transition-colors font-medium text-sm"
+                  >
+                    Start Free
+                  </button>
+                </div>
+                
+                {/* Pro Tier */}
+                <div className="flex-1 p-6 sm:p-8 bg-gradient-to-br from-blue-900/20 to-indigo-900/20 relative">
+                  <div className="absolute top-0 right-0 bg-blue-600 text-white text-[10px] font-bold uppercase tracking-wider py-1 px-3 rounded-bl-lg rounded-tr-xl">Popular</div>
+                  <h3 className="text-xl font-semibold text-blue-300 mb-1">Pro Tier</h3>
+                  <div className="text-3xl font-bold text-white mb-1">$15 <span className="text-sm text-blue-300 font-normal opacity-70">/mo</span></div>
+                  <p className="text-sm text-blue-200 opacity-80 mb-6">For power users and teams</p>
+                  
+                  <ul className="space-y-3 mb-8 text-sm text-slate-200">
+                    <li className="flex gap-2 items-center"><span className="text-blue-400">✓</span> Unlimited AI Personas</li>
+                    <li className="flex gap-2 items-center"><span className="text-blue-400">✓</span> Unlimited Connections</li>
+                    <li className="flex gap-2 items-center"><span className="text-blue-400">✓</span> 50MB Knowledge Base</li>
+                    <li className="flex gap-2 items-center"><span className="text-blue-400">✓</span> Advanced Token Scopes</li>
+                  </ul>
+                  
+                  <button 
+                    onClick={() => handleCheckout('pro')}
+                    disabled={loading}
+                    className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors font-medium text-sm shadow-lg shadow-blue-600/30 flex justify-center items-center gap-2"
+                  >
+                    {loading ? (
+                      <svg className="animate-spin w-4 h-4 text-white" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
-                      Verifying...
-                    </span>
-                  ) : 'Sign In'}
-                </button>
-              </form>
-
-              {/* Help text */}
-              <p className="mt-4 text-center text-xs text-slate-500">
-                New here? Check the{' '}
-                <a href="https://github.com/omribenami/MyApi" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline underline-offset-2">
-                  docs
-                </a>
-                {' '}to get started
-              </p>
-            </div>
-
-            {/* Trust badges */}
-            <div className="mt-4 flex items-center justify-center gap-4 text-xs text-slate-600">
-              <span className="flex items-center gap-1">
-                <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-                </svg>
-                Encrypted
-              </span>
-              <span>•</span>
-              <span className="flex items-center gap-1">
-                <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                </svg>
-                Self-hosted
-              </span>
-              <span>•</span>
-              <span>Open Source</span>
-            </div>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.31-8.86c-1.77-.45-2.34-.94-2.34-1.67 0-.84.79-1.43 2.1-1.43 1.38 0 1.9.66 1.94 1.64h1.71c-.05-1.34-.87-2.57-2.49-2.97V5H10.9v1.69c-1.51.32-2.72 1.3-2.72 2.81 0 1.79 1.49 2.69 3.66 3.21 1.95.46 2.34 1.15 2.34 1.87 0 .53-.39 1.64-2.25 1.64-1.74 0-2.27-.85-2.34-1.76H7.83c.09 1.69 1.16 2.79 3.07 3.16V19h2.34v-1.67c1.52-.3 2.76-1.36 2.76-2.91.01-1.95-1.5-2.72-3.69-3.28z"/>
+                        </svg>
+                        Subscribe with Stripe
+                      </>
+                    )}
+                  </button>
+                  {error && <p className="text-red-400 text-xs mt-3 text-center">{error}</p>}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

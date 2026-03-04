@@ -1312,6 +1312,43 @@ app.post("/api/v1/tokens/validate", (req, res) => {
   });
 });
 
+// --- BILLING / STRIPE CHECKOUT ---
+app.post('/api/v1/billing/checkout', (req, res) => {
+  try {
+    const { plan } = req.body || {};
+    const selectedPlan = String(plan || '').toLowerCase().trim();
+
+    if (!selectedPlan || !['free', 'pro'].includes(selectedPlan)) {
+      return res.status(400).json({ error: 'Invalid plan. Allowed: free, pro' });
+    }
+
+    if (selectedPlan === 'free') {
+      return res.json({
+        url: '/dashboard/',
+        plan: 'free',
+        provider: 'none',
+      });
+    }
+
+    const proPaymentLink = process.env.STRIPE_PAYMENT_LINK_PRO || process.env.STRIPE_PAYMENT_LINK || '';
+    if (!proPaymentLink) {
+      return res.status(503).json({
+        error: 'Stripe payment link is not configured',
+        hint: 'Set STRIPE_PAYMENT_LINK_PRO in src/.env',
+      });
+    }
+
+    return res.json({
+      url: proPaymentLink,
+      plan: 'pro',
+      provider: 'stripe',
+    });
+  } catch (error) {
+    console.error('Stripe checkout init error:', error);
+    return res.status(500).json({ error: 'Failed to initialize checkout' });
+  }
+});
+
 // --- CONNECTORS ---
 app.get("/api/v1/connectors", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Insufficient scope" });
