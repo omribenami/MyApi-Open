@@ -291,9 +291,9 @@ function DashboardHome() {
       <div className="text-center text-sm text-slate-500 pt-8 border-t border-slate-800">
         <p>
           Need help? Check our{' '}
-          <a href="https://github.com/omribenami/MyApi" className="text-slate-300 hover:text-slate-200">
+          <Link to="/platform-docs" className="text-slate-300 hover:text-slate-200">
             documentation
-          </a>
+          </Link>
         </p>
       </div>
     </div>

@@ -334,11 +334,7 @@ function Login() {
 
                   {/* Help text */}
                   <p className="mt-4 text-center text-xs text-slate-500">
-                    New here? Check the{' '}
-                    <a href="https://github.com/omribenami/MyApi" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 underline underline-offset-2">
-                      docs
-                    </a>
-                    {' '}to get started
+                    New here? Open <button type="button" onClick={() => setViewMode('pricing')} className="text-blue-400 hover:text-blue-300 underline underline-offset-2">Pricing Plans</button> to get started.
                   </p>
                 </div>
                 
