@@ -215,6 +215,10 @@ export const useTokenStore = create((set, get) => ({
     set({ success: null });
   },
 
+  setError: (error) => {
+    set({ error });
+  },
+
   clearError: () => {
     set({ error: null });
   },

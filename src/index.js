@@ -1230,7 +1230,7 @@ app.post("/api/v1/tokens/:id/regenerate", authenticate, (req, res) => {
   const hash = bcrypt.hashSync(rawToken, 10);
   const now = new Date().toISOString();
 
-  db.prepare('UPDATE access_tokens SET hash = ?, updated_at = ? WHERE id = ?').run(hash, now, req.params.id);
+  db.prepare('UPDATE access_tokens SET hash = ? WHERE id = ?').run(hash, req.params.id);
 
   const scopes = getTokenScopes(req.params.id);
 
@@ -1253,6 +1253,31 @@ app.post("/api/v1/tokens/:id/regenerate", authenticate, (req, res) => {
       allowedPersonas: token.allowedPersonas || null
     }
   });
+});
+
+// Regenerate master token (creates a new full-scope master token)
+app.post('/api/v1/tokens/master/regenerate', authenticate, (req, res) => {
+  if (req.tokenMeta.scope !== 'full') return res.status(403).json({ error: 'Only master token can regenerate master token' });
+
+  try {
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const hash = bcrypt.hashSync(rawToken, 10);
+    const tokenId = createAccessToken(hash, req.tokenMeta.ownerId || 'admin', 'full', 'Master Token', null, null);
+
+    createAuditLog({
+      requesterId: req.tokenMeta.tokenId,
+      action: 'regenerate_master_token',
+      resource: '/tokens/master/regenerate',
+      scope: req.tokenMeta.scope,
+      ip: req.ip,
+      details: { tokenId }
+    });
+
+    res.json({ data: { id: tokenId, token: rawToken, scope: 'full' } });
+  } catch (error) {
+    console.error('Master token regeneration error:', error);
+    res.status(500).json({ error: 'Failed to regenerate master token' });
+  }
 });
 
 // Revoke (delete) a token

@@ -17,6 +17,7 @@ const GUEST_SCOPES = [
 
 function AccessTokens() {
   const masterToken = useAuthStore((state) => state.masterToken);
+  const setMasterToken = useAuthStore((state) => state.setMasterToken);
   const {
     tokens,
     isLoading,
@@ -25,6 +26,7 @@ function AccessTokens() {
     success,
     fetchTokens,
     createToken,
+    setError,
     clearError,
     clearSuccess,
     selectToken,
@@ -35,6 +37,7 @@ function AccessTokens() {
   // Master token reveal
   const [masterRevealed, setMasterRevealed] = useState(false);
   const [masterCopied, setMasterCopied] = useState(false);
+  const [masterRegenerating, setMasterRegenerating] = useState(false);
 
   // Guest token modals
   const [showEditModal, setShowEditModal] = useState(false);
@@ -132,6 +135,35 @@ function AccessTokens() {
     if (ok) {
       setMasterCopied(true);
       setTimeout(() => setMasterCopied(false), 2000);
+    }
+  };
+
+  const handleRegenerateMaster = async () => {
+    setMasterRegenerating(true);
+    clearError();
+    try {
+      const res = await fetch('/api/v1/tokens/master/regenerate', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${masterToken}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to regenerate master token');
+
+      const newToken = data?.data?.token;
+      if (!newToken) throw new Error('No token returned from server');
+
+      setMasterToken(newToken);
+      setMasterRevealed(true);
+      const ok = await copyText(newToken);
+      if (ok) {
+        setMasterCopied(true);
+        setTimeout(() => setMasterCopied(false), 2000);
+      }
+      await fetchTokens(newToken);
+    } catch (err) {
+      setError(err.message || 'Failed to regenerate master token');
+    } finally {
+      setMasterRegenerating(false);
     }
   };
 
@@ -339,12 +371,19 @@ function AccessTokens() {
                 >
                   {masterCopied ? 'Copied!' : 'Copy'}
                 </button>
+                <button
+                  onClick={handleRegenerateMaster}
+                  disabled={masterRegenerating}
+                  className="px-3 py-1.5 text-xs text-amber-300 hover:text-amber-200 bg-slate-700 hover:bg-slate-600 rounded transition-colors disabled:opacity-50"
+                >
+                  {masterRegenerating ? 'Regenerating…' : 'Regenerate'}
+                </button>
               </div>
             </div>
           </div>
 
           <p className="mt-3 text-xs text-slate-500">
-            This token is set during server setup and cannot be changed here. To rotate it, update your server configuration.
+            Regenerating rotates your master token immediately. Your current session keeps working, but any old copied master token stops working.
           </p>
         </div>
       </section>
