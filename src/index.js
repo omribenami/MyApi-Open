@@ -211,15 +211,17 @@ const OAUTH_SERVICES = Object.keys(oauthAdapters);
 const isAdapterConfigured = (adapter) => {
   if (!adapter) return false;
   if (typeof adapter.isConfigured === 'function') return adapter.isConfigured();
-  return Boolean(adapter.clientId && adapter.clientSecret && adapter.redirectUri);
+  return Boolean(
+    (adapter.clientId || '').toString().trim() &&
+    (adapter.clientSecret || '').toString().trim() &&
+    (adapter.redirectUri || '').toString().trim()
+  );
 };
-const OAUTH_ENABLED = Object.fromEntries(
-  OAUTH_SERVICES.map((service) => {
-    const adapter = oauthAdapters[service];
-    const enabledByConfig = oauthConfig[service]?.enabled !== false;
-    return [service, Boolean(enabledByConfig && isAdapterConfigured(adapter))];
-  })
-);
+const isOAuthServiceEnabled = (service) => {
+  const adapter = oauthAdapters[service];
+  const enabledByConfig = oauthConfig[service]?.enabled !== false;
+  return Boolean(enabledByConfig && isAdapterConfigured(adapter));
+};
 
 // --- Middleware ---
 const session = require('express-session');
@@ -2288,7 +2290,7 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
   if (!OAUTH_SERVICES.includes(service)) {
     return res.status(400).json({ error: "Invalid OAuth service" });
   }
-  if (!OAUTH_ENABLED[service]) {
+  if (!isOAuthServiceEnabled(service)) {
     return res.status(400).json({ error: `OAuth service '${service}' is not enabled or configured` });
   }
 
@@ -2404,7 +2406,7 @@ app.get("/api/v1/oauth/status", authenticate, (req, res) => {
       status: status?.status || "disconnected",
       lastSync: status?.lastSyncedAt || null,
       scope: token?.scope || null,
-      enabled: OAUTH_ENABLED[service]
+      enabled: isOAuthServiceEnabled(service)
     };
   });
   

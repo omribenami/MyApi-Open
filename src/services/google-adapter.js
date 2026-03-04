@@ -12,7 +12,19 @@ class GoogleAdapter {
     this.redirectUri = config.redirectUri || process.env.GOOGLE_REDIRECT_URI || 'http://localhost:4500/api/v1/oauth/callback/google';
   }
 
+  isConfigured() {
+    return Boolean(
+      (this.clientId || '').toString().trim() &&
+      (this.clientSecret || '').toString().trim() &&
+      (this.redirectUri || '').toString().trim()
+    );
+  }
+
   getAuthorizationUrl(state) {
+    if (!this.isConfigured()) {
+      throw new Error('Google OAuth is not configured (missing GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REDIRECT_URI)');
+    }
+
     const params = {
       client_id: this.clientId,
       redirect_uri: this.redirectUri,
