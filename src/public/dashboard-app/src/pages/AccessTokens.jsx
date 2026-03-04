@@ -192,35 +192,58 @@ function AccessTokens() {
     await copyText(token);
   };
 
-  const handleCopyGuestToken = async (tokenId) => {
-    const rawToken = revealedTokens[tokenId];
+  const getTokenKey = (token) => token?.id || token?.tokenId;
+
+  const regenerateAndStoreToken = async (token) => {
+    const tokenKey = getTokenKey(token);
+    if (!tokenKey) throw new Error('Invalid token id');
+
+    const res = await fetch(`/api/v1/tokens/${tokenKey}/regenerate`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${masterToken}` },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Failed to regenerate token');
+
+    const raw = data?.data?.token || null;
+    if (raw) {
+      setRevealedTokens((prev) => ({ ...prev, [tokenKey]: raw }));
+      setVisibleTokenIds((prev) => ({ ...prev, [tokenKey]: true }));
+    }
+    return raw;
+  };
+
+  const handleCopyGuestToken = async (token) => {
+    const tokenKey = getTokenKey(token);
+    if (!tokenKey) return;
+
+    clearError();
+    let rawToken = revealedTokens[tokenKey];
+
     if (!rawToken) {
-      clearError();
-      return;
+      try {
+        rawToken = await regenerateAndStoreToken(token);
+      } catch (err) {
+        setError(err.message || 'Failed to retrieve token');
+        return;
+      }
     }
 
     const ok = await copyText(rawToken);
     if (ok) {
-      setCopiedTokenId(tokenId);
+      setCopiedTokenId(tokenKey);
       setTimeout(() => setCopiedTokenId(null), 1800);
     }
   };
 
   const handleRegenerateToken = async (token) => {
-    setRegeneratingTokenId(token.tokenId);
+    const tokenKey = getTokenKey(token);
+    if (!tokenKey) return;
+
+    setRegeneratingTokenId(tokenKey);
     clearError();
     try {
-      const res = await fetch(`/api/v1/tokens/${token.tokenId}/regenerate`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${masterToken}` },
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || 'Failed to regenerate token');
-
-      if (data?.data?.token) {
-        setRevealedTokens((prev) => ({ ...prev, [token.tokenId]: data.data.token }));
-        setVisibleTokenIds((prev) => ({ ...prev, [token.tokenId]: true }));
-      }
+      await regenerateAndStoreToken(token);
       await fetchTokens(masterToken);
     } catch (err) {
       setError(err.message || 'Failed to regenerate token');
@@ -540,9 +563,10 @@ function AccessTokens() {
           <div className="space-y-3">
             {guestTokens.map((token) => {
               const personaLabel = getPersonaLabel(token);
+              const tokenKey = token.id || token.tokenId;
               return (
                 <div
-                  key={token.tokenId || token.id}
+                  key={tokenKey}
                   className="bg-slate-800 border border-slate-700 rounded-lg p-5 hover:border-slate-600 transition-colors"
                 >
                   <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
@@ -591,11 +615,11 @@ function AccessTokens() {
 
                       <div className="mt-3 p-3 bg-slate-900 rounded-lg border border-slate-700">
                         <code className="text-xs text-slate-300 font-mono break-all">
-                          {revealedTokens[token.tokenId] && visibleTokenIds[token.tokenId]
-                            ? revealedTokens[token.tokenId]
-                            : maskToken(revealedTokens[token.tokenId] || token.tokenId || token.tokenId || '')}
+                          {revealedTokens[tokenKey] && visibleTokenIds[tokenKey]
+                            ? revealedTokens[tokenKey]
+                            : maskToken(revealedTokens[tokenKey] || tokenKey || '')}
                         </code>
-                        {!revealedTokens[token.tokenId] && (
+                        {!revealedTokens[tokenKey] && (
                           <p className="mt-2 text-[11px] text-slate-500">Token secret is hidden until creation/regeneration.</p>
                         )}
                       </div>
@@ -610,27 +634,33 @@ function AccessTokens() {
                         Edit
                       </button>
                       <button
-                        onClick={() => setVisibleTokenIds((prev) => ({ ...prev, [token.tokenId]: !prev[token.tokenId] }))}
-                        className="px-3 py-1.5 text-sm text-slate-200 hover:text-white bg-slate-700 hover:bg-slate-600 rounded transition-colors"
-                        disabled={!revealedTokens[token.tokenId]}
-                        title={revealedTokens[token.tokenId] ? 'Toggle hide/reveal' : 'Regenerate token first to reveal/copy'}
+                        onClick={async () => {
+                          if (!revealedTokens[tokenKey]) {
+                            await handleRegenerateToken(token);
+                            return;
+                          }
+                          setVisibleTokenIds((prev) => ({ ...prev, [tokenKey]: !prev[tokenKey] }));
+                        }}
+                        className="px-3 py-1.5 text-sm text-slate-200 hover:text-white bg-slate-700 hover:bg-slate-600 rounded transition-colors disabled:opacity-50"
+                        disabled={regeneratingTokenId === tokenKey}
+                        title={revealedTokens[tokenKey] ? 'Toggle hide/reveal' : 'Regenerate and reveal token'}
                       >
-                        {visibleTokenIds[token.tokenId] ? 'Hide' : 'Reveal'}
+                        {visibleTokenIds[tokenKey] ? 'Hide' : 'Reveal'}
                       </button>
                       <button
-                        onClick={() => handleCopyGuestToken(token.tokenId)}
+                        onClick={() => handleCopyGuestToken(token)}
                         className="px-3 py-1.5 text-sm text-cyan-300 hover:text-cyan-200 bg-slate-700 hover:bg-slate-600 rounded transition-colors disabled:opacity-50"
-                        disabled={!revealedTokens[token.tokenId]}
-                        title={revealedTokens[token.tokenId] ? 'Copy token' : 'Regenerate token first to copy'}
+                        disabled={regeneratingTokenId === tokenKey}
+                        title={revealedTokens[tokenKey] ? 'Copy token' : 'Regenerate and copy token'}
                       >
-                        {copiedTokenId === token.tokenId ? 'Copied!' : 'Copy'}
+                        {copiedTokenId === tokenKey ? 'Copied!' : 'Copy'}
                       </button>
                       <button
                         onClick={() => handleRegenerateToken(token)}
                         className="px-3 py-1.5 text-sm text-amber-300 hover:text-amber-200 bg-slate-700 hover:bg-slate-600 rounded transition-colors disabled:opacity-50"
-                        disabled={regeneratingTokenId === token.tokenId}
+                        disabled={regeneratingTokenId === tokenKey}
                       >
-                        {regeneratingTokenId === token.tokenId ? 'Regenerating…' : 'Regenerate'}
+                        {regeneratingTokenId === tokenKey ? 'Regenerating…' : 'Regenerate'}
                       </button>
                       <button
                         onClick={() => { selectToken(token); setShowRevokeModal(true); }}
