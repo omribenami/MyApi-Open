@@ -6,6 +6,7 @@ export const useAuthStore = create((set) => ({
   sessionToken: null,
   isAuthenticated: false,
   isLoading: false,
+  isInitialized: false,
   error: null,
 
   initialize: async () => {
@@ -22,11 +23,14 @@ export const useAuthStore = create((set) => ({
       if (res.ok) {
         const payload = await res.json();
         const user = payload?.data || payload;
-        set({ user, isAuthenticated: true, error: null });
+        set({ user, isAuthenticated: true, error: null, isInitialized: true });
+        return;
       }
     } catch {
       // no-op
     }
+
+    set({ isInitialized: true });
   },
 
   setMasterToken: (token) => {
@@ -55,7 +59,7 @@ export const useAuthStore = create((set) => ({
     localStorage.removeItem('masterToken');
     sessionStorage.removeItem('sessionToken');
     fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
-    set({ user: null, masterToken: null, sessionToken: null, isAuthenticated: false, error: null });
+    set({ user: null, masterToken: null, sessionToken: null, isAuthenticated: false, isInitialized: true, error: null });
   },
 
   startOAuthFlow: () => {

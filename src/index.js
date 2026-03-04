@@ -230,11 +230,18 @@ const session = require('express-session');
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({ origin: process.env.CORS_ORIGIN || "*", credentials: true }));
 app.use(express.json({ limit: "100kb" }));
+const isProd = process.env.NODE_ENV === 'production';
+const secureCookie = process.env.SESSION_COOKIE_SECURE
+  ? String(process.env.SESSION_COOKIE_SECURE).toLowerCase() === 'true'
+  : isProd;
+
 app.use(session({
   secret: process.env.SESSION_SECRET || 'myapi-session-secret-change-me',
+  name: 'myapi.sid',
   resave: false,
   saveUninitialized: false,
-  cookie: { secure: false, httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000, sameSite: 'lax' }
+  proxy: true,
+  cookie: { secure: secureCookie, httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000, sameSite: 'lax' }
 }));
 
 // Redirect to React dashboard

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import BrandLogo from './BrandLogo';
+import CookieNotice from './CookieNotice';
 
 function Layout({ children, onLogout }) {
   const location = useLocation();
@@ -121,6 +122,7 @@ function Layout({ children, onLogout }) {
       <footer className="border-t border-slate-800 mt-12 py-6">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"><div className="text-center text-sm text-slate-500"><p>MyApi Dashboard v1.0 · © 2026</p></div></div>
       </footer>
+      <CookieNotice />
     </div>
   );
 }

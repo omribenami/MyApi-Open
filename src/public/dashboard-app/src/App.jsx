@@ -43,6 +43,7 @@ function ProtectedRoute({ children }) {
 
 function App() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isInitialized = useAuthStore((state) => state.isInitialized);
   const initialize = useAuthStore((state) => state.initialize);
   const handleLogout = useAuthStore((state) => state.logout);
 
@@ -50,6 +51,17 @@ function App() {
   useEffect(() => {
     initialize();
   }, []);
+
+  if (!isInitialized) {
+    return (
+      <div className="min-h-screen grid place-items-center bg-slate-950 text-slate-300">
+        <div className="text-center">
+          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-b-2 border-blue-500" />
+          <p>Restoring your session…</p>
+        </div>
+      </div>
+    );
+  }
 
   // If not authenticated, show login page
   if (!isAuthenticated) {
