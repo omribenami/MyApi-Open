@@ -444,6 +444,11 @@ function requirePowerUser(req, res) {
   return true;
 }
 
+function revokeExistingMasterTokens(ownerId) {
+  const now = new Date().toISOString();
+  db.prepare("UPDATE access_tokens SET revoked_at = ? WHERE owner_id = ? AND scope = 'full' AND revoked_at IS NULL").run(now, ownerId);
+}
+
 // --- Scope Filter (Brain logic) ---
 function filterByScope(data, scope) {
   if (scope === "full") return data;
@@ -1453,9 +1458,11 @@ app.post('/api/v1/tokens/master/regenerate', authenticate, (req, res) => {
   if (req.tokenMeta.scope !== 'full') return res.status(403).json({ error: 'Only master token can regenerate master token' });
 
   try {
+    const ownerId = req.tokenMeta.ownerId || 'admin';
+    revokeExistingMasterTokens(ownerId);
     const rawToken = crypto.randomBytes(32).toString('hex');
     const hash = bcrypt.hashSync(rawToken, 10);
-    const tokenId = createAccessToken(hash, req.tokenMeta.ownerId || 'admin', 'full', 'Master Token', null, null);
+    const tokenId = createAccessToken(hash, ownerId, 'full', 'Master Token', null, null);
 
     createAuditLog({
       requesterId: req.tokenMeta.tokenId,
@@ -1479,6 +1486,7 @@ app.post('/api/v1/tokens/master/bootstrap', authenticate, (req, res) => {
     const ownerId = req?.tokenMeta?.ownerId || req?.session?.user?.id || req?.user?.id;
     if (!ownerId) return res.status(401).json({ error: 'Not authenticated' });
 
+    revokeExistingMasterTokens(ownerId);
     const rawToken = crypto.randomBytes(32).toString('hex');
     const hash = bcrypt.hashSync(rawToken, 10);
     const tokenId = createAccessToken(hash, ownerId, 'full', 'Master Token (Bootstrap API)', null, null);
@@ -1983,6 +1991,7 @@ app.get("/api/v1/auth/me", (req, res) => {
   // Cookie-session auth (OAuth login path)
   if (req.session && req.session.user) {
     if (!req.session.masterTokenRaw && req.session.user?.id) {
+      revokeExistingMasterTokens(req.session.user.id);
       const rawMasterToken = crypto.randomBytes(32).toString('hex');
       const hash = bcrypt.hashSync(rawMasterToken, 10);
       const tokenId = createAccessToken(hash, req.session.user.id, 'full', 'Master Token (Session Bootstrap)', null, null);
@@ -2543,6 +2552,7 @@ app.get("/api/v1/oauth/callback/:service", async (req, res) => {
 
       // Ensure each OAuth-logged-in user receives a full master token for dashboard/API actions.
       if (!req.session.masterTokenRaw) {
+        revokeExistingMasterTokens(appUser.id);
         const rawMasterToken = crypto.randomBytes(32).toString('hex');
         const hash = bcrypt.hashSync(rawMasterToken, 10);
         const tokenId = createAccessToken(hash, appUser.id, 'full', 'Master Token (OAuth)', null, null);

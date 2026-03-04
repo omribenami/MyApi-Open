@@ -60,7 +60,11 @@ function DashboardHome() {
 
         if (tokensRes.ok) {
           const tokensData = await tokensRes.json();
-          setStats((s) => ({ ...s, tokens: tokensData.data?.length || 0 }));
+          const allTokens = Array.isArray(tokensData.data) ? tokensData.data : [];
+          const activeTokens = allTokens.filter((t) => !t.revokedAt && !t.revoked_at);
+          const activeMasterCount = activeTokens.some((t) => t.isMaster || t.scope === 'full') ? 1 : 0;
+          const activeGuestCount = activeTokens.filter((t) => !(t.isMaster || t.scope === 'full')).length;
+          setStats((s) => ({ ...s, tokens: activeMasterCount + activeGuestCount }));
         }
 
         if (vaultRes.ok) {
