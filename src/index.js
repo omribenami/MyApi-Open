@@ -402,7 +402,10 @@ function rateLimit(windowMs = 60000, maxRequests = (process.env.NODE_ENV === 'te
   };
 }
 // Apply limiter only to API routes so dashboard pages still render and can show graceful UI errors.
-app.use('/api/v1', rateLimit());
+app.use('/api/v1', rateLimit(60000, process.env.NODE_ENV === 'test' ? 1000 : 120)); // Base API limit (relaxed slightly for normal usage)
+app.use('/api/v1/auth/login', rateLimit(60000, process.env.NODE_ENV === 'test' ? 1000 : 5)); // Strict 5 requests/min for login brute-force protection
+app.use('/api/v1/auth/register', rateLimit(60000, process.env.NODE_ENV === 'test' ? 1000 : 3)); // Strict 3 requests/min for registration
+app.use('/api/v1/auth/2fa', rateLimit(60000, process.env.NODE_ENV === 'test' ? 1000 : 10)); // Strict 10 requests/min for 2FA attempts
 
 // --- Auth Middleware ---
 // NOTE: We are transitioning from Bearer master-token login to session-based login.
@@ -1944,6 +1947,11 @@ app.get("/api/v1/audit", authenticate, (req, res) => {
 app.post("/api/v1/auth/register", (req, res) => {
   const { username, password, display_name, email, timezone } = req.body;
   if (!username || !password) return res.status(400).json({ error: "username and password are required" });
+
+  if (!isStrongPassword(password)) {
+    return res.status(400).json({ error: "Password must be at least 8 characters and contain 3 of: uppercase, lowercase, number, symbol" });
+  }
+
   try {
     const user = createUser(username, display_name || username, email, timezone, password);
     createAuditLog({ requesterId: user.id, action: "user_register", resource: `/users/${user.id}`, scope: "public", ip: req.ip });
@@ -2239,11 +2247,26 @@ app.post("/api/v1/auth/logout", (req, res) => {
 // ============================
 // NEW: USERS
 // ============================
+
+const isStrongPassword = (pw) => {
+  if (!pw || pw.length < 8) return false;
+  const hasUpperCase = /[A-Z]/.test(pw);
+  const hasLowerCase = /[a-z]/.test(pw);
+  const hasNumbers = /\d/.test(pw);
+  const hasNonalphas = /\W/.test(pw);
+  return [hasUpperCase, hasLowerCase, hasNumbers, hasNonalphas].filter(Boolean).length >= 3;
+};
+
 app.post("/api/v1/users", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can create users" });
   if (!requirePowerUser(req, res)) return;
   const { username, displayName, email, timezone, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: "username and password are required" });
+  
+  if (!isStrongPassword(password)) {
+    return res.status(400).json({ error: "Password must be at least 8 characters and contain 3 of: uppercase, lowercase, number, symbol" });
+  }
+
   try {
     const user = createUser(username, displayName, email, timezone, password);
     createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "create_user", resource: `/users/${user.id}`, scope: req.tokenMeta.scope, ip: req.ip });
