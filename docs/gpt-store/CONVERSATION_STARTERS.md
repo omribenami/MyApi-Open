@@ -1,0 +1,8 @@
+- Connect my Google and GitHub accounts in MyApi
+- Why is my OAuth callback failing?
+- Show me all available services and auth types
+- Create a guest token with read-only scopes
+- Troubleshoot 401/403 errors on MyApi endpoints
+- What env vars are missing for Slack integration?
+- Help me configure WhatsApp Business API on MyApi
+- Summarize all connectors that are not configured yet
