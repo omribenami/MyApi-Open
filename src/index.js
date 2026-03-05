@@ -238,7 +238,7 @@ const isProd = process.env.NODE_ENV === 'production';
 
 app.use(helmet({ contentSecurityPolicy: false }));
 
-const devOrigins = ['http://localhost:3001', 'http://127.0.0.1:3001', 'http://localhost:5173', 'http://127.0.0.1:5173'];
+const devOrigins = ['http://localhost:3001', 'http://127.0.0.1:3001', 'http://localhost:4500', 'http://127.0.0.1:4500', 'http://localhost:5173', 'http://127.0.0.1:5173'];
 const envOrigins = String(process.env.CORS_ORIGIN || '')
   .split(',')
   .map((s) => s.trim())
