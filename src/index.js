@@ -408,9 +408,9 @@ const vault = { identityDocs: {}, preferences: {} };
 
 // --- Rate Limiter ---
 const rateLimitMap = {};
-function rateLimit(windowMs = 60000, maxRequests = (process.env.NODE_ENV === 'test' ? 1000 : 60)) {
+function rateLimit(windowMs = 60000, maxRequests = (process.env.NODE_ENV === 'test' ? 1000 : 60), namespace = 'default') {
   return (req, res, next) => {
-    const key = req.ip;
+    const key = `${namespace}:${req.ip}`;
     const now = Date.now();
     if (!rateLimitMap[key]) rateLimitMap[key] = [];
     rateLimitMap[key] = rateLimitMap[key].filter(t => now - t < windowMs);
@@ -425,11 +425,9 @@ function rateLimit(windowMs = 60000, maxRequests = (process.env.NODE_ENV === 'te
     next();
   };
 }
-// Apply limiter only to API routes so dashboard pages still render and can show graceful UI errors.
-app.use('/api/v1', rateLimit(60000, process.env.NODE_ENV === 'test' ? 1000 : 120)); // Base API limit (relaxed slightly for normal usage)
-app.use('/api/v1/auth/login', rateLimit(60000, process.env.NODE_ENV === 'test' ? 1000 : 5)); // Strict 5 requests/min for login brute-force protection
-app.use('/api/v1/auth/register', rateLimit(60000, process.env.NODE_ENV === 'test' ? 1000 : 3)); // Strict 3 requests/min for registration
-app.use('/api/v1/auth/2fa', rateLimit(60000, process.env.NODE_ENV === 'test' ? 1000 : 10)); // Strict 10 requests/min for 2FA attempts
+
+// IMPORTANT: As requested, rate limiting is scoped ONLY to plan-management features.
+const planFeatureRateLimit = rateLimit(60000, process.env.NODE_ENV === 'test' ? 1000 : 30, 'plan-features');
 
 // --- Auth Middleware ---
 // NOTE: We are transitioning from Bearer master-token login to session-based login.
@@ -2310,7 +2308,7 @@ app.get("/api/v1/users", authenticate, (req, res) => {
   res.json({ data: getUsers() });
 });
 
-app.put('/api/v1/users/:id/plan', authenticate, (req, res) => {
+app.put('/api/v1/users/:id/plan', planFeatureRateLimit, authenticate, (req, res) => {
   if (req.tokenMeta.scope !== 'full') return res.status(403).json({ error: 'Only master token can manage plans' });
   if (!requirePowerUser(req, res)) return;
   try {
@@ -2338,7 +2336,7 @@ app.put('/api/v1/users/:id/plan', authenticate, (req, res) => {
   }
 });
 
-app.put('/api/v1/users/:id/subscription', authenticate, (req, res) => {
+app.put('/api/v1/users/:id/subscription', planFeatureRateLimit, authenticate, (req, res) => {
   if (req.tokenMeta.scope !== 'full') return res.status(403).json({ error: 'Only master token can manage subscriptions' });
   if (!requirePowerUser(req, res)) return;
   try {
