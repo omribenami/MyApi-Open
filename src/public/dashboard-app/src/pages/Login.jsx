@@ -76,6 +76,13 @@ function Login() {
         setViewMode('login');
         setError('Enter your authenticator code to complete sign-in.');
         window.history.replaceState({}, document.title, '/dashboard/');
+        setTimeout(() => {
+          const authInput = document.getElementById('twoFactorCode');
+          if (authInput) {
+            authInput.focus();
+            authInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 100);
       } else if (callback.error) {
         setError(`OAuth error: ${callback.error}`);
         window.history.replaceState({}, document.title, '/dashboard/');

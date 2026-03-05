@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useKnowledgeStore } from '../stores/knowledgeStore';
+import DOMPurify from 'dompurify';
 
 const SOURCE_OPTIONS = [
   { value: 'memory', label: 'Memory' },
@@ -63,7 +64,8 @@ function renderMarkdown(text) {
     .replace(/\n\n+/g, '</p><p class="my-2 text-slate-300 leading-relaxed">')
     .replace(/\n/g, '<br>');
 
-  return `<div class="text-slate-300 leading-relaxed"><p class="my-2">${html}</p></div>`;
+  const rawHtml = `<div class="text-slate-300 leading-relaxed"><p class="my-2">${html}</p></div>`;
+  return DOMPurify.sanitize(rawHtml, { USE_PROFILES: { html: true } });
 }
 
 function DocumentEditor() {
