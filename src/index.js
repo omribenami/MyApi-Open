@@ -2782,8 +2782,17 @@ app.get("/api/v1/oauth/callback/:service", async (req, res) => {
     return res.status(400).json({ error: "Missing authorization code" });
   }
 
-  const stateMeta = req.session?.oauthStateMeta?.[state] || { mode: 'connect', returnTo: '/dashboard/' };
+  const stateMeta = req.session?.oauthStateMeta?.[state];
+  if (!stateMeta) {
+    return res.status(400).json({ error: "OAuth flow session expired or invalid state" });
+  }
   if (req.session?.oauthStateMeta) delete req.session.oauthStateMeta[state];
+
+  // Prevent open redirect
+  let safeReturnTo = stateMeta.returnTo || '/dashboard/';
+  if (!safeReturnTo.startsWith('/') || safeReturnTo.startsWith('//')) {
+    safeReturnTo = '/dashboard/';
+  }
 
   try {
     const adapter = oauthAdapters[service];
@@ -2837,7 +2846,7 @@ app.get("/api/v1/oauth/callback/:service", async (req, res) => {
           two_factor_enabled: true,
           roles: appUser.roles || 'user',
         };
-        const next = encodeURIComponent(stateMeta.returnTo || '/dashboard/');
+        const next = encodeURIComponent(safeReturnTo);
         const redirectUrl = `/dashboard/?oauth_service=${service}&oauth_status=pending_2fa&next=${next}`;
         return req.session.save(() => {
           res.redirect(redirectUrl);
@@ -2873,7 +2882,7 @@ app.get("/api/v1/oauth/callback/:service", async (req, res) => {
       details: { service, mode: stateMeta.mode || 'connect', scope: tokenData.scope }
     });
 
-    const next = encodeURIComponent(stateMeta.returnTo || '/dashboard/');
+    const next = encodeURIComponent(safeReturnTo);
     const redirectUrl = `/dashboard/?oauth_service=${service}&oauth_status=connected&mode=${encodeURIComponent(stateMeta.mode || 'connect')}&next=${next}`;
     return req.session.save(() => {
       res.redirect(redirectUrl);
