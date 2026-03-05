@@ -1,120 +1,108 @@
-import { formatServiceStatus, formatLastSynced, getServiceById } from '../utils/oauth';
-import { useServicesStore } from '../stores/servicesStore';
+import { getAuthTypeStyle, getStatusMeta } from '../utils/serviceCatalog';
 
-function ServiceCard({ service, onConnect, onRevoke, onDetails }) {
-  // Support both old format (from AVAILABLE_SERVICES) and new API format
-  const serviceInfo = getServiceById(service.name) || {
-    name: service.label || service.name,
-    description: service.description || '',
-    icon: service.icon
-  };
-  
-  const status = formatServiceStatus(service.status);
-  const lastSynced = formatLastSynced(service.lastSync);
-  const { selectedService } = useServicesStore();
-  const isSelected = selectedService?.name === service.name;
+function ServiceCard({ service, onConnect, onRevoke, onDetails, compact = false }) {
+  const statusMeta = getStatusMeta(service.status, service.notConfigured);
 
-  if (!serviceInfo || !serviceInfo.name) {
-    return null;
-  }
+  const cardClass = compact
+    ? 'p-4'
+    : 'p-5';
+
+  const logoFallback = (service.label || service.name || '?').slice(0, 1).toUpperCase();
 
   return (
-    <div
-      onClick={() => onDetails && onDetails(service)}
-      className={`relative bg-slate-800 border-2 rounded-lg overflow-hidden transition-all duration-200 cursor-pointer ${
-        isSelected
-          ? 'border-blue-500 shadow-lg shadow-blue-500/20'
-          : 'border-slate-700 hover:border-slate-600 hover:shadow-lg'
-      }`}
+    <article
+      className="bg-slate-800 border border-slate-700 rounded-xl hover:border-slate-600 transition-colors focus-within:ring-2 focus-within:ring-blue-500/40"
     >
-      {/* Header */}
-      <div className="p-6">
-        {/* Service Info */}
-        <div className="flex items-start justify-between mb-4">
-          <div className="flex items-center">
-            {/* Logo Image or Fallback Icon */}
+      <button
+        type="button"
+        onClick={() => onDetails && onDetails(service)}
+        className={`w-full text-left ${cardClass}`}
+        aria-label={`View details for ${service.label}`}
+      >
+        <div className="flex items-start gap-3">
+          <div className="w-11 h-11 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center overflow-hidden shrink-0">
             {service.icon ? (
-              <img 
-                src={service.icon} 
-                alt={service.label || service.name}
-                className="w-12 h-12 mr-4 rounded"
+              <img
+                src={service.icon}
+                alt=""
+                className="w-7 h-7 object-contain"
+                loading="lazy"
                 onError={(e) => {
-                  e.target.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%236366f1"><circle cx="12" cy="12" r="10"/></svg>';
+                  e.currentTarget.style.display = 'none';
+                  e.currentTarget.parentElement.textContent = logoFallback;
                 }}
               />
             ) : (
-              <div className="text-4xl mr-4">{serviceInfo.icon}</div>
+              <span className="text-sm font-semibold text-slate-200">{logoFallback}</span>
             )}
-            <div>
-              <h3 className="text-lg font-semibold text-white">{service.label || serviceInfo.name}</h3>
-              <p className="text-sm text-slate-400 mt-1">{service.description || serviceInfo.description}</p>
-            </div>
           </div>
-          <div className="ml-4">
-            <span
-              className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium"
-              style={{
-                backgroundColor: status.color + '20',
-                color: status.color,
-                border: `1px solid ${status.color}40`,
-              }}
-            >
-              <span className="mr-1">{status.icon}</span>
-              {status.label}
-            </span>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap gap-2 items-center">
+              <h3 className="text-base font-semibold text-white truncate">{service.label}</h3>
+              <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs ${statusMeta.className}`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${statusMeta.dot}`} aria-hidden="true" />
+                {statusMeta.label}
+              </span>
+            </div>
+            <p className="text-sm text-slate-400 mt-1 line-clamp-2">{service.description}</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <span className={`px-2 py-1 rounded-md text-[11px] uppercase tracking-wide ${getAuthTypeStyle(service.auth_type)}`}>
+                {service.auth_type || 'unknown'}
+              </span>
+              {service.category_label || service.category ? (
+                <span className="px-2 py-1 rounded-md text-[11px] bg-slate-700 text-slate-300 border border-slate-600">
+                  {service.category_label || service.category}
+                </span>
+              ) : null}
+            </div>
           </div>
         </div>
+      </button>
 
-        {/* Metadata */}
-        {service.status === 'connected' && (
-          <div className="space-y-2 mb-4">
-            <div className="text-xs text-slate-400">
-              <span className="font-medium">Last synced:</span> {lastSynced}
-            </div>
-            {service.scope && (
-              <div className="text-xs text-slate-400">
-                <span className="font-medium">Scopes:</span> {service.scope}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Actions */}
-      <div className="px-6 py-4 border-t border-slate-700 bg-slate-900/50 flex gap-3">
+      <div className="border-t border-slate-700 p-4 flex gap-2">
         {service.status === 'connected' ? (
           <>
             <button
-              onClick={() => onRevoke(service)}
-              className="flex-1 px-3 py-2 rounded-lg text-sm font-medium text-red-300 bg-red-900 bg-opacity-20 hover:bg-opacity-40 border border-red-700 hover:border-red-600 transition-colors"
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRevoke(service);
+              }}
+              className="flex-1 px-3 py-2 rounded-lg text-sm font-medium text-red-300 bg-red-900/20 hover:bg-red-900/40 border border-red-700 transition-colors"
             >
               Disconnect
             </button>
             <button
-              onClick={() => onConnect(service)}
-              className="flex-1 px-3 py-2 rounded-lg text-sm font-medium text-blue-300 bg-blue-900 bg-opacity-20 hover:bg-opacity-40 border border-blue-700 hover:border-blue-600 transition-colors"
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onConnect(service);
+              }}
+              className="flex-1 px-3 py-2 rounded-lg text-sm font-medium text-blue-200 bg-blue-600/20 hover:bg-blue-600/35 border border-blue-500/60 transition-colors"
             >
-              Refresh
+              Reconnect
             </button>
           </>
-        ) : service.notConfigured ? (
-          <button
-            onClick={() => onConnect(service)}
-            className="w-full px-4 py-2 rounded-lg text-sm font-medium text-slate-400 bg-slate-700 border border-slate-600 cursor-pointer hover:border-amber-600 hover:text-amber-300 transition-colors"
-            title="OAuth credentials not configured on server"
-          >
-            Connect — Not yet configured
-          </button>
         ) : (
           <button
-            onClick={() => onConnect(service)}
-            className="w-full px-4 py-2 rounded-lg text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 border border-blue-500 transition-colors"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onConnect(service);
+            }}
+            className={`w-full px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+              service.notConfigured
+                ? 'text-amber-300 bg-amber-900/20 border-amber-700 hover:bg-amber-900/35'
+                : 'text-white bg-blue-600 hover:bg-blue-700 border-blue-500'
+            }`}
+            title={service.notConfigured ? 'Missing backend OAuth env keys' : undefined}
           >
-            Connect
+            {service.notConfigured ? 'Setup Required' : 'Connect'}
           </button>
         )}
       </div>
-    </div>
+    </article>
   );
 }
 
