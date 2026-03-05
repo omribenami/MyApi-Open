@@ -117,6 +117,11 @@ const SlackAdapter = require("./services/slack-adapter");
 const DiscordAdapter = require("./services/discord-adapter");
 const WhatsAppAdapter = require("./services/whatsapp-adapter");
 const GenericOAuthAdapter = require("./services/generic-oauth-adapter");
+const {
+  buildServiceDefinition,
+  validateExecutionInput,
+  executeServiceMethod,
+} = require('./services/integration-layer');
 
 const app = express();
 app.set('trust proxy', true);
@@ -3086,16 +3091,21 @@ app.get('/api/v1/services/categories', (req, res) => {
 app.get('/api/v1/services', (req, res) => {
   try {
     const { category } = req.query;
-    const { getServices, getServicesByCategory } = require('./database');
-    
+    const { getServices, getServicesByCategory, getServiceMethods } = require('./database');
+
     let services;
     if (category) {
       services = getServicesByCategory(category);
     } else {
       services = getServices();
     }
-    
-    res.json({ data: services, count: services.length });
+
+    const enriched = services.map((service) => {
+      const methods = getServiceMethods(service.id);
+      return buildServiceDefinition(service, methods);
+    });
+
+    res.json({ data: enriched, count: enriched.length });
   } catch (err) {
     console.error('Services list error:', err);
     res.status(500).json({ error: 'Failed to get services' });
@@ -3107,19 +3117,15 @@ app.get('/api/v1/services/:name', (req, res) => {
   try {
     const { getServiceByName, getServiceMethods } = require('./database');
     const service = getServiceByName(req.params.name);
-    
+
     if (!service) {
       return res.status(404).json({ error: 'Service not found' });
     }
-    
+
     const methods = getServiceMethods(service.id);
-    
-    res.json({
-      data: {
-        ...service,
-        methods: methods
-      }
-    });
+    const definition = buildServiceDefinition(service, methods);
+
+    res.json({ data: definition });
   } catch (err) {
     console.error('Service detail error:', err);
     res.status(500).json({ error: 'Failed to get service' });
@@ -3131,8 +3137,21 @@ app.get('/api/v1/services/:serviceId/methods', (req, res) => {
   try {
     const { getServiceMethods } = require('./database');
     const methods = getServiceMethods(parseInt(req.params.serviceId));
-    
-    res.json({ data: methods, count: methods.length });
+    const safeParse = (value, fallback) => {
+      if (!value) return fallback;
+      try { return JSON.parse(value); } catch { return fallback; }
+    };
+    const normalized = methods.map((m) => ({
+      id: m.id,
+      methodName: m.method_name,
+      httpMethod: String(m.http_method || 'GET').toUpperCase(),
+      endpoint: m.endpoint,
+      description: m.description || '',
+      parameters: safeParse(m.parameters, []),
+      responseExample: safeParse(m.response_example, null),
+    }));
+
+    res.json({ data: normalized, count: normalized.length });
   } catch (err) {
     console.error('Service methods error:', err);
     res.status(500).json({ error: 'Failed to get service methods' });
@@ -3182,48 +3201,61 @@ app.post('/api/v1/services/:serviceName/execute', authenticate, async (req, res)
   try {
     const { serviceName } = req.params;
     const { method, params } = req.body;
-    
-    if (!method) {
-      return res.status(400).json({ error: 'method is required' });
-    }
-    
-    const { getServiceByName, getOAuthToken } = require('./database');
+
+    const { getServiceByName, getServiceMethods, getOAuthToken } = require('./database');
     const service = getServiceByName(serviceName);
-    
+
     if (!service) {
       return res.status(404).json({ error: 'Service not found' });
     }
-    
-    // Check if user has connected this service (OAuth token)
-    const token = getOAuthToken(serviceName, 'owner');
-    if (!token && service.auth_type !== 'webhook') {
+
+    const methods = getServiceMethods(service.id);
+    const serviceDef = buildServiceDefinition(service, methods);
+    const validation = validateExecutionInput(serviceDef, method, params);
+    if (!validation.ok) {
+      return res.status(validation.status || 400).json({ error: validation.error, code: validation.code || 'VALIDATION_ERROR' });
+    }
+
+    const userId = getOAuthUserId(req);
+    const token = getOAuthToken(serviceName, userId);
+    if (!token && service.auth_type !== 'webhook' && service.auth_type !== 'none') {
       return res.status(403).json({ error: `Service '${serviceName}' not connected. Please connect it first.` });
     }
-    
-    // Execute the API call based on service type
-    // This would call service-specific adapters
+
+    const execution = await executeServiceMethod({
+      serviceDef,
+      method: validation.method,
+      params: params || {},
+      token,
+    });
+
     const result = {
       service: serviceName,
-      method: method,
-      status: 'executed',
+      method,
+      status: execution.ok ? 'executed' : 'failed',
       timestamp: new Date().toISOString(),
-      response: {
-        message: `✅ ${method} successfully called on ${serviceName}`,
-        serviceEndpoint: service.api_endpoint,
-        params: params || {}
-      }
+      response: execution,
     };
-    
-    // Log the execution
+
     createAuditLog({
       requesterId: req.tokenMeta.tokenId,
       action: 'service_execute',
       resource: `/services/${serviceName}/execute`,
       scope: req.tokenMeta.scope,
       ip: req.ip,
-      details: { service: serviceName, method, params }
+      details: {
+        service: serviceName,
+        method,
+        params,
+        status: result.status,
+        errorCode: execution.error?.code || null,
+      }
     });
-    
+
+    if (!execution.ok) {
+      return res.status(execution.statusCode || 500).json({ error: execution.error?.message || 'Execution failed', data: result });
+    }
+
     res.json({ data: result });
   } catch (err) {
     console.error('Service execution error:', err);

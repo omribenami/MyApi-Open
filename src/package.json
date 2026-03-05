@@ -13,7 +13,8 @@
     "test:phase6": "cd ../../../tests && node test-phase6-persona-manager.js",
     "test:phase7": "cd ../../../tests && node test-phase7-oauth.js",
     "test:security": "cd ../../../tests && node test-security.js",
-    "test:audit": "cd ../../../tests && node test-audit-logging.js"
+    "test:audit": "cd ../../../tests && node test-audit-logging.js",
+    "test:services": "node tests/test-services-integration.js"
   },
   "keywords": [
     "api",
