@@ -245,11 +245,30 @@ const envOrigins = String(process.env.CORS_ORIGIN || '')
   .filter(Boolean);
 const allowedOrigins = envOrigins.length > 0 ? envOrigins : (isProd ? [] : devOrigins);
 
+function isAllowedCorsOrigin(origin) {
+  if (allowedOrigins.includes(origin)) return true;
+
+  // Support wildcard origins in env, e.g. https://*.example.com
+  for (const allowed of allowedOrigins) {
+    if (!allowed.includes('*')) continue;
+    const suffix = allowed.replace('*.', '');
+    if (origin === suffix || origin.endsWith(`.${suffix}`)) return true;
+  }
+
+  // Cloudflare tunnel/dev domains (safe-list for remote dashboard access)
+  try {
+    const { hostname } = new URL(origin);
+    if (hostname.endsWith('.trycloudflare.com') || hostname.endsWith('.cfargotunnel.com')) return true;
+  } catch (_) {}
+
+  return false;
+}
+
 app.use(cors({
   origin: (origin, callback) => {
     // Allow same-origin/non-browser requests (no Origin header)
     if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) return callback(null, true);
+    if (isAllowedCorsOrigin(origin)) return callback(null, true);
 
     // In local/dev environments we may access dashboard via LAN IP, localhost aliases,
     // or temporary tunnels; allow explicit Origin dynamically to avoid blank SPA asset loads.
