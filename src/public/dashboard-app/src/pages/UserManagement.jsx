@@ -27,7 +27,8 @@ function formatError(err, fallback) {
   }
 
   if (err?.status >= 500) {
-    return 'Internal server error. Please retry.';
+    const serverMessage = typeof err?.payload === 'object' ? err?.payload?.error : '';
+    return serverMessage || 'Internal server error. Please retry.';
   }
 
   return err?.message || fallback;

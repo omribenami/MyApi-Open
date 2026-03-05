@@ -484,10 +484,23 @@ function getRequestOwnerId(req) {
   return String(req?.tokenMeta?.ownerId || req?.session?.user?.id || 'owner');
 }
 
+function getOwnerEmailFromUserDoc() {
+  try {
+    if (!fs.existsSync(USER_MD_PATH)) return '';
+    const raw = fs.readFileSync(USER_MD_PATH, 'utf8');
+    const line = raw.split('\n').find((l) => /\*\*\s*Email\s*\*\*/i.test(l));
+    if (!line) return '';
+    const m = line.match(/\*\*\s*Email\s*\*\*\s*:\s*(.+)$/i);
+    return String(m?.[1] || '').trim().toLowerCase();
+  } catch (_) {
+    return '';
+  }
+}
+
 function requirePowerUser(req, res) {
-  const configuredEmail = String(process.env.POWER_USER_EMAIL || process.env.OWNER_EMAIL || '').trim().toLowerCase();
+  const configuredEmail = String(process.env.POWER_USER_EMAIL || process.env.OWNER_EMAIL || getOwnerEmailFromUserDoc() || '').trim().toLowerCase();
   if (!configuredEmail) {
-    res.status(503).json({ error: 'Power-user access is not configured' });
+    res.status(503).json({ error: 'Power-user access is not configured (set POWER_USER_EMAIL/OWNER_EMAIL or USER.md email)' });
     return false;
   }
 
