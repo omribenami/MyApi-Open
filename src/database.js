@@ -771,20 +771,57 @@ function createUser(username, displayName, email, timezone, password, plan = 'fr
   return { id, username, displayName, email, avatarUrl: avatarUrl || null, timezone, createdAt: now, status: 'active', plan: plan || 'free' };
 }
 
+function getUsersTableColumns() {
+  try {
+    const cols = db.prepare('PRAGMA table_info(users)').all();
+    return new Set(cols.map((c) => c.name));
+  } catch (_) {
+    return new Set();
+  }
+}
+
 function getUsers() {
-  const stmt = db.prepare("SELECT id, username, display_name as displayName, email, avatar_url as avatarUrl, timezone, created_at as createdAt, status, COALESCE(plan, 'free') as plan, stripe_subscription_status as stripeSubscriptionStatus, stripe_customer_id as stripeCustomerId, stripe_subscription_id as stripeSubscriptionId, COALESCE(two_factor_enabled, 0) as twoFactorEnabled, CASE WHEN COALESCE(plan, 'free') = 'free' THEN 1 WHEN LOWER(COALESCE(stripe_subscription_status, '')) IN ('active','trialing') THEN 1 ELSE 0 END as planActive FROM users ORDER BY created_at DESC");
+  const cols = getUsersTableColumns();
+  const hasPlan = cols.has('plan');
+  const hasStripeStatus = cols.has('stripe_subscription_status');
+  const hasStripeCustomerId = cols.has('stripe_customer_id');
+  const hasStripeSubscriptionId = cols.has('stripe_subscription_id');
+  const hasTwoFactorEnabled = cols.has('two_factor_enabled');
+
+  const planExpr = hasPlan ? "COALESCE(plan, 'free')" : "'free'";
+  const stripeStatusExpr = hasStripeStatus ? 'stripe_subscription_status' : 'NULL';
+  const stripeCustomerExpr = hasStripeCustomerId ? 'stripe_customer_id' : 'NULL';
+  const stripeSubscriptionExpr = hasStripeSubscriptionId ? 'stripe_subscription_id' : 'NULL';
+  const twoFactorExpr = hasTwoFactorEnabled ? 'COALESCE(two_factor_enabled, 0)' : '0';
+
+  const stmt = db.prepare(`SELECT id, username, display_name as displayName, email, avatar_url as avatarUrl, timezone, created_at as createdAt, status, ${planExpr} as plan, ${stripeStatusExpr} as stripeSubscriptionStatus, ${stripeCustomerExpr} as stripeCustomerId, ${stripeSubscriptionExpr} as stripeSubscriptionId, ${twoFactorExpr} as twoFactorEnabled, CASE WHEN ${planExpr} = 'free' THEN 1 WHEN LOWER(COALESCE(${stripeStatusExpr}, '')) IN ('active','trialing') THEN 1 ELSE 0 END as planActive FROM users ORDER BY created_at DESC`);
   return stmt.all().map((u) => ({ ...u, twoFactorEnabled: Boolean(u.twoFactorEnabled), planActive: Boolean(u.planActive) }));
 }
 
 function getUserByUsername(username) {
-  const stmt = db.prepare("SELECT id, username, display_name as displayName, email, avatar_url as avatarUrl, timezone, password_hash, COALESCE(totp_secret, '') as totpSecret, COALESCE(two_factor_enabled, 0) as twoFactorEnabled, created_at as createdAt, status, COALESCE(plan, 'free') as plan, stripe_subscription_status as stripeSubscriptionStatus, stripe_customer_id as stripeCustomerId, stripe_subscription_id as stripeSubscriptionId FROM users WHERE username = ?");
+  const cols = getUsersTableColumns();
+  const hasPlan = cols.has('plan');
+  const hasStripeStatus = cols.has('stripe_subscription_status');
+  const hasStripeCustomerId = cols.has('stripe_customer_id');
+  const hasStripeSubscriptionId = cols.has('stripe_subscription_id');
+  const hasTotpSecret = cols.has('totp_secret');
+  const hasTwoFactorEnabled = cols.has('two_factor_enabled');
+
+  const stmt = db.prepare(`SELECT id, username, display_name as displayName, email, avatar_url as avatarUrl, timezone, password_hash, ${hasTotpSecret ? "COALESCE(totp_secret, '')" : "''"} as totpSecret, ${hasTwoFactorEnabled ? 'COALESCE(two_factor_enabled, 0)' : '0'} as twoFactorEnabled, created_at as createdAt, status, ${hasPlan ? "COALESCE(plan, 'free')" : "'free'"} as plan, ${hasStripeStatus ? 'stripe_subscription_status' : 'NULL'} as stripeSubscriptionStatus, ${hasStripeCustomerId ? 'stripe_customer_id' : 'NULL'} as stripeCustomerId, ${hasStripeSubscriptionId ? 'stripe_subscription_id' : 'NULL'} as stripeSubscriptionId FROM users WHERE username = ?`);
   const u = stmt.get(username);
   if (!u) return null;
   return { ...u, twoFactorEnabled: Boolean(u.twoFactorEnabled) };
 }
 
 function getUserById(id) {
-  const stmt = db.prepare("SELECT id, username, display_name as displayName, email, avatar_url as avatarUrl, timezone, COALESCE(two_factor_enabled, 0) as twoFactorEnabled, created_at as createdAt, status, COALESCE(plan, 'free') as plan, stripe_subscription_status as stripeSubscriptionStatus, stripe_customer_id as stripeCustomerId, stripe_subscription_id as stripeSubscriptionId FROM users WHERE id = ?");
+  const cols = getUsersTableColumns();
+  const hasPlan = cols.has('plan');
+  const hasStripeStatus = cols.has('stripe_subscription_status');
+  const hasStripeCustomerId = cols.has('stripe_customer_id');
+  const hasStripeSubscriptionId = cols.has('stripe_subscription_id');
+  const hasTwoFactorEnabled = cols.has('two_factor_enabled');
+
+  const stmt = db.prepare(`SELECT id, username, display_name as displayName, email, avatar_url as avatarUrl, timezone, ${hasTwoFactorEnabled ? 'COALESCE(two_factor_enabled, 0)' : '0'} as twoFactorEnabled, created_at as createdAt, status, ${hasPlan ? "COALESCE(plan, 'free')" : "'free'"} as plan, ${hasStripeStatus ? 'stripe_subscription_status' : 'NULL'} as stripeSubscriptionStatus, ${hasStripeCustomerId ? 'stripe_customer_id' : 'NULL'} as stripeCustomerId, ${hasStripeSubscriptionId ? 'stripe_subscription_id' : 'NULL'} as stripeSubscriptionId FROM users WHERE id = ?`);
   const u = stmt.get(id);
   if (!u) return null;
   return { ...u, twoFactorEnabled: Boolean(u.twoFactorEnabled) };
