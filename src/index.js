@@ -250,6 +250,11 @@ app.use(cors({
     // Allow same-origin/non-browser requests (no Origin header)
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
+
+    // In local/dev environments we may access dashboard via LAN IP, localhost aliases,
+    // or temporary tunnels; allow explicit Origin dynamically to avoid blank SPA asset loads.
+    if (!isProd) return callback(null, true);
+
     return callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
