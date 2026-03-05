@@ -10,6 +10,7 @@ const multer = require('multer');
 const pdfParse = require('pdf-parse');
 const speakeasy = require('speakeasy');
 const QRCode = require('qrcode');
+const { marked } = require('marked');
 
 const {
   db,
@@ -129,6 +130,81 @@ const PORT = process.env.PORT || 4500;
 const WORKSPACE_ROOT = path.join(__dirname, '..', '..', '..');
 const USER_MD_PATH = path.join(WORKSPACE_ROOT, 'USER.md');
 const SOUL_MD_PATH = path.join(WORKSPACE_ROOT, 'SOUL.md');
+const LEGAL_DOCS_DIR = path.join(__dirname, '..', 'docs', 'legal');
+
+function escapeHtml(value = '') {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function sanitizeUrl(url = '') {
+  const trimmed = String(url || '').trim();
+  if (!trimmed) return '#';
+  if (/^(https?:|mailto:)/i.test(trimmed)) return trimmed;
+  if (trimmed.startsWith('/') || trimmed.startsWith('#')) return trimmed;
+  return '#';
+}
+
+function renderLegalMarkdown(markdown = '') {
+  const safeMarkdown = String(markdown || '').replace(/<[^>]*>/g, '');
+  const renderer = new marked.Renderer();
+  renderer.link = ({ href, title, tokens }) => {
+    const text = (tokens || []).map((token) => token.raw || token.text || '').join('') || href || '';
+    const safeHref = sanitizeUrl(href || '');
+    const safeTitle = title ? ` title="${escapeHtml(title)}"` : '';
+    return `<a href="${escapeHtml(safeHref)}"${safeTitle} target="_blank" rel="noopener noreferrer">${escapeHtml(text)}</a>`;
+  };
+
+  return marked.parse(safeMarkdown, {
+    gfm: true,
+    breaks: true,
+    renderer,
+    headerIds: false,
+    mangle: false,
+  });
+}
+
+function loadLegalDoc(filename, fallbackTitle, fallbackBody) {
+  const targetPath = path.join(LEGAL_DOCS_DIR, filename);
+  if (fs.existsSync(targetPath)) {
+    return fs.readFileSync(targetPath, 'utf8');
+  }
+  return `# ${fallbackTitle}\n\n${fallbackBody}`;
+}
+
+function renderLegalPage({ title, markdownContent }) {
+  const contentHtml = renderLegalMarkdown(markdownContent);
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeHtml(title)} · MyApi</title>
+  <style>
+    :root{--bg:#020617;--card:#0f172a;--text:#e2e8f0;--muted:#94a3b8;--accent:#60a5fa;--border:#1e293b;}
+    body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;}
+    .wrap{max-width:860px;margin:0 auto;padding:24px 16px 48px;}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;}
+    h1,h2,h3{line-height:1.25;margin-top:1.2em;}
+    h1{margin-top:0;}
+    p,li{color:var(--text);} code{background:#0b1220;padding:2px 6px;border-radius:6px;}
+    a{color:var(--accent);} .top{margin-bottom:16px;font-size:14px;color:var(--muted);}
+    .top a{color:var(--muted);text-decoration:none;} .top a:hover{color:var(--text)}
+    @media (max-width: 640px){.wrap{padding:12px}.card{padding:16px}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top"><a href="/dashboard/">← Back to MyApi</a></div>
+    <article class="card">${contentHtml}</article>
+  </div>
+</body>
+</html>`;
+}
 
 // Initialize database
 initDatabase();
@@ -297,6 +373,27 @@ app.use(session({
   proxy: true,
   cookie: { secure: secureCookie, httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000, sameSite: 'lax' }
 }));
+
+// Public legal pages (no auth required)
+app.get('/privacy', (req, res) => {
+  const markdown = loadLegalDoc(
+    'PRIVACY_POLICY.md',
+    'Privacy Policy',
+    'Privacy policy content is being prepared and will be published here shortly.'
+  );
+  res.set('Cache-Control', 'no-store');
+  res.type('html').send(renderLegalPage({ title: 'Privacy Policy', markdownContent: markdown }));
+});
+
+app.get('/terms', (req, res) => {
+  const markdown = loadLegalDoc(
+    'TERMS_OF_USE.md',
+    'Terms of Use',
+    'Terms of use content is being prepared and will be published here shortly.'
+  );
+  res.set('Cache-Control', 'no-store');
+  res.type('html').send(renderLegalPage({ title: 'Terms of Use', markdownContent: markdown }));
+});
 
 // Redirect to React dashboard
 app.get('/', (req, res) => res.redirect('/dashboard/'));

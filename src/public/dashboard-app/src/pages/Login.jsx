@@ -385,6 +385,11 @@ function Login() {
             </div>
           </section>
         </div>
+        <div className="mt-8 text-center text-sm text-slate-400">
+          <a href="/privacy" className="hover:text-slate-200 transition-colors">Privacy Policy</a>
+          <span className="mx-2">·</span>
+          <a href="/terms" className="hover:text-slate-200 transition-colors">Terms of Use</a>
+        </div>
       </div>
     </div>
   );

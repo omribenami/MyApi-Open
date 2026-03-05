@@ -242,8 +242,13 @@ function Layout({ children, onLogout }) {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6"><div className="rounded-lg">{children}</div></main>
 
       <footer className="border-t border-slate-800 mt-12 py-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-3">
           <p className="text-sm text-slate-500 font-medium">MyApi Dashboard v1.0 · © 2026</p>
+          <div className="flex items-center justify-center gap-4 text-sm text-slate-400">
+            <a href="/privacy" className="hover:text-slate-200 transition-colors">Privacy Policy</a>
+            <span aria-hidden="true">·</span>
+            <a href="/terms" className="hover:text-slate-200 transition-colors">Terms of Use</a>
+          </div>
         </div>
       </footer>
       <CookieNotice />
