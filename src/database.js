@@ -2126,6 +2126,12 @@ You are Luna, a certified wellness coach and mindfulness practitioner with 8 yea
 
 function seedServices() {
   const services = [
+    // Core Platform - with official logos
+    { name: 'google', label: 'Google', category: 'productivity', icon: 'https://cdn.simpleicons.org/google/4285F4', auth: 'oauth2', endpoint: 'https://www.googleapis.com', docs: 'https://developers.google.com' },
+    { name: 'slack', label: 'Slack', category: 'communication', icon: 'https://cdn.simpleicons.org/slack/4A154B', auth: 'oauth2', endpoint: 'https://slack.com/api', docs: 'https://api.slack.com/docs' },
+    { name: 'discord', label: 'Discord', category: 'communication', icon: 'https://cdn.simpleicons.org/discord/5865F2', auth: 'oauth2', endpoint: 'https://discord.com/api/v10', docs: 'https://discord.com/developers/docs' },
+    { name: 'whatsapp', label: 'WhatsApp', category: 'communication', icon: 'https://cdn.simpleicons.org/whatsapp/25D366', auth: 'oauth2', endpoint: 'https://graph.facebook.com/v18.0', docs: 'https://developers.facebook.com/docs/whatsapp' },
+
     // Social Media - with official logos
     { name: 'twitter', label: 'X (Twitter)', category: 'social', icon: 'https://cdn.simpleicons.org/x/000000', auth: 'oauth2', endpoint: 'https://api.twitter.com/2', docs: 'https://developer.twitter.com' },
     { name: 'facebook', label: 'Facebook', category: 'social', icon: 'https://cdn.simpleicons.org/facebook/1877F2', auth: 'oauth2', endpoint: 'https://graph.facebook.com', docs: 'https://developers.facebook.com/docs/graph-api' },
@@ -2139,6 +2145,7 @@ function seedServices() {
     { name: 'mastodon', label: 'Mastodon', category: 'social', icon: 'https://cdn.simpleicons.org/mastodon/6364FF', auth: 'oauth2', endpoint: 'https://mastodon.social/api/v1', docs: 'https://docs.joinmastodon.org' },
     
     // Development - with official logos
+    { name: 'github', label: 'GitHub', category: 'dev', icon: 'https://cdn.simpleicons.org/github/FFFFFF', auth: 'oauth2', endpoint: 'https://api.github.com', docs: 'https://docs.github.com/en/rest' },
     { name: 'gitlab', label: 'GitLab', category: 'dev', icon: 'https://cdn.simpleicons.org/gitlab/FC6D26', auth: 'oauth2', endpoint: 'https://gitlab.com/api/v4', docs: 'https://docs.gitlab.com/ee/api' },
     { name: 'bitbucket', label: 'Bitbucket', category: 'dev', icon: 'https://cdn.simpleicons.org/bitbucket/0052CC', auth: 'oauth2', endpoint: 'https://api.bitbucket.org/2.0', docs: 'https://developer.atlassian.com/cloud/bitbucket' },
     { name: 'azuredevops', label: 'Azure DevOps', category: 'dev', icon: 'https://cdn.simpleicons.org/azuredevops/0078D4', auth: 'oauth2', endpoint: 'https://dev.azure.com', docs: 'https://docs.microsoft.com/en-us/rest/api/azure/devops' },
