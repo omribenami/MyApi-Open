@@ -1207,11 +1207,12 @@ const discoveryJson = (req, res) => {
  '/api/openapi.json', '/api/openapi.yaml', '/api/swagger.json',
  '/api/v1/openapi.json', '/api/v1/openapi.yaml',
  '/api/docs/openapi.json', '/api/docs/swagger.json',
+ '/.well-known/openapi'
 ].forEach(p => app.get(p, discoveryRedirect));
 
 // Docs/Swagger UI pages → return JSON discovery instead of 404
-['/docs', '/api-docs', '/swagger', '/api/docs', '/api/api-docs',
- '/v1', '/api', '/v1/docs',
+['/docs', '/api-docs', '/swagger', '/swagger-ui', '/api/swagger', '/api/docs', '/api/api-docs',
+ '/v1', '/api', '/v1/docs', '/api/v1/docs', '/developer',
 ].forEach(p => app.get(p, discoveryJson));
 
 // robots.txt — point crawlers and AIs to the API
