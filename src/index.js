@@ -397,7 +397,47 @@ app.get('/terms', (req, res) => {
 });
 
 // Redirect to React dashboard
-app.get('/', (req, res) => res.redirect('/dashboard/'));
+// Root: serve API docs to AI agents, dashboard to browsers
+app.get('/', (req, res) => {
+  const accept = (req.headers.accept || '').toLowerCase();
+  const ua = (req.headers['user-agent'] || '').toLowerCase();
+  const hasAuth = /^bearer\s+.+/i.test(req.headers.authorization || '');
+
+  // Detect AI/bot/programmatic access:
+  // - Prefers JSON over HTML
+  // - Has a Bearer token (agent calling the API)
+  // - Common AI/bot/CLI user agents
+  const aiPatterns = /curl|httpie|wget|python|node|go-http|axios|fetch|openai|anthropic|claude|gpt|chatgpt|langchain|autogpt|zapier|n8n|postman|insomnia|bot|crawl|spider/;
+  const prefersJson = accept.includes('application/json') && !accept.includes('text/html');
+  const isAi = prefersJson || hasAuth || aiPatterns.test(ua);
+
+  if (isAi) {
+    const host = req.headers.host || 'www.myapiai.com';
+    return res.json({
+      name: 'MyApi',
+      version: '0.1.0',
+      description: 'Personal API platform. Authenticate with Bearer token to access your data, knowledge base, personas, and connected services.',
+      quickStart: `https://${host}/api/v1/quick-start`,
+      openapi: `https://${host}/openapi.json`,
+      apiRoot: `https://${host}/api/v1/`,
+      authentication: {
+        type: 'Bearer',
+        header: 'Authorization: Bearer <your-token>',
+        hint: 'Use the token provided by the platform owner.',
+      },
+      keyEndpoints: {
+        capabilities: 'GET /api/v1/tokens/me/capabilities',
+        knowledgeBase: 'GET /api/v1/brain/knowledge-base',
+        vaultTokens: 'GET /api/v1/vault/tokens',
+        services: 'GET /api/v1/services',
+        personas: 'GET /api/v1/personas',
+        identity: 'GET /api/v1/identity',
+      },
+    });
+  }
+
+  res.redirect('/dashboard/');
+});
 app.get('/login', (req, res) => res.redirect('/dashboard/'));
 
 // Dashboard: serve static files (auth handled client-side via localStorage token)
