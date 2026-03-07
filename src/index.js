@@ -1186,6 +1186,71 @@ app.get('/api/v1/tokens/me/capabilities', authenticate, (req, res) => {
   });
 });
 
+// --- AI Discovery: every common path an AI might try ---
+
+const discoveryRedirect = (req, res) => res.redirect('/openapi.json');
+const discoveryJson = (req, res) => {
+  const host = req.headers.host || 'www.myapiai.com';
+  res.json({
+    name: 'MyApi',
+    version: '0.1.0',
+    description: 'Personal API platform. Authenticate with Bearer token.',
+    openapi_spec: `https://${host}/openapi.json`,
+    quick_start: `https://${host}/api/v1/quick-start`,
+    api_root: `https://${host}/api/v1/`,
+    authentication: 'Authorization: Bearer <your-token>',
+  });
+};
+
+// OpenAPI spec at every path AIs look for
+['/openapi.yaml', '/swagger.json', '/swagger.yaml',
+ '/api/openapi.json', '/api/openapi.yaml', '/api/swagger.json',
+ '/api/v1/openapi.json', '/api/v1/openapi.yaml',
+ '/api/docs/openapi.json', '/api/docs/swagger.json',
+].forEach(p => app.get(p, discoveryRedirect));
+
+// Docs/Swagger UI pages → return JSON discovery instead of 404
+['/docs', '/api-docs', '/swagger', '/api/docs', '/api/api-docs',
+ '/v1', '/api', '/v1/docs',
+].forEach(p => app.get(p, discoveryJson));
+
+// robots.txt — point crawlers and AIs to the API
+app.get('/robots.txt', (req, res) => {
+  const host = req.headers.host || 'www.myapiai.com';
+  res.type('text/plain').send(
+`User-agent: *
+Allow: /
+
+# MyApi - Personal API Platform
+# API Documentation: https://${host}/openapi.json
+# Quick Start Guide: https://${host}/api/v1/quick-start
+# API Root (JSON):   https://${host}/api/v1/
+# AI Plugin Manifest: https://${host}/.well-known/ai-plugin.json
+
+Sitemap: https://${host}/sitemap.xml
+`);
+});
+
+// sitemap.xml — list all discoverable endpoints
+app.get('/sitemap.xml', (req, res) => {
+  const host = req.headers.host || 'www.myapiai.com';
+  const urls = [
+    '/', '/openapi.json', '/api/v1/', '/api/v1/quick-start',
+    '/.well-known/ai-plugin.json', '/.well-known/openapi.json',
+    '/dashboard/',
+  ];
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls.map(u => `  <url><loc>https://${host}${u}</loc></url>`).join('\n')}
+</urlset>`;
+  res.type('application/xml').send(xml);
+});
+
+// /health — useful for monitoring + AI discovery
+app.get('/api/v1/health', (req, res) => {
+  res.json({ status: 'ok', api: '/api/v1/', docs: '/openapi.json' });
+});
+
 app.get('/openapi.json', (req, res) => {
   const host = req.get('host');
   const scheme = req.protocol || 'http';
