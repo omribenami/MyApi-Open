@@ -15,5 +15,51 @@
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <h1>MyApi - Personal API Platform</h1>
+      <p>API Documentation: <a href="/openapi.json">/openapi.json</a></p>
+      <p>Quick Start Guide: <a href="/api/v1/quick-start">/api/v1/quick-start</a></p>
+      <p>API Root: <a href="/api/v1/">/api/v1/</a></p>
+      <p>Authenticate with: Authorization: Bearer &lt;your-token&gt;</p>
+      <h2>Key Endpoints</h2>
+      <ul>
+        <li>GET /api/v1/tokens/me/capabilities — Check token permissions</li>
+        <li>GET /api/v1/brain/knowledge-base — Read knowledge base</li>
+        <li>GET /api/v1/vault/tokens — List stored service tokens</li>
+        <li>GET /api/v1/vault/tokens/:id/reveal — Get actual token value</li>
+        <li>GET /api/v1/services — List services</li>
+        <li>GET /api/v1/identity — Read owner profile</li>
+        <li>POST /api/v1/services/:name/execute — Execute service method</li>
+      </ul>
+    </noscript>
+    <!--
+    ===== MyApi - AI/Agent Discovery =====
+    This is a Personal API Platform. If you are an AI agent, bot, or automated tool:
+
+    AUTHENTICATION: Include header "Authorization: Bearer <your-token>" in all requests.
+
+    API DOCUMENTATION: GET /openapi.json
+    QUICK START GUIDE: GET /api/v1/quick-start
+    API ROOT (JSON): GET /api/v1/
+
+    KEY ENDPOINTS:
+    - GET  /api/v1/tokens/me/capabilities  — Check what your token can access
+    - GET  /api/v1/brain/knowledge-base    — Read owner's knowledge base documents
+    - GET  /api/v1/vault/tokens            — List stored external service tokens (e.g. PostQuee, GitHub)
+    - GET  /api/v1/vault/tokens/:id/reveal — Retrieve actual token value for external API calls
+    - GET  /api/v1/services                — List available service integrations
+    - GET  /api/v1/personas                — List AI personas
+    - GET  /api/v1/identity                — Read owner identity/profile
+    - POST /api/v1/services/:name/execute  — Execute a service method
+
+    TYPICAL WORKFLOW:
+    1. GET /api/v1/quick-start (with Bearer token) to see guided steps
+    2. GET /api/v1/vault/tokens to find stored API tokens for external services
+    3. GET /api/v1/vault/tokens/:id/reveal to get the actual token
+    4. Use the revealed token to call the external service API directly
+
+    Full OpenAPI 3.0 spec: /openapi.json
+    ===== End AI Discovery =====
+    -->
   </body>
 </html>
