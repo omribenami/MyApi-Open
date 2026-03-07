@@ -258,7 +258,8 @@ const oauthAdapters = {
     tokenUrl: 'https://open.tiktokapis.com/v2/oauth/token/',
     scope: 'user.info.basic,video.list',
     redirectUri: process.env.TIKTOK_REDIRECT_URI || oauthConfig.tiktok?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/tiktok`,
-    clientId: process.env.TIKTOK_CLIENT_ID || oauthConfig.tiktok?.clientId,
+    // TikTok docs/UI often call this value "Client Key". Accept both env names.
+    clientId: process.env.TIKTOK_CLIENT_ID || process.env.TIKTOK_CLIENT_KEY || oauthConfig.tiktok?.clientId,
     clientSecret: process.env.TIKTOK_CLIENT_SECRET || oauthConfig.tiktok?.clientSecret,
     extraAuthParams: { response_type: 'code' },
     extraTokenParams: { grant_type: 'authorization_code' },
@@ -2928,7 +2929,13 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
 });
 
 // GET /api/v1/oauth/callback/:service — Handle OAuth callback
-app.get("/api/v1/oauth/callback/:service", async (req, res) => {
+// Also support legacy/public callback paths to avoid provider-side 404s when
+// an app is configured without the /api/v1 prefix.
+app.get([
+  "/api/v1/oauth/callback/:service",
+  "/oauth/callback/:service",
+  "/api/oauth/callback/:service",
+], async (req, res) => {
   const { service } = req.params;
   const { code, state } = req.query;
 
