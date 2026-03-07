@@ -441,6 +441,15 @@ app.get('/', (req, res) => {
 app.get('/login', (req, res) => res.redirect('/dashboard/'));
 
 // Dashboard: serve static files (auth handled client-side via localStorage token)
+// AI Discovery: add Link headers to every response so AI tools always find the API
+app.use((req, res, next) => {
+  const host = req.headers.host || 'www.myapiai.com';
+  res.set('Link', `<https://${host}/openapi.json>; rel="service-desc", <https://${host}/api/v1/>; rel="api", <https://${host}/api/v1/quick-start>; rel="help"`);
+  res.set('X-API-Docs', `/openapi.json`);
+  res.set('X-API-Root', `/api/v1/`);
+  next();
+});
+
 // Security: block access to sensitive files before static middleware
 app.use((req, res, next) => {
   const blocked = /\.(sqlite|sqlite3|db|env|key|pem|log)$/i;
