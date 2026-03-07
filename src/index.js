@@ -425,6 +425,109 @@ app.use(express.static(path.join(__dirname, "public")));
 const onboardRoutes = require('./onboard');
 app.use('/api/v1', onboardRoutes);
 
+// --- AI-Discoverable API Root & Well-Known Endpoints ---
+
+// GET /api/v1/ — API discovery root (unauthenticated)
+app.get('/api/v1/', (req, res) => {
+  res.json({
+    name: 'MyApi',
+    version: '0.1.0',
+    description: 'Personal API platform. Authenticate with Bearer token to access your data, knowledge base, personas, and connected services.',
+    documentation: {
+      openapi: '/openapi.json',
+      quickStart: '/api/v1/quick-start',
+    },
+    authentication: {
+      type: 'Bearer',
+      header: 'Authorization: Bearer <your-token>',
+      hint: 'Use the token provided by the platform owner. Include it in every request.',
+    },
+    endpoints: {
+      discovery: 'GET /api/v1/',
+      quickStart: 'GET /api/v1/quick-start',
+      capabilities: 'GET /api/v1/capabilities',
+      tokenInfo: 'GET /api/v1/tokens/me/capabilities',
+      knowledgeBase: 'GET /api/v1/brain/knowledge-base',
+      personas: 'GET /api/v1/personas',
+      services: 'GET /api/v1/services',
+      identity: 'GET /api/v1/identity',
+      vaultTokens: 'GET /api/v1/vault/tokens',
+      connectors: 'GET /api/v1/connectors',
+      openapi: 'GET /openapi.json',
+    },
+  });
+});
+
+// GET /api/v1/quick-start — step-by-step guide for AI agents
+app.get('/api/v1/quick-start', (req, res) => {
+  const hasAuth = !!(req.headers.authorization || '').match(/^Bearer\s+.+/i);
+  res.json({
+    title: 'MyApi Quick Start for AI Agents',
+    authenticated: hasAuth,
+    steps: [
+      {
+        step: 1,
+        action: 'Authenticate',
+        detail: 'Add header: Authorization: Bearer <token>',
+        done: hasAuth,
+      },
+      {
+        step: 2,
+        action: 'Check your permissions',
+        endpoint: 'GET /api/v1/tokens/me/capabilities',
+        detail: 'See what scopes your token grants access to.',
+      },
+      {
+        step: 3,
+        action: 'Explore the knowledge base',
+        endpoint: 'GET /api/v1/brain/knowledge-base',
+        detail: 'Read documents stored by the owner (identity, preferences, skills, etc).',
+      },
+      {
+        step: 4,
+        action: 'Check connected services',
+        endpoint: 'GET /api/v1/vault/tokens',
+        detail: 'See what external service tokens (e.g. PostQuee, GitHub) are stored.',
+      },
+      {
+        step: 5,
+        action: 'Use vault tokens to call external APIs',
+        endpoint: 'GET /api/v1/vault/tokens/:id/reveal',
+        detail: 'Retrieve the actual token value, then use it to call the external service API.',
+      },
+      {
+        step: 6,
+        action: 'Execute service methods',
+        endpoint: 'POST /api/v1/services/:serviceName/execute',
+        detail: 'For integrated services, execute API methods directly through MyApi.',
+      },
+    ],
+    fullDocs: '/openapi.json',
+  });
+});
+
+// /.well-known/openapi — standard discovery path
+app.get('/.well-known/openapi.json', (req, res) => {
+  res.redirect('/openapi.json');
+});
+
+// /.well-known/ai-plugin.json — ChatGPT/AI plugin discovery standard
+app.get('/.well-known/ai-plugin.json', (req, res) => {
+  const host = req.headers.host || 'www.myapiai.com';
+  res.json({
+    schema_version: 'v1',
+    name_for_human: 'MyApi',
+    name_for_model: 'myapi',
+    description_for_human: 'Personal API platform for managing your digital identity, knowledge, and connected services.',
+    description_for_model: 'MyApi is a personal API. Use it to: read the owner\'s knowledge base, check connected services and their tokens, manage personas, and execute actions on connected platforms. Authenticate with Bearer token. Start by calling GET /api/v1/ for endpoint discovery, then GET /api/v1/quick-start for step-by-step usage.',
+    auth: { type: 'service_http', authorization_type: 'bearer' },
+    api: { type: 'openapi', url: `https://${host}/openapi.json` },
+    logo_url: `https://${host}/dashboard/myapi-logo.svg`,
+    contact_email: 'support@myapiai.com',
+    legal_info_url: `https://${host}/legal`,
+  });
+});
+
 // User profile routes
 app.get('/api/v1/users/me', authenticate, (req, res) => {
   let identity = {};
