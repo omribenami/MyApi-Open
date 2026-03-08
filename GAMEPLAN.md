@@ -76,14 +76,14 @@
 
 | Step | Status | Notes | Completed |
 |------|--------|-------|-----------|
-| 1.1 | ⬜ TODO | | |
-| 1.2 | ⬜ TODO | | |
-| 1.3 | ⬜ TODO | | |
+| 1.1 | ✅ DONE | Purged 40 duplicate tokens, 2 clean remain | 2026-03-07 19:50 |
+| 1.2 | ✅ DONE | UPSERT by (service_name, user_id) | 2026-03-07 19:52 |
+| 1.3 | ✅ DONE | isTokenExpired + refreshOAuthToken added | 2026-03-07 19:55 |
 | 1.4 | ⬜ BLOCKED | Waiting on Omri for GitHub OAuth App | |
-| 2.1 | ⬜ TODO | | |
-| 2.2 | ⬜ TODO | | |
-| 2.3 | ⬜ TODO | | |
-| 2.4 | ⬜ TODO | | |
+| 2.1 | ✅ DONE | Real HTTP proxy in executeServiceMethod + /proxy endpoint | 2026-03-07 20:00 |
+| 2.2 | ✅ DONE | GitHub 10, Google 9, Slack 3, Discord 2 methods | 2026-03-07 20:02 |
+| 2.3 | ✅ DONE | 24 methods seeded in service_api_methods | 2026-03-07 20:02 |
+| 2.4 | ✅ DONE | Consistent {ok, data, error, meta} shape in proxy | 2026-03-07 20:02 |
 | 3.1 | ⬜ TODO | | |
 | 3.2 | ⬜ TODO | | |
 | 3.3 | ⬜ TODO | | |
