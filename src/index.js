@@ -3666,6 +3666,26 @@ app.post('/api/v1/services/:serviceName/proxy', authenticate, async (req, res) =
       return res.status(400).json({ error: 'path is required (e.g. "/user/repos")' });
     }
 
+    // Service scope enforcement
+    const { checkScopes } = require('./middleware/scope-validator');
+    const rawScope = req.tokenMeta?.scope || req.tokenData?.scope || '';
+    const tokenScopes = rawScope === 'full' ? ['admin:*'] : rawScope.split(',').map(s => s.trim()).filter(Boolean);
+    const isWrite = ['POST', 'PUT', 'PATCH', 'DELETE'].includes((httpMethod || 'GET').toUpperCase());
+    const requiredScopes = [
+      `services:${serviceName}:${isWrite ? 'write' : 'read'}`,  // specific: services:github:read
+      `services:${serviceName}`,                                   // service-level: services:github
+      'services:*',                                                // wildcard
+      `services:${isWrite ? 'write' : 'read'}`,                  // generic: services:read
+    ];
+    const hasScope = tokenScopes.includes('admin:*') || requiredScopes.some(s => tokenScopes.includes(s));
+    if (!hasScope) {
+      return res.status(403).json({
+        error: 'Insufficient scope',
+        message: `Token needs one of: ${requiredScopes.join(', ')}`,
+        hint: 'Update token scope to include service access'
+      });
+    }
+
     const { getOAuthToken, isTokenExpired, refreshOAuthToken } = require('./database');
     const userId = getOAuthUserId(req);
     let token = getOAuthToken(serviceName, userId);
