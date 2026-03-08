@@ -74,6 +74,7 @@ export function normalizeService(rawService, oauthMeta) {
     category: rawService.category_name || rawService.category,
     category_label: rawService.category_label || rawService.category_name || rawService.category,
     status: oauthMeta?.status || 'disconnected',
+    lastApiCall: oauthMeta?.lastApiCall || null,  // Phase 5.4: Track last API call
     enabled: oauthMeta?.enabled !== false,
     notConfigured: oauthMeta?.enabled === false,
     env_requirements: getServiceEnvRequirements(rawService.name),

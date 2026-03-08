@@ -46,6 +46,11 @@ function ServiceCard({ service, onConnect, onRevoke, onDetails, compact = false 
               </span>
             </div>
             <p className="text-sm text-slate-400 mt-1 line-clamp-2">{service.description}</p>
+            {service.status === 'connected' && service.lastApiCall && (
+              <p className="text-xs text-slate-500 mt-2">
+                Last API call: {new Date(service.lastApiCall).toLocaleString()}
+              </p>
+            )}
             <div className="mt-3 flex flex-wrap gap-2">
               <span className={`px-2 py-1 rounded-md text-[11px] uppercase tracking-wide ${getAuthTypeStyle(service.auth_type)}`}>
                 {service.auth_type || 'unknown'}

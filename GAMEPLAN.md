@@ -91,7 +91,7 @@
 | 4.2 | ⬜ TODO | | |
 | 4.3 | ⬜ TODO | | |
 | 4.4 | ⬜ TODO | | |
-| 5.1 | ⬜ TODO | | |
-| 5.2 | ⬜ TODO | | |
-| 5.3 | ⬜ TODO | | |
-| 5.4 | ⬜ TODO | | |
+| 5.1 | ✅ DONE | Key rotation table, functions, POST /api/v1/keys/rotate endpoint | 2026-03-08 04:50 |
+| 5.2 | ✅ DONE | Rate limits table, checkRateLimit/incrementRateLimit functions, proxy rate checking | 2026-03-08 04:50 |
+| 5.3 | ✅ DONE | Audit log schema extended, enhanced proxy logging with service_name, api_method, response_time_ms | 2026-03-08 04:50 |
+| 5.4 | ✅ DONE | last_api_call tracking in oauth_tokens, ServiceCard UI shows last API call timestamp | 2026-03-08 04:50 |

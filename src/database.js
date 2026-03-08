@@ -320,6 +320,31 @@ function initDatabase() {
 
     CREATE INDEX IF NOT EXISTS idx_services_category ON services(category_id);
     CREATE INDEX IF NOT EXISTS idx_service_api_methods_service ON service_api_methods(service_id);
+
+    CREATE TABLE IF NOT EXISTS key_versions (
+      id TEXT PRIMARY KEY,
+      version INTEGER NOT NULL,
+      algorithm TEXT DEFAULT 'aes-256-gcm',
+      key_hash TEXT NOT NULL,
+      status TEXT DEFAULT 'active',
+      created_at TEXT NOT NULL,
+      rotated_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS rate_limits (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      service_name TEXT NOT NULL,
+      call_count INTEGER DEFAULT 0,
+      window_start TEXT NOT NULL,
+      window_end TEXT NOT NULL,
+      limit_per_hour INTEGER DEFAULT 100,
+      created_at TEXT NOT NULL,
+      UNIQUE(user_id, service_name, window_start)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_rate_limits_user_service ON rate_limits(user_id, service_name);
+    CREATE INDEX IF NOT EXISTS idx_rate_limits_window ON rate_limits(window_start, window_end);
   `);
 
   // Seed default scopes if not already present
@@ -376,6 +401,15 @@ function initDatabase() {
   // 2FA columns
   try { db.exec("ALTER TABLE users ADD COLUMN totp_secret TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE users ADD COLUMN two_factor_enabled INTEGER DEFAULT 0"); } catch (e) {}
+
+  // Phase 5 migrations: Token encryption key rotation, rate limiting, audit logs
+  try { db.exec("ALTER TABLE oauth_tokens ADD COLUMN key_version INTEGER DEFAULT 1"); } catch (e) {}
+  try { db.exec("ALTER TABLE oauth_tokens ADD COLUMN last_api_call TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE audit_log ADD COLUMN service_name TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE audit_log ADD COLUMN api_method TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE audit_log ADD COLUMN api_endpoint TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE audit_log ADD COLUMN status_code INTEGER"); } catch (e) {}
+  try { db.exec("ALTER TABLE audit_log ADD COLUMN response_time_ms INTEGER"); } catch (e) {}
 
   // Multi-tenant ownership columns (security isolation)
   const ownerMigrations = [
@@ -1205,7 +1239,8 @@ function getOAuthToken(serviceName, userId) {
       expiresAt: row.expires_at,
       scope: row.scope,
       createdAt: row.created_at,
-      updatedAt: row.updated_at
+      updatedAt: row.updated_at,
+      lastApiCall: row.last_api_call  // Phase 5.4: Track last API call
     };
   } catch (e) {
     console.error('Error decrypting OAuth token:', e);
@@ -1387,6 +1422,159 @@ function validateStateToken(serviceName, stateToken) {
   }
   
   return false;
+}
+
+// Phase 5.1: Token Encryption Key Rotation
+function createKeyVersion(version, algorithm = 'aes-256-gcm') {
+  const id = 'key_v' + crypto.randomBytes(8).toString('hex');
+  const vaultKey = process.env.VAULT_KEY || 'default-vault-key-change-me';
+  const key = crypto.scryptSync(vaultKey, 'salt', 32);
+  const keyHash = crypto.createHash('sha256').update(key).digest('hex');
+  const now = new Date().toISOString();
+  
+  const stmt = db.prepare(`
+    INSERT INTO key_versions (id, version, algorithm, key_hash, status, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  
+  stmt.run(id, version, algorithm, keyHash, 'active', now);
+  
+  return { id, version, algorithm, createdAt: now };
+}
+
+function getKeyVersions() {
+  const stmt = db.prepare('SELECT * FROM key_versions ORDER BY version DESC');
+  return stmt.all();
+}
+
+function getCurrentKeyVersion() {
+  const stmt = db.prepare('SELECT * FROM key_versions WHERE status = ? ORDER BY version DESC LIMIT 1');
+  const row = stmt.get('active');
+  return row ? { id: row.id, version: row.version, algorithm: row.algorithm } : null;
+}
+
+function rotateEncryptionKey(newVaultKey) {
+  // 1. Create new key version
+  const currentVersions = db.prepare('SELECT MAX(version) as maxVersion FROM key_versions').get();
+  const newVersion = (currentVersions.maxVersion || 0) + 1;
+  
+  const newKeyId = createKeyVersion(newVersion);
+  
+  // 2. Re-encrypt all OAuth tokens with new key
+  const tokens = db.prepare('SELECT * FROM oauth_tokens').all();
+  const now = new Date().toISOString();
+  
+  for (const token of tokens) {
+    try {
+      // Decrypt with old key
+      const oldKey = process.env.VAULT_KEY || 'default-vault-key-change-me';
+      const oldKeyHash = crypto.scryptSync(oldKey, 'salt', 32);
+      
+      let decryptedAccess = null;
+      let decryptedRefresh = null;
+      
+      if (token.access_token) {
+        const parsed = JSON.parse(token.access_token);
+        const decipher = crypto.createDecipheriv('aes-256-gcm', oldKeyHash, Buffer.from(parsed.iv, 'hex'));
+        decipher.setAuthTag(Buffer.from(parsed.authTag, 'hex'));
+        decryptedAccess = decipher.update(parsed.encrypted, 'hex', 'utf8') + decipher.final('utf8');
+      }
+      
+      if (token.refresh_token) {
+        const parsed = JSON.parse(token.refresh_token);
+        const decipher = crypto.createDecipheriv('aes-256-gcm', oldKeyHash, Buffer.from(parsed.iv, 'hex'));
+        decipher.setAuthTag(Buffer.from(parsed.authTag, 'hex'));
+        decryptedRefresh = decipher.update(parsed.encrypted, 'hex', 'utf8') + decipher.final('utf8');
+      }
+      
+      // Re-encrypt with new key
+      const newKeyHash = crypto.scryptSync(newVaultKey, 'salt', 32);
+      
+      let newAccessTokenEncrypted = null;
+      if (decryptedAccess) {
+        const cipher = crypto.createCipheriv('aes-256-gcm', newKeyHash, crypto.randomBytes(16));
+        let enc = cipher.update(decryptedAccess, 'utf8', 'hex');
+        enc += cipher.final('hex');
+        const authTag = cipher.getAuthTag().toString('hex');
+        const iv = crypto.randomBytes(16).toString('hex');
+        newAccessTokenEncrypted = JSON.stringify({ encrypted: enc, iv, authTag });
+      }
+      
+      let newRefreshTokenEncrypted = null;
+      if (decryptedRefresh) {
+        const cipher = crypto.createCipheriv('aes-256-gcm', newKeyHash, crypto.randomBytes(16));
+        let enc = cipher.update(decryptedRefresh, 'utf8', 'hex');
+        enc += cipher.final('hex');
+        const authTag = cipher.getAuthTag().toString('hex');
+        const iv = crypto.randomBytes(16).toString('hex');
+        newRefreshTokenEncrypted = JSON.stringify({ encrypted: enc, iv, authTag });
+      }
+      
+      // Update token with new key version
+      db.prepare(`
+        UPDATE oauth_tokens 
+        SET access_token = ?, refresh_token = ?, key_version = ?, updated_at = ?
+        WHERE id = ?
+      `).run(newAccessTokenEncrypted, newRefreshTokenEncrypted, newVersion, now, token.id);
+    } catch (err) {
+      console.error(`Failed to rotate key for token ${token.id}:`, err.message);
+    }
+  }
+  
+  // 3. Mark old versions as retired
+  db.prepare("UPDATE key_versions SET status = ? WHERE status = ? AND version < ?")
+    .run('retired', 'active', newVersion);
+  
+  return { success: true, newVersion, tokensRotated: tokens.length };
+}
+
+// Phase 5.2: Rate Limiting
+function checkRateLimit(userId, serviceName, limitPerHour = 100) {
+  const now = new Date();
+  // Use hour as the key for rate limiting window
+  const hourKey = Math.floor(now.getTime() / (60 * 60 * 1000));
+  const windowStart = new Date(hourKey * 60 * 60 * 1000).toISOString();
+  
+  const stmt = db.prepare(`
+    SELECT call_count FROM rate_limits
+    WHERE user_id = ? AND service_name = ? AND window_start = ?
+  `);
+  
+  const record = stmt.get(userId, serviceName, windowStart);
+  const currentCount = record?.call_count || 0;
+  
+  return {
+    allowed: currentCount < limitPerHour,
+    currentCount,
+    limit: limitPerHour,
+    remaining: Math.max(0, limitPerHour - currentCount)
+  };
+}
+
+function incrementRateLimit(userId, serviceName, limitPerHour = 100) {
+  const now = new Date();
+  // Use hour as the key for rate limiting window
+  const hourKey = Math.floor(now.getTime() / (60 * 60 * 1000));
+  const windowStart = new Date(hourKey * 60 * 60 * 1000).toISOString();
+  const windowEnd = new Date((hourKey + 1) * 60 * 60 * 1000).toISOString();
+  
+  // Try to update, if no rows affected, insert
+  const updateStmt = db.prepare(`
+    UPDATE rate_limits
+    SET call_count = call_count + 1
+    WHERE user_id = ? AND service_name = ? AND window_start = ?
+  `);
+  
+  const result = updateStmt.run(userId, serviceName, windowStart);
+  
+  if (result.changes === 0) {
+    // Insert new rate limit record
+    const insertStmt = db.prepare(`
+      INSERT INTO rate_limits (user_id, service_name, call_count, limit_per_hour, window_start, window_end, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+    insertStmt.run(userId, serviceName, 1, limitPerHour, windowStart, windowEnd, new Date().toISOString());
+  }
 }
 
 // Brain - Conversations
@@ -2395,6 +2583,13 @@ module.exports = {
   getOAuthStatus,
   createStateToken,
   validateStateToken,
+  // Phase 5: Key rotation and rate limiting
+  createKeyVersion,
+  getKeyVersions,
+  getCurrentKeyVersion,
+  rotateEncryptionKey,
+  checkRateLimit,
+  incrementRateLimit,
   // Brain
   createConversation,
   getConversations,

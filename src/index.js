@@ -773,6 +773,15 @@ function authenticate(req, res, next) {
   next();
 }
 
+function adminOnly(req, res, next) {
+  // Check if token has admin scope
+  const scope = req.tokenMeta?.scope || req.tokenData?.scope || '';
+  if (scope !== 'full' && !scope.includes('admin')) {
+    return res.status(403).json({ error: "Admin access required" });
+  }
+  next();
+}
+
 function getOAuthUserId(req) {
   return req?.session?.user?.id ? String(req.session.user.id) : 'oauth_user';
 }
@@ -3353,6 +3362,7 @@ app.get("/api/v1/oauth/status", authenticate, (req, res) => {
       name: service,
       status: status?.status || "disconnected",
       lastSync: status?.lastSyncedAt || null,
+      lastApiCall: token?.lastApiCall || null,  // Phase 5.4: Last API call timestamp
       scope: token?.scope || null,
       enabled: isOAuthServiceEnabled(service)
     };
@@ -3462,6 +3472,60 @@ app.get("/api/v1/oauth/test/:service", authenticate, async (req, res) => {
   } catch (error) {
     console.error(`OAuth test error for ${service}:`, error.message);
     res.status(500).json({ error: "Failed to test token", message: error.message });
+  }
+});
+
+// ===== PHASE 5: KEY ROTATION & RATE LIMITING =====
+
+// POST /api/v1/keys/rotate — Rotate encryption keys for OAuth tokens
+app.post("/api/v1/keys/rotate", authenticate, adminOnly, async (req, res) => {
+  try {
+    const { rotateEncryptionKey } = require('./database');
+    const newVaultKey = req.body.vaultKey || process.env.VAULT_KEY;
+    
+    if (!newVaultKey) {
+      return res.status(400).json({ error: "vaultKey required in request body or VAULT_KEY env var" });
+    }
+    
+    const result = rotateEncryptionKey(newVaultKey);
+    
+    createAuditLog({
+      requesterId: req.tokenMeta.tokenId,
+      action: "key_rotation",
+      resource: "/keys/rotate",
+      scope: req.tokenMeta.scope,
+      ip: req.ip,
+      details: { newVersion: result.newVersion, tokensRotated: result.tokensRotated }
+    });
+    
+    res.json({
+      ok: true,
+      message: "Encryption keys rotated successfully",
+      newVersion: result.newVersion,
+      tokensRotated: result.tokensRotated,
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error("Key rotation error:", err);
+    res.status(500).json({ error: "Key rotation failed", message: err.message });
+  }
+});
+
+// GET /api/v1/keys/status — Check encryption key status
+app.get("/api/v1/keys/status", authenticate, adminOnly, (req, res) => {
+  try {
+    const { getKeyVersions, getCurrentKeyVersion } = require('./database');
+    const versions = getKeyVersions();
+    const current = getCurrentKeyVersion();
+    
+    res.json({
+      currentVersion: current,
+      allVersions: versions,
+      totalVersions: versions.length
+    });
+  } catch (err) {
+    console.error("Key status error:", err);
+    res.status(500).json({ error: "Failed to get key status" });
   }
 });
 
@@ -3717,6 +3781,22 @@ app.post('/api/v1/services/:serviceName/proxy', authenticate, async (req, res) =
       return res.status(400).json({ error: `No API root configured for service '${serviceName}'` });
     }
 
+    // Phase 5.2: Rate limiting check
+    const { checkRateLimit, incrementRateLimit } = require('./database');
+    const rateLimitConfig = { 'github': 100, 'google': 150, 'slack': 120, 'discord': 100 };
+    const limitPerHour = rateLimitConfig[serviceName] || 100;
+    
+    const rateLimit = checkRateLimit(userId, serviceName, limitPerHour);
+    if (!rateLimit.allowed) {
+      return res.status(429).json({
+        error: 'Rate limit exceeded',
+        service: serviceName,
+        limit: limitPerHour,
+        remaining: 0,
+        resetTime: new Date(Date.now() + 60 * 60 * 1000).toISOString()
+      });
+    }
+
     const https = require('https');
     const http = require('http');
     const targetUrl = new URL(apiPath.startsWith('/') ? `${apiRoot}${apiPath}` : `${apiRoot}/${apiPath}`);
@@ -3745,6 +3825,9 @@ app.post('/api/v1/services/:serviceName/proxy', authenticate, async (req, res) =
       headers['Content-Length'] = Buffer.byteLength(bodyStr);
     }
 
+    // Track timing for response_time_ms
+    const startTime = Date.now();
+    
     const result = await new Promise((resolve, reject) => {
       const request = transport.request(targetUrl, { method, headers }, (response) => {
         let data = '';
@@ -3760,13 +3843,35 @@ app.post('/api/v1/services/:serviceName/proxy', authenticate, async (req, res) =
       request.end();
     });
 
+    const responseTimeMs = Date.now() - startTime;
+    
+    // Increment rate limit counter
+    incrementRateLimit(userId, serviceName, limitPerHour);
+    
+    // Update last_api_call timestamp
+    const now = new Date().toISOString();
+    db.prepare(`
+      UPDATE oauth_tokens SET last_api_call = ? WHERE service_name = ? AND user_id = ?
+    `).run(now, serviceName, userId);
+
+    // Phase 5.3: Enhanced audit logging with service details
     createAuditLog({
       requesterId: req.tokenMeta.tokenId,
       action: 'service_proxy',
       resource: `/services/${serviceName}/proxy`,
       scope: req.tokenMeta.scope,
       ip: req.ip,
-      details: { service: serviceName, path: apiPath, method, status: result.statusCode }
+      details: {
+        service: serviceName,
+        path: apiPath,
+        method,
+        status: result.statusCode,
+        service_name: serviceName,
+        api_method: method,
+        api_endpoint: apiPath,
+        status_code: result.statusCode,
+        response_time_ms: responseTimeMs
+      }
     });
 
     res.status(result.statusCode >= 400 ? result.statusCode : 200).json({
@@ -3774,7 +3879,17 @@ app.post('/api/v1/services/:serviceName/proxy', authenticate, async (req, res) =
       service: serviceName,
       statusCode: result.statusCode,
       data: result.data,
-      meta: { endpoint: targetUrl.toString(), method, timestamp: new Date().toISOString() }
+      meta: {
+        endpoint: targetUrl.toString(),
+        method,
+        timestamp: new Date().toISOString(),
+        responseTimeMs,
+        rateLimit: {
+          limit: limitPerHour,
+          remaining: Math.max(0, rateLimit.remaining - 1),
+          resetTime: new Date(Date.now() + 60 * 60 * 1000).toISOString()
+        }
+      }
     });
   } catch (err) {
     console.error('Service proxy error:', err);
