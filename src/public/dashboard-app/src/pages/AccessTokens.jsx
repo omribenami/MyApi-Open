@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useTokenStore } from '../stores/tokenStore';
 import EditTokenModal from '../components/EditTokenModal';
+import ServiceScopeSelector from '../components/ServiceScopeSelector';
 import RevokeConfirmationModal from '../components/RevokeConfirmationModal';
 
 const GUEST_SCOPES = [
@@ -43,6 +44,7 @@ function AccessTokens() {
 
   // Guest token modals
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showServiceScopeModal, setShowServiceScopeModal] = useState(false);
   const [showRevokeModal, setShowRevokeModal] = useState(false);
 
   // Create guest token form
@@ -710,6 +712,13 @@ New Token
                         Edit
                       </button>
                       <button
+                        onClick={() => { selectToken(token); setShowServiceScopeModal(true); }}
+                        className="px-3 py-1.5 text-sm text-purple-400 hover:text-purple-300 bg-slate-700 hover:bg-slate-600 rounded transition-colors"
+                        title="Configure per-service access levels"
+                      >
+                        Services
+                      </button>
+                      <button
                         onClick={async () => {
                           if (!revealedTokens[tokenKey]) {
                             await handleRegenerateToken(token);
@@ -759,6 +768,14 @@ New Token
         token={selectedToken}
         onClose={() => { setShowEditModal(false); deselectToken(); }}
         onSuccess={() => { setShowEditModal(false); deselectToken(); fetchTokens(masterToken); }}
+      />
+
+      <ServiceScopeSelector
+        isOpen={showServiceScopeModal}
+        currentToken={selectedToken}
+        masterToken={masterToken}
+        onClose={() => { setShowServiceScopeModal(false); deselectToken(); }}
+        onSuccess={() => { setShowServiceScopeModal(false); deselectToken(); fetchTokens(masterToken); }}
       />
 
       <RevokeConfirmationModal
