@@ -1135,6 +1135,17 @@ function storeOAuthToken(serviceName, userId, accessToken, refreshToken, expires
     });
   }
   
+  // Upsert: replace existing token for same service+user instead of creating duplicates
+  const existing = db.prepare('SELECT id FROM oauth_tokens WHERE service_name = ? AND user_id = ?').get(serviceName, userId);
+  
+  if (existing) {
+    db.prepare(`
+      UPDATE oauth_tokens SET access_token = ?, refresh_token = ?, expires_at = ?, scope = ?, updated_at = ?
+      WHERE service_name = ? AND user_id = ?
+    `).run(accessTokenEncrypted, refreshTokenEncrypted, expiresAt, scope, now, serviceName, userId);
+    return { id: existing.id, serviceName, userId, expiresAt, scope, createdAt: now, updated: true };
+  }
+  
   const stmt = db.prepare(`
     INSERT INTO oauth_tokens (id, service_name, user_id, access_token, refresh_token, expires_at, scope, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -1199,6 +1210,83 @@ function getOAuthToken(serviceName, userId) {
   } catch (e) {
     console.error('Error decrypting OAuth token:', e);
     return null;
+  }
+}
+
+/**
+ * Check if a token is expired (or will expire within bufferMs).
+ * Returns true if token needs refresh.
+ */
+function isTokenExpired(tokenRow, bufferMs = 300000) {
+  if (!tokenRow || !tokenRow.expiresAt) return false; // no expiry = assume valid
+  const expiresAt = new Date(tokenRow.expiresAt).getTime();
+  return Date.now() + bufferMs >= expiresAt;
+}
+
+/**
+ * Refresh an OAuth token using its refresh_token.
+ * Requires the service's token URL and client credentials.
+ */
+async function refreshOAuthToken(serviceName, userId, tokenUrl, clientId, clientSecret) {
+  const existing = getOAuthToken(serviceName, userId);
+  if (!existing || !existing.refreshToken) {
+    return { ok: false, error: 'No refresh token available' };
+  }
+
+  if (!isTokenExpired(existing)) {
+    return { ok: true, token: existing, refreshed: false };
+  }
+
+  try {
+    const https = require('https');
+    const http = require('http');
+    const url = new URL(tokenUrl);
+    const transport = url.protocol === 'https:' ? https : http;
+
+    const body = new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: existing.refreshToken,
+      client_id: clientId,
+      client_secret: clientSecret,
+    }).toString();
+
+    const result = await new Promise((resolve, reject) => {
+      const req = transport.request(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Length': Buffer.byteLength(body),
+          'Accept': 'application/json',
+        },
+      }, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          try { resolve({ status: res.statusCode, body: JSON.parse(data) }); }
+          catch { resolve({ status: res.statusCode, body: data }); }
+        });
+      });
+      req.on('error', reject);
+      req.write(body);
+      req.end();
+    });
+
+    if (result.status !== 200 || result.body.error) {
+      return { ok: false, error: result.body.error_description || result.body.error || 'Refresh failed', status: result.status };
+    }
+
+    const newAccessToken = result.body.access_token;
+    const newRefreshToken = result.body.refresh_token || existing.refreshToken;
+    const newExpiresAt = result.body.expires_in
+      ? new Date(Date.now() + result.body.expires_in * 1000).toISOString()
+      : existing.expiresAt;
+    const newScope = result.body.scope || existing.scope;
+
+    storeOAuthToken(serviceName, userId, newAccessToken, newRefreshToken, newExpiresAt, newScope);
+    
+    return { ok: true, refreshed: true, token: getOAuthToken(serviceName, userId) };
+  } catch (err) {
+    return { ok: false, error: err.message };
   }
 }
 
@@ -2300,6 +2388,8 @@ module.exports = {
   deletePersona,
   storeOAuthToken,
   getOAuthToken,
+  isTokenExpired,
+  refreshOAuthToken,
   revokeOAuthToken,
   updateOAuthStatus,
   getOAuthStatus,

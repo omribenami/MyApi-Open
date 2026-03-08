@@ -234,24 +234,114 @@ function normalizeExecutionError(error, serviceName, methodName) {
   };
 }
 
-async function executeServiceMethod({ serviceDef, method, params = {} }) {
+async function executeServiceMethod({ serviceDef, method, params = {}, token = null }) {
+  const provider = getProviderDetails(serviceDef.name);
+  const apiRoot = provider?.apiRoot || serviceDef.apiEndpoint;
+
+  // If no apiRoot or no endpoint on the method, return a helpful error
+  if (!apiRoot && !method.endpoint) {
+    return {
+      ok: false,
+      service: serviceDef.name,
+      method: method.methodName,
+      statusCode: 501,
+      data: null,
+      error: { code: 'NO_ENDPOINT', message: `No API endpoint configured for ${serviceDef.name}/${method.methodName}` },
+      meta: { timestamp: new Date().toISOString() },
+    };
+  }
+
   try {
     const payload = await withRetry(async () => {
+      const https = require('https');
+      const http = require('http');
+
+      // Build URL: if method.endpoint is absolute use it, otherwise combine with apiRoot
+      let targetUrl;
+      if (method.endpoint && (method.endpoint.startsWith('http://') || method.endpoint.startsWith('https://'))) {
+        targetUrl = new URL(method.endpoint);
+      } else {
+        const base = apiRoot.endsWith('/') ? apiRoot.slice(0, -1) : apiRoot;
+        const ep = (method.endpoint || '').startsWith('/') ? method.endpoint : `/${method.endpoint || ''}`;
+        targetUrl = new URL(base + ep);
+      }
+
+      // Interpolate path params like :owner, :repo, {owner}, {repo}
+      if (params) {
+        let pathname = targetUrl.pathname;
+        for (const [k, v] of Object.entries(params)) {
+          pathname = pathname.replace(`:${k}`, encodeURIComponent(v));
+          pathname = pathname.replace(`{${k}}`, encodeURIComponent(v));
+        }
+        targetUrl.pathname = pathname;
+      }
+
+      // For GET requests, add non-path params as query params
+      const httpMethod = (method.httpMethod || 'GET').toUpperCase();
+      if (httpMethod === 'GET' && params) {
+        for (const [k, v] of Object.entries(params)) {
+          if (!method.endpoint || (!method.endpoint.includes(`:${k}`) && !method.endpoint.includes(`{${k}}`))) {
+            targetUrl.searchParams.set(k, v);
+          }
+        }
+      }
+
+      const transport = targetUrl.protocol === 'https:' ? https : http;
+
+      // Build headers with auth
+      const headers = {
+        'Accept': 'application/json',
+        'User-Agent': 'MyApi-Gateway/1.0',
+      };
+
+      if (token && token.accessToken) {
+        // Different auth header patterns per provider
+        if (serviceDef.name === 'github') {
+          headers['Authorization'] = `token ${token.accessToken}`;
+        } else {
+          headers['Authorization'] = `Bearer ${token.accessToken}`;
+        }
+      }
+
+      let body = null;
+      if (['POST', 'PUT', 'PATCH'].includes(httpMethod) && params) {
+        body = JSON.stringify(params);
+        headers['Content-Type'] = 'application/json';
+        headers['Content-Length'] = Buffer.byteLength(body);
+      }
+
+      const result = await new Promise((resolve, reject) => {
+        const req = transport.request(targetUrl, { method: httpMethod, headers }, (res) => {
+          let data = '';
+          res.on('data', chunk => data += chunk);
+          res.on('end', () => {
+            let parsed;
+            try { parsed = JSON.parse(data); } catch { parsed = data; }
+            resolve({ statusCode: res.statusCode, data: parsed, headers: res.headers });
+          });
+        });
+        req.on('error', reject);
+        if (body) req.write(body);
+        req.end();
+      });
+
+      if (result.statusCode >= 400) {
+        const error = new Error(typeof result.data === 'object' ? (result.data.message || result.data.error || JSON.stringify(result.data)) : result.data);
+        error.statusCode = result.statusCode;
+        throw error;
+      }
+
       return {
         ok: true,
         service: serviceDef.name,
         method: method.methodName,
-        statusCode: 200,
-        data: {
-          message: `Method '${method.methodName}' accepted for ${serviceDef.name}`,
-          endpoint: method.endpoint,
-          httpMethod: method.httpMethod,
-          params,
-        },
+        statusCode: result.statusCode,
+        data: result.data,
         error: null,
         meta: {
-          simulated: true,
           timestamp: new Date().toISOString(),
+          endpoint: targetUrl.toString(),
+          httpMethod,
         },
       };
     });

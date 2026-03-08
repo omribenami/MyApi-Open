@@ -3654,6 +3654,113 @@ app.post('/api/v1/services/:serviceName/execute', authenticate, async (req, res)
   }
 });
 
+// POST /api/v1/services/:serviceName/proxy — Direct API proxy (pass-through to service API)
+// Allows AI agents to call any endpoint on a connected service without predefined methods
+app.post('/api/v1/services/:serviceName/proxy', authenticate, async (req, res) => {
+  try {
+    const { serviceName } = req.params;
+    const { path: apiPath, method: httpMethod = 'GET', body: reqBody, query: queryParams } = req.body;
+
+    if (!apiPath) {
+      return res.status(400).json({ error: 'path is required (e.g. "/user/repos")' });
+    }
+
+    const { getOAuthToken, isTokenExpired, refreshOAuthToken } = require('./database');
+    const userId = getOAuthUserId(req);
+    let token = getOAuthToken(serviceName, userId);
+
+    if (!token) {
+      return res.status(403).json({ error: `Service '${serviceName}' not connected. Please connect it first via /api/v1/oauth/authorize/${serviceName}` });
+    }
+
+    // Auto-refresh if expired
+    if (isTokenExpired(token)) {
+      const provider = OAUTH_PROVIDER_DETAILS[serviceName];
+      if (provider && provider.tokenUrl && token.refreshToken) {
+        const clientId = process.env[`${serviceName.toUpperCase()}_CLIENT_ID`];
+        const clientSecret = process.env[`${serviceName.toUpperCase()}_CLIENT_SECRET`];
+        if (clientId && clientSecret) {
+          const refreshResult = await refreshOAuthToken(serviceName, userId, provider.tokenUrl, clientId, clientSecret);
+          if (refreshResult.ok) {
+            token = refreshResult.token;
+          } else {
+            return res.status(401).json({ error: 'Token expired and refresh failed', details: refreshResult.error });
+          }
+        }
+      }
+    }
+
+    const provider = OAUTH_PROVIDER_DETAILS[serviceName];
+    const apiRoot = provider?.apiRoot;
+    if (!apiRoot) {
+      return res.status(400).json({ error: `No API root configured for service '${serviceName}'` });
+    }
+
+    const https = require('https');
+    const http = require('http');
+    const targetUrl = new URL(apiPath.startsWith('/') ? `${apiRoot}${apiPath}` : `${apiRoot}/${apiPath}`);
+    
+    // Add query params
+    if (queryParams && typeof queryParams === 'object') {
+      Object.entries(queryParams).forEach(([k, v]) => targetUrl.searchParams.set(k, v));
+    }
+
+    const transport = targetUrl.protocol === 'https:' ? https : http;
+    const method = (httpMethod || 'GET').toUpperCase();
+
+    const headers = {
+      'Accept': 'application/json',
+      'User-Agent': 'MyApi-Gateway/1.0',
+    };
+
+    if (token.accessToken) {
+      headers['Authorization'] = serviceName === 'github' ? `token ${token.accessToken}` : `Bearer ${token.accessToken}`;
+    }
+
+    let bodyStr = null;
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && reqBody) {
+      bodyStr = JSON.stringify(reqBody);
+      headers['Content-Type'] = 'application/json';
+      headers['Content-Length'] = Buffer.byteLength(bodyStr);
+    }
+
+    const result = await new Promise((resolve, reject) => {
+      const request = transport.request(targetUrl, { method, headers }, (response) => {
+        let data = '';
+        response.on('data', chunk => data += chunk);
+        response.on('end', () => {
+          let parsed;
+          try { parsed = JSON.parse(data); } catch { parsed = data; }
+          resolve({ statusCode: response.statusCode, data: parsed });
+        });
+      });
+      request.on('error', reject);
+      if (bodyStr) request.write(bodyStr);
+      request.end();
+    });
+
+    createAuditLog({
+      requesterId: req.tokenMeta.tokenId,
+      action: 'service_proxy',
+      resource: `/services/${serviceName}/proxy`,
+      scope: req.tokenMeta.scope,
+      ip: req.ip,
+      details: { service: serviceName, path: apiPath, method, status: result.statusCode }
+    });
+
+    res.status(result.statusCode >= 400 ? result.statusCode : 200).json({
+      ok: result.statusCode < 400,
+      service: serviceName,
+      statusCode: result.statusCode,
+      data: result.data,
+      meta: { endpoint: targetUrl.toString(), method, timestamp: new Date().toISOString() }
+    });
+  } catch (err) {
+    console.error('Service proxy error:', err);
+    res.status(500).json({ error: 'Proxy request failed', message: err.message });
+  }
+});
+
 // --- Brain API Endpoints ---
 
 // Import brain components
