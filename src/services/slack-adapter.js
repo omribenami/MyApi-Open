@@ -15,7 +15,7 @@ class SlackAdapter {
   getAuthorizationUrl(state) {
     const params = {
       client_id: this.clientId,
-      scope: 'chat:write channels:read users:read',
+      scope: 'users:read chat:write users.profile:read',
       redirect_uri: this.redirectUri,
       state: state
     };
@@ -54,7 +54,7 @@ class SlackAdapter {
                 accessToken: result.access_token,
                 refreshToken: null,
                 tokenType: 'bearer',
-                scope: 'chat:write channels:read users:read',
+                scope: 'users:read chat:write users.profile:read',
                 teamId: result.team?.id,
                 userId: result.authed_user?.id
               });

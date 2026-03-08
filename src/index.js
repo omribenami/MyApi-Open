@@ -3350,13 +3350,15 @@ app.get([
   }
 });
 
-// GET /api/v1/oauth/status — Get all connected services
-app.get("/api/v1/oauth/status", authenticate, (req, res) => {
+// GET /api/v1/oauth/status — Get all connected services (PUBLIC - no auth required)
+app.get("/api/v1/oauth/status", (req, res) => {
   const statuses = getOAuthStatus();
   
   const services = OAUTH_SERVICES.map(service => {
     const status = statuses.find(s => s.serviceName === service);
-    const token = getOAuthToken(service, getOAuthUserId(req));
+    // Only show tokens for authenticated users
+    const userId = req.tokenMeta?.userId || (req.session?.user?.id ? String(req.session.user.id) : null);
+    const token = userId ? getOAuthToken(service, userId) : null;
     
     return {
       name: service,
@@ -3368,13 +3370,16 @@ app.get("/api/v1/oauth/status", authenticate, (req, res) => {
     };
   });
   
-  createAuditLog({
-    requesterId: req.tokenMeta.tokenId,
-    action: "get_oauth_status",
-    resource: "/oauth/status",
-    scope: req.tokenMeta.scope,
-    ip: req.ip
-  });
+  // Log if authenticated
+  if (req.tokenMeta?.tokenId || req.session?.user?.id) {
+    createAuditLog({
+      requesterId: req.tokenMeta?.tokenId || `session:${req.session.user.id}`,
+      action: "get_oauth_status",
+      resource: "/oauth/status",
+      scope: req.tokenMeta?.scope || "session",
+      ip: req.ip
+    });
+  }
   
   res.json({ services });
 });
