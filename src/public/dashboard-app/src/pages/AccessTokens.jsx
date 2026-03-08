@@ -13,6 +13,8 @@ const GUEST_SCOPES = [
   { value: 'brain:chat', label: 'Chat', description: 'Conversation and messaging' },
   { value: 'skills:read', label: 'Skills (Read)', description: 'Read skills and metadata' },
   { value: 'skills:write', label: 'Skills (Write)', description: 'Create and manage skills' },
+  { value: 'services:read', label: 'Services (Read)', description: 'Proxy GET requests to connected OAuth services' },
+  { value: 'services:write', label: 'Services (Write)', description: 'Proxy POST/PUT/DELETE requests to connected OAuth services' },
 ];
 
 function AccessTokens() {
