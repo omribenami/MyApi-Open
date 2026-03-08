@@ -84,9 +84,9 @@
 | 2.2 | ✅ DONE | GitHub 10, Google 9, Slack 3, Discord 2 methods | 2026-03-07 20:02 |
 | 2.3 | ✅ DONE | 24 methods seeded in service_api_methods | 2026-03-07 20:02 |
 | 2.4 | ✅ DONE | Consistent {ok, data, error, meta} shape in proxy | 2026-03-07 20:02 |
-| 3.1 | ⬜ TODO | | |
-| 3.2 | ⬜ TODO | | |
-| 3.3 | ⬜ TODO | | |
+| 3.1 | ✅ DONE | services:NAME:read/write, services:*, services:read | 2026-03-07 20:15 |
+| 3.2 | ✅ DONE | Scope check in proxy route, admin:* bypass | 2026-03-07 20:15 |
+| 3.3 | ⬜ TODO | Dashboard UI for per-token service access | |
 | 4.1 | ⬜ TODO | | |
 | 4.2 | ⬜ TODO | | |
 | 4.3 | ⬜ TODO | | |
