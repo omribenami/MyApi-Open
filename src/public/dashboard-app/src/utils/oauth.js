@@ -12,11 +12,30 @@ export async function startOAuthFlow(service, options = {}) {
     if (options.returnTo) params.append('returnTo', options.returnTo);
     params.append('redirect', '1'); // Force server-side redirect
 
-    // Direct redirect to OAuth authorize endpoint
-    // Server will handle the redirect to the OAuth provider
-    const authUrl = `/api/v1/oauth/authorize/${service}?${params.toString()}`;
-    console.log(`[OAuth] Redirecting to: ${authUrl}`);
-    window.location.href = authUrl;
+    // Fetch the auth URL first to verify it's working
+    const endpoint = `/api/v1/oauth/authorize/${service}?${params.toString()}`;
+    console.log(`[OAuth] Starting OAuth flow for ${service}`);
+    console.log(`[OAuth] Endpoint: ${endpoint}`);
+    
+    // Try to fetch with redirect mode
+    const response = await fetch(endpoint, {
+      method: 'GET',
+      credentials: 'include',
+      redirect: 'follow' // Important: follow redirects
+    });
+    
+    console.log(`[OAuth] Response status: ${response.status}`);
+    console.log(`[OAuth] Response URL: ${response.url}`);
+    
+    // If fetch followed the redirect, we're already on the OAuth provider page
+    // If not, manually set location
+    if (response.url && response.url.includes('github.com')) {
+      console.log(`[OAuth] Already on GitHub, no redirect needed`);
+    } else {
+      // Fallback: direct navigation
+      console.log(`[OAuth] Direct navigation to: ${endpoint}`);
+      window.location.href = endpoint;
+    }
   } catch (error) {
     console.error(`Failed to start OAuth flow for ${service}:`, error);
     throw error;
