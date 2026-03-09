@@ -2,12 +2,20 @@ import { oauth } from './apiClient';
 
 export async function startOAuthFlow(service, options = {}) {
   try {
-    const response = await oauth.getAuthorizationUrl(service, options);
-    const { authUrl } = response.data;
-
     sessionStorage.setItem('oauth_service', service);
     if (options.mode) sessionStorage.setItem('oauth_mode', options.mode);
+    if (options.returnTo) sessionStorage.setItem('oauth_returnTo', options.returnTo);
 
+    // Build query params
+    const params = new URLSearchParams();
+    if (options.mode) params.append('mode', options.mode);
+    if (options.returnTo) params.append('returnTo', options.returnTo);
+    params.append('redirect', '1'); // Force server-side redirect
+
+    // Direct redirect to OAuth authorize endpoint
+    // Server will handle the redirect to the OAuth provider
+    const authUrl = `/api/v1/oauth/authorize/${service}?${params.toString()}`;
+    console.log(`[OAuth] Redirecting to: ${authUrl}`);
     window.location.href = authUrl;
   } catch (error) {
     console.error(`Failed to start OAuth flow for ${service}:`, error);

@@ -3170,9 +3170,15 @@ app.delete('/api/v1/personas/:id/skills/:skillId', authenticate, (req, res) => {
 app.get("/api/v1/oauth/authorize/:service", (req, res) => {
   const { service } = req.params;
   const mode = (req.query.mode || 'connect').toString();
+  
+  // DEBUG: Log all requests
+  console.log(`[OAuth] authorize/${service} requested`);
+  console.log(`[OAuth] Mode: ${mode}, Redirect: ${req.query.redirect || 'false'}`);
+  console.log(`[OAuth] User Agent: ${req.headers['user-agent']}`);
 
   const wantsRedirect = String(req.query.redirect || '') === '1';
   if (!OAUTH_SERVICES.includes(service)) {
+    console.log(`[OAuth] ERROR: Service "${service}" not supported. Available: ${OAUTH_SERVICES.join(', ')}`);
     if (wantsRedirect) {
       return res.redirect(`/dashboard/?oauth_service=${encodeURIComponent(service)}&oauth_status=error&error=${encodeURIComponent('Invalid OAuth service')}`);
     }
@@ -3205,11 +3211,18 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
     details: { service, mode, state: state.substring(0, 10) + '...' }
   });
 
-  if (wantsRedirect) {
-    return res.redirect(authUrl);
+  // DEFAULT BEHAVIOR: Always redirect directly to OAuth provider
+  // This is more reliable than returning JSON for browser-based flows
+  // Query param ?json=1 is available for API clients that need JSON
+  const wantsJson = String(req.query.json || '') === '1';
+  
+  if (wantsJson) {
+    console.log(`[OAuth] Returning JSON response for ${service}`);
+    return res.json({ ok: true, authUrl, state });
   }
 
-  res.json({ ok: true, authUrl, state });
+  console.log(`[OAuth] Redirecting to ${service} OAuth provider`);
+  return res.redirect(authUrl);
 });
 
 // GET /api/v1/oauth/callback/:service — Handle OAuth callback
