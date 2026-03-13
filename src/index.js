@@ -3173,26 +3173,55 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
   
   // DEBUG: Log all requests
   console.log(`[OAuth] authorize/${service} requested`);
-  console.log(`[OAuth] Mode: ${mode}, Redirect: ${req.query.redirect || 'false'}`);
-  console.log(`[OAuth] User Agent: ${req.headers['user-agent']}`);
+  console.log(`[OAuth] Mode: ${mode}`);
+  console.log(`[OAuth] Available services: ${OAUTH_SERVICES.join(', ')}`);
 
-  const wantsRedirect = String(req.query.redirect || '') === '1';
+  // Validate service parameter
+  if (!service || typeof service !== 'string' || service.trim().length === 0) {
+    console.log(`[OAuth] ERROR: Invalid service parameter: "${service}"`);
+    return res.status(400).json({ 
+      error: 'Invalid service parameter',
+      message: `Service parameter must be a non-empty string. Got: ${typeof service}`
+    });
+  }
+
+  // Check if service is in the list of supported OAuth services
   if (!OAUTH_SERVICES.includes(service)) {
-    console.log(`[OAuth] ERROR: Service "${service}" not supported. Available: ${OAUTH_SERVICES.join(', ')}`);
-    if (wantsRedirect) {
-      return res.redirect(`/dashboard/?oauth_service=${encodeURIComponent(service)}&oauth_status=error&error=${encodeURIComponent('Invalid OAuth service')}`);
-    }
-    return res.status(400).json({ error: "Invalid OAuth service" });
-  }
-  if (!isOAuthServiceEnabled(service)) {
-    const msg = `OAuth service '${service}' is not enabled or configured`;
-    if (wantsRedirect) {
-      return res.redirect(`/dashboard/?oauth_service=${encodeURIComponent(service)}&oauth_status=error&error=${encodeURIComponent(msg)}`);
-    }
-    return res.status(400).json({ error: msg });
+    console.log(`[OAuth] ERROR: Service "${service}" not in supported services. Available: ${OAUTH_SERVICES.join(', ')}`);
+    return res.status(400).json({ 
+      error: `Service "${service}" not supported`,
+      availableServices: OAUTH_SERVICES,
+      message: `The service "${service}" is not available for OAuth. Available services are: ${OAUTH_SERVICES.join(', ')}`
+    });
   }
 
-  const state = createStateToken(service, 10);
+  // Check if service is enabled and configured
+  if (!isOAuthServiceEnabled(service)) {
+    const adapter = oauthAdapters[service];
+    const isConfigured = adapter ? isAdapterConfigured(adapter) : false;
+    console.log(`[OAuth] ERROR: Service "${service}" is not enabled. Configured: ${isConfigured}`);
+    
+    return res.status(400).json({ 
+      error: `Service "${service}" is not enabled or configured`,
+      message: `OAuth for "${service}" is either disabled or missing required configuration (clientId, clientSecret, redirectUri)`,
+      service: service,
+      configured: isConfigured
+    });
+  }
+
+  // Create state token for CSRF protection
+  let state;
+  try {
+    state = createStateToken(service, 10);
+  } catch (stateError) {
+    console.error(`[OAuth] Failed to create state token for ${service}:`, stateError);
+    return res.status(500).json({ 
+      error: 'Failed to initialize OAuth flow',
+      message: 'Could not create secure state token'
+    });
+  }
+
+  // Store OAuth flow metadata in session
   req.session.oauthStateMeta = req.session.oauthStateMeta || {};
   req.session.oauthStateMeta[state] = {
     mode,
@@ -3200,9 +3229,20 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
     createdAt: Date.now(),
   };
 
-  const adapter = oauthAdapters[service];
-  const authUrl = adapter.getAuthorizationUrl(state);
+  // Get authorization URL from adapter
+  let authUrl;
+  try {
+    const adapter = oauthAdapters[service];
+    authUrl = adapter.getAuthorizationUrl(state);
+  } catch (authError) {
+    console.error(`[OAuth] Failed to generate authorization URL for ${service}:`, authError);
+    return res.status(500).json({ 
+      error: 'Failed to generate authorization URL',
+      message: authError.message || 'Could not generate OAuth authorization URL'
+    });
+  }
 
+  // Log the OAuth flow start
   createAuditLog({
     requesterId: req.ip,
     action: "oauth_authorize_start",
@@ -3211,17 +3251,21 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
     details: { service, mode, state: state.substring(0, 10) + '...' }
   });
 
-  // DEFAULT BEHAVIOR: Always redirect directly to OAuth provider
-  // This is more reliable than returning JSON for browser-based flows
-  // Query param ?json=1 is available for API clients that need JSON
-  const wantsJson = String(req.query.json || '') === '1';
+  // Determine response format (JSON or redirect)
+  const wantsJson = String(req.query.json || '').toLowerCase() === '1';
   
   if (wantsJson) {
     console.log(`[OAuth] Returning JSON response for ${service}`);
-    return res.json({ ok: true, authUrl, state });
+    return res.json({ 
+      ok: true, 
+      authUrl, 
+      state,
+      service
+    });
   }
 
-  console.log(`[OAuth] Redirecting to ${service} OAuth provider`);
+  // Default behavior: redirect to OAuth provider
+  console.log(`[OAuth] Redirecting to ${service} OAuth provider at: ${authUrl.split('?')[0]}`);
   return res.redirect(authUrl);
 });
 

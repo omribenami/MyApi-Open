@@ -1,44 +1,41 @@
 import { oauth } from './apiClient';
 
-export async function startOAuthFlow(service, options = {}) {
+export function startOAuthFlow(service, options = {}) {
   try {
+    // Validate service parameter
+    if (!service || typeof service !== 'string' || service.trim().length === 0) {
+      throw new Error(`Invalid service parameter: "${service}"`);
+    }
+
+    console.log(`[OAuth] Starting OAuth flow for: ${service}`);
+    console.log(`[OAuth] Options:`, options);
+
+    // Store state in session storage for callback handling
     sessionStorage.setItem('oauth_service', service);
     if (options.mode) sessionStorage.setItem('oauth_mode', options.mode);
     if (options.returnTo) sessionStorage.setItem('oauth_returnTo', options.returnTo);
 
-    // Build query params
+    // Build query params for the authorize endpoint
     const params = new URLSearchParams();
     if (options.mode) params.append('mode', options.mode);
     if (options.returnTo) params.append('returnTo', options.returnTo);
-    params.append('redirect', '1'); // Force server-side redirect
 
-    // Fetch the auth URL first to verify it's working
     const endpoint = `/api/v1/oauth/authorize/${service}?${params.toString()}`;
-    console.log(`[OAuth] Starting OAuth flow for ${service}`);
-    console.log(`[OAuth] Endpoint: ${endpoint}`);
+    console.log(`[OAuth] Redirecting to: ${endpoint}`);
     
-    // Try to fetch with redirect mode
-    const response = await fetch(endpoint, {
-      method: 'GET',
-      credentials: 'include',
-      redirect: 'follow' // Important: follow redirects
+    // Use direct window navigation to initiate OAuth flow
+    // This is the most reliable way to trigger browser-based OAuth
+    window.location.href = endpoint;
+    
+    // Return a promise that never resolves (page will navigate away)
+    return new Promise(() => {
+      // This promise intentionally never resolves
+      // Navigation will unload the page before any callback occurs
     });
-    
-    console.log(`[OAuth] Response status: ${response.status}`);
-    console.log(`[OAuth] Response URL: ${response.url}`);
-    
-    // If fetch followed the redirect, we're already on the OAuth provider page
-    // If not, manually set location
-    if (response.url && response.url.includes('github.com')) {
-      console.log(`[OAuth] Already on GitHub, no redirect needed`);
-    } else {
-      // Fallback: direct navigation
-      console.log(`[OAuth] Direct navigation to: ${endpoint}`);
-      window.location.href = endpoint;
-    }
   } catch (error) {
-    console.error(`Failed to start OAuth flow for ${service}:`, error);
-    throw error;
+    console.error(`[OAuth] Error starting OAuth flow for ${service}:`, error);
+    // Return a rejected promise so the calling code knows there was an error
+    return Promise.reject(error);
   }
 }
 

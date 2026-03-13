@@ -43,51 +43,65 @@ function ServiceDetailModal({ service, onClose, onConnect, onRevoke }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true" aria-labelledby="service-modal-title">
-      <div className="bg-slate-800 border border-slate-700 rounded-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6">
-        <div className="flex items-start justify-between gap-4 mb-6">
-          <div className="flex items-center gap-4 min-w-0">
-            <div className="w-14 h-14 rounded-xl bg-slate-900 border border-slate-700 flex items-center justify-center overflow-hidden shrink-0">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true" aria-labelledby="service-modal-title">
+      <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-8 shadow-2xl">
+        <div className="flex items-start justify-between gap-4 mb-8">
+          <div className="flex items-center gap-5 min-w-0 flex-1">
+            <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-slate-700 to-slate-800 border border-slate-600/60 flex items-center justify-center overflow-hidden shrink-0 shadow-lg shadow-slate-900/50">
               {service.icon ? (
                 <img src={service.icon} alt="" className="w-9 h-9 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
               ) : (
-                <span className="text-lg text-slate-200 font-semibold">{service.label?.slice(0, 1)}</span>
+                <span className="text-2xl text-slate-200 font-bold">{service.label?.slice(0, 1)}</span>
               )}
             </div>
-            <div className="min-w-0">
-              <h2 id="service-modal-title" className="text-2xl font-bold text-white truncate">{service.label}</h2>
-              <div className="mt-2 flex flex-wrap gap-2 items-center">
-                <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs ${statusMeta.className}`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${statusMeta.dot}`} />
+            <div className="min-w-0 flex-1">
+              <h2 id="service-modal-title" className="text-3xl font-bold text-white truncate">{service.label}</h2>
+              <div className="mt-3 flex flex-wrap gap-2 items-center">
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium ${statusMeta.className}`}>
+                  <span className={`h-2 w-2 rounded-full ${statusMeta.dot}`} />
                   {statusMeta.label}
                 </span>
-                <span className={`px-2 py-1 rounded-md text-[11px] uppercase tracking-wide ${getAuthTypeStyle(service.auth_type)}`}>
+                <span className={`px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide ${getAuthTypeStyle(service.auth_type)}`}>
                   {service.auth_type || 'unknown'}
                 </span>
-                <span className="px-2 py-1 rounded-md text-[11px] bg-slate-700 text-slate-300 border border-slate-600">
+                <span className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-700/50 text-slate-200 border border-slate-600/50">
                   {service.category_label || service.category || 'Uncategorized'}
                 </span>
               </div>
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-300 text-2xl" aria-label="Close service details">✕</button>
+          <button 
+            onClick={onClose} 
+            className="text-slate-400 hover:text-slate-200 text-2xl transition-colors flex-shrink-0" 
+            aria-label="Close service details"
+          >
+            ✕
+          </button>
         </div>
 
-        {service.description && <p className="text-slate-300 mb-6">{service.description}</p>}
+        {service.description && (
+          <p className="text-slate-300 text-base leading-relaxed mb-8 bg-slate-900/30 rounded-xl p-4 border border-slate-700/50">
+            {service.description}
+          </p>
+        )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
-          <div className="rounded-lg bg-slate-900 border border-slate-700 p-4">
-            <p className="text-xs uppercase text-slate-400 mb-1">API Base URL</p>
-            <p className="text-sm text-slate-200 font-mono break-all" title={service.api_endpoint || 'Unknown'}>
-              {service.api_endpoint || 'Not provided'}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+          <div className="rounded-xl bg-slate-900/40 border border-slate-700/50 backdrop-blur-sm p-5">
+            <p className="text-xs uppercase font-semibold text-slate-400 mb-3 tracking-wide">🔗 API Base URL</p>
+            <p className="text-sm text-slate-200 font-mono break-all bg-slate-950/50 rounded p-3 border border-slate-700/30" title={service.api_endpoint || 'Unknown'}>
+              {service.api_endpoint || '—'}
             </p>
           </div>
-          <div className="rounded-lg bg-slate-900 border border-slate-700 p-4">
-            <p className="text-xs uppercase text-slate-400 mb-1">Env Requirements</p>
+          <div className="rounded-xl bg-slate-900/40 border border-slate-700/50 backdrop-blur-sm p-5">
+            <p className="text-xs uppercase font-semibold text-slate-400 mb-3 tracking-wide">⚙️ Env Requirements</p>
             {service.env_requirements?.length ? (
               <div className="flex flex-wrap gap-2">
                 {service.env_requirements.map((envKey) => (
-                  <span key={envKey} className="text-xs px-2 py-1 rounded bg-slate-700 text-slate-200 border border-slate-600" title={`Required env var: ${envKey}`}>
+                  <span 
+                    key={envKey} 
+                    className="text-xs px-3 py-2 rounded-lg bg-slate-700/40 text-slate-200 border border-slate-600/50 font-mono" 
+                    title={`Required env var: ${envKey}`}
+                  >
                     {envKey}
                   </span>
                 ))}
@@ -99,14 +113,15 @@ function ServiceDetailModal({ service, onClose, onConnect, onRevoke }) {
         </div>
 
         {service.documentation_url && (
-          <div className="mb-6">
+          <div className="mb-8 p-4 rounded-xl bg-blue-900/20 border border-blue-700/40">
             <a
               href={service.documentation_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-blue-400 hover:text-blue-300 text-sm inline-flex items-center gap-2"
+              className="text-blue-300 hover:text-blue-200 text-sm inline-flex items-center gap-2 font-medium transition-colors"
             >
-              View integration docs →
+              📚 View integration documentation
+              <span className="text-lg">→</span>
             </a>
           </div>
         )}
@@ -117,23 +132,23 @@ function ServiceDetailModal({ service, onClose, onConnect, onRevoke }) {
               <button
                 onClick={handleTestConnection}
                 disabled={testingConnection}
-                className="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
+                className="flex-1 px-5 py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white font-semibold rounded-lg transition-all duration-200 disabled:opacity-50 shadow-lg shadow-emerald-600/20 hover:shadow-emerald-600/30"
               >
-                {testingConnection ? 'Testing...' : 'Test Connection'}
+                {testingConnection ? '⏳ Testing...' : '✓ Test Connection'}
               </button>
               <button
                 onClick={handleRevoke}
-                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition-colors"
+                className="flex-1 px-5 py-3 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-semibold rounded-lg transition-all duration-200 shadow-lg shadow-red-600/20 hover:shadow-red-600/30"
               >
-                Disconnect
+                🔌 Disconnect
               </button>
             </>
           ) : (
             <button
               onClick={handleConnect}
-              className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+              className="w-full px-5 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white font-semibold rounded-lg transition-all duration-200 shadow-lg shadow-blue-600/20 hover:shadow-blue-600/30"
             >
-              {service.notConfigured ? 'Continue (shows setup guidance)' : 'Connect Service'}
+              {service.notConfigured ? '⚙️ Continue (Setup Guidance)' : '➕ Connect Service'}
             </button>
           )}
         </div>
