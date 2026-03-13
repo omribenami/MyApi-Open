@@ -345,7 +345,56 @@ function initDatabase() {
 
     CREATE INDEX IF NOT EXISTS idx_rate_limits_user_service ON rate_limits(user_id, service_name);
     CREATE INDEX IF NOT EXISTS idx_rate_limits_window ON rate_limits(window_start, window_end);
+
+    -- Device Approval System Tables
+    CREATE TABLE IF NOT EXISTS approved_devices (
+      id TEXT PRIMARY KEY,
+      token_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      device_fingerprint TEXT NOT NULL,
+      device_fingerprint_hash TEXT NOT NULL UNIQUE,
+      device_name TEXT NOT NULL,
+      device_info_json TEXT,
+      ip_address TEXT NOT NULL,
+      approved_at TEXT NOT NULL,
+      last_used_at TEXT,
+      revoked_at TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (token_id) REFERENCES access_tokens(id),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS device_approvals_pending (
+      id TEXT PRIMARY KEY,
+      device_fingerprint TEXT NOT NULL,
+      device_fingerprint_hash TEXT NOT NULL,
+      token_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      device_info_json TEXT,
+      ip_address TEXT NOT NULL,
+      status TEXT DEFAULT 'pending',
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      approved_at TEXT,
+      denied_at TEXT,
+      denial_reason TEXT,
+      FOREIGN KEY (token_id) REFERENCES access_tokens(id),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_approved_devices_user_token ON approved_devices(user_id, token_id);
+    CREATE INDEX IF NOT EXISTS idx_approved_devices_fingerprint ON approved_devices(device_fingerprint_hash);
+    CREATE INDEX IF NOT EXISTS idx_pending_approvals_user ON device_approvals_pending(user_id);
+    CREATE INDEX IF NOT EXISTS idx_pending_approvals_status ON device_approvals_pending(status);
+    CREATE INDEX IF NOT EXISTS idx_pending_approvals_expires ON device_approvals_pending(expires_at);
   `);
+
+  // Add device_id column to access_logs if not already present
+  try {
+    db.exec('ALTER TABLE audit_log ADD COLUMN device_id TEXT');
+  } catch (e) {
+    // Column already exists — ignore
+  }
 
   // Seed default scopes if not already present
   seedDefaultScopes();
@@ -2528,6 +2577,212 @@ function addServiceMethod(serviceId, methodName, httpMethod, endpoint, descripti
   stmt.run(serviceId, methodName, httpMethod, endpoint, description, params ? JSON.stringify(params) : null, responseExample, now);
 }
 
+// ===== Device Approval System =====
+
+function createApprovedDevice(tokenId, userId, fingerprintHash, deviceName, deviceInfo, ipAddress) {
+  const id = 'device_' + crypto.randomBytes(16).toString('hex');
+  const now = new Date().toISOString();
+  const stmt = db.prepare(`
+    INSERT INTO approved_devices (
+      id, token_id, user_id, device_fingerprint_hash, device_name, device_info_json, ip_address, approved_at, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  stmt.run(id, tokenId, userId, fingerprintHash, deviceName, JSON.stringify(deviceInfo), ipAddress, now, now);
+  return id;
+}
+
+function getApprovedDevices(userId, tokenId = null) {
+  let query = 'SELECT * FROM approved_devices WHERE user_id = ? AND revoked_at IS NULL';
+  const params = [userId];
+  
+  if (tokenId) {
+    query += ' AND token_id = ?';
+    params.push(tokenId);
+  }
+  
+  query += ' ORDER BY last_used_at DESC NULLS LAST';
+  return db.prepare(query).all(...params);
+}
+
+function getApprovedDeviceByHash(userId, fingerprintHash) {
+  return db.prepare(`
+    SELECT * FROM approved_devices 
+    WHERE user_id = ? AND device_fingerprint_hash = ? AND revoked_at IS NULL
+  `).get(userId, fingerprintHash);
+}
+
+function updateDeviceLastUsed(deviceId) {
+  const now = new Date().toISOString();
+  return db.prepare(`
+    UPDATE approved_devices 
+    SET last_used_at = ? 
+    WHERE id = ?
+  `).run(now, deviceId);
+}
+
+function revokeDevice(deviceId) {
+  const now = new Date().toISOString();
+  return db.prepare(`
+    UPDATE approved_devices 
+    SET revoked_at = ? 
+    WHERE id = ?
+  `).run(now, deviceId);
+}
+
+function renameDevice(deviceId, newName) {
+  return db.prepare(`
+    UPDATE approved_devices 
+    SET device_name = ? 
+    WHERE id = ?
+  `).run(newName, deviceId);
+}
+
+function createPendingApproval(tokenId, userId, fingerprintHash, deviceInfo, ipAddress) {
+  const id = 'approval_' + crypto.randomBytes(16).toString('hex');
+  const now = new Date().toISOString();
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24h expiry
+  
+  const stmt = db.prepare(`
+    INSERT INTO device_approvals_pending (
+      id, device_fingerprint_hash, token_id, user_id, device_info_json, ip_address, status, created_at, expires_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  
+  stmt.run(id, fingerprintHash, tokenId, userId, JSON.stringify(deviceInfo), ipAddress, 'pending', now, expiresAt);
+  return id;
+}
+
+function getPendingApprovals(userId, tokenId = null) {
+  let query = `
+    SELECT * FROM device_approvals_pending 
+    WHERE user_id = ? AND status = 'pending' AND expires_at > datetime('now')
+  `;
+  const params = [userId];
+  
+  if (tokenId) {
+    query += ' AND token_id = ?';
+    params.push(tokenId);
+  }
+  
+  query += ' ORDER BY created_at DESC';
+  return db.prepare(query).all(...params);
+}
+
+function getPendingApprovalById(approvalId) {
+  return db.prepare(`
+    SELECT * FROM device_approvals_pending WHERE id = ?
+  `).get(approvalId);
+}
+
+function approvePendingDevice(approvalId, deviceName) {
+  const approval = getPendingApprovalById(approvalId);
+  if (!approval) return null;
+  
+  // Create approved device
+  const deviceId = createApprovedDevice(
+    approval.token_id,
+    approval.user_id,
+    approval.device_fingerprint_hash,
+    deviceName || 'Approved Device',
+    JSON.parse(approval.device_info_json || '{}'),
+    approval.ip_address
+  );
+  
+  // Mark approval as approved
+  const now = new Date().toISOString();
+  db.prepare(`
+    UPDATE device_approvals_pending 
+    SET status = 'approved', approved_at = ? 
+    WHERE id = ?
+  `).run(now, approvalId);
+  
+  return deviceId;
+}
+
+function denyPendingApproval(approvalId, reason = null) {
+  const now = new Date().toISOString();
+  db.prepare(`
+    UPDATE device_approvals_pending 
+    SET status = 'denied', denied_at = ?, denial_reason = ? 
+    WHERE id = ?
+  `).run(now, reason, approvalId);
+}
+
+function cleanupExpiredApprovals() {
+  // Delete approvals that expired more than 7 days ago
+  const cutoffDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  return db.prepare(`
+    DELETE FROM device_approvals_pending 
+    WHERE expires_at < ? AND status IN ('denied', 'approved')
+  `).run(cutoffDate);
+}
+
+function getDeviceApprovalHistory(userId, tokenId = null, limit = 100) {
+  let query = `
+    SELECT 
+      'approved' as type,
+      approved_at as event_date,
+      device_name,
+      ip_address,
+      'approval' as action,
+      device_fingerprint_hash,
+      id
+    FROM approved_devices
+    WHERE user_id = ?
+  `;
+  const params = [userId];
+  
+  if (tokenId) {
+    query += ' AND token_id = ?';
+    params.push(tokenId);
+  }
+  
+  query += `
+    UNION ALL
+    SELECT 
+      'revoked' as type,
+      revoked_at as event_date,
+      device_name,
+      ip_address,
+      'revocation' as action,
+      device_fingerprint_hash,
+      id
+    FROM approved_devices
+    WHERE user_id = ? AND revoked_at IS NOT NULL
+  `;
+  params.push(userId);
+  
+  if (tokenId) {
+    query += ' AND token_id = ?';
+    params.push(tokenId);
+  }
+  
+  query += `
+    UNION ALL
+    SELECT
+      status as type,
+      created_at as event_date,
+      'Device Request' as device_name,
+      ip_address,
+      status as action,
+      device_fingerprint_hash,
+      id
+    FROM device_approvals_pending
+    WHERE user_id = ? AND status IN ('approved', 'denied')
+  `;
+  params.push(userId);
+  
+  if (tokenId) {
+    query += ' AND token_id = ?';
+    params.push(tokenId);
+  }
+  
+  query += ' ORDER BY event_date DESC LIMIT ?';
+  params.push(limit);
+  
+  return db.prepare(query).all(...params);
+}
+
 module.exports = {
   db,
   initDatabase,
@@ -2640,4 +2895,18 @@ module.exports = {
   getServiceByName,
   getServiceMethods,
   addServiceMethod,
+  // Device Approval System
+  createApprovedDevice,
+  getApprovedDevices,
+  getApprovedDeviceByHash,
+  updateDeviceLastUsed,
+  revokeDevice,
+  renameDevice,
+  createPendingApproval,
+  getPendingApprovals,
+  getPendingApprovalById,
+  approvePendingDevice,
+  denyPendingApproval,
+  cleanupExpiredApprovals,
+  getDeviceApprovalHistory,
 };

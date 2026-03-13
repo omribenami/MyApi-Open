@@ -737,7 +737,10 @@ checkDbIntegrity();
 // - Dashboard (human): cookie session (preferred)
 // - API agents: Bearer tokens
 const authRoutes = require('./auth');
+const deviceRoutes = require('./routes/devices');
+
 app.use('/api/v1', authRoutes);
+app.use('/api/v1/devices', deviceRoutes);
 
 function authenticate(req, res, next) {
   // 1) Session auth (human dashboard)

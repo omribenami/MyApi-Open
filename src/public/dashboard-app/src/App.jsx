@@ -17,6 +17,7 @@ import ApiDocs from './pages/ApiDocs';
 import Marketplace from './pages/Marketplace';
 import MyListings from './pages/MyListings';
 import Skills from './pages/Skills';
+import DeviceManagement from './pages/DeviceManagement';
 import Layout from './components/Layout';
 
 // Create React Query client
@@ -169,6 +170,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <MyListings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/devices"
+              element={
+                <ProtectedRoute>
+                  <DeviceManagement />
                 </ProtectedRoute>
               }
             />
