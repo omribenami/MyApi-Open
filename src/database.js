@@ -3,7 +3,10 @@ const path = require('path');
 const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 
-const dbPath = path.join(__dirname, 'db.sqlite');
+// Use environment variable if set, otherwise default to db.sqlite in src directory
+const dbPath = process.env.DB_PATH 
+  ? path.resolve(process.env.DB_PATH) 
+  : path.join(__dirname, 'db.sqlite');
 const db = new Database(dbPath);
 
 function normalizeOwnerId(ownerId) {
@@ -2582,12 +2585,21 @@ function addServiceMethod(serviceId, methodName, httpMethod, endpoint, descripti
 function createApprovedDevice(tokenId, userId, fingerprintHash, deviceName, deviceInfo, ipAddress) {
   const id = 'device_' + crypto.randomBytes(16).toString('hex');
   const now = new Date().toISOString();
+  
+  // Create a serialized version of the fingerprint data as the raw fingerprint
+  const deviceFingerprintRaw = JSON.stringify({
+    hash: fingerprintHash,
+    deviceInfo: deviceInfo,
+    ipAddress: ipAddress,
+    timestamp: now
+  });
+  
   const stmt = db.prepare(`
     INSERT INTO approved_devices (
-      id, token_id, user_id, device_fingerprint_hash, device_name, device_info_json, ip_address, approved_at, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      id, token_id, user_id, device_fingerprint, device_fingerprint_hash, device_name, device_info_json, ip_address, approved_at, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
-  stmt.run(id, tokenId, userId, fingerprintHash, deviceName, JSON.stringify(deviceInfo), ipAddress, now, now);
+  stmt.run(id, tokenId, userId, deviceFingerprintRaw, fingerprintHash, deviceName, JSON.stringify(deviceInfo), ipAddress, now, now);
   return id;
 }
 
@@ -2642,13 +2654,21 @@ function createPendingApproval(tokenId, userId, fingerprintHash, deviceInfo, ipA
   const now = new Date().toISOString();
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24h expiry
   
+  // Create a serialized version of the fingerprint data as the raw fingerprint
+  const deviceFingerprintRaw = JSON.stringify({
+    hash: fingerprintHash,
+    deviceInfo: deviceInfo,
+    ipAddress: ipAddress,
+    timestamp: now
+  });
+  
   const stmt = db.prepare(`
     INSERT INTO device_approvals_pending (
-      id, device_fingerprint_hash, token_id, user_id, device_info_json, ip_address, status, created_at, expires_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      id, device_fingerprint, device_fingerprint_hash, token_id, user_id, device_info_json, ip_address, status, created_at, expires_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   
-  stmt.run(id, fingerprintHash, tokenId, userId, JSON.stringify(deviceInfo), ipAddress, 'pending', now, expiresAt);
+  stmt.run(id, deviceFingerprintRaw, fingerprintHash, tokenId, userId, JSON.stringify(deviceInfo), ipAddress, 'pending', now, expiresAt);
   return id;
 }
 

@@ -4,11 +4,17 @@ const db = require('../database');
 
 const router = express.Router();
 
-// Ensure user is authenticated
+// Ensure user is authenticated and extract userId from either session or token
 function requireAuth(req, res, next) {
-  if (!req.userId) {
+  // Support both session auth (req.user.id) and Bearer token auth (req.tokenMeta.ownerId)
+  const userId = req.user?.id || req.tokenMeta?.ownerId;
+  
+  if (!userId) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
+  
+  // Attach userId to request for use in route handlers
+  req.userId = userId;
   next();
 }
 

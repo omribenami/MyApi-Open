@@ -37,17 +37,13 @@ function checkApprovalRateLimit(tokenId) {
  * Should be applied to all API endpoints that require device approval
  */
 function deviceApprovalMiddleware(req, res, next) {
-  // Extract token from headers
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return next(); // No token, skip device check
-  }
-
-  const tokenId = req.tokenId; // Should be set by auth middleware
-  const userId = req.userId; // Should be set by auth middleware
+  // Extract user context from either session or token metadata
+  const userId = req.user?.id || req.tokenMeta?.ownerId;
+  const tokenId = req.tokenMeta?.tokenId;
   
-  if (!tokenId || !userId) {
-    return next(); // No user context, skip device check
+  // Skip device check if not authenticated
+  if (!userId || !tokenId) {
+    return next();
   }
 
   try {
