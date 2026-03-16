@@ -102,7 +102,8 @@ function initDatabase() {
       template_data TEXT,
       active INTEGER DEFAULT 0,
       created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
+      updated_at TEXT NOT NULL,
+      owner_id TEXT DEFAULT 'owner'
     );
 
     CREATE TABLE IF NOT EXISTS oauth_tokens (
