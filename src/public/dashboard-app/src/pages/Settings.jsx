@@ -812,6 +812,109 @@ function ToggleRow({ label, description, checked, onChange }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// AI Agent Token Usage Section
+// ─────────────────────────────────────────────────────────────────────────────
+
+function AIAgentTrackingSection() {
+  const masterToken = useAuthStore((state) => state.masterToken);
+  const [agents, setAgents] = useState([]);
+  const [agentLoading, setAgentLoading] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const loadAgents = async () => {
+      setAgentLoading(true);
+      try {
+        const authHeaders = masterToken ? { Authorization: `Bearer ${masterToken}` } : {};
+        const res = await fetch('/api/v1/manage/audit/agents', { headers: authHeaders, credentials: 'include' });
+        if (res.ok) {
+          const data = await res.json();
+          if (active) setAgents(data.agents || []);
+        }
+      } catch (err) {
+        console.error('Error loading AI agents:', err);
+      } finally {
+        if (active) setAgentLoading(false);
+      }
+    };
+    loadAgents();
+    return () => { active = false; };
+  }, [masterToken]);
+
+  const getAgentBadgeColor = (type) => {
+    switch (type) {
+      case 'ai': return 'bg-blue-900/40 text-blue-400 border-blue-800';
+      case 'script': return 'bg-purple-900/40 text-purple-400 border-purple-800';
+      case 'cli': return 'bg-green-900/40 text-green-400 border-green-800';
+      default: return 'bg-slate-800 text-slate-400 border-slate-700';
+    }
+  };
+
+  return (
+    <SectionCard title="AI Agent & Token Usage" description="Monitor which AI agents and scripts are accessing your tokens">
+      {agentLoading ? (
+        <p className="text-slate-500 text-sm italic">Loading agent usage data...</p>
+      ) : agents.length === 0 ? (
+        <p className="text-slate-500 text-sm italic">No agents have accessed your tokens yet.</p>
+      ) : (
+        <div className="space-y-3">
+          {agents.map((agent, idx) => (
+            <div key={idx} className="p-4 bg-slate-900 border border-slate-700 rounded-lg">
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium text-white">{agent.agentName}</p>
+                  <span className={`px-2 py-0.5 text-xs rounded border ${getAgentBadgeColor(agent.agentType)}`}>
+                    {agent.agentType === 'ai' ? 'AI Agent' : agent.agentType === 'script' ? 'Script' : agent.agentType === 'cli' ? 'CLI' : 'Browser'}
+                  </span>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-emerald-400">{agent.accessCount}</p>
+                  <p className="text-xs text-slate-500">API calls</p>
+                </div>
+              </div>
+              
+              {agent.lastAccess && (
+                <p className="text-xs text-slate-400 mb-2">Last access: {new Date(agent.lastAccess).toLocaleString()}</p>
+              )}
+              
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <p className="text-slate-500 mb-1">Tokens Used ({agent.tokensUsed.length})</p>
+                  <div className="space-y-1 max-h-20 overflow-y-auto">
+                    {agent.tokensUsed.length === 0 ? (
+                      <p className="text-slate-600 italic">None</p>
+                    ) : (
+                      agent.tokensUsed.map((tokenId, i) => (
+                        <code key={i} className="block text-slate-400 text-[10px] break-all">
+                          {tokenId.slice(0, 12)}...
+                        </code>
+                      ))
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-slate-500 mb-1">Endpoints ({agent.endpointsAccessed.length})</p>
+                  <div className="space-y-1 max-h-20 overflow-y-auto">
+                    {agent.endpointsAccessed.slice(0, 3).map((endpoint, i) => (
+                      <code key={i} className="block text-slate-400 text-[10px] break-all">
+                        {endpoint}
+                      </code>
+                    ))}
+                    {agent.endpointsAccessed.length > 3 && (
+                      <p className="text-slate-600 italic text-[10px]">+{agent.endpointsAccessed.length - 3} more</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
 function PrivacySection() {
   const masterToken = useAuthStore((state) => state.masterToken);
   const {
@@ -1082,6 +1185,7 @@ const SECTIONS = [
   { id: 'profile', label: 'Profile' },
   { id: 'billing', label: 'Plans' },
   { id: 'security', label: 'Security' },
+  { id: 'agents', label: 'Token Usage' },
   { id: 'privacy', label: 'Privacy' },
   { id: 'danger', label: 'Danger Zone' },
 ];
@@ -1134,6 +1238,7 @@ function Settings() {
       {activeSection === 'profile' && <ProfileSection />}
       {activeSection === 'billing' && <BillingSection />}
       {activeSection === 'security' && <SecuritySection />}
+      {activeSection === 'agents' && <AIAgentTrackingSection />}
       {activeSection === 'privacy' && <PrivacySection />}
       {activeSection === 'danger' && (
         <DangerZoneSection

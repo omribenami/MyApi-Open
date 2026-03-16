@@ -245,6 +245,96 @@ function createManagementRoutes(tokenManager, vault, auditLog) {
     }
   });
 
+  // GET /manage/audit/agents - Get token usage by AI agents
+  router.get('/audit/agents', async (req, res) => {
+    try {
+      const logs = auditLog.getRecent(1000, 0); // Get last 1000 audit logs
+
+      // Parse userAgent and group by agent
+      const agentMap = {};
+      
+      logs.forEach(log => {
+        if (!log.userAgent) return;
+        
+        // Extract agent name from user-agent string
+        // Patterns: "Jarvis/1.0", "OpenClaw/...", "Mozilla/5.0 ..."
+        let agentName = 'Unknown';
+        let agentType = 'browser';
+        
+        if (log.userAgent.includes('Jarvis')) {
+          agentName = 'Jarvis';
+          agentType = 'ai';
+        } else if (log.userAgent.includes('OpenClaw')) {
+          agentName = 'OpenClaw';
+          agentType = 'ai';
+        } else if (log.userAgent.includes('Python')) {
+          agentName = 'Python Script';
+          agentType = 'script';
+        } else if (log.userAgent.includes('Node')) {
+          agentName = 'Node.js';
+          agentType = 'script';
+        } else if (log.userAgent.includes('curl')) {
+          agentName = 'cURL';
+          agentType = 'cli';
+        } else {
+          agentName = log.userAgent.split('/')[0] || 'Unknown';
+          agentType = 'browser';
+        }
+
+        if (!agentMap[agentName]) {
+          agentMap[agentName] = {
+            agentName,
+            agentType,
+            accessCount: 0,
+            lastAccess: null,
+            tokenIds: new Set(),
+            endpoints: new Set(),
+            methods: new Set()
+          };
+        }
+
+        agentMap[agentName].accessCount++;
+        agentMap[agentName].lastAccess = log.date;
+        if (log.tokenId) agentMap[agentName].tokenIds.add(log.tokenId);
+        if (log.endpoint) agentMap[agentName].endpoints.add(log.endpoint);
+        if (log.method) agentMap[agentName].methods.add(log.method);
+      });
+
+      // Convert to array and sort by access count
+      const agents = Object.values(agentMap)
+        .map(agent => ({
+          agentName: agent.agentName,
+          agentType: agent.agentType,
+          accessCount: agent.accessCount,
+          lastAccess: agent.lastAccess,
+          tokensUsed: Array.from(agent.tokenIds),
+          endpointsAccessed: Array.from(agent.endpoints),
+          methodsUsed: Array.from(agent.methods)
+        }))
+        .sort((a, b) => b.accessCount - a.accessCount);
+
+      auditLog.log({
+        tokenId: req.tokenData.id,
+        tokenType: req.tokenData.type,
+        requester: req.tokenData.name,
+        action: 'audit:agents',
+        endpoint: req.path,
+        method: req.method,
+        status: 200,
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent')
+      });
+
+      res.json({
+        agents,
+        total: agents.length,
+        lastUpdated: new Date().toISOString()
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   return router;
 }
 
