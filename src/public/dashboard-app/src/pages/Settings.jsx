@@ -295,12 +295,6 @@ function ProfileSection() {
 // Security Section
 // ─────────────────────────────────────────────────────────────────────────────
 
-const MOCK_SESSIONS = [
-  { id: 1, device: 'Chrome on macOS', location: 'San Francisco, US', lastActive: '2 minutes ago', current: true },
-  { id: 2, device: 'Safari on iPhone', location: 'San Francisco, US', lastActive: '1 hour ago', current: false },
-  { id: 3, device: 'Firefox on Linux', location: 'New York, US', lastActive: '3 days ago', current: false },
-];
-
 function SecuritySection() {
   const masterToken = useAuthStore((state) => state.masterToken);
   const {
@@ -317,7 +311,9 @@ function SecuritySection() {
     clearPasswordSuccess,
   } = useSettingsStore();
 
-  const [sessions, setSessions] = useState(MOCK_SESSIONS);
+  const [approvedDevices, setApprovedDevices] = useState([]);
+  const [pendingApprovals, setPendingApprovals] = useState([]);
+  const [deviceLoading, setDeviceLoading] = useState(false);
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
   const [twoFactorLoading, setTwoFactorLoading] = useState(false);
   const [twoFactorCode, setTwoFactorCode] = useState('');
@@ -351,6 +347,37 @@ function SecuritySection() {
     return () => { active = false; };
   }, [masterToken]);
 
+  // Load device approval data
+  useEffect(() => {
+    let active = true;
+    const loadDeviceData = async () => {
+      setDeviceLoading(true);
+      try {
+        const authHeaders = masterToken ? { Authorization: `Bearer ${masterToken}` } : {};
+        
+        // Fetch approved devices
+        const approvedRes = await fetch('/api/v1/devices/approved', { headers: authHeaders, credentials: 'include' });
+        if (approvedRes.ok) {
+          const approvedData = await approvedRes.json();
+          if (active) setApprovedDevices(approvedData.devices || []);
+        }
+
+        // Fetch pending approvals
+        const pendingRes = await fetch('/api/v1/devices/approvals/pending', { headers: authHeaders, credentials: 'include' });
+        if (pendingRes.ok) {
+          const pendingData = await pendingRes.json();
+          if (active) setPendingApprovals(pendingData.approvals || []);
+        }
+      } catch (err) {
+        console.error('Error loading device data:', err);
+      } finally {
+        if (active) setDeviceLoading(false);
+      }
+    };
+    loadDeviceData();
+    return () => { active = false; };
+  }, [masterToken]);
+
   const handleChangePassword = async (e) => {
     e.preventDefault();
     clearPasswordError();
@@ -376,8 +403,79 @@ function SecuritySection() {
     setPasswordSuccess('Password changed successfully');
   };
 
-  const handleRevokeSession = (id) => {
-    setSessions((prev) => prev.filter((s) => s.id !== id));
+  const handleApproveDevice = async (approvalId) => {
+    try {
+      const authHeaders = {
+        'Content-Type': 'application/json',
+        ...(masterToken ? { Authorization: `Bearer ${masterToken}` } : {}),
+      };
+      const res = await fetch(`/api/v1/devices/approve/${approvalId}`, {
+        method: 'POST',
+        headers: authHeaders,
+        credentials: 'include',
+        body: JSON.stringify({ device_name: 'Approved Device' }),
+      });
+      if (res.ok) {
+        // Reload data
+        const approvedRes = await fetch('/api/v1/devices/approved', { headers: authHeaders, credentials: 'include' });
+        if (approvedRes.ok) {
+          const data = await approvedRes.json();
+          setApprovedDevices(data.devices || []);
+        }
+        const pendingRes = await fetch('/api/v1/devices/approvals/pending', { headers: authHeaders, credentials: 'include' });
+        if (pendingRes.ok) {
+          const data = await pendingRes.json();
+          setPendingApprovals(data.approvals || []);
+        }
+      }
+    } catch (err) {
+      console.error('Error approving device:', err);
+    }
+  };
+
+  const handleDenyDevice = async (approvalId) => {
+    try {
+      const authHeaders = {
+        'Content-Type': 'application/json',
+        ...(masterToken ? { Authorization: `Bearer ${masterToken}` } : {}),
+      };
+      const res = await fetch(`/api/v1/devices/deny/${approvalId}`, {
+        method: 'POST',
+        headers: authHeaders,
+        credentials: 'include',
+        body: JSON.stringify({ reason: 'Denied by user' }),
+      });
+      if (res.ok) {
+        const pendingRes = await fetch('/api/v1/devices/approvals/pending', { headers: authHeaders, credentials: 'include' });
+        if (pendingRes.ok) {
+          const data = await pendingRes.json();
+          setPendingApprovals(data.approvals || []);
+        }
+      }
+    } catch (err) {
+      console.error('Error denying device:', err);
+    }
+  };
+
+  const handleRevokeDevice = async (deviceId) => {
+    if (!window.confirm('Revoke this device? It will need to be re-approved to use your tokens.')) return;
+    try {
+      const authHeaders = masterToken ? { Authorization: `Bearer ${masterToken}` } : {};
+      const res = await fetch(`/api/v1/devices/${deviceId}/revoke`, {
+        method: 'POST',
+        headers: authHeaders,
+        credentials: 'include',
+      });
+      if (res.ok) {
+        const approvedRes = await fetch('/api/v1/devices/approved', { headers: authHeaders, credentials: 'include' });
+        if (approvedRes.ok) {
+          const data = await approvedRes.json();
+          setApprovedDevices(data.devices || []);
+        }
+      }
+    } catch (err) {
+      console.error('Error revoking device:', err);
+    }
   };
 
   const startTwoFactorSetup = async () => {
@@ -590,44 +688,95 @@ function SecuritySection() {
           )}
         </div>
 
-        {/* Active Sessions */}
+        {/* Device & AI Approvals */}
         <div className="border-t border-slate-700 pt-6">
-          <h3 className="text-base font-medium text-white mb-4">Active Sessions</h3>
-          <div className="space-y-3">
-            {sessions.map((session) => (
-              <div
-                key={session.id}
-                className="flex items-center justify-between p-4 bg-slate-900 border border-slate-700 rounded-lg"
-              >
-                <div className="flex items-start gap-3">
-                  <span className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-700 bg-slate-800 text-[11px] text-slate-300 font-semibold">
-                    {session.device.includes('iPhone') || session.device.includes('Android') ? 'MOB' : 'WEB'}
-                  </span>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-white">{session.device}</p>
-                      {session.current && (
-                        <span className="px-1.5 py-0.5 bg-green-900 bg-opacity-40 text-green-400 text-xs rounded border border-green-800">
-                          Current
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-slate-400 mt-0.5">{session.location}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">Last active: {session.lastActive}</p>
-                  </div>
-                </div>
-                {!session.current && (
-                  <button
-                    onClick={() => handleRevokeSession(session.id)}
-                    className="text-xs text-red-400 hover:text-red-300 px-3 py-1.5 border border-red-800 hover:border-red-600 rounded-lg transition-colors flex-shrink-0"
+          {/* Pending Approvals Section */}
+          {pendingApprovals.length > 0 && (
+            <div className="mb-6">
+              <h3 className="text-base font-medium text-white mb-2 flex items-center gap-2">
+                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-amber-900 text-amber-300 text-xs font-bold">
+                  {pendingApprovals.length}
+                </span>
+                Devices & AIs Pending Approval
+              </h3>
+              <p className="text-slate-400 text-sm mb-3">New devices or AI agents are requesting access to your tokens:</p>
+              <div className="space-y-3">
+                {pendingApprovals.map((approval) => (
+                  <div
+                    key={approval.id}
+                    className="p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg"
                   >
-                    Revoke
-                  </button>
-                )}
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-white">
+                          {approval.deviceInfo?.userAgent || approval.deviceInfo?.name || 'Unknown Device'}
+                        </p>
+                        <p className="text-xs text-amber-200 mt-0.5">
+                          IP: {approval.ip} • Requested {new Date(approval.createdAt).toLocaleDateString()}
+                        </p>
+                        {approval.deviceInfo?.os && (
+                          <p className="text-xs text-slate-400 mt-1">{approval.deviceInfo.os} {approval.deviceInfo.browser ? `• ${approval.deviceInfo.browser}` : ''}</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex gap-2 mt-3">
+                      <button
+                        onClick={() => handleApproveDevice(approval.id)}
+                        className="px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors"
+                      >
+                        Approve
+                      </button>
+                      <button
+                        onClick={() => handleDenyDevice(approval.id)}
+                        className="px-3 py-1.5 text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors"
+                      >
+                        Deny
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-            {sessions.length === 0 && (
-              <p className="text-slate-500 text-sm italic">No other active sessions.</p>
+            </div>
+          )}
+
+          {/* Approved Devices Section */}
+          <div>
+            <h3 className="text-base font-medium text-white mb-3">
+              {pendingApprovals.length > 0 ? 'Approved Devices & AIs' : 'Approved Devices & AIs'}
+            </h3>
+            {deviceLoading ? (
+              <p className="text-slate-500 text-sm italic">Loading devices...</p>
+            ) : approvedDevices.length === 0 ? (
+              <p className="text-slate-500 text-sm italic">No approved devices yet. Devices will appear here after you approve them.</p>
+            ) : (
+              <div className="space-y-3">
+                {approvedDevices.map((device) => (
+                  <div
+                    key={device.id}
+                    className="flex items-center justify-between p-4 bg-slate-900 border border-slate-700 rounded-lg"
+                  >
+                    <div className="flex items-start gap-3 flex-1">
+                      <span className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-700 bg-slate-800 text-[11px] text-slate-300 font-semibold">
+                        {device.info?.userAgent?.includes('iPhone') || device.info?.userAgent?.includes('Android') ? 'MOB' : device.info?.type === 'ai' ? 'AI' : 'WEB'}
+                      </span>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-white">{device.name}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">IP: {device.ip}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Approved {new Date(device.approvedAt).toLocaleDateString()}
+                          {device.lastUsedAt && ` • Last used ${new Date(device.lastUsedAt).toLocaleDateString()}`}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleRevokeDevice(device.id)}
+                      className="text-xs text-red-400 hover:text-red-300 px-3 py-1.5 border border-red-800 hover:border-red-600 rounded-lg transition-colors flex-shrink-0"
+                    >
+                      Revoke
+                    </button>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>
