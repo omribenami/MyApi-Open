@@ -314,6 +314,7 @@ function SecuritySection() {
   const [approvedDevices, setApprovedDevices] = useState([]);
   const [pendingApprovals, setPendingApprovals] = useState([]);
   const [deviceLoading, setDeviceLoading] = useState(false);
+  const [deviceLoadError, setDeviceLoadError] = useState('');
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
   const [twoFactorLoading, setTwoFactorLoading] = useState(false);
   const [twoFactorCode, setTwoFactorCode] = useState('');
@@ -347,12 +348,14 @@ function SecuritySection() {
     return () => { active = false; };
   }, [masterToken]);
 
-  // Load device approval data
+  // Load device approval data with polling to auto-refresh when approvals change
   useEffect(() => {
     let active = true;
+    let pollInterval = null;
+
     const loadDeviceData = async () => {
-      setDeviceLoading(true);
       try {
+        setDeviceLoadError('');
         const authHeaders = masterToken ? { Authorization: `Bearer ${masterToken}` } : {};
         
         // Fetch approved devices
@@ -360,6 +363,11 @@ function SecuritySection() {
         if (approvedRes.ok) {
           const approvedData = await approvedRes.json();
           if (active) setApprovedDevices(approvedData.devices || []);
+        } else if (approvedRes.status === 403) {
+          // Device not approved error - will be handled separately
+          if (active) setApprovedDevices([]);
+        } else {
+          throw new Error(`Failed to load approved devices (${approvedRes.status})`);
         }
 
         // Fetch pending approvals
@@ -367,15 +375,38 @@ function SecuritySection() {
         if (pendingRes.ok) {
           const pendingData = await pendingRes.json();
           if (active) setPendingApprovals(pendingData.approvals || []);
+        } else if (pendingRes.status === 403) {
+          // Device not approved error - will be handled separately
+          if (active) setPendingApprovals([]);
+        } else {
+          throw new Error(`Failed to load pending approvals (${pendingRes.status})`);
         }
       } catch (err) {
         console.error('Error loading device data:', err);
+        if (active) {
+          setDeviceLoadError(err.message || 'Failed to load device data. Try refreshing.');
+        }
       } finally {
         if (active) setDeviceLoading(false);
       }
     };
+
+    // Initial load
+    setDeviceLoading(true);
     loadDeviceData();
-    return () => { active = false; };
+
+    // Set up polling interval (every 5 seconds) to detect when approvals change
+    // This ensures the UI auto-updates without requiring manual refresh
+    pollInterval = setInterval(() => {
+      if (active) {
+        loadDeviceData();
+      }
+    }, 5000);
+
+    return () => {
+      active = false;
+      if (pollInterval) clearInterval(pollInterval);
+    };
   }, [masterToken]);
 
   const handleChangePassword = async (e) => {
@@ -690,6 +721,10 @@ function SecuritySection() {
 
         {/* Device & AI Approvals */}
         <div className="border-t border-slate-700 pt-6">
+          {deviceLoadError && (
+            <ErrorBanner message={deviceLoadError} onClose={() => setDeviceLoadError('')} />
+          )}
+          
           {/* Pending Approvals Section */}
           {pendingApprovals.length > 0 && (
             <div className="mb-6">

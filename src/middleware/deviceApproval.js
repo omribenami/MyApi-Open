@@ -66,6 +66,11 @@ function deviceApprovalMiddleware(req, res, next) {
         approvedAt: approvedDevice.approved_at,
       };
       
+      // Set cache-control headers to prevent stale device status
+      res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.set('Pragma', 'no-cache');
+      res.set('Expires', '0');
+      
       return next();
     }
 
@@ -79,8 +84,9 @@ function deviceApprovalMiddleware(req, res, next) {
     if (!existingPending && !canCreateApproval) {
       // Rate limited
       return res.status(429).json({
-        error: 'Too many device approval requests',
-        message: 'Maximum 5 approval requests per hour allowed',
+        error: 'too_many_requests',
+        message: 'Too many device approval requests. Maximum 5 requests per hour allowed.',
+        code: 'DEVICE_APPROVAL_RATE_LIMITED',
         retryAfter: 3600,
       });
     }
@@ -138,13 +144,21 @@ function deviceApprovalMiddleware(req, res, next) {
       suspiciousActivity: suspiciousAnalysis,
     };
 
-    // Return 403 with pending approval info
+    // Prevent caching of device approval responses
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+
+    // Return 403 Forbidden with pending approval info
+    // Use explicit error codes so frontend can handle appropriately
     return res.status(403).json({
       error: 'device_not_approved',
+      code: 'DEVICE_APPROVAL_REQUIRED',
       message: 'This device requires approval to access MyApi',
       approval: {
         id: approvalId,
         status: 'pending',
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
         expiresIn: '24 hours',
       },
       device: currentFingerprint.summary,
@@ -153,7 +167,8 @@ function deviceApprovalMiddleware(req, res, next) {
     });
   } catch (error) {
     console.error('Device approval middleware error:', error);
-    // Don't block on middleware errors, just log and continue
+    // On error, allow request to continue (fail open for security reasons)
+    // but log the error for debugging
     return next();
   }
 }

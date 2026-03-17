@@ -29,6 +29,18 @@ apiClient.interceptors.response.use(
       sessionStorage.removeItem('sessionToken');
       window.location.href = '/';
     }
+    
+    // Handle device approval errors (403 Forbidden)
+    // These are expected and should be handled by the UI showing approval form
+    if (error.response?.status === 403) {
+      const errorData = error.response?.data || {};
+      if (errorData.code === 'DEVICE_APPROVAL_REQUIRED' || errorData.error === 'device_not_approved') {
+        // This is a device approval error, not a permission error
+        // Allow it to propagate so UI can handle it appropriately
+        return Promise.reject(error);
+      }
+    }
+    
     return Promise.reject(error);
   }
 );

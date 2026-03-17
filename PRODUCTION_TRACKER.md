@@ -9,10 +9,10 @@
 - [x] Commit changes
 
 ## Phase 2: Security & Device Approvals (Security + QA)
-- [ ] Audit existing device approval middleware & UI
-- [ ] Fix identified bugs (polling/websockets, state mismatch)
-- [ ] Implement secure cookie policies
-- [ ] Commit changes
+- [x] Audit existing device approval middleware & UI
+- [x] Fix identified bugs (polling/websockets, state mismatch)
+- [x] Implement secure cookie policies
+- [x] Commit changes
 
 ## Phase 3: Service Configurations (Integrations)
 - [ ] Create `service_preferences` DB table/schema

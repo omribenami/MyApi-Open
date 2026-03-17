@@ -41,11 +41,18 @@ router.post('/fingerprint', requireAuth, (req, res) => {
  * GET /api/v1/devices/approved
  * Get all approved devices for the authenticated user
  * Optional query: token_id (filter by token)
+ * Note: This endpoint should be called frequently (e.g., every 5 seconds) to detect
+ * when a pending approval has been approved on another device
  */
 router.get('/approved', requireAuth, (req, res) => {
   try {
     const { token_id } = req.query;
     const devices = db.getApprovedDevices(req.userId, token_id);
+    
+    // Prevent caching to ensure frontend always gets latest data
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
     
     const formattedDevices = devices.map(device => ({
       id: device.id,
@@ -179,11 +186,17 @@ router.post('/:device_id/revoke', requireAuth, (req, res) => {
  * GET /api/v1/devices/approvals/pending
  * Get pending device approvals for the user
  * Optional query: token_id (filter by token)
+ * Note: Called frequently by polling interval to detect new pending approvals
  */
 router.get('/approvals/pending', requireAuth, (req, res) => {
   try {
     const { token_id } = req.query;
     const pendingApprovals = db.getPendingApprovals(req.userId, token_id);
+    
+    // Prevent caching to ensure frontend always gets latest pending approvals
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
     
     const formatted = pendingApprovals.map(approval => ({
       id: approval.id,
