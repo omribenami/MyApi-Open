@@ -5,12 +5,13 @@ import AlertBanner from '../components/AlertBanner';
 import { useAuthStore } from '../stores/authStore';
 
 /**
- * Dashboard - Main dashboard with real-time alerts and key metrics
+ * Dashboard - Professional enterprise-grade dashboard with real-time alerts
  * Features:
- * - Real-time alert banner with WebSocket support
- * - 4 key metric cards (Security Status, API Health, Connected Services, Recent Activity)
+ * - Professional real-time alert system (WebSocket)
+ * - 4 key metric cards with clear data hierarchy
  * - Quick action buttons
  * - Responsive grid layout
+ * - Enterprise SaaS styling (AWS/Vercel/Stripe inspired)
  */
 function Dashboard() {
   const navigate = useNavigate();
@@ -80,7 +81,7 @@ function Dashboard() {
             const newAlert = {
               id: `alert-${Date.now()}`,
               severity: 'critical',
-              title: '⚠️ New Device Requesting Access',
+              title: 'New Device Requesting Access',
               message: `${data.deviceName} is requesting access from ${data.ip}`,
               details: `User Agent: ${data.userAgent}`,
               deviceId: data.deviceId,
@@ -96,7 +97,7 @@ function Dashboard() {
             const newAlert = {
               id: `alert-${Date.now()}`,
               severity: 'warning',
-              title: '🟡 Rate Limit Warning',
+              title: 'Rate Limit Warning',
               message: `You're approaching rate limits: ${data.message}`,
               timestamp: new Date(),
             };
@@ -108,7 +109,7 @@ function Dashboard() {
               const newAlert = {
                 id: `alert-${Date.now()}`,
                 severity: 'warning',
-                title: `🟡 ${data.serviceName} Error`,
+                title: `${data.serviceName} Service Error`,
                 message: data.message,
                 timestamp: new Date(),
               };
@@ -217,177 +218,206 @@ function Dashboard() {
       )}
 
       {/* Main Grid - 4 Key Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Card 1: Security Status */}
-        <div className="rounded-md border border-slate-800 bg-slate-900 p-6 hover:border-slate-700 transition-colors">
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider">
-                Security Status
-              </h3>
-              <div className="mt-3 flex items-baseline gap-2">
-                <span className="text-2xl font-semibold text-slate-100">
-                  {metrics.approvedDevices}
-                </span>
-                <span className="text-sm text-slate-400">approved</span>
+        <div className="rounded-lg border border-slate-700/50 bg-slate-900/50 backdrop-blur p-6 hover:border-slate-600/50 transition-all duration-200">
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-8 h-8 rounded bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
+                <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
               </div>
+              <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest">
+                Security
+              </h3>
             </div>
-            <span className="text-2xl">🔒</span>
+            <p className="text-2xl font-bold text-slate-100 tracking-tight">
+              {metrics.approvedDevices}
+            </p>
+            <p className="text-xs text-slate-400 mt-1">Approved Devices</p>
           </div>
-          <div className="space-y-2 text-xs text-slate-400">
-            <div className="flex justify-between">
-              <span>Pending Approvals:</span>
-              <span className={metrics.pendingApprovals > 0 ? 'text-yellow-400 font-semibold' : ''}>
+          <div className="pt-4 border-t border-slate-700/30 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-400">Pending Approvals</span>
+              <span className={`text-sm font-semibold ${metrics.pendingApprovals > 0 ? 'text-amber-400' : 'text-green-400'}`}>
                 {metrics.pendingApprovals}
               </span>
             </div>
-            <div className="flex justify-between">
-              <span>Last Activity:</span>
-              <span className="text-slate-300">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-400">Last Activity</span>
+              <span className="text-xs text-slate-300">
                 {metrics.lastActivityTime
                   ? new Date(metrics.lastActivityTime).toLocaleDateString()
-                  : 'Never'}
+                  : 'None'}
               </span>
             </div>
           </div>
           <Link
             to="/device-management"
-            className="mt-4 inline-block text-blue-400 hover:text-blue-300 text-xs font-medium"
+            className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors"
           >
-            Manage Devices →
+            View Details
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
           </Link>
         </div>
 
         {/* Card 2: API Health */}
-        <div className="rounded-md border border-slate-800 bg-slate-900 p-6 hover:border-slate-700 transition-colors">
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider">
+        <div className="rounded-lg border border-slate-700/50 bg-slate-900/50 backdrop-blur p-6 hover:border-slate-600/50 transition-all duration-200">
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-8 h-8 rounded bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+              <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest">
                 API Health
               </h3>
-              <div className="mt-3 flex items-baseline gap-2">
-                <span className="text-2xl font-semibold text-slate-100">
-                  {metrics.apiUptime.toFixed(1)}%
-                </span>
-                <span className="text-sm text-slate-400">uptime</span>
-              </div>
             </div>
-            <span className="text-2xl">⚡</span>
+            <p className="text-2xl font-bold text-slate-100 tracking-tight">
+              {metrics.apiUptime.toFixed(1)}%
+            </p>
+            <p className="text-xs text-slate-400 mt-1">Uptime</p>
           </div>
-          <div className="space-y-2 text-xs text-slate-400">
-            <div className="flex justify-between">
-              <span>Active Tokens:</span>
-              <span className="text-slate-300">{metrics.activeTokens}</span>
+          <div className="pt-4 border-t border-slate-700/30 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-400">Active Tokens</span>
+              <span className="text-sm font-semibold text-slate-200">{metrics.activeTokens}</span>
             </div>
-            <div className="flex justify-between">
-              <span>Status:</span>
-              <span className={metrics.lastError ? 'text-red-400 font-semibold' : 'text-green-400 font-semibold'}>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-400">Status</span>
+              <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold ${
+                metrics.lastError 
+                  ? 'bg-red-500/10 text-red-400 border border-red-500/20' 
+                  : 'bg-green-500/10 text-green-400 border border-green-500/20'
+              }`}>
+                <span className={`w-2 h-2 rounded-full ${metrics.lastError ? 'bg-red-400' : 'bg-green-400'}`}></span>
                 {metrics.lastError ? 'Error' : 'Operational'}
               </span>
             </div>
           </div>
-          {metrics.lastError && (
-            <p className="mt-2 text-xs text-red-400">
-              Last error: {metrics.lastError.substring(0, 50)}...
-            </p>
-          )}
           <Link
             to="/settings"
-            className="mt-4 inline-block text-blue-400 hover:text-blue-300 text-xs font-medium"
+            className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors"
           >
-            View Logs →
+            View Logs
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
           </Link>
         </div>
 
         {/* Card 3: Connected Services */}
-        <div className="rounded-md border border-slate-800 bg-slate-900 p-6 hover:border-slate-700 transition-colors">
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider">
-                Connected Services
-              </h3>
-              <div className="mt-3 flex items-baseline gap-2">
-                <span className="text-2xl font-semibold text-slate-100">
-                  {metrics.connectedServices}
-                </span>
-                <span className="text-sm text-slate-400">active</span>
+        <div className="rounded-lg border border-slate-700/50 bg-slate-900/50 backdrop-blur p-6 hover:border-slate-600/50 transition-all duration-200">
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-8 h-8 rounded bg-purple-500/10 border border-purple-500/20 flex items-center justify-center">
+                <svg className="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.658 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
               </div>
+              <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest">
+                Services
+              </h3>
             </div>
-            <span className="text-2xl">🔗</span>
+            <p className="text-2xl font-bold text-slate-100 tracking-tight">
+              {metrics.connectedServices}
+            </p>
+            <p className="text-xs text-slate-400 mt-1">Connected</p>
           </div>
-          <div className="space-y-2 text-xs text-slate-400">
-            <div className="flex justify-between">
-              <span>Total Services:</span>
-              <span className="text-slate-300">{metrics.totalServices || 0}</span>
+          <div className="pt-4 border-t border-slate-700/30 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-400">Total Services</span>
+              <span className="text-sm font-semibold text-slate-200">{metrics.totalServices || 0}</span>
             </div>
-            <div className="flex justify-between">
-              <span>Status:</span>
-              <span className="text-green-400 font-semibold">Connected</span>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-400">Status</span>
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-green-500/10 text-green-400 border border-green-500/20">
+                <span className="w-2 h-2 rounded-full bg-green-400"></span>
+                Connected
+              </span>
             </div>
           </div>
           <Link
             to="/services"
-            className="mt-4 inline-block text-blue-400 hover:text-blue-300 text-xs font-medium"
+            className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors"
           >
-            Manage Services →
+            Manage Services
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
           </Link>
         </div>
 
         {/* Card 4: Recent Activity */}
-        <div className="rounded-md border border-slate-800 bg-slate-900 p-6 hover:border-slate-700 transition-colors">
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider">
-                Recent Activity
-              </h3>
-              <div className="mt-3 flex items-baseline gap-2">
-                <span className="text-2xl font-semibold text-slate-100">
-                  {metrics.recentActivity?.length || 0}
-                </span>
-                <span className="text-sm text-slate-400">events</span>
+        <div className="rounded-lg border border-slate-700/50 bg-slate-900/50 backdrop-blur p-6 hover:border-slate-600/50 transition-all duration-200">
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-8 h-8 rounded bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+                <svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
               </div>
+              <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest">
+                Activity
+              </h3>
             </div>
-            <span className="text-2xl">📊</span>
+            <p className="text-2xl font-bold text-slate-100 tracking-tight">
+              {metrics.recentActivity?.length || 0}
+            </p>
+            <p className="text-xs text-slate-400 mt-1">Recent Events</p>
           </div>
-          <div className="space-y-2 text-xs">
-            {metrics.recentActivity && metrics.recentActivity.length > 0 ? (
-              metrics.recentActivity.slice(0, 3).map((activity, idx) => (
-                <div key={idx} className="text-slate-400 truncate">
-                  • {activity.description}
-                </div>
-              ))
-            ) : (
-              <p className="text-slate-400">No recent activity</p>
-            )}
+          <div className="pt-4 border-t border-slate-700/30">
+            <div className="space-y-2">
+              {metrics.recentActivity && metrics.recentActivity.length > 0 ? (
+                metrics.recentActivity.slice(0, 2).map((activity, idx) => (
+                  <p key={idx} className="text-xs text-slate-400 truncate">
+                    {activity.description}
+                  </p>
+                ))
+              ) : (
+                <p className="text-xs text-slate-500 italic">No recent activity</p>
+              )}
+            </div>
           </div>
           <Link
             to="/settings"
-            className="mt-4 inline-block text-blue-400 hover:text-blue-300 text-xs font-medium"
+            className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors"
           >
-            View All →
+            View All
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
           </Link>
         </div>
       </div>
 
       {/* Quick Actions Section */}
-      <div className="space-y-4">
-        <h2 className="text-lg font-semibold text-slate-100">Quick Actions</h2>
+      <div className="space-y-4 mt-8">
+        <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-widest">Quick Actions</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Approve Pending Devices */}
           <Link
             to="/device-management"
-            className="bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 rounded-md p-4 transition-all group"
+            className="group rounded-lg border border-slate-700/50 bg-slate-900/30 hover:bg-slate-800/50 hover:border-slate-600/50 p-4 transition-all duration-200"
           >
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">✅</span>
-              <div>
-                <h3 className="font-semibold text-slate-100 group-hover:text-slate-50">
-                  Approve Pending Devices
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center flex-shrink-0 group-hover:bg-blue-500/20 transition-colors">
+                <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-semibold text-slate-100 group-hover:text-slate-50 transition-colors">
+                  Approve Devices
                 </h3>
-                <p className="text-sm text-slate-400">
+                <p className="text-xs text-slate-400 mt-1">
                   {metrics.pendingApprovals > 0
-                    ? `${metrics.pendingApprovals} device(s) waiting`
-                    : 'No pending devices'}
+                    ? `${metrics.pendingApprovals} waiting for approval`
+                    : 'All devices approved'}
                 </p>
               </div>
             </div>
@@ -396,15 +426,19 @@ function Dashboard() {
           {/* Add Service */}
           <Link
             to="/services"
-            className="bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 rounded-md p-4 transition-all group"
+            className="group rounded-lg border border-slate-700/50 bg-slate-900/30 hover:bg-slate-800/50 hover:border-slate-600/50 p-4 transition-all duration-200"
           >
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">➕</span>
-              <div>
-                <h3 className="font-semibold text-slate-100 group-hover:text-slate-50">
-                  Connect a Service
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center flex-shrink-0 group-hover:bg-purple-500/20 transition-colors">
+                <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-semibold text-slate-100 group-hover:text-slate-50 transition-colors">
+                  Connect Service
                 </h3>
-                <p className="text-sm text-slate-400">
+                <p className="text-xs text-slate-400 mt-1">
                   Add OAuth or API integrations
                 </p>
               </div>
@@ -414,16 +448,20 @@ function Dashboard() {
           {/* View Logs */}
           <Link
             to="/settings"
-            className="bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 rounded-md p-4 transition-all group"
+            className="group rounded-lg border border-slate-700/50 bg-slate-900/30 hover:bg-slate-800/50 hover:border-slate-600/50 p-4 transition-all duration-200"
           >
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">📋</span>
-              <div>
-                <h3 className="font-semibold text-slate-100 group-hover:text-slate-50">
-                  View Activity Logs
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center flex-shrink-0 group-hover:bg-amber-500/20 transition-colors">
+                <svg className="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-semibold text-slate-100 group-hover:text-slate-50 transition-colors">
+                  View Logs
                 </h3>
-                <p className="text-sm text-slate-400">
-                  Audit and debug records
+                <p className="text-xs text-slate-400 mt-1">
+                  Audit and debug activity records
                 </p>
               </div>
             </div>
@@ -432,42 +470,51 @@ function Dashboard() {
       </div>
 
       {/* System Status Footer */}
-      <div className="mt-12 pt-8 border-t border-slate-800">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="mt-12 pt-8 border-t border-slate-800/50">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           <div>
-            <h3 className="text-sm font-semibold text-slate-300 mb-2">Documentation</h3>
-            <p className="text-xs text-slate-400 mb-3">
+            <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest mb-3">Documentation</h3>
+            <p className="text-xs text-slate-400 mb-4 leading-relaxed">
               Learn how to use MyApi to connect services and build custom AI personas.
             </p>
             <Link
               to="/platform-docs"
-              className="text-blue-400 hover:text-blue-300 text-xs font-medium"
+              className="text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors inline-flex items-center gap-1"
             >
-              Read Platform Docs →
+              Read Docs
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
             </Link>
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-slate-300 mb-2">API Reference</h3>
-            <p className="text-xs text-slate-400 mb-3">
+            <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest mb-3">API Reference</h3>
+            <p className="text-xs text-slate-400 mb-4 leading-relaxed">
               Integrate MyApi directly into your applications with our OpenAPI specs.
             </p>
             <Link
               to="/api-docs"
-              className="text-blue-400 hover:text-blue-300 text-xs font-medium"
+              className="text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors inline-flex items-center gap-1"
             >
-              View API Docs →
+              View API Docs
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
             </Link>
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-slate-300 mb-2">Support</h3>
-            <p className="text-xs text-slate-400 mb-3">
-              Need help? Check our documentation or contact support.
+            <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest mb-3">Support</h3>
+            <p className="text-xs text-slate-400 mb-4 leading-relaxed">
+              Need help? Check our documentation or contact our support team.
             </p>
             <Link
               to="/platform-docs"
-              className="text-blue-400 hover:text-blue-300 text-xs font-medium"
+              className="text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors inline-flex items-center gap-1"
             >
-              Get Help →
+              Get Support
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
             </Link>
           </div>
         </div>
