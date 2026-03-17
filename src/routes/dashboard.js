@@ -63,7 +63,7 @@ router.get('/metrics', requireAuth, (req, res) => {
     // Get connected services count
     const connectedServicesResult = db.db.prepare(`
       SELECT COUNT(*) as count FROM oauth_tokens 
-      WHERE user_id = ? AND status = 'active'
+      WHERE user_id = ? AND (expires_at IS NULL OR expires_at > datetime('now'))
     `).get(req.userId);
     const connectedServices = connectedServicesResult?.count || 0;
 
@@ -76,8 +76,8 @@ router.get('/metrics', requireAuth, (req, res) => {
 
     // Get active tokens count
     const activeTokensResult = db.db.prepare(`
-      SELECT COUNT(*) as count FROM api_tokens 
-      WHERE user_id = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > datetime('now'))
+      SELECT COUNT(*) as count FROM access_tokens 
+      WHERE owner_id = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > datetime('now'))
     `).get(req.userId);
     const activeTokens = activeTokensResult?.count || 0;
 
@@ -122,7 +122,7 @@ router.get('/metrics', requireAuth, (req, res) => {
           UNION ALL
           SELECT created_at FROM oauth_tokens WHERE user_id = ?
           UNION ALL
-          SELECT created_at FROM api_tokens WHERE user_id = ?
+          SELECT created_at FROM access_tokens WHERE owner_id = ?
         )
       `).get(req.userId, req.userId, req.userId);
       if (activityResult?.last_time) {

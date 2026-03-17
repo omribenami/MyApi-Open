@@ -148,20 +148,21 @@ function deviceApprovalMiddleware(req, res, next) {
     );
 
     // Log the approval request
-    db.createAuditLog(
-      userId,
-      'device_approval_requested',
-      'device',
-      tokenId,
-      req.ip,
-      JSON.stringify({
+    db.createAuditLog({
+      timestamp: new Date().toISOString(),
+      requesterId: userId,
+      action: 'device_approval_requested',
+      resource: 'device',
+      scope: tokenId,
+      ip: req.ip,
+      details: JSON.stringify({
         device_fingerprint: fingerprintHash,
         approval_id: approvalId,
         suspicious: suspiciousAnalysis.suspicious,
         risk_level: suspiciousAnalysis.riskLevel,
         warnings: suspiciousAnalysis.warnings,
       })
-    );
+    });
 
     // Trigger notification (will be handled by route handler if needed)
     req.pendingDeviceApproval = {
