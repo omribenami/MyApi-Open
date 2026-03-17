@@ -15,10 +15,10 @@
 - [x] Commit changes
 
 ## Phase 3: Service Configurations (Integrations)
-- [ ] Create `service_preferences` DB table/schema
-- [ ] Create Service Configuration UI (React)
-- [ ] Update API Proxy to inject defaults (FB page, Slack channel)
-- [ ] Commit changes
+- [x] Create `service_preferences` DB table/schema
+- [x] Create Service Configuration UI (React)
+- [x] Update API Proxy to inject defaults (FB page, Slack channel)
+- [x] Commit changes
 
 ## Phase 4: Final Polish & QA
 - [ ] Write integration tests for device approval

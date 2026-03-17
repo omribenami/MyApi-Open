@@ -109,6 +109,8 @@ const {
   getServiceByName,
   getServiceMethods,
   addServiceMethod,
+  // Service Preferences (Phase 3)
+  getServicePreference,
 } = require("./database");
 
 // OAuth service adapters
@@ -738,9 +740,11 @@ checkDbIntegrity();
 // - API agents: Bearer tokens
 const authRoutes = require('./auth');
 const deviceRoutes = require('./routes/devices');
+const createServicesRoutes = require('./routes/services');
 
 app.use('/api/v1', authRoutes);
 app.use('/api/v1/devices', deviceRoutes);
+app.use('/api/v1/services', authenticate, createServicesRoutes());
 
 function authenticate(req, res, next) {
   // 1) Session auth (human dashboard)
@@ -3866,6 +3870,73 @@ app.post('/api/v1/services/:serviceName/proxy', authenticate, async (req, res) =
     const http = require('http');
     const targetUrl = new URL(apiPath.startsWith('/') ? `${apiRoot}${apiPath}` : `${apiRoot}/${apiPath}`);
     
+    // Phase 3: Auto-inject service preferences (defaults)
+    let finalBody = reqBody ? JSON.parse(JSON.stringify(reqBody)) : {};  // Deep copy
+    try {
+      const servicePrefs = getServicePreference(userId, serviceName);
+      if (servicePrefs && servicePrefs.preferences) {
+        const prefs = servicePrefs.preferences;
+        
+        // Auto-inject defaults based on service type
+        if (serviceName === 'slack') {
+          // If no channel is specified, inject the default
+          if (!finalBody.channel && prefs.default_channel) {
+            finalBody.channel = prefs.default_channel;
+            console.log(`[ServicePrefs] Injected default Slack channel: ${prefs.default_channel}`);
+          }
+        } else if (serviceName === 'facebook') {
+          // If no page_id is specified, inject the default
+          if (!finalBody.page_id && prefs.default_page_id) {
+            finalBody.page_id = prefs.default_page_id;
+            console.log(`[ServicePrefs] Injected default Facebook page_id: ${prefs.default_page_id}`);
+          }
+        } else if (serviceName === 'instagram') {
+          // If no account_id is specified, inject the default
+          if (!finalBody.account_id && prefs.default_account_id) {
+            finalBody.account_id = prefs.default_account_id;
+            console.log(`[ServicePrefs] Injected default Instagram account_id: ${prefs.default_account_id}`);
+          }
+        } else if (serviceName === 'twitter') {
+          // If no account is specified, inject the default
+          if (!finalBody.account && prefs.default_account) {
+            finalBody.account = prefs.default_account;
+            console.log(`[ServicePrefs] Injected default Twitter account: ${prefs.default_account}`);
+          }
+        } else if (serviceName === 'discord') {
+          // If no server_id/channel_id is specified, inject the defaults
+          if (!finalBody.server_id && prefs.default_server_id) {
+            finalBody.server_id = prefs.default_server_id;
+            console.log(`[ServicePrefs] Injected default Discord server_id: ${prefs.default_server_id}`);
+          }
+          if (!finalBody.channel_id && prefs.default_channel_id) {
+            finalBody.channel_id = prefs.default_channel_id;
+            console.log(`[ServicePrefs] Injected default Discord channel_id: ${prefs.default_channel_id}`);
+          }
+        } else if (serviceName === 'linkedin') {
+          // If no profile_id is specified, inject the default
+          if (!finalBody.profile_id && prefs.default_profile_id) {
+            finalBody.profile_id = prefs.default_profile_id;
+            console.log(`[ServicePrefs] Injected default LinkedIn profile_id: ${prefs.default_profile_id}`);
+          }
+        } else if (serviceName === 'reddit') {
+          // If no subreddit is specified, inject the default
+          if (!finalBody.subreddit && prefs.default_subreddit) {
+            finalBody.subreddit = prefs.default_subreddit;
+            console.log(`[ServicePrefs] Injected default Reddit subreddit: ${prefs.default_subreddit}`);
+          }
+        } else if (serviceName === 'tiktok') {
+          // If no account is specified, inject the default
+          if (!finalBody.account && prefs.default_account) {
+            finalBody.account = prefs.default_account;
+            console.log(`[ServicePrefs] Injected default TikTok account: ${prefs.default_account}`);
+          }
+        }
+      }
+    } catch (err) {
+      console.error(`[ServicePrefs] Error injecting preferences for ${serviceName}:`, err.message);
+      // Continue anyway - preferences are optional
+    }
+    
     // Add query params
     if (queryParams && typeof queryParams === 'object') {
       Object.entries(queryParams).forEach(([k, v]) => targetUrl.searchParams.set(k, v));
@@ -3884,8 +3955,8 @@ app.post('/api/v1/services/:serviceName/proxy', authenticate, async (req, res) =
     }
 
     let bodyStr = null;
-    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && reqBody) {
-      bodyStr = JSON.stringify(reqBody);
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && finalBody && Object.keys(finalBody).length > 0) {
+      bodyStr = JSON.stringify(finalBody);
       headers['Content-Type'] = 'application/json';
       headers['Content-Length'] = Buffer.byteLength(bodyStr);
     }

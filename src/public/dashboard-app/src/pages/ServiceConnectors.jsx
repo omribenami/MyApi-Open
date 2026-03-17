@@ -3,6 +3,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useServicesStore } from '../stores/servicesStore';
 import ServiceCard from '../components/ServiceCard';
 import ServiceDetailModal from '../components/ServiceDetailModal';
+import ServiceConfigModal from '../components/ServiceConfigModal';
 import { startOAuthFlow } from '../utils/oauth';
 import { oauth } from '../utils/apiClient';
 import { normalizeService, getStatusMeta } from '../utils/serviceCatalog';
@@ -30,6 +31,8 @@ function ServiceConnectors() {
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [categories, setCategories] = useState([]);
   const [selectedServiceDetail, setSelectedServiceDetail] = useState(null);
+  const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
+  const [serviceToConfig, setServiceToConfig] = useState(null);
 
   useEffect(() => {
     fetchCategories();
@@ -140,6 +143,17 @@ function ServiceConnectors() {
     } finally {
       setIsRevoking(false);
     }
+  };
+
+  const handleConfigure = (service) => {
+    setServiceToConfig(service);
+    setIsConfigModalOpen(true);
+  };
+
+  const handleConfigSave = (preferences) => {
+    console.log(`[Config] Saved preferences for ${serviceToConfig.name}:`, preferences);
+    // Refresh services if needed
+    fetchServices();
   };
 
   const filteredServices = useMemo(() => {
@@ -290,6 +304,7 @@ function ServiceConnectors() {
                 onConnect={handleConnect}
                 onRevoke={() => openRevokeModal(service.name)}
                 onDetails={openServiceDetails}
+                onConfigure={handleConfigure}
               />
             ))}
           </div>
@@ -372,6 +387,16 @@ function ServiceConnectors() {
           </div>
         </div>
       )}
+
+      <ServiceConfigModal
+        isOpen={isConfigModalOpen}
+        service={serviceToConfig}
+        onClose={() => {
+          setIsConfigModalOpen(false);
+          setServiceToConfig(null);
+        }}
+        onSave={handleConfigSave}
+      />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { getAuthTypeStyle, getStatusMeta } from '../utils/serviceCatalog';
 
-function ServiceCard({ service, onConnect, onRevoke, onDetails, compact = false }) {
+function ServiceCard({ service, onConnect, onRevoke, onDetails, onConfigure, compact = false }) {
   const statusMeta = getStatusMeta(service.status, service.notConfigured);
 
   const logoFallback = (service.label || service.name || '?').slice(0, 1).toUpperCase();
@@ -69,6 +69,16 @@ function ServiceCard({ service, onConnect, onRevoke, onDetails, compact = false 
       <div className="border-t border-slate-700/50 bg-gradient-to-r from-slate-900/40 to-transparent px-6 py-4 flex gap-2">
         {service.status === 'connected' ? (
           <>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onConfigure && onConfigure(service);
+              }}
+              className="flex-1 px-4 py-2.5 rounded-lg text-sm font-semibold text-purple-300 bg-gradient-to-r from-purple-600/30 to-purple-600/10 border border-purple-500/50 hover:from-purple-600/50 hover:to-purple-600/30 hover:border-purple-500/70 transition-all duration-200 hover:shadow-lg hover:shadow-purple-600/10"
+            >
+              ⚙️ Configure
+            </button>
             <button
               type="button"
               onClick={(e) => {

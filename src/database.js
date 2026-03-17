@@ -391,6 +391,21 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_pending_approvals_user ON device_approvals_pending(user_id);
     CREATE INDEX IF NOT EXISTS idx_pending_approvals_status ON device_approvals_pending(status);
     CREATE INDEX IF NOT EXISTS idx_pending_approvals_expires ON device_approvals_pending(expires_at);
+
+    -- Service Preferences Table (Phase 3)
+    CREATE TABLE IF NOT EXISTS service_preferences (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      service_name TEXT NOT NULL,
+      preferences_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      UNIQUE(user_id, service_name)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_service_preferences_user ON service_preferences(user_id);
+    CREATE INDEX IF NOT EXISTS idx_service_preferences_service ON service_preferences(service_name);
   `);
 
   // Add device_id column to access_logs if not already present
@@ -2804,6 +2819,100 @@ function getDeviceApprovalHistory(userId, tokenId = null, limit = 100) {
   return db.prepare(query).all(...params);
 }
 
+// --- SERVICE PREFERENCES (Phase 3) ---
+
+function createServicePreference(userId, serviceName, preferences) {
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const preferencesJson = typeof preferences === 'string' ? preferences : JSON.stringify(preferences);
+  
+  try {
+    db.prepare(`
+      INSERT INTO service_preferences (id, user_id, service_name, preferences_json, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(id, userId, serviceName, preferencesJson, now, now);
+    
+    return {
+      id,
+      user_id: userId,
+      service_name: serviceName,
+      preferences: JSON.parse(preferencesJson),
+      created_at: now,
+      updated_at: now
+    };
+  } catch (err) {
+    // If record already exists, update it instead
+    if (err.message.includes('UNIQUE constraint failed')) {
+      return updateServicePreference(userId, serviceName, preferences);
+    }
+    throw err;
+  }
+}
+
+function getServicePreference(userId, serviceName) {
+  const row = db.prepare(`
+    SELECT * FROM service_preferences
+    WHERE user_id = ? AND service_name = ?
+  `).get(userId, serviceName);
+  
+  if (!row) return null;
+  
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    service_name: row.service_name,
+    preferences: JSON.parse(row.preferences_json),
+    created_at: row.created_at,
+    updated_at: row.updated_at
+  };
+}
+
+function getServicePreferences(userId) {
+  const rows = db.prepare(`
+    SELECT * FROM service_preferences
+    WHERE user_id = ?
+    ORDER BY service_name ASC
+  `).all(userId);
+  
+  return rows.map(row => ({
+    id: row.id,
+    user_id: row.user_id,
+    service_name: row.service_name,
+    preferences: JSON.parse(row.preferences_json),
+    created_at: row.created_at,
+    updated_at: row.updated_at
+  }));
+}
+
+function updateServicePreference(userId, serviceName, preferences) {
+  const now = new Date().toISOString();
+  const preferencesJson = typeof preferences === 'string' ? preferences : JSON.stringify(preferences);
+  
+  const stmt = db.prepare(`
+    UPDATE service_preferences
+    SET preferences_json = ?, updated_at = ?
+    WHERE user_id = ? AND service_name = ?
+  `);
+  
+  const result = stmt.run(preferencesJson, now, userId, serviceName);
+  
+  if (result.changes === 0) {
+    // Record doesn't exist, create it
+    return createServicePreference(userId, serviceName, preferences);
+  }
+  
+  return getServicePreference(userId, serviceName);
+}
+
+function deleteServicePreference(userId, serviceName) {
+  const stmt = db.prepare(`
+    DELETE FROM service_preferences
+    WHERE user_id = ? AND service_name = ?
+  `);
+  
+  return stmt.run(userId, serviceName).changes > 0;
+}
+
 module.exports = {
   db,
   initDatabase,
@@ -2930,4 +3039,10 @@ module.exports = {
   denyPendingApproval,
   cleanupExpiredApprovals,
   getDeviceApprovalHistory,
+  // Service Preferences (Phase 3)
+  createServicePreference,
+  getServicePreference,
+  getServicePreferences,
+  updateServicePreference,
+  deleteServicePreference,
 };
