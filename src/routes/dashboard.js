@@ -46,6 +46,7 @@ function requireAuth(req, res, next) {
  */
 router.get('/metrics', requireAuth, (req, res) => {
   try {
+    console.log('[Dashboard Metrics] userId:', req.userId);
     // Get approved devices count
     const approvedDevicesResult = db.db.prepare(`
       SELECT COUNT(*) as count FROM approved_devices 

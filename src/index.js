@@ -752,7 +752,7 @@ const dashboardRoutes = require('./routes/dashboard');
 const createServicesRoutes = require('./routes/services');
 
 app.use('/api/v1', authRoutes);
-app.use('/api/v1/devices', deviceRoutes);
+app.use('/api/v1/devices', authenticate, deviceRoutes);
 app.use('/api/v1/dashboard', authenticate, deviceApprovalMiddleware, dashboardRoutes);
 app.use('/api/v1/services', authenticate, deviceApprovalMiddleware, createServicesRoutes());
 

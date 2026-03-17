@@ -130,14 +130,14 @@ router.post('/:device_id/rename', requireAuth, (req, res) => {
     
     db.renameDevice(req.params.device_id, name.trim());
     
-    db.createAuditLog(
-      req.userId,
-      'device_renamed',
-      'device',
-      req.params.device_id,
-      req.ip,
-      JSON.stringify({ old_name: device.device_name, new_name: name })
-    );
+    db.createAuditLog({
+      requesterId: req.userId,
+      action: 'device_renamed',
+      resource: 'device',
+      scope: req.params.device_id,
+      ip: req.ip,
+      details: { old_name: device.device_name, new_name: name }
+    });
     
     res.json({ success: true, message: 'Device renamed successfully' });
   } catch (error) {
@@ -163,14 +163,14 @@ router.post('/:device_id/revoke', requireAuth, (req, res) => {
     
     db.revokeDevice(req.params.device_id);
     
-    db.createAuditLog(
-      req.userId,
-      'device_revoked',
-      'device',
-      req.params.device_id,
-      req.ip,
-      JSON.stringify({ device_name: device.device_name })
-    );
+    db.createAuditLog({
+      requesterId: req.userId,
+      action: 'device_revoked',
+      resource: 'device',
+      scope: req.params.device_id,
+      ip: req.ip,
+      details: { device_name: device.device_name }
+    });
     
     res.json({ 
       success: true, 
@@ -251,14 +251,14 @@ router.post('/approve/:approval_id', requireAuth, (req, res) => {
       device_name || `Approved Device (${approval.device_info_json ? JSON.parse(approval.device_info_json).browser : 'Unknown'})`
     );
     
-    db.createAuditLog(
-      req.userId,
-      'device_approved',
-      'device',
-      deviceId,
-      req.ip,
-      JSON.stringify({ approval_id: req.params.approval_id })
-    );
+    db.createAuditLog({
+      requesterId: req.userId,
+      action: 'device_approved',
+      resource: 'device',
+      scope: deviceId,
+      ip: req.ip,
+      details: { approval_id: req.params.approval_id }
+    });
     
     res.json({
       success: true,
@@ -298,14 +298,14 @@ router.post('/deny/:approval_id', requireAuth, (req, res) => {
       reason || 'Device approval denied by user'
     );
     
-    db.createAuditLog(
-      req.userId,
-      'device_denied',
-      'device',
-      req.params.approval_id,
-      req.ip,
-      JSON.stringify({ reason: reason || 'No reason provided' })
-    );
+    db.createAuditLog({
+      requesterId: req.userId,
+      action: 'device_denied',
+      resource: 'device',
+      scope: req.params.approval_id,
+      ip: req.ip,
+      details: { reason: reason || 'No reason provided' }
+    });
     
     res.json({
       success: true,
