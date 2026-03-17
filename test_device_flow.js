@@ -96,6 +96,7 @@ async function testStep1_UnapprovedDeviceAccess(adminToken) {
   console.log('\n=== Step 1: Unapproved Device Tries to Access Protected Route ===');
   
   // Use a known test token that's already in the database
+  // The device fingerprint will be unique due to different User-Agent and IP
   const unapprovedToken = `test_token_123456789abcdef123456`;
   const uniqueUserAgent = `TestBrowser/${Date.now()}/Device1`;
   const uniqueIP = `192.168.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}`;
