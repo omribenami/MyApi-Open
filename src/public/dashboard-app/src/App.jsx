@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from './stores/authStore';
 import Login from './pages/Login';
+import Dashboard from './pages/Dashboard';
 import DashboardHome from './pages/DashboardHome';
 import ServiceConnectors from './pages/ServiceConnectors';
 import TokenVault from './pages/TokenVault';
@@ -75,7 +76,7 @@ function App() {
       <Router basename="/dashboard">
         <Layout onLogout={handleLogout}>
           <Routes>
-            <Route path="/" element={<DashboardHome />} />
+            <Route path="/" element={<Dashboard />} />
             <Route
               path="/services"
               element={
@@ -175,6 +176,14 @@ function App() {
             />
             <Route
               path="/devices"
+              element={
+                <ProtectedRoute>
+                  <DeviceManagement />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/device-management"
               element={
                 <ProtectedRoute>
                   <DeviceManagement />

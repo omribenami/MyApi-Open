@@ -6,6 +6,13 @@ const db = require('../database');
  * Checks if the requesting device is approved before allowing API access
  */
 
+// Global alert emitter (will be set by index.js)
+let globalAlertEmitter = null;
+
+function setAlertEmitter(emitter) {
+  globalAlertEmitter = emitter;
+}
+
 // Rate limit tracking (in-memory, should use Redis for production)
 const approvalRateLimits = new Map(); // token_id -> { count, resetTime }
 
@@ -97,7 +104,9 @@ function deviceApprovalMiddleware(req, res, next) {
 
     // Create pending approval if not already exists
     let approvalId = null;
+    let isNewApproval = false;
     if (!existingPending) {
+      isNewApproval = true;
       approvalId = db.createPendingApproval(
         tokenId,
         userId,
@@ -105,6 +114,18 @@ function deviceApprovalMiddleware(req, res, next) {
         currentFingerprint.summary,
         currentFingerprint.fingerprint.ipAddress
       );
+      
+      // Emit alert event for new device approval request
+      if (globalAlertEmitter) {
+        globalAlertEmitter.emit('device:pending_approval', {
+          userId,
+          deviceId: approvalId,
+          deviceName: currentFingerprint.summary.os || 'Unknown Device',
+          ip: currentFingerprint.fingerprint.ipAddress,
+          userAgent: currentFingerprint.summary.browser || 'Unknown',
+          timestamp: new Date().toISOString(),
+        });
+      }
     } else {
       approvalId = existingPending.id;
     }
@@ -216,4 +237,5 @@ module.exports = {
   deviceApprovalMiddleware,
   deviceTrackingMiddleware,
   skipDeviceApproval,
+  setAlertEmitter,
 };

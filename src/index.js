@@ -11,6 +11,11 @@ const pdfParse = require('pdf-parse');
 const speakeasy = require('speakeasy');
 const QRCode = require('qrcode');
 const { marked } = require('marked');
+const http = require('http');
+const EventEmitter = require('events');
+
+// Global event emitter for device alerts and real-time notifications
+const alertEmitter = new EventEmitter();
 
 const {
   db,
@@ -134,6 +139,9 @@ const WORKSPACE_ROOT = path.join(__dirname, '..', '..', '..');
 const USER_MD_PATH = path.join(WORKSPACE_ROOT, 'USER.md');
 const SOUL_MD_PATH = path.join(WORKSPACE_ROOT, 'SOUL.md');
 const LEGAL_DOCS_DIR = path.join(__dirname, '..', 'docs', 'legal');
+
+// Import device approval middleware
+const { setAlertEmitter: setDeviceAlertEmitter } = require('./middleware/deviceApproval');
 
 function escapeHtml(value = '') {
   return String(value)
@@ -740,10 +748,12 @@ checkDbIntegrity();
 // - API agents: Bearer tokens
 const authRoutes = require('./auth');
 const deviceRoutes = require('./routes/devices');
+const dashboardRoutes = require('./routes/dashboard');
 const createServicesRoutes = require('./routes/services');
 
 app.use('/api/v1', authRoutes);
 app.use('/api/v1/devices', deviceRoutes);
+app.use('/api/v1/dashboard', authenticate, dashboardRoutes);
 app.use('/api/v1/services', authenticate, createServicesRoutes());
 
 function authenticate(req, res, next) {
@@ -5269,8 +5279,115 @@ app.use((err, req, res, next) => {
   next();
 });
 
+// --- Alert Emitter Setup ---
+// Initialize the device approval middleware with the alert emitter
+setDeviceAlertEmitter(alertEmitter);
+
+// --- WebSocket Setup ---
+let WebSocketServer;
+try {
+  WebSocketServer = require('ws').Server;
+} catch (err) {
+  console.log('ws package not installed, WebSocket support disabled');
+  WebSocketServer = null;
+}
+
+// Map to store WebSocket connections per user
+const wsConnections = new Map();
+
+// Create HTTP server
+const server = http.createServer(app);
+
+// Setup WebSocket server if available
+if (WebSocketServer) {
+  const wss = new WebSocketServer({ server });
+
+  wss.on('connection', (ws, req) => {
+    console.log('New WebSocket connection');
+    
+    let userId = null;
+    let isAuthenticated = false;
+
+    // Handle WebSocket messages
+    ws.on('message', (message) => {
+      try {
+        const data = JSON.parse(message);
+        
+        // Authentication message
+        if (data.type === 'auth' && data.token) {
+          // Validate token and extract userId
+          // For now, we'll accept any token message
+          // In production, validate the JWT/bearer token
+          isAuthenticated = true;
+          userId = data.userId || 'unknown';
+          
+          if (!wsConnections.has(userId)) {
+            wsConnections.set(userId, []);
+          }
+          wsConnections.get(userId).push(ws);
+          
+          ws.send(JSON.stringify({
+            type: 'authenticated',
+            message: 'WebSocket connection authenticated',
+          }));
+          console.log(`User ${userId} authenticated via WebSocket`);
+        }
+      } catch (err) {
+        console.error('Error processing WebSocket message:', err);
+      }
+    });
+
+    // Handle WebSocket close
+    ws.on('close', () => {
+      if (userId && wsConnections.has(userId)) {
+        const connections = wsConnections.get(userId);
+        const index = connections.indexOf(ws);
+        if (index > -1) {
+          connections.splice(index, 1);
+        }
+        if (connections.length === 0) {
+          wsConnections.delete(userId);
+        }
+      }
+      console.log('WebSocket connection closed');
+    });
+
+    // Handle WebSocket errors
+    ws.on('error', (err) => {
+      console.error('WebSocket error:', err);
+    });
+  });
+
+  // Listen for device alert events and broadcast to connected users
+  alertEmitter.on('device:pending_approval', (data) => {
+    const userId = data.userId;
+    if (wsConnections.has(userId)) {
+      const connections = wsConnections.get(userId);
+      const message = JSON.stringify({
+        type: 'device:pending_approval',
+        deviceId: data.deviceId,
+        deviceName: data.deviceName,
+        ip: data.ip,
+        userAgent: data.userAgent,
+        timestamp: new Date().toISOString(),
+      });
+      
+      connections.forEach((connection) => {
+        if (connection.readyState === 1) { // WebSocket.OPEN
+          connection.send(message);
+        }
+      });
+    }
+  });
+
+  console.log('WebSocket server enabled');
+}
+
 // --- Start ---
 bootstrap();
-app.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`Server ready on http://0.0.0.0:${PORT}`);
+  if (WebSocketServer) {
+    console.log(`WebSocket ready on ws://0.0.0.0:${PORT}`);
+  }
 });
