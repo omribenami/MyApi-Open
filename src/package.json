@@ -6,6 +6,11 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
+    "start:pm2": "pm2 start ecosystem.config.js --env production",
+    "start:pm2:dev": "pm2 start ecosystem.config.js --env development",
+    "stop:pm2": "pm2 stop myapi-platform",
+    "restart:pm2": "pm2 restart myapi-platform",
+    "logs:pm2": "pm2 logs myapi-platform",
     "build:frontend": "cd public/dashboard-app && npm run build",
     "init": "node scripts/init-db.js",
     "test": "sh -c 'NODE_ENV=test PORT=4789 node index.js >/tmp/myapi-qa-server.log 2>&1 & PID=$!; sleep 2; BASE_URL=http://127.0.0.1:4789 node ../../../tests/run-all-tests.js; CODE=$?; if [ $CODE -eq 0 ]; then BASE_URL=http://127.0.0.1:4789 node scripts/test-phase12a-discovery-kb.js; CODE=$?; fi; node scripts/cleanup-test-users.js || true; kill $PID >/dev/null 2>&1 || true; wait $PID 2>/dev/null || true; exit $CODE'",
@@ -48,6 +53,7 @@
     "uuid": "^9.0.1"
   },
   "devDependencies": {
-    "nodemon": "^3.0.2"
+    "nodemon": "^3.0.2",
+    "pm2": "^5.3.0"
   }
 }

@@ -2,26 +2,104 @@ version: '3.8'
 
 services:
   myapi:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: myapi-platform
+    
+    # Port mapping
     ports:
-      - "3001:3001"
+      - "${PORT:-4500}:${PORT:-4500}"
+    
+    # Environment variables
     environment:
-      - PORT=3001
-      - NODE_ENV=production
-      - JWT_SECRET=${JWT_SECRET:-myapi-production-secret-change-this}
-      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-MyApi-Secure-32Char-EncryptKey!!}
+      - NODE_ENV=${NODE_ENV:-production}
+      - PORT=${PORT:-4500}
+      - JWT_SECRET=${JWT_SECRET:-change-this-in-production}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-32characterencryptionkeyhere!!}
       - DB_PATH=/app/data/myapi.db
-      - USER_MD_PATH=/app/data/USER.md
-      - ALLOWED_ORIGINS=http://localhost:3001,http://192.168.1.253:3001
-      - RATE_LIMIT_WINDOW_MS=900000
-      - RATE_LIMIT_MAX_REQUESTS=100
+      - USER_MD_PATH=${USER_MD_PATH:-/app/data/USER.md}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:4500,http://localhost:3001}
+      - BASE_URL=${BASE_URL:-http://localhost:4500}
+      - PUBLIC_URL=${PUBLIC_URL:-http://localhost:4500}
+      - RATE_LIMIT_WINDOW_MS=${RATE_LIMIT_WINDOW_MS:-900000}
+      - RATE_LIMIT_MAX_REQUESTS=${RATE_LIMIT_MAX_REQUESTS:-100}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI}
+      - GITHUB_APP_ID=${GITHUB_APP_ID}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
+      - GITHUB_REDIRECT_URI=${GITHUB_REDIRECT_URI}
+      - TIKTOK_CLIENT_KEY=${TIKTOK_CLIENT_KEY}
+      - TIKTOK_CLIENT_SECRET=${TIKTOK_CLIENT_SECRET}
+      - TIKTOK_APP_ID=${TIKTOK_APP_ID}
+      - TIKTOK_REDIRECT_URI=${TIKTOK_REDIRECT_URI}
+      - SLACK_CLIENT_ID=${SLACK_CLIENT_ID}
+      - SLACK_CLIENT_SECRET=${SLACK_CLIENT_SECRET}
+      - SLACK_REDIRECT_URI=${SLACK_REDIRECT_URI}
+      - LINKEDIN_CLIENT_ID=${LINKEDIN_CLIENT_ID}
+      - LINKEDIN_CLIENT_SECRET=${LINKEDIN_CLIENT_SECRET}
+      - LINKEDIN_REDIRECT_URI=${LINKEDIN_REDIRECT_URI}
+      - FACEBOOK_CLIENT_ID=${FACEBOOK_CLIENT_ID}
+      - FACEBOOK_CLIENT_SECRET=${FACEBOOK_CLIENT_SECRET}
+      - FACEBOOK_REDIRECT_URI=${FACEBOOK_REDIRECT_URI}
+      - TWITTER_CLIENT_ID=${TWITTER_CLIENT_ID}
+      - TWITTER_CLIENT_SECRET=${TWITTER_CLIENT_SECRET}
+      - TWITTER_REDIRECT_URI=${TWITTER_REDIRECT_URI}
+      - DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID}
+      - DISCORD_CLIENT_SECRET=${DISCORD_CLIENT_SECRET}
+      - DISCORD_REDIRECT_URI=${DISCORD_REDIRECT_URI}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    
+    # Persistent volumes for SQLite and logs
     volumes:
-      - ./data:/app/data
-      - ./logs:/app/logs
+      # SQLite database - persistent storage
+      - myapi-data:/app/data
+      # Application logs
+      - myapi-logs:/app/logs
+      # Optional: Mount local data directory for development/debugging
+      # - ./data:/app/data
+    
+    # Restart policy
     restart: unless-stopped
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:${PORT:-4500}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    
+    # Network
     networks:
       - myapi-network
+    
+    # Resource limits (optional, adjust as needed)
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '1'
+    #       memory: 1G
+    #     reservations:
+    #       cpus: '0.5'
+    #       memory: 512M
+
+# Named volumes for persistent data
+volumes:
+  myapi-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data
+  myapi-logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./logs
 
 networks:
   myapi-network:
