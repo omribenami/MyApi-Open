@@ -48,8 +48,15 @@ function deviceApprovalMiddleware(req, res, next) {
   const userId = req.user?.id || req.tokenMeta?.ownerId;
   const tokenId = req.tokenMeta?.tokenId;
   
+  console.log('[Device Approval Middleware]', {
+    userId,
+    tokenId,
+    path: req.path,
+  });
+  
   // Skip device check if not authenticated
   if (!userId || !tokenId) {
+    console.log('[Device Approval] Skipping - not authenticated');
     return next();
   }
 
@@ -187,7 +194,10 @@ function deviceApprovalMiddleware(req, res, next) {
       suspiciousActivity: suspiciousAnalysis.warnings.length > 0 ? suspiciousAnalysis : null,
     });
   } catch (error) {
-    console.error('Device approval middleware error:', error);
+    console.error('[Device Approval Middleware ERROR]', {
+      message: error.message,
+      stack: error.stack,
+    });
     // On error, allow request to continue (fail open for security reasons)
     // but log the error for debugging
     return next();

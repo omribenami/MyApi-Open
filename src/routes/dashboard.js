@@ -55,7 +55,7 @@ router.get('/metrics', requireAuth, (req, res) => {
 
     // Get pending approvals count
     const pendingApprovalsResult = db.db.prepare(`
-      SELECT COUNT(*) as count FROM device_approval_requests 
+      SELECT COUNT(*) as count FROM device_approvals_pending 
       WHERE user_id = ? AND status = 'pending'
     `).get(req.userId);
     const pendingApprovals = pendingApprovalsResult?.count || 0;
@@ -118,7 +118,7 @@ router.get('/metrics', requireAuth, (req, res) => {
     try {
       const activityResult = db.db.prepare(`
         SELECT MAX(created_at) as last_time FROM (
-          SELECT created_at FROM device_approval_requests WHERE user_id = ?
+          SELECT created_at FROM device_approvals_pending WHERE user_id = ?
           UNION ALL
           SELECT created_at FROM oauth_tokens WHERE user_id = ?
           UNION ALL
@@ -137,9 +137,10 @@ router.get('/metrics', requireAuth, (req, res) => {
     try {
       // Device approvals
       const deviceApprovals = db.db.prepare(`
-        SELECT id, device_name, created_at FROM device_approval_requests 
-        WHERE user_id = ? AND status = 'approved'
-        ORDER BY created_at DESC 
+        SELECT ad.id, ad.device_name, ad.created_at 
+        FROM approved_devices ad
+        WHERE ad.user_id = ?
+        ORDER BY ad.approved_at DESC 
         LIMIT 3
       `).all(req.userId);
 
@@ -147,7 +148,7 @@ router.get('/metrics', requireAuth, (req, res) => {
         recentActivity.push({
           id: `device-${approval.id}`,
           type: 'device_approval',
-          description: `Device '${approval.device_name}' was approved`,
+          description: `Device '${approval.device_name || 'Device'}' was approved`,
           timestamp: approval.created_at,
         });
       });

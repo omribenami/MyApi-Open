@@ -141,7 +141,7 @@ const SOUL_MD_PATH = path.join(WORKSPACE_ROOT, 'SOUL.md');
 const LEGAL_DOCS_DIR = path.join(__dirname, '..', 'docs', 'legal');
 
 // Import device approval middleware
-const { setAlertEmitter: setDeviceAlertEmitter } = require('./middleware/deviceApproval');
+const { deviceApprovalMiddleware, setAlertEmitter: setDeviceAlertEmitter } = require('./middleware/deviceApproval');
 
 function escapeHtml(value = '') {
   return String(value)
@@ -753,8 +753,8 @@ const createServicesRoutes = require('./routes/services');
 
 app.use('/api/v1', authRoutes);
 app.use('/api/v1/devices', deviceRoutes);
-app.use('/api/v1/dashboard', authenticate, dashboardRoutes);
-app.use('/api/v1/services', authenticate, createServicesRoutes());
+app.use('/api/v1/dashboard', authenticate, deviceApprovalMiddleware, dashboardRoutes);
+app.use('/api/v1/services', authenticate, deviceApprovalMiddleware, createServicesRoutes());
 
 function authenticate(req, res, next) {
   // 1) Session auth (human dashboard)
