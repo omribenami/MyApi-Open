@@ -3502,8 +3502,35 @@ app.get([
     });
 
     const next = encodeURIComponent(safeReturnTo);
+    const masterToken = req.session.masterTokenRaw || 'myapi_' + crypto.randomBytes(32).toString("hex");
+    
+    // Set master token as a persistent cookie so the dashboard can use it
+    res.cookie('myapi_master_token', masterToken, {
+      httpOnly: false, // Allow JS to read it
+      path: '/',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      sameSite: 'lax'
+    });
+    
+    // Also set user info for quick access
+    res.cookie('myapi_user', JSON.stringify({
+      id: appUser.id,
+      email: appUser.email,
+      username: appUser.username,
+      display_name: appUser.displayName || appUser.username
+    }), {
+      httpOnly: false,
+      path: '/',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      sameSite: 'lax'
+    });
+    
     const redirectUrl = `/dashboard/?oauth_service=${service}&oauth_status=connected&mode=${encodeURIComponent(stateMeta.mode || 'connect')}&next=${next}`;
-    return req.session.save(() => {
+    
+    req.session.save((err) => {
+      if (err) {
+        console.error('[OAuth] Session save error:', err);
+      }
       res.redirect(redirectUrl);
     });
   } catch (error) {
