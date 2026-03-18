@@ -39,16 +39,16 @@ async function testOAuthURLGeneration() {
 
 // TEST 2: Service availability endpoint works
 async function testServiceAvailability() {
-  const res = await axios.get(`${BASE_URL}/services/available`, {
+  const res = await axios.get(`${BASE_URL}/services`, {
     headers: { Authorization: `Bearer ${VALID_TOKEN}` }
   }).catch(err => {
     if (err.response?.status === 403) {
-      return { data: { services: [] } }; // Device not approved
+      return { data: { data: [] } }; // Device not approved
     }
     throw err;
   });
 
-  if (!Array.isArray(res.data.services)) {
+  if (!Array.isArray(res.data.data) && !Array.isArray(res.data.services)) {
     results.warnings.push('Services response is not an array');
   }
 }
@@ -58,7 +58,7 @@ async function testServicePreferencePersistence() {
   // Try to set and retrieve
   try {
     await axios.post(`${BASE_URL}/services/preferences/slack`, 
-      { channel: 'general' },
+      { preferences: { default_channel: 'general' } },
       { headers: { Authorization: `Bearer ${VALID_TOKEN}` } }
     ).catch(err => {
       if (err.response?.status === 403) {

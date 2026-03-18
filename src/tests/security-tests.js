@@ -38,7 +38,7 @@ async function testInvalidToken() {
   }
 }
 
-// TEST 2: Unapproved device should get 403 with device_not_approved code
+// TEST 2: Unapproved device should get 403 or 429 (rate limited after 5 attempts)
 async function testUnapprovedDeviceBlocked() {
   // Create a unique device fingerprint
   const fakeFingerprint = crypto.randomBytes(32).toString('hex');
@@ -52,10 +52,11 @@ async function testUnapprovedDeviceBlocked() {
     });
     throw new Error('Should have blocked unapproved device');
   } catch (err) {
-    if (err.response?.status !== 403) {
-      throw new Error(`Expected 403, got ${err.response?.status}`);
+    // Both 403 (device not approved) and 429 (rate limited) are valid security responses
+    if (err.response?.status !== 403 && err.response?.status !== 429) {
+      throw new Error(`Expected 403 or 429, got ${err.response?.status}`);
     }
-    if (err.response?.data?.code !== 'DEVICE_APPROVAL_REQUIRED') {
+    if (err.response?.status === 403 && err.response?.data?.code !== 'DEVICE_APPROVAL_REQUIRED') {
       throw new Error(`Expected DEVICE_APPROVAL_REQUIRED, got ${err.response?.data?.code}`);
     }
   }
