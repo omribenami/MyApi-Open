@@ -16,6 +16,7 @@ const EventEmitter = require('events');
 
 // Global event emitter for device alerts and real-time notifications
 const alertEmitter = new EventEmitter();
+const NotificationService = require('./services/notificationService');
 
 const {
   db,
@@ -2037,6 +2038,16 @@ app.delete("/api/v1/tokens/:id", authenticate, (req, res) => {
   
   // Also revoke all scopes for this token
   revokeScopes(req.params.id);
+  
+  // Emit notification
+  NotificationService.emitNotification(req.tokenMeta.ownerId, 'token_revoked',
+    'Token Revoked',
+    `Your access token has been revoked`,
+    { relatedEntityType: 'token', relatedEntityId: req.params.id, actionUrl: '/dashboard/access-tokens' }
+  ).catch(err => console.error('Notification error:', err));
+  NotificationService.logActivity(req.tokenMeta.ownerId, 'token_revoked', 'token', {
+    resourceId: req.params.id, actorType: 'user', actorId: req.tokenMeta.ownerId, result: 'success', ipAddress: req.ip,
+  });
   
   createAuditLog({ 
     requesterId: req.tokenMeta.tokenId, 
