@@ -1,5 +1,6 @@
 const DeviceFingerprint = require('../utils/deviceFingerprint');
 const db = require('../database');
+const NotificationService = require('../services/notificationService');
 
 /**
  * Device Approval Middleware
@@ -127,7 +128,39 @@ function deviceApprovalMiddleware(req, res, next) {
         currentFingerprint.fingerprint.ipAddress
       );
       
-      // Emit alert event for new device approval request
+      // Emit notification and log activity for new device approval request
+      const deviceInfo = `${currentFingerprint.summary.os} · ${currentFingerprint.summary.browser}`;
+      NotificationService.emitNotification(userId, 'device_approval_requested', 
+        `New Device Requesting Access`,
+        `A new device is requesting access from ${currentFingerprint.fingerprint.ipAddress}`,
+        {
+          relatedEntityType: 'device',
+          relatedEntityId: approvalId,
+          data: {
+            deviceInfo,
+            ipAddress: currentFingerprint.fingerprint.ipAddress,
+            os: currentFingerprint.summary.os,
+            browser: currentFingerprint.summary.browser,
+          },
+          actionUrl: '/dashboard/device-management',
+        }
+      ).catch(err => console.error('Failed to emit device approval notification:', err));
+      
+      // Log activity
+      NotificationService.logActivity(userId, 'device_approval_requested', 'device', {
+        resourceId: approvalId,
+        resourceName: deviceInfo,
+        actorType: 'system',
+        details: {
+          ip_address: currentFingerprint.fingerprint.ipAddress,
+          os: currentFingerprint.summary.os,
+          browser: currentFingerprint.summary.browser,
+        },
+        result: 'pending',
+        ipAddress: currentFingerprint.fingerprint.ipAddress,
+      });
+      
+      // Emit alert event for new device approval request (legacy WebSocket)
       if (globalAlertEmitter) {
         globalAlertEmitter.emit('device:pending_approval', {
           userId,

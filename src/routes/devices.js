@@ -1,6 +1,7 @@
 const express = require('express');
 const DeviceFingerprint = require('../utils/deviceFingerprint');
 const db = require('../database');
+const NotificationService = require('../services/notificationService');
 
 const router = express.Router();
 
@@ -163,6 +164,28 @@ router.post('/:device_id/revoke', requireAuth, (req, res) => {
     
     db.revokeDevice(req.params.device_id);
     
+    // Emit notification
+    NotificationService.emitNotification(req.userId, 'device_revoked',
+      'Device Access Revoked',
+      `Your device "${device.device_name}" has been revoked and can no longer access your account`,
+      {
+        relatedEntityType: 'device',
+        relatedEntityId: req.params.device_id,
+        data: { deviceName: device.device_name },
+        actionUrl: '/dashboard/device-management',
+      }
+    ).catch(err => console.error('Failed to emit device_revoked notification:', err));
+    
+    // Log activity
+    NotificationService.logActivity(req.userId, 'device_revoked', 'device', {
+      resourceId: req.params.device_id,
+      resourceName: device.device_name,
+      actorType: 'user',
+      actorId: req.userId,
+      result: 'success',
+      ipAddress: req.ip,
+    });
+    
     db.createAuditLog({
       requesterId: req.userId,
       action: 'device_revoked',
@@ -250,6 +273,29 @@ router.post('/approve/:approval_id', requireAuth, (req, res) => {
       req.params.approval_id,
       device_name || `Approved Device (${approval.device_info_json ? JSON.parse(approval.device_info_json).browser : 'Unknown'})`
     );
+    
+    // Emit notification
+    const deviceInfo = device_name || `Approved Device`;
+    NotificationService.emitNotification(req.userId, 'device_approved',
+      'Device Approved',
+      `Your device "${deviceInfo}" has been approved and can now access your account`,
+      {
+        relatedEntityType: 'device',
+        relatedEntityId: deviceId,
+        data: { deviceName: deviceInfo },
+        actionUrl: '/dashboard/device-management',
+      }
+    ).catch(err => console.error('Failed to emit device_approved notification:', err));
+    
+    // Log activity
+    NotificationService.logActivity(req.userId, 'device_approved', 'device', {
+      resourceId: deviceId,
+      resourceName: deviceInfo,
+      actorType: 'user',
+      actorId: req.userId,
+      result: 'success',
+      ipAddress: req.ip,
+    });
     
     db.createAuditLog({
       requesterId: req.userId,
