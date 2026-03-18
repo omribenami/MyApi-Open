@@ -11,6 +11,58 @@ const {
 function createServicesRoutes() {
   const router = express.Router();
 
+  // GET /api/v1/services - List all services with their connection status
+  router.get('/', (req, res) => {
+    try {
+      const userId = req.user?.id || req.tokenMeta?.ownerId || 'owner';
+      
+      // Define all available services
+      const allServices = [
+        { id: 'github', name: 'GitHub', description: 'Version control and collaboration', icon: 'github', category: 'Developer Tools' },
+        { id: 'google', name: 'Google', description: 'Email, Calendar, Drive, Sheets, Docs', icon: 'google', category: 'Productivity' },
+        { id: 'slack', name: 'Slack', description: 'Team messaging and collaboration', icon: 'slack', category: 'Communication' },
+        { id: 'discord', name: 'Discord', description: 'Voice, video, and text communication', icon: 'discord', category: 'Communication' },
+        { id: 'tiktok', name: 'TikTok', description: 'Short-form video platform', icon: 'tiktok', category: 'Social Media' },
+        { id: 'linkedin', name: 'LinkedIn', description: 'Professional networking', icon: 'linkedin', category: 'Social Media' },
+        { id: 'facebook', name: 'Facebook', description: 'Social media platform', icon: 'facebook', category: 'Social Media' },
+        { id: 'instagram', name: 'Instagram', description: 'Photo and video sharing', icon: 'instagram', category: 'Social Media' },
+        { id: 'twitter', name: 'Twitter/X', description: 'Social media platform', icon: 'twitter', category: 'Social Media' },
+        { id: 'notion', name: 'Notion', description: 'Workspace and documentation', icon: 'notion', category: 'Productivity' }
+      ];
+      
+      // Get connected services for this user
+      const connectedServices = req.tokenMeta?.ownerId 
+        ? db.db.prepare(`
+            SELECT service_name, created_at, expires_at 
+            FROM oauth_tokens 
+            WHERE user_id = ?
+          `).all(req.tokenMeta.ownerId)
+        : [];
+      
+      const connectedMap = Object.fromEntries(
+        connectedServices.map(s => [s.service_name, s])
+      );
+      
+      // Enrich services with connection status
+      const servicesWithStatus = allServices.map(svc => ({
+        ...svc,
+        status: connectedMap[svc.name] ? 'connected' : 'available',
+        connectedAt: connectedMap[svc.name]?.created_at || null,
+        expiresAt: connectedMap[svc.name]?.expires_at || null,
+      }));
+      
+      res.json({
+        success: true,
+        data: servicesWithStatus,
+        total: servicesWithStatus.length,
+        connected: Object.keys(connectedMap).length,
+      });
+    } catch (error) {
+      console.error('[Services] Error fetching services:', error);
+      res.status(500).json({ error: 'Failed to fetch services' });
+    }
+  });
+
   // GET /api/v1/services/available - List available services
   router.get('/available', (req, res) => {
     try {
