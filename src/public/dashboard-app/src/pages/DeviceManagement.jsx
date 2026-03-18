@@ -23,13 +23,13 @@ const DeviceManagement = () => {
     setError(null);
     try {
       if (activeTab === 'approved') {
-        const res = await apiClient.get('/api/v1/devices/approved');
+        const res = await apiClient.get('/devices/approved');
         setApprovedDevices(res.data.devices || []);
       } else if (activeTab === 'pending') {
-        const res = await apiClient.get('/api/v1/devices/approvals/pending');
+        const res = await apiClient.get('/devices/approvals/pending');
         setPendingApprovals(res.data.approvals || []);
       } else if (activeTab === 'activity') {
-        const res = await apiClient.get('/api/v1/devices/activity/log');
+        const res = await apiClient.get('/devices/activity/log');
         setActivityLog(res.data.activity || []);
       }
     } catch (err) {

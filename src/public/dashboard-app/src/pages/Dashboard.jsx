@@ -38,7 +38,7 @@ function Dashboard() {
   const fetchMetrics = async () => {
     try {
       const headers = masterToken ? { Authorization: `Bearer ${masterToken}` } : {};
-      const response = await apiClient.get('/api/v1/dashboard/metrics', { headers });
+      const response = await apiClient.get('/dashboard/metrics', { headers });
       setMetrics(response.data);
       setError(null);
     } catch (err) {
