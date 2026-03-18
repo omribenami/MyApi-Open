@@ -1017,7 +1017,7 @@ function approveHandshake(handshakeId) {
   const row = get.get(handshakeId);
   if (!row || row.status !== 'pending') return null;
   const scopes = JSON.parse(row.requested_scopes);
-  const rawToken = crypto.randomBytes(32).toString('hex');
+  const rawToken = 'myapi_' + crypto.randomBytes(32).toString("hex");
   const hash = bcrypt.hashSync(rawToken, 10);
   const tokenLabel = `Handshake:${row.user_id}:${row.agent_id}`;
   const tokenId = createAccessToken(hash, row.user_id, scopes.join(','), tokenLabel, null);

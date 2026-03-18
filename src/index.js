@@ -886,7 +886,7 @@ function bootstrap() {
   const masterExists = existingTokens.some(t => t.scope === 'full' && !t.revokedAt);
   let rawMaster;
   if (!masterExists) {
-    rawMaster = crypto.randomBytes(32).toString("hex");
+    rawMaster = 'myapi_' + crypto.randomBytes(32).toString("hex");
     const hash = bcrypt.hashSync(rawMaster, 10);
     createAccessToken(hash, "owner", "full", "Master Token");
     console.log("=== MyApi Platform Started ===");
@@ -1704,7 +1704,7 @@ app.post("/api/v1/tokens", authenticate, (req, res) => {
   }
   
   // Create the token
-  const rawToken = crypto.randomBytes(32).toString("hex");
+  const rawToken = 'myapi_' + crypto.randomBytes(32).toString("hex");
   const hash = bcrypt.hashSync(rawToken, 10);
   let expiresAt = null;
   if (expiresInHours) expiresAt = new Date(Date.now() + expiresInHours * 3600000).toISOString();
@@ -1891,7 +1891,7 @@ app.post("/api/v1/tokens/:id/regenerate", authenticate, (req, res) => {
   if (!token) return res.status(404).json({ error: "Token not found" });
   if (token.revokedAt) return res.status(400).json({ error: "Cannot regenerate a revoked token" });
 
-  const rawToken = crypto.randomBytes(32).toString("hex");
+  const rawToken = 'myapi_' + crypto.randomBytes(32).toString("hex");
   const hash = bcrypt.hashSync(rawToken, 10);
   const now = new Date().toISOString();
 
@@ -1927,7 +1927,7 @@ app.post('/api/v1/tokens/master/regenerate', authenticate, (req, res) => {
   try {
     const ownerId = req.tokenMeta.ownerId || 'admin';
     revokeExistingMasterTokens(ownerId);
-    const rawToken = crypto.randomBytes(32).toString('hex');
+    const rawToken = 'myapi_' + crypto.randomBytes(32).toString("hex");
     const hash = bcrypt.hashSync(rawToken, 10);
     const tokenId = createAccessToken(hash, ownerId, 'full', 'Master Token', null, null);
 
@@ -1957,10 +1957,12 @@ app.post('/api/v1/tokens/master/bootstrap', authenticate, (req, res) => {
     const ownerId = req?.tokenMeta?.ownerId || req?.session?.user?.id || req?.user?.id;
     if (!ownerId) return res.status(401).json({ error: 'Not authenticated' });
 
-    revokeExistingMasterTokens(ownerId);
-    const rawToken = crypto.randomBytes(32).toString('hex');
+    // Do NOT revoke existing master tokens! This breaks external scripts.
+    // revokeExistingMasterTokens(ownerId);
+    
+    const rawToken = 'myapi_' + crypto.randomBytes(32).toString("hex");
     const hash = bcrypt.hashSync(rawToken, 10);
-    const tokenId = createAccessToken(hash, ownerId, 'full', 'Master Token (Bootstrap API)', null, null);
+    const tokenId = createAccessToken(hash, ownerId, 'full', 'Master Token (Dashboard Session)', null, null);
 
     if (req.session) {
       req.session.masterTokenRaw = rawToken;
@@ -2482,18 +2484,11 @@ app.post("/api/v1/auth/token-login", authRateLimit, (req, res) => {
 app.get("/api/v1/auth/me", (req, res) => {
   // Cookie-session auth (OAuth login path)
   if (req.session && req.session.user) {
-    if (!req.session.masterTokenRaw && req.session.user?.id) {
-      revokeExistingMasterTokens(req.session.user.id);
-      const rawMasterToken = crypto.randomBytes(32).toString('hex');
-      const hash = bcrypt.hashSync(rawMasterToken, 10);
-      const tokenId = createAccessToken(hash, req.session.user.id, 'full', 'Master Token (Session Bootstrap)', null, null);
-      req.session.masterTokenRaw = rawMasterToken;
-      req.session.masterTokenId = tokenId;
-    }
+    // Just return existing token if it exists — don't generate new ones on every refresh!
     return res.json({
       ...req.session.user,
-      bootstrap: req.session.masterTokenRaw
-        ? { masterToken: req.session.masterTokenRaw, tokenId: req.session.masterTokenId || null }
+      bootstrap: req.session.masterTokenRaw && req.session.masterTokenId
+        ? { masterToken: req.session.masterTokenRaw, tokenId: req.session.masterTokenId }
         : null,
     });
   }
@@ -2652,12 +2647,18 @@ app.post('/api/v1/auth/2fa/challenge', (req, res) => {
     delete req.session.pending_2fa_user;
 
     if (!req.session.masterTokenRaw) {
-      revokeExistingMasterTokens(pendingUser.id);
-      const rawMasterToken = crypto.randomBytes(32).toString('hex');
-      const hash = bcrypt.hashSync(rawMasterToken, 10);
-      const tokenId = createAccessToken(hash, pendingUser.id, 'full', 'Master Token (OAuth 2FA)', null, null);
-      req.session.masterTokenRaw = rawMasterToken;
-      req.session.masterTokenId = tokenId;
+      const existingTokens = getAccessTokens();
+      const hasValidMaster = existingTokens.some(t => 
+        t.scope === 'full' && !t.revokedAt && t.ownerId === String(pendingUser.id)
+      );
+      
+      if (!hasValidMaster) {
+        const rawMasterToken = 'myapi_' + crypto.randomBytes(32).toString("hex");
+        const hash = bcrypt.hashSync(rawMasterToken, 10);
+        const tokenId = createAccessToken(hash, pendingUser.id, 'full', 'Master Token (OAuth 2FA)', null, null);
+        req.session.masterTokenRaw = rawMasterToken;
+        req.session.masterTokenId = tokenId;
+      }
     }
 
     createAuditLog({ requesterId: String(pendingUser.id), action: '2fa_challenge_passed', resource: '/auth/2fa/challenge', scope: 'session', ip: req.ip });
@@ -3389,13 +3390,20 @@ app.get([
       };
 
       // Ensure each OAuth-logged-in user receives a full master token for dashboard/API actions.
+      // ONLY create if no existing valid master token exists - don't revoke!
       if (!req.session.masterTokenRaw) {
-        revokeExistingMasterTokens(appUser.id);
-        const rawMasterToken = crypto.randomBytes(32).toString('hex');
-        const hash = bcrypt.hashSync(rawMasterToken, 10);
-        const tokenId = createAccessToken(hash, appUser.id, 'full', 'Master Token (OAuth)', null, null);
-        req.session.masterTokenRaw = rawMasterToken;
-        req.session.masterTokenId = tokenId;
+        const existingTokens = getAccessTokens();
+        const hasValidMaster = existingTokens.some(t => 
+          t.scope === 'full' && !t.revokedAt && t.ownerId === String(appUser.id)
+        );
+        
+        if (!hasValidMaster) {
+          const rawMasterToken = 'myapi_' + crypto.randomBytes(32).toString("hex");
+          const hash = bcrypt.hashSync(rawMasterToken, 10);
+          const tokenId = createAccessToken(hash, appUser.id, 'full', 'Master Token (OAuth)', null, null);
+          req.session.masterTokenRaw = rawMasterToken;
+          req.session.masterTokenId = tokenId;
+        }
       }
     }
 
