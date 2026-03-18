@@ -382,9 +382,9 @@ app.use(session({
   secret: process.env.SESSION_SECRET || 'myapi-session-secret-change-me',
   name: 'myapi.sid',
   resave: false,
-  saveUninitialized: false,
+  saveUninitialized: true,
   proxy: true,
-  cookie: { secure: secureCookie, httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000, sameSite: 'lax' }
+  cookie: { secure: false, httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000, sameSite: 'lax', path: '/' }
 }));
 
 // Public legal pages (no auth required)
