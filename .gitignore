@@ -8,9 +8,17 @@ dist/
 __pycache__/
 *.pyc
 
-# SQLite runtime sidecars
+# SQLite runtime files (never commit live DBs/WALs)
+*.sqlite
 *.sqlite-shm
 *.sqlite-wal
+*.db
+*.db-shm
+*.db-wal
+src/data/*.db
+src/data/*.db-shm
+src/data/*.db-wal
+src/.db_integrity
 
 # Build/cache
 .cache/
