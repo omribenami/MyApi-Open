@@ -24,8 +24,6 @@ function Dashboard() {
     approvedDevices: 0,
     pendingApprovals: 0,
     connectedServices: 0,
-    apiUptime: 0,
-    lastError: null,
     activeTokens: 0,
     recentActivity: [],
     personas: 0,
@@ -268,53 +266,7 @@ function Dashboard() {
           </Link>
         </div>
 
-        {/* Card 2: API Health */}
-        <div className="rounded-lg border border-slate-700/50 bg-slate-900/50 backdrop-blur p-6 hover:border-slate-600/50 transition-all duration-200">
-          <div className="mb-4">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-8 h-8 rounded bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-                <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-              </div>
-              <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest">
-                API Health
-              </h3>
-            </div>
-            <p className="text-2xl font-bold text-slate-100 tracking-tight">
-              {metrics.apiUptime.toFixed(1)}%
-            </p>
-            <p className="text-xs text-slate-400 mt-1">Uptime</p>
-          </div>
-          <div className="pt-4 border-t border-slate-700/30 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-400">Active Tokens</span>
-              <span className="text-sm font-semibold text-slate-200">{metrics.activeTokens}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-400">Status</span>
-              <span className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold ${
-                metrics.lastError 
-                  ? 'bg-red-500/10 text-red-400 border border-red-500/20' 
-                  : 'bg-green-500/10 text-green-400 border border-green-500/20'
-              }`}>
-                <span className={`w-2 h-2 rounded-full ${metrics.lastError ? 'bg-red-400' : 'bg-green-400'}`}></span>
-                {metrics.lastError ? 'Error' : 'Operational'}
-              </span>
-            </div>
-          </div>
-          <Link
-            to="/settings#audit-logs"
-            className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors"
-          >
-            View Logs
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </Link>
-        </div>
-
-        {/* Card 3: Connected Services */}
+        {/* Card 2: Connected Services */}
         <div className="rounded-lg border border-slate-700/50 bg-slate-900/50 backdrop-blur p-6 hover:border-slate-600/50 transition-all duration-200">
           <div className="mb-4">
             <div className="flex items-center gap-2 mb-2">

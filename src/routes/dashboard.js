@@ -130,37 +130,8 @@ router.get('/metrics', requireAuth, (req, res) => {
       // Table might not exist
     }
 
-    // Get API uptime (from system health - default to 99.8% if no data)
-    let apiUptime = 99.8;
-    try {
-      const healthResult = db.db.prepare(`
-        SELECT uptime_percentage FROM system_health 
-        WHERE user_id = ? 
-        ORDER BY recorded_at DESC 
-        LIMIT 1
-      `).get(req.userId);
-      if (healthResult?.uptime_percentage !== undefined) {
-        apiUptime = healthResult.uptime_percentage;
-      }
-    } catch (err) {
-      // Table might not exist, use default
-    }
-
-    // Get last error
-    let lastError = null;
-    try {
-      const errorResult = db.db.prepare(`
-        SELECT error_message FROM api_errors 
-        WHERE user_id = ? 
-        ORDER BY created_at DESC 
-        LIMIT 1
-      `).get(req.userId);
-      if (errorResult?.error_message) {
-        lastError = errorResult.error_message;
-      }
-    } catch (err) {
-      // Table might not exist
-    }
+    // Note: Removed fake "API uptime" metric - it was hardcoded to 99.8% with no real backing
+    // If you need real health monitoring, implement a proper system_health table with actual data
 
     // Get last activity time
     let lastActivityTime = null;
@@ -240,8 +211,6 @@ router.get('/metrics', requireAuth, (req, res) => {
       pendingApprovals,
       connectedServices,
       totalServices,
-      apiUptime: parseFloat(apiUptime.toFixed(1)),
-      lastError,
       activeTokens,
       lastActivityTime,
       recentActivity: limitedActivity,
