@@ -15,6 +15,7 @@ const createApiRoutes = require('./routes/api');
 const createManagementRoutes = require('./routes/management');
 const notificationsRoutes = require('./routes/notifications');
 const activityRoutes = require('./routes/activity');
+const emailRoutes = require('./routes/email');
 const logger = require('./utils/logger');
 
 // Initialize Express app
@@ -97,6 +98,9 @@ app.use('/api/v1/notifications', authenticate(tokenManager, auditLog), notificat
 
 // Activity log routes (require authentication)
 app.use('/api/v1/activity', authenticate(tokenManager, auditLog), activityRoutes);
+
+// Email routes (require authentication)
+app.use('/api/v1/email', authenticate(tokenManager, auditLog), emailRoutes);
 
 // Serve dashboard for all other routes
 app.get('*', (req, res) => {
