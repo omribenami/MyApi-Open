@@ -52,7 +52,7 @@ function createServicesRoutes() {
   // POST /api/v1/services/preferences/:serviceName - Create or update service preferences
   router.post('/preferences/:serviceName', (req, res) => {
     try {
-      const userId = req.user?.id || req.tokenMeta?.userId || 'owner';
+      const userId = req.user?.id || req.tokenMeta?.ownerId || 'owner';
       const { serviceName } = req.params;
       const { preferences } = req.body;
 
@@ -83,7 +83,7 @@ function createServicesRoutes() {
   // PUT /api/v1/services/preferences/:serviceName - Update service preferences
   router.put('/preferences/:serviceName', (req, res) => {
     try {
-      const userId = req.user?.id || req.tokenMeta?.userId || 'owner';
+      const userId = req.user?.id || req.tokenMeta?.ownerId || 'owner';
       const { serviceName } = req.params;
       const { preferences } = req.body;
 
