@@ -52,13 +52,20 @@ async function testUnapprovedDeviceBlocked() {
     });
     throw new Error('Should have blocked unapproved device');
   } catch (err) {
-    // Both 403 (device not approved) and 429 (rate limited) are valid security responses
-    if (err.response?.status !== 403 && err.response?.status !== 429) {
-      throw new Error(`Expected 403 or 429, got ${err.response?.status}`);
+    // Handle case where response doesn't exist (network error, etc.)
+    if (!err.response) {
+      throw new Error(`No response received: ${err.message}`);
     }
-    if (err.response?.status === 403 && err.response?.data?.code !== 'DEVICE_APPROVAL_REQUIRED') {
+    
+    // Both 403 (device not approved) and 429 (rate limited) are valid security responses
+    const status = err.response?.status;
+    if (status !== 403 && status !== 429) {
+      throw new Error(`Expected 403 or 429, got ${status}`);
+    }
+    if (status === 403 && err.response?.data?.code !== 'DEVICE_APPROVAL_REQUIRED') {
       throw new Error(`Expected DEVICE_APPROVAL_REQUIRED, got ${err.response?.data?.code}`);
     }
+    // 429 rate limited is also acceptable - device approval is working, just rate limited
   }
 }
 
