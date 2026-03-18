@@ -12,6 +12,12 @@ const router = express.Router();
 router.get('/unread', (req, res) => {
   try {
     const userId = req.user?.id || req.tokenMeta?.ownerId;
+    
+    if (!userId) {
+      console.error('userId extraction failed:', { user: req.user, tokenMeta: req.tokenMeta });
+      return res.status(401).json({ error: 'Unauthorized - no user ID' });
+    }
+    
     const count = db.getUnreadNotificationCount(userId);
     
     res.json({
@@ -31,6 +37,12 @@ router.get('/unread', (req, res) => {
 router.get('/settings', (req, res) => {
   try {
     const userId = req.user?.id || req.tokenMeta?.ownerId;
+    
+    if (!userId) {
+      console.error('userId extraction failed:', { user: req.user, tokenMeta: req.tokenMeta });
+      return res.status(401).json({ error: 'Unauthorized - no user ID' });
+    }
+    
     const settings = db.getOrCreateNotificationSettings(userId);
     
     res.json({
@@ -50,6 +62,12 @@ router.get('/settings', (req, res) => {
 router.put('/settings', (req, res) => {
   try {
     const userId = req.user?.id || req.tokenMeta?.ownerId;
+    
+    if (!userId) {
+      console.error('userId extraction failed:', { user: req.user, tokenMeta: req.tokenMeta });
+      return res.status(401).json({ error: 'Unauthorized - no user ID' });
+    }
+    
     const settings = db.updateNotificationSettings(userId, req.body);
     
     res.json({
@@ -110,6 +128,12 @@ router.delete('/:id', (req, res) => {
 router.get('/', (req, res) => {
   try {
     const userId = req.user?.id || req.tokenMeta?.ownerId;
+    
+    if (!userId) {
+      console.error('userId extraction failed:', { user: req.user, tokenMeta: req.tokenMeta });
+      return res.status(401).json({ error: 'Unauthorized - no user ID' });
+    }
+    
     const limit = Math.min(parseInt(req.query.limit) || 50, 100);
     const offset = parseInt(req.query.offset) || 0;
     
