@@ -4,6 +4,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import apiRequest from '../utils/apiRequest';
 import DeleteAccountModal from '../components/DeleteAccountModal';
 import ExportDataModal from '../components/ExportDataModal';
+import NotificationSettings from '../components/NotificationSettings';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared UI helpers
@@ -1221,6 +1222,7 @@ const SECTIONS = [
   { id: 'profile', label: 'Profile' },
   { id: 'billing', label: 'Plans' },
   { id: 'security', label: 'Security' },
+  { id: 'notifications', label: 'Notifications' },
   { id: 'agents', label: 'Token Usage' },
   { id: 'privacy', label: 'Privacy' },
   { id: 'danger', label: 'Danger Zone' },
@@ -1274,6 +1276,7 @@ function Settings() {
       {activeSection === 'profile' && <ProfileSection />}
       {activeSection === 'billing' && <BillingSection />}
       {activeSection === 'security' && <SecuritySection />}
+      {activeSection === 'notifications' && <NotificationSettings />}
       {activeSection === 'agents' && <AIAgentTrackingSection />}
       {activeSection === 'privacy' && <PrivacySection />}
       {activeSection === 'danger' && (

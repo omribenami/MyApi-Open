@@ -14,22 +14,23 @@
 - [x] Create `/api/v1/notifications/settings` endpoints (get, update)
 
 ### Phase 2: Activity Log Page
-- [ ] Create `/activity` React page
-- [ ] Filters & search
-- [ ] Real-time WebSocket updates
-- [ ] Link from dashboard
+- [x] Create `/activity` React page
+- [x] Filters & search
+- [x] Real-time WebSocket updates
+- [x] Link from dashboard
 
 ### Phase 3: Notification Center
-- [ ] Bell icon with unread count
-- [ ] Toast notifications
-- [ ] Notification center page
-- [ ] Mark as read/delete
+- [x] Bell icon with unread count
+- [x] Toast notifications
+- [x] Notification center page
+- [x] Mark as read/delete
 
 ### Phase 4: Settings Page
-- [ ] `/settings#notifications` section
-- [ ] Event toggles
-- [ ] Email digest options
-- [ ] Bulk actions
+- [ ] Create NotificationSettings component
+- [ ] Add to Settings.jsx page
+- [ ] Event toggles for each notification type
+- [ ] Email digest options (immediate, daily, weekly, disabled)
+- [ ] Bulk enable/disable actions
 
 ### Phase 5: Email Service
 - [ ] Email queue processing
