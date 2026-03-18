@@ -3469,6 +3469,18 @@ app.get([
       }
     }
 
+    // Emit notification for service connection
+    if (appUser) {
+      NotificationService.emitNotification(appUser.id, 'service_connected',
+        `${service.charAt(0).toUpperCase() + service.slice(1)} Connected`,
+        `Your ${service} account has been successfully connected to MyApi`,
+        { relatedEntityType: 'service', relatedEntityId: service, actionUrl: '/dashboard/services' }
+      ).catch(err => console.error('Notification error:', err));
+      NotificationService.logActivity(appUser.id, 'service_connected', 'service', {
+        resourceId: service, resourceName: service, actorType: 'user', actorId: appUser.id, result: 'success', ipAddress: req.ip,
+      });
+    }
+
     createAuditLog({
       requesterId: req.ip,
       action: "oauth_callback_success",
@@ -5136,6 +5148,21 @@ app.post('/api/v1/marketplace/:id/rate', authenticate, (req, res) => {
 
     const userId = req.tokenMeta.ownerId;
     const result = rateMarketplaceListing(listingId, userId, rating, review);
+    
+    // Emit notification to skill owner
+    if (listing && listing.owner_id && listing.owner_id !== userId) {
+      const skillName = listing.name || 'Your skill';
+      const userName = req.tokenMeta.displayName || 'Someone';
+      NotificationService.emitNotification(listing.owner_id, 'skill_liked',
+        `Skill Liked`,
+        `${userName} liked your skill "${skillName}" with a ${rating}-star rating`,
+        { relatedEntityType: 'skill', relatedEntityId: listing.skill_id, actionUrl: `/dashboard/skills/${listing.skill_id}` }
+      ).catch(err => console.error('Notification error:', err));
+      NotificationService.logActivity(listing.owner_id, 'skill_liked', 'skill', {
+        resourceId: listing.skill_id, resourceName: skillName, actorType: 'user', actorId: userId, actorName: userName, result: 'success',
+      });
+    }
+    
     res.json(result);
   } catch (err) {
     console.error('Marketplace rate error:', err);

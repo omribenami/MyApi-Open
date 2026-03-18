@@ -1,4 +1,5 @@
 const logger = require('../utils/logger');
+const NotificationService = require('../services/notificationService');
 
 // Authentication middleware
 function authenticate(tokenManager, auditLog) {
@@ -62,6 +63,19 @@ function authenticate(tokenManager, auditLog) {
         ipAddress: req.ip,
         userAgent: req.get('user-agent')
       });
+
+      // Emit guest token usage notification if this is a guest token
+      if (tokenData.type === 'guest' && tokenData.ownerId) {
+        NotificationService.logActivity(tokenData.ownerId, 'guest_token_used', 'guest_token', {
+          resourceId: tokenData.id,
+          resourceName: tokenData.name,
+          actorType: 'guest_token',
+          actorId: tokenData.id,
+          details: { endpoint: req.path, method: req.method },
+          result: 'success',
+          ipAddress: req.ip,
+        }).catch(err => logger.error('Failed to log guest token activity:', err));
+      }
 
       next();
     } catch (error) {
