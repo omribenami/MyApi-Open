@@ -753,6 +753,10 @@ const deviceRoutes = require('./routes/devices');
 const dashboardRoutes = require('./routes/dashboard');
 const createServicesRoutes = require('./routes/services');
 
+// Import new auth routes
+const newAuthRoutes = require('./routes/auth');
+
+app.use('/api/v1/auth', newAuthRoutes);
 app.use('/api/v1', authRoutes);
 app.use('/api/v1/devices', authenticate, deviceRoutes);
 // Device approval is now applied globally in the authenticate middleware
