@@ -6,23 +6,43 @@ import App from './App.jsx'
 // Emergency client-side guard for rare storage/db corruption errors surfaced by browser/runtime.
 // If detected, clear local auth/session artifacts once and reload cleanly.
 if (typeof window !== 'undefined') {
-  window.addEventListener('unhandledrejection', (event) => {
-    const reason = event?.reason;
-    const message = typeof reason === 'string'
-      ? reason
-      : (reason?.message || String(reason || ''));
+  const CORRUPTION_MARKER = 'Corruption: block checksum mismatch';
+  const RECOVERY_KEY = '__myapi_recovered_from_corruption__';
 
-    if (message.includes('Corruption: block checksum mismatch')) {
-      event.preventDefault();
-      const key = '__myapi_recovered_from_corruption__';
-      if (!sessionStorage.getItem(key)) {
-        sessionStorage.setItem(key, '1');
-        localStorage.removeItem('masterToken');
-        sessionStorage.removeItem('sessionToken');
-        sessionStorage.removeItem('tokenData');
-        window.location.replace('/dashboard/');
-      }
+  const recoverFromCorruption = () => {
+    try {
+      if (sessionStorage.getItem(RECOVERY_KEY)) return;
+      sessionStorage.setItem(RECOVERY_KEY, '1');
+      localStorage.removeItem('masterToken');
+      sessionStorage.removeItem('sessionToken');
+      sessionStorage.removeItem('tokenData');
+    } catch {
+      // Ignore cleanup errors and still force a clean reload.
     }
+
+    window.location.replace('/dashboard/');
+  };
+
+  const messageFromError = (value) => {
+    if (typeof value === 'string') return value;
+    return value?.message || String(value || '');
+  };
+
+  window.addEventListener('unhandledrejection', (event) => {
+    const message = messageFromError(event?.reason);
+    if (!message.includes(CORRUPTION_MARKER)) return;
+
+    event.preventDefault();
+    recoverFromCorruption();
+  });
+
+  // Some environments surface this as a regular error event instead of a rejected promise.
+  window.addEventListener('error', (event) => {
+    const message = messageFromError(event?.error || event?.message);
+    if (!message.includes(CORRUPTION_MARKER)) return;
+
+    event.preventDefault?.();
+    recoverFromCorruption();
   });
 }
 

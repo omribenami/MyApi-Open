@@ -10,8 +10,15 @@ export const useAuthStore = create((set) => ({
   error: null,
 
   initialize: async () => {
-    const masterToken = localStorage.getItem('masterToken');
-    const sessionToken = sessionStorage.getItem('sessionToken');
+    let masterToken = null;
+    let sessionToken = null;
+
+    try {
+      masterToken = localStorage.getItem('masterToken');
+      sessionToken = sessionStorage.getItem('sessionToken');
+    } catch {
+      // Storage access can fail on corrupted browser storage; continue with cookie bootstrap path.
+    }
 
     // If we already have a token stored, use it and skip bootstrap
     if (masterToken) {
@@ -60,12 +67,20 @@ export const useAuthStore = create((set) => ({
   },
 
   setMasterToken: (token) => {
-    localStorage.setItem('masterToken', token);
+    try {
+      localStorage.setItem('masterToken', token);
+    } catch {
+      // Keep in-memory auth state even if storage is temporarily unavailable.
+    }
     set({ masterToken: token, isAuthenticated: true, error: null });
   },
 
   setSessionToken: (token) => {
-    sessionStorage.setItem('sessionToken', token);
+    try {
+      sessionStorage.setItem('sessionToken', token);
+    } catch {
+      // Ignore storage failures; keep token in memory for this runtime.
+    }
     set({ sessionToken: token });
   },
 
@@ -82,8 +97,12 @@ export const useAuthStore = create((set) => ({
   },
 
   logout: () => {
-    localStorage.removeItem('masterToken');
-    sessionStorage.removeItem('sessionToken');
+    try {
+      localStorage.removeItem('masterToken');
+      sessionStorage.removeItem('sessionToken');
+    } catch {
+      // Ignore storage cleanup failures on logout.
+    }
     fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
     set({ user: null, masterToken: null, sessionToken: null, isAuthenticated: false, isInitialized: true, error: null });
   },
