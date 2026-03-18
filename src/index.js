@@ -3512,18 +3512,15 @@ app.get([
       sameSite: 'lax'
     });
     
-    // Also set user info for quick access
-    res.cookie('myapi_user', JSON.stringify({
-      id: appUser.id,
-      email: appUser.email,
-      username: appUser.username,
-      display_name: appUser.displayName || appUser.username
-    }), {
-      httpOnly: false,
-      path: '/',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      sameSite: 'lax'
-    });
+    // Also set user info for quick access (use session.user which is already set)
+    if (req.session.user) {
+      res.cookie('myapi_user', JSON.stringify(req.session.user), {
+        httpOnly: false,
+        path: '/',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+        sameSite: 'lax'
+      });
+    }
     
     const redirectUrl = `/dashboard/?oauth_service=${service}&oauth_status=connected&mode=${encodeURIComponent(stateMeta.mode || 'connect')}&next=${next}`;
     
