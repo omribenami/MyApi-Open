@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useSettingsStore } from '../stores/settingsStore';
+import apiRequest from '../utils/apiRequest';
 import DeleteAccountModal from '../components/DeleteAccountModal';
 import ExportDataModal from '../components/ExportDataModal';
 
@@ -436,76 +437,76 @@ function SecuritySection() {
 
   const handleApproveDevice = async (approvalId) => {
     try {
-      const authHeaders = {
-        'Content-Type': 'application/json',
-        ...(masterToken ? { Authorization: `Bearer ${masterToken}` } : {}),
-      };
-      const res = await fetch(`/api/v1/devices/approve/${approvalId}`, {
+      const res = await apiRequest(`/devices/approve/${approvalId}`, {
         method: 'POST',
-        headers: authHeaders,
-        credentials: 'include',
-        body: JSON.stringify({ device_name: 'Approved Device' }),
+        body: { device_name: 'Approved Device' },
       });
+      
       if (res.ok) {
         // Reload data
-        const approvedRes = await fetch('/api/v1/devices/approved', { headers: authHeaders, credentials: 'include' });
+        const approvedRes = await apiRequest('/devices/approved');
         if (approvedRes.ok) {
           const data = await approvedRes.json();
           setApprovedDevices(data.devices || []);
         }
-        const pendingRes = await fetch('/api/v1/devices/approvals/pending', { headers: authHeaders, credentials: 'include' });
+        const pendingRes = await apiRequest('/devices/approvals/pending');
         if (pendingRes.ok) {
           const data = await pendingRes.json();
           setPendingApprovals(data.approvals || []);
         }
+      } else {
+        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || errorData.message || `Server error: ${res.status}`);
       }
     } catch (err) {
       console.error('Error approving device:', err);
+      setDeviceError(`Failed to approve device: ${err.message}`);
     }
   };
 
   const handleDenyDevice = async (approvalId) => {
     try {
-      const authHeaders = {
-        'Content-Type': 'application/json',
-        ...(masterToken ? { Authorization: `Bearer ${masterToken}` } : {}),
-      };
-      const res = await fetch(`/api/v1/devices/deny/${approvalId}`, {
+      const res = await apiRequest(`/devices/deny/${approvalId}`, {
         method: 'POST',
-        headers: authHeaders,
-        credentials: 'include',
-        body: JSON.stringify({ reason: 'Denied by user' }),
+        body: { reason: 'Denied by user' },
       });
+      
       if (res.ok) {
-        const pendingRes = await fetch('/api/v1/devices/approvals/pending', { headers: authHeaders, credentials: 'include' });
+        const pendingRes = await apiRequest('/devices/approvals/pending');
         if (pendingRes.ok) {
           const data = await pendingRes.json();
           setPendingApprovals(data.approvals || []);
         }
+      } else {
+        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || errorData.message || `Server error: ${res.status}`);
       }
     } catch (err) {
       console.error('Error denying device:', err);
+      setDeviceError(`Failed to deny device: ${err.message}`);
     }
   };
 
   const handleRevokeDevice = async (deviceId) => {
     if (!window.confirm('Revoke this device? It will need to be re-approved to use your tokens.')) return;
     try {
-      const authHeaders = masterToken ? { Authorization: `Bearer ${masterToken}` } : {};
-      const res = await fetch(`/api/v1/devices/${deviceId}/revoke`, {
+      const res = await apiRequest(`/devices/${deviceId}/revoke`, {
         method: 'POST',
-        headers: authHeaders,
-        credentials: 'include',
       });
+      
       if (res.ok) {
-        const approvedRes = await fetch('/api/v1/devices/approved', { headers: authHeaders, credentials: 'include' });
+        const approvedRes = await apiRequest('/devices/approved');
         if (approvedRes.ok) {
           const data = await approvedRes.json();
           setApprovedDevices(data.devices || []);
         }
+      } else {
+        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || errorData.message || `Server error: ${res.status}`);
       }
     } catch (err) {
       console.error('Error revoking device:', err);
+      setDeviceError(`Failed to revoke device: ${err.message}`);
     }
   };
 

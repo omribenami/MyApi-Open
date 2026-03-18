@@ -46,7 +46,7 @@ const DeviceManagement = () => {
     }
 
     try {
-      await apiClient.post(`/api/v1/devices/${deviceId}/revoke`);
+      await apiClient.post(`/devices/${deviceId}/revoke`);
       setApprovalMessage({ type: 'success', text: 'Device revoked successfully' });
       loadDeviceData();
       setTimeout(() => setApprovalMessage(''), 3000);
@@ -61,7 +61,7 @@ const DeviceManagement = () => {
     }
 
     try {
-      await apiClient.post(`/api/v1/devices/${deviceId}/rename`, {
+      await apiClient.post(`/devices/${deviceId}/rename`, {
         name: newDeviceName,
       });
       setApprovalMessage({ type: 'success', text: 'Device renamed successfully' });
@@ -77,7 +77,7 @@ const DeviceManagement = () => {
 
   const handleApproveDevice = async (approvalId) => {
     try {
-      await apiClient.post(`/api/v1/devices/approve/${approvalId}`, {
+      await apiClient.post(`/devices/approve/${approvalId}`, {
         device_name: newDeviceName || 'Approved Device',
       });
       setApprovalMessage({ type: 'success', text: 'Device approved successfully' });
@@ -91,7 +91,7 @@ const DeviceManagement = () => {
 
   const handleDenyDevice = async (approvalId) => {
     try {
-      await apiClient.post(`/api/v1/devices/deny/${approvalId}`, {
+      await apiClient.post(`/devices/deny/${approvalId}`, {
         reason: 'Device approval denied by user',
       });
       setApprovalMessage({ type: 'success', text: 'Device approval denied' });

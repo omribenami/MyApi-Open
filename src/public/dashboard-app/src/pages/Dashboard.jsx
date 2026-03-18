@@ -148,7 +148,7 @@ function Dashboard() {
   const handleApproveDevice = async (deviceId) => {
     try {
       const headers = masterToken ? { Authorization: `Bearer ${masterToken}` } : {};
-      await apiClient.post(`/api/v1/devices/approve/${deviceId}`, 
+      await apiClient.post(`/devices/approve/${deviceId}`, 
         { device_name: 'Approved Device' }, 
         { headers }
       );
