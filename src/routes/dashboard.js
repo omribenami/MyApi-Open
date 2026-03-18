@@ -61,12 +61,12 @@ router.get('/metrics', requireAuth, (req, res) => {
     } catch (e) { console.error('Error counting approved devices:', e); }
 
     try {
-      const result = db.db.prepare('SELECT COUNT(*) as count FROM device_approvals_pending WHERE user_id = ? AND status = "pending"').get(req.userId);
+      const result = db.db.prepare('SELECT COUNT(*) as count FROM device_approvals_pending WHERE user_id = ?').get(req.userId);
       pendingApprovals = result?.count || 0;
     } catch (e) { console.error('Error counting pending approvals:', e); }
 
     try {
-      const result = db.db.prepare('SELECT COUNT(*) as count FROM oauth_tokens WHERE user_id = ? AND (expires_at IS NULL OR expires_at > datetime("now"))').get(req.userId);
+      const result = db.db.prepare('SELECT COUNT(*) as count FROM oauth_tokens WHERE user_id = ?').get(req.userId);
       connectedServices = result?.count || 0;
     } catch (e) { console.error('Error counting connected services:', e); }
 
@@ -76,7 +76,7 @@ router.get('/metrics', requireAuth, (req, res) => {
     } catch (e) { console.error('Error counting total services:', e); }
 
     try {
-      const result = db.db.prepare('SELECT COUNT(*) as count FROM access_tokens WHERE owner_id = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > datetime("now"))').get(req.userId);
+      const result = db.db.prepare('SELECT COUNT(*) as count FROM access_tokens WHERE owner_id = ?').get(req.userId);
       activeTokens = result?.count || 0;
     } catch (e) { console.error('Error counting active tokens:', e); }
 
@@ -101,11 +101,15 @@ router.get('/metrics', requireAuth, (req, res) => {
     } catch (e) { }
 
     try {
-      const result = db.db.prepare('SELECT MAX(created_at) as last_time FROM (SELECT created_at FROM device_approvals_pending WHERE user_id = ? UNION ALL SELECT created_at FROM oauth_tokens WHERE user_id = ? UNION ALL SELECT created_at FROM access_tokens WHERE owner_id = ?)').get(req.userId, req.userId, req.userId);
-      if (result?.last_time) {
-        lastActivityTime = result.last_time;
+      const approvals = db.db.prepare('SELECT created_at FROM device_approvals_pending WHERE user_id = ? ORDER BY created_at DESC LIMIT 1').get(req.userId);
+      const tokens = db.db.prepare('SELECT created_at FROM oauth_tokens WHERE user_id = ? ORDER BY created_at DESC LIMIT 1').get(req.userId);
+      const accessTokens = db.db.prepare('SELECT created_at FROM access_tokens WHERE owner_id = ? ORDER BY created_at DESC LIMIT 1').get(req.userId);
+      
+      const times = [approvals?.created_at, tokens?.created_at, accessTokens?.created_at].filter(Boolean).sort().reverse();
+      if (times.length > 0) {
+        lastActivityTime = times[0];
       }
-    } catch (e) { }
+    } catch (e) { console.error('Error getting last activity time:', e); }
 
     // Set cache control
     res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
