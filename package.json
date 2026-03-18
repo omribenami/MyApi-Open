@@ -10,7 +10,8 @@
     "start": "node src/server.js"
   },
   "dependencies": {
-    "better-sqlite3": "^12.6.2"
+    "better-sqlite3": "^12.6.2",
+    "nodemailer": "^8.0.3"
   },
   "devDependencies": {
     "@babel/preset-env": "^7.29.2",
