@@ -13,6 +13,8 @@ const PersonalBrain = require('./brain/brain');
 const { authenticate } = require('./middleware/auth');
 const createApiRoutes = require('./routes/api');
 const createManagementRoutes = require('./routes/management');
+const notificationsRoutes = require('./routes/notifications');
+const activityRoutes = require('./routes/activity');
 const logger = require('./utils/logger');
 
 // Initialize Express app
@@ -89,6 +91,12 @@ app.use('/api', authenticate(tokenManager, auditLog), createApiRoutes(brain, vau
 
 // Management routes (require personal token)
 app.use('/api/manage', authenticate(tokenManager, auditLog), createManagementRoutes(tokenManager, vault, auditLog));
+
+// Notification routes (require authentication)
+app.use('/api/v1/notifications', authenticate(tokenManager, auditLog), notificationsRoutes);
+
+// Activity log routes (require authentication)
+app.use('/api/v1/activity', authenticate(tokenManager, auditLog), activityRoutes);
 
 // Serve dashboard for all other routes
 app.get('*', (req, res) => {

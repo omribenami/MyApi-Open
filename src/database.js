@@ -404,6 +404,89 @@ function initDatabase() {
       UNIQUE(user_id, service_name)
     );
 
+    CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      read_at TEXT,
+      created_at TEXT NOT NULL,
+      expires_at TEXT,
+      related_entity_type TEXT,
+      related_entity_id TEXT,
+      data TEXT,
+      action_url TEXT,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS notification_settings (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL UNIQUE,
+      device_approval_requested_web INTEGER DEFAULT 1,
+      device_approval_requested_email INTEGER DEFAULT 1,
+      skill_liked_web INTEGER DEFAULT 1,
+      skill_liked_email INTEGER DEFAULT 1,
+      skill_used_web INTEGER DEFAULT 1,
+      skill_used_email INTEGER DEFAULT 1,
+      persona_invoked_web INTEGER DEFAULT 1,
+      persona_invoked_email INTEGER DEFAULT 1,
+      guest_token_used_web INTEGER DEFAULT 1,
+      guest_token_used_email INTEGER DEFAULT 1,
+      token_revoked_web INTEGER DEFAULT 1,
+      token_revoked_email INTEGER DEFAULT 1,
+      device_approved_web INTEGER DEFAULT 1,
+      device_approved_email INTEGER DEFAULT 0,
+      service_connected_web INTEGER DEFAULT 1,
+      service_connected_email INTEGER DEFAULT 0,
+      device_revoked_web INTEGER DEFAULT 1,
+      device_revoked_email INTEGER DEFAULT 1,
+      email_digest_type TEXT DEFAULT 'immediate',
+      email_digest_time TEXT DEFAULT '09:00',
+      email_digest_day TEXT DEFAULT 'monday',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS activity_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      action_type TEXT NOT NULL,
+      resource_type TEXT NOT NULL,
+      resource_id TEXT,
+      resource_name TEXT,
+      actor_type TEXT,
+      actor_id TEXT,
+      actor_name TEXT,
+      details TEXT,
+      result TEXT,
+      ip_address TEXT,
+      user_agent TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS email_queue (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      email_address TEXT NOT NULL,
+      notification_id TEXT,
+      subject TEXT NOT NULL,
+      body TEXT NOT NULL,
+      html_body TEXT,
+      status TEXT DEFAULT 'pending',
+      sent_at TEXT,
+      failed_reason TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
+    CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at);
+    CREATE INDEX IF NOT EXISTS idx_activity_log_user ON activity_log(user_id);
+    CREATE INDEX IF NOT EXISTS idx_activity_log_created ON activity_log(created_at);
+    CREATE INDEX IF NOT EXISTS idx_email_queue_status ON email_queue(status);
     CREATE INDEX IF NOT EXISTS idx_service_preferences_user ON service_preferences(user_id);
     CREATE INDEX IF NOT EXISTS idx_service_preferences_service ON service_preferences(service_name);
   `);
@@ -2913,6 +2996,234 @@ function deleteServicePreference(userId, serviceName) {
   return stmt.run(userId, serviceName).changes > 0;
 }
 
+// Notification functions
+function createNotification(userId, type, title, message, options = {}) {
+  const id = 'notif_' + crypto.randomBytes(16).toString('hex');
+  const stmt = db.prepare(`
+    INSERT INTO notifications (id, user_id, type, title, message, related_entity_type, related_entity_id, data, action_url, created_at, expires_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  
+  const expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(); // 60 days
+  
+  stmt.run(
+    id,
+    userId,
+    type,
+    title,
+    message,
+    options.relatedEntityType || null,
+    options.relatedEntityId || null,
+    options.data ? JSON.stringify(options.data) : null,
+    options.actionUrl || null,
+    new Date().toISOString(),
+    expiresAt
+  );
+  
+  return id;
+}
+
+function getNotifications(userId, limit = 50, offset = 0) {
+  const stmt = db.prepare(`
+    SELECT * FROM notifications
+    WHERE user_id = ? AND expires_at > datetime('now')
+    ORDER BY created_at DESC
+    LIMIT ? OFFSET ?
+  `);
+  
+  return stmt.all(userId, limit, offset);
+}
+
+function markNotificationAsRead(notificationId) {
+  const stmt = db.prepare(`
+    UPDATE notifications
+    SET read_at = ?
+    WHERE id = ?
+  `);
+  
+  return stmt.run(new Date().toISOString(), notificationId).changes > 0;
+}
+
+function deleteNotification(notificationId) {
+  const stmt = db.prepare(`
+    DELETE FROM notifications
+    WHERE id = ?
+  `);
+  
+  return stmt.run(notificationId).changes > 0;
+}
+
+function getUnreadNotificationCount(userId) {
+  const result = db.prepare(`
+    SELECT COUNT(*) as count FROM notifications
+    WHERE user_id = ? AND read_at IS NULL
+  `).get(userId);
+  
+  return result?.count || 0;
+}
+
+function getOrCreateNotificationSettings(userId) {
+  let settings = db.prepare(`
+    SELECT * FROM notification_settings
+    WHERE user_id = ?
+  `).get(userId);
+  
+  if (!settings) {
+    const id = 'notif_settings_' + crypto.randomBytes(16).toString('hex');
+    db.prepare(`
+      INSERT INTO notification_settings (id, user_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?)
+    `).run(id, userId, new Date().toISOString(), new Date().toISOString());
+    
+    settings = db.prepare(`
+      SELECT * FROM notification_settings
+      WHERE user_id = ?
+    `).get(userId);
+  }
+  
+  return settings;
+}
+
+function updateNotificationSettings(userId, updates) {
+  const settings = getOrCreateNotificationSettings(userId);
+  
+  const allowedFields = [
+    'device_approval_requested_web', 'device_approval_requested_email',
+    'skill_liked_web', 'skill_liked_email',
+    'skill_used_web', 'skill_used_email',
+    'persona_invoked_web', 'persona_invoked_email',
+    'guest_token_used_web', 'guest_token_used_email',
+    'token_revoked_web', 'token_revoked_email',
+    'device_approved_web', 'device_approved_email',
+    'service_connected_web', 'service_connected_email',
+    'device_revoked_web', 'device_revoked_email',
+    'email_digest_type', 'email_digest_time', 'email_digest_day'
+  ];
+  
+  const validUpdates = Object.keys(updates)
+    .filter(key => allowedFields.includes(key))
+    .reduce((obj, key) => { obj[key] = updates[key]; return obj; }, {});
+  
+  if (Object.keys(validUpdates).length === 0) {
+    return settings;
+  }
+  
+  const setClause = Object.keys(validUpdates).map(key => `${key} = ?`).join(', ');
+  const values = Object.values(validUpdates);
+  
+  db.prepare(`
+    UPDATE notification_settings
+    SET ${setClause}, updated_at = ?
+    WHERE user_id = ?
+  `).run(...values, new Date().toISOString(), userId);
+  
+  return getOrCreateNotificationSettings(userId);
+}
+
+function createActivityLog(userId, actionType, resourceType, options = {}) {
+  const stmt = db.prepare(`
+    INSERT INTO activity_log (user_id, action_type, resource_type, resource_id, resource_name, actor_type, actor_id, actor_name, details, result, ip_address, user_agent, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  
+  stmt.run(
+    userId,
+    actionType,
+    resourceType,
+    options.resourceId || null,
+    options.resourceName || null,
+    options.actorType || 'user',
+    options.actorId || null,
+    options.actorName || null,
+    options.details ? JSON.stringify(options.details) : null,
+    options.result || 'success',
+    options.ipAddress || null,
+    options.userAgent || null,
+    new Date().toISOString()
+  );
+}
+
+function getActivityLog(userId, filters = {}) {
+  let query = `
+    SELECT * FROM activity_log
+    WHERE user_id = ?
+  `;
+  const params = [userId];
+  
+  if (filters.actionType) {
+    query += ` AND action_type = ?`;
+    params.push(filters.actionType);
+  }
+  if (filters.resourceType) {
+    query += ` AND resource_type = ?`;
+    params.push(filters.resourceType);
+  }
+  if (filters.result) {
+    query += ` AND result = ?`;
+    params.push(filters.result);
+  }
+  if (filters.afterDate) {
+    query += ` AND created_at > ?`;
+    params.push(filters.afterDate);
+  }
+  if (filters.beforeDate) {
+    query += ` AND created_at < ?`;
+    params.push(filters.beforeDate);
+  }
+  
+  query += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+  params.push(filters.limit || 50);
+  params.push(filters.offset || 0);
+  
+  return db.prepare(query).all(...params);
+}
+
+function queueEmail(userId, emailAddress, subject, body, options = {}) {
+  const id = 'email_' + crypto.randomBytes(16).toString('hex');
+  const stmt = db.prepare(`
+    INSERT INTO email_queue (id, user_id, email_address, notification_id, subject, body, html_body, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  
+  stmt.run(
+    id,
+    userId,
+    emailAddress,
+    options.notificationId || null,
+    subject,
+    body,
+    options.htmlBody || null,
+    new Date().toISOString()
+  );
+  
+  return id;
+}
+
+function getPendingEmails(limit = 100) {
+  return db.prepare(`
+    SELECT * FROM email_queue
+    WHERE status = 'pending'
+    ORDER BY created_at ASC
+    LIMIT ?
+  `).all(limit);
+}
+
+function markEmailAsSent(emailId) {
+  return db.prepare(`
+    UPDATE email_queue
+    SET status = 'sent', sent_at = ?
+    WHERE id = ?
+  `).run(new Date().toISOString(), emailId).changes > 0;
+}
+
+function markEmailAsFailed(emailId, reason) {
+  return db.prepare(`
+    UPDATE email_queue
+    SET status = 'failed', failed_reason = ?
+    WHERE id = ?
+  `).run(reason, emailId).changes > 0;
+}
+
 module.exports = {
   db,
   initDatabase,
@@ -3045,4 +3356,18 @@ module.exports = {
   getServicePreferences,
   updateServicePreference,
   deleteServicePreference,
+  // Notifications & Activity Log
+  createNotification,
+  getNotifications,
+  markNotificationAsRead,
+  deleteNotification,
+  getUnreadNotificationCount,
+  getOrCreateNotificationSettings,
+  updateNotificationSettings,
+  createActivityLog,
+  getActivityLog,
+  queueEmail,
+  getPendingEmails,
+  markEmailAsSent,
+  markEmailAsFailed,
 };
