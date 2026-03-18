@@ -1967,6 +1967,17 @@ app.post('/api/v1/tokens/master/bootstrap', authenticate, (req, res) => {
     if (req.session) {
       req.session.masterTokenRaw = rawToken;
       req.session.masterTokenId = tokenId;
+      req.session.save?.();  // Explicitly save session
+    }
+
+    // Also save to global.sessions for Bearer token users
+    const authHeader = req.headers.authorization;
+    if (authHeader && global.sessions) {
+      const bearerToken = authHeader.replace('Bearer ', '');
+      if (global.sessions[bearerToken]) {
+        global.sessions[bearerToken].masterTokenRaw = rawToken;
+        global.sessions[bearerToken].masterTokenId = tokenId;
+      }
     }
 
     createAuditLog({
@@ -2500,7 +2511,14 @@ app.get("/api/v1/auth/me", (req, res) => {
   if (global.sessions && global.sessions[token]) {
     const session = global.sessions[token];
     const user = getUserById(session.userId);
-    if (user) return res.json({ data: user });
+    if (user) {
+      return res.json({ 
+        data: user,
+        bootstrap: session.masterTokenRaw && session.masterTokenId
+          ? { masterToken: session.masterTokenRaw, tokenId: session.masterTokenId }
+          : null,
+      });
+    }
   }
   res.status(401).json({ error: "Invalid session" });
 });

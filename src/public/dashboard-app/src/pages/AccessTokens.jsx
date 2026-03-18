@@ -67,8 +67,16 @@ function AccessTokens() {
   }, [masterToken, fetchTokens]);
 
   // OAuth session fallback: lazily bootstrap master token if missing.
+  // ONLY bootstrap if masterToken doesn't already exist in localStorage
   useEffect(() => {
     if (masterToken) return;
+    
+    const stored = localStorage.getItem('masterToken');
+    if (stored) {
+      setMasterToken(stored);
+      return;
+    }
+    
     fetch('/api/v1/auth/me', { credentials: 'include' })
       .then((r) => (r.ok ? r.json() : null))
       .then(async (payload) => {

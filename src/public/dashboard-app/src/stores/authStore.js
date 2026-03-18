@@ -13,11 +13,14 @@ export const useAuthStore = create((set) => ({
     const masterToken = localStorage.getItem('masterToken');
     const sessionToken = sessionStorage.getItem('sessionToken');
 
+    // If we already have a token stored, use it and skip bootstrap
     if (masterToken) {
-      set({ masterToken, sessionToken, isAuthenticated: true });
+      set({ masterToken, sessionToken, isAuthenticated: true, isInitialized: true });
+      return;
     }
 
     // Session-cookie fallback for OAuth login (e.g. Google/Facebook)
+    // ONLY bootstrap if we don't have a stored token
     try {
       const res = await fetch('/api/v1/auth/me', { credentials: 'include' });
       if (res.ok) {
@@ -42,7 +45,7 @@ export const useAuthStore = create((set) => ({
         }
         set({
           user,
-          masterToken: bootstrapToken || masterToken || null,
+          masterToken: bootstrapToken || null,
           isAuthenticated: true,
           error: null,
           isInitialized: true,
