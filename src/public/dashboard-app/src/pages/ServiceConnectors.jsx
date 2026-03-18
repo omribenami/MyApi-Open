@@ -158,23 +158,24 @@ function ServiceConnectors() {
 
   const filteredServices = useMemo(() => {
     return services.filter((s) => {
+      // Hide services that are not configured so users don't see broken/unavailable services
+      if (s.notConfigured) return false;
+
       const text = `${s.label} ${s.description || ''} ${s.category_label || s.category || ''}`.toLowerCase();
       const matchesSearch = !searchQuery || text.includes(searchQuery.toLowerCase());
       const matchesCategory = selectedCategory === 'all' || s.category === selectedCategory;
       const matchesStatus = selectedStatus === 'all'
         || (selectedStatus === 'connected' && s.status === 'connected')
-        || (selectedStatus === 'needs_setup' && s.notConfigured)
-        || (selectedStatus === 'available' && s.status !== 'connected' && !s.notConfigured);
+        || (selectedStatus === 'available' && s.status !== 'connected');
 
       return matchesSearch && matchesCategory && matchesStatus && s.label;
     });
   }, [services, searchQuery, selectedCategory, selectedStatus]);
 
   const summary = {
-    total: services.length,
-    connected: services.filter((s) => s.status === 'connected').length,
+    total: services.filter(s => !s.notConfigured).length,
+    connected: services.filter((s) => s.status === 'connected' && !s.notConfigured).length,
     available: services.filter((s) => s.status !== 'connected' && !s.notConfigured).length,
-    needsSetup: services.filter((s) => s.notConfigured).length,
   };
 
   return (
@@ -184,11 +185,10 @@ function ServiceConnectors() {
         <p className="mt-3 text-base text-slate-400">Discover, connect, and manage all your service integrations in one unified dashboard. Monitor connection status and handle authentication securely.</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <SummaryTile label="Total Services" value={summary.total} icon="📦" />
         <SummaryTile label="Connected" value={summary.connected} tone="emerald" icon="✓" />
         <SummaryTile label="Available" value={summary.available} tone="blue" icon="→" />
-        <SummaryTile label="Setup Required" value={summary.needsSetup} tone="amber" icon="⚙" />
       </div>
 
       <section className="rounded-2xl border border-slate-700 bg-gradient-to-br from-slate-800/60 to-slate-800/30 backdrop-blur-sm p-6 space-y-5" aria-label="Service filters">
@@ -221,7 +221,6 @@ function ServiceConnectors() {
               { key: 'all', label: 'All Services' },
               { key: 'connected', label: 'Connected' },
               { key: 'available', label: 'Available' },
-              { key: 'needs_setup', label: 'Needs Setup' },
             ].map((status) => (
               <button
                 key={status.key}
