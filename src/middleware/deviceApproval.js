@@ -88,20 +88,25 @@ function deviceApprovalMiddleware(req, res, next) {
       return next();
     }
 
-    // Device not approved, check if approval already pending
+    // Device not approved - return 403 immediately
+    // (Do NOT rate limit the rejection itself, only the approval request creation)
+    
+    // But first, check if approval already pending
     const pendingApprovals = db.getPendingApprovals(userId, tokenId);
     const existingPending = pendingApprovals.find(p => p.device_fingerprint_hash === fingerprintHash);
 
-    // Check rate limit for new approvals
+    // Check rate limit ONLY for new approval requests (not for the 403 response itself)
     const canCreateApproval = checkApprovalRateLimit(tokenId);
     
     if (!existingPending && !canCreateApproval) {
-      // Rate limited
-      return res.status(429).json({
-        error: 'too_many_requests',
-        message: 'Too many device approval requests. Maximum 5 requests per hour allowed.',
-        code: 'DEVICE_APPROVAL_RATE_LIMITED',
-        retryAfter: 3600,
+      // RATE LIMITED - but we still return 403 to maintain security posture
+      // (The rate limit applies only to creating NEW pending approvals)
+      return res.status(403).json({
+        error: 'device_not_approved',
+        message: 'Device not approved for this token.',
+        code: 'DEVICE_NOT_APPROVED',
+        approval_pending: false,
+        approval_id: null,
       });
     }
 
