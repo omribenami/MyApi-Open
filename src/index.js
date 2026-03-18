@@ -759,14 +759,6 @@ app.use('/api/v1/devices', authenticate, deviceRoutes);
 app.use('/api/v1/dashboard', authenticate, dashboardRoutes);
 app.use('/api/v1/services', authenticate, createServicesRoutes());
 
-// Notification system routes
-const notificationsRoutes = require('./routes/notifications');
-const activityRoutes = require('./routes/activity');
-const emailRoutes = require('./routes/email');
-app.use('/api/v1/notifications', authenticate, notificationsRoutes);
-app.use('/api/v1/activity', authenticate, activityRoutes);
-app.use('/api/v1/email', authenticate, emailRoutes);
-
 function authenticate(req, res, next) {
   // 1) Session auth (human dashboard)
   if (req.session && req.session.user) {
@@ -844,6 +836,14 @@ function adminOnly(req, res, next) {
 function getOAuthUserId(req) {
   return req?.session?.user?.id ? String(req.session.user.id) : 'oauth_user';
 }
+
+// Register notification system routes (after authenticate is defined)
+const notificationsRoutes = require('./routes/notifications');
+const activityRoutes = require('./routes/activity');
+const emailRoutes = require('./routes/email');
+app.use('/api/v1/notifications', authenticate, notificationsRoutes);
+app.use('/api/v1/activity', authenticate, activityRoutes);
+app.use('/api/v1/email', authenticate, emailRoutes);
 
 function getRequestOwnerId(req) {
   return String(req?.tokenMeta?.ownerId || req?.session?.user?.id || 'owner');
