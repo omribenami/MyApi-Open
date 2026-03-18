@@ -20,6 +20,7 @@ import MyListings from './pages/MyListings';
 import Skills from './pages/Skills';
 import DeviceManagement from './pages/DeviceManagement';
 import ActivityLog from './pages/ActivityLog';
+import NotificationCenter from './pages/NotificationCenter';
 import Layout from './components/Layout';
 
 // Create React Query client
@@ -196,6 +197,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <ActivityLog />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/notifications"
+              element={
+                <ProtectedRoute>
+                  <NotificationCenter />
                 </ProtectedRoute>
               }
             />

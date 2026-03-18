@@ -1,8 +1,10 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
+import { useNotificationStore } from '../stores/notificationStore';
 import BrandLogo from './BrandLogo';
 import CookieNotice from './CookieNotice';
+import Toast from './Toast';
 
 function NavDropdown({ label, items, isActiveFn, onMobileClick }) {
   const [open, setOpen] = useState(false);
@@ -164,6 +166,24 @@ function Layout({ children, onLogout }) {
               ))}
             </div>
 
+            {/* Notification Bell */}
+            <div className="relative">
+              <Link
+                to="/dashboard/notifications"
+                className="relative flex items-center justify-center w-10 h-10 rounded-lg border border-slate-700 bg-slate-900 hover:border-slate-600 transition-colors"
+                title="Notifications"
+              >
+                <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                </svg>
+                {useNotificationStore(state => state.unreadCount) > 0 && (
+                  <span className="absolute top-0 right-0 h-5 w-5 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center transform translate-x-1 -translate-y-1">
+                    {useNotificationStore(state => state.unreadCount) > 9 ? '9+' : useNotificationStore(state => state.unreadCount)}
+                  </span>
+                )}
+              </Link>
+            </div>
+
             {/* User Profile Menu */}
             <div className="relative flex items-center">
               <button
@@ -253,6 +273,20 @@ function Layout({ children, onLogout }) {
           </div>
         </div>
       </footer>
+      
+      {/* Toast Container */}
+      <div className="fixed top-4 right-4 z-50 space-y-2 max-w-sm">
+        {useNotificationStore(state => state.toasts).map(toast => (
+          <Toast
+            key={toast.id}
+            id={toast.id}
+            message={toast.message}
+            type={toast.type}
+            onClose={() => useNotificationStore(state => state.removeToast(toast.id))}
+          />
+        ))}
+      </div>
+      
       <CookieNotice />
     </div>
   );
