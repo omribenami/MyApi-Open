@@ -6,12 +6,12 @@
 ## 📍 Progress Tracker
 
 ### Phase 1: Database & Backend
-- [ ] Create notification tables
-- [ ] Create notification manager service
-- [ ] Hook notification emission into events
-- [ ] Create `/api/v1/activity` endpoint
-- [ ] Create `/api/v1/notifications/*` endpoints
-- [ ] Create `/api/v1/notifications/settings` endpoints
+- [x] Create notification tables (notifications, notification_settings, activity_log, email_queue)
+- [x] Create notification manager service (NotificationService)
+- [ ] Hook notification emission into events (will do in Phase 6)
+- [x] Create `/api/v1/activity` endpoint (list + summary)
+- [x] Create `/api/v1/notifications/*` endpoints (list, unread, mark-read, delete)
+- [x] Create `/api/v1/notifications/settings` endpoints (get, update)
 
 ### Phase 2: Activity Log Page
 - [ ] Create `/activity` React page

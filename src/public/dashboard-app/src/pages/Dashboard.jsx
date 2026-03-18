@@ -340,7 +340,7 @@ function Dashboard() {
             </div>
           </div>
           <Link
-            to="/settings#audit-logs"
+            to="/activity"
             className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors"
           >
             View All
@@ -521,7 +521,7 @@ function Dashboard() {
 
           {/* View Logs */}
           <Link
-            to="/settings#audit-logs"
+            to="/activity"
             className="group rounded-lg border border-slate-700/50 bg-slate-900/30 hover:bg-slate-800/50 hover:border-slate-600/50 p-4 transition-all duration-200"
           >
             <div className="flex items-start gap-3">

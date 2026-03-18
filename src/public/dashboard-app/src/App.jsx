@@ -19,6 +19,7 @@ import Marketplace from './pages/Marketplace';
 import MyListings from './pages/MyListings';
 import Skills from './pages/Skills';
 import DeviceManagement from './pages/DeviceManagement';
+import ActivityLog from './pages/ActivityLog';
 import Layout from './components/Layout';
 
 // Create React Query client
@@ -187,6 +188,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <DeviceManagement />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/activity"
+              element={
+                <ProtectedRoute>
+                  <ActivityLog />
                 </ProtectedRoute>
               }
             />
