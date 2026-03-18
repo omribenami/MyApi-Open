@@ -7,12 +7,17 @@ import App from './App.jsx'
 // If detected, clear local auth/session artifacts once and reload cleanly.
 if (typeof window !== 'undefined') {
   const CORRUPTION_MARKER = 'Corruption: block checksum mismatch';
-  const RECOVERY_KEY = '__myapi_recovered_from_corruption__';
+  const RECOVERY_TS_KEY = '__myapi_corruption_recovery_ts__';
 
   const recoverFromCorruption = () => {
     try {
-      if (sessionStorage.getItem(RECOVERY_KEY)) return;
-      sessionStorage.setItem(RECOVERY_KEY, '1');
+      const now = Date.now();
+      const lastTs = Number(sessionStorage.getItem(RECOVERY_TS_KEY) || 0);
+
+      // Guard against tight redirect loops, but still allow repeated recovery attempts.
+      if (Number.isFinite(lastTs) && now - lastTs < 1500) return;
+      sessionStorage.setItem(RECOVERY_TS_KEY, String(now));
+
       localStorage.removeItem('masterToken');
       sessionStorage.removeItem('sessionToken');
       sessionStorage.removeItem('tokenData');
