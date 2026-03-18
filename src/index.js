@@ -3482,14 +3482,14 @@ app.get([
     }
 
     // Emit notification for service connection
-    if (appUser) {
-      NotificationService.emitNotification(appUser.id, 'service_connected',
+    if (req.session.user) {
+      NotificationService.emitNotification(req.session.user.id, 'service_connected',
         `${service.charAt(0).toUpperCase() + service.slice(1)} Connected`,
         `Your ${service} account has been successfully connected to MyApi`,
         { relatedEntityType: 'service', relatedEntityId: service, actionUrl: '/dashboard/services' }
       ).catch(err => console.error('Notification error:', err));
-      NotificationService.logActivity(appUser.id, 'service_connected', 'service', {
-        resourceId: service, resourceName: service, actorType: 'user', actorId: appUser.id, result: 'success', ipAddress: req.ip,
+      NotificationService.logActivity(req.session.user.id, 'service_connected', 'service', {
+        resourceId: service, resourceName: service, actorType: 'user', actorId: req.session.user.id, result: 'success', ipAddress: req.ip,
       });
     }
 
