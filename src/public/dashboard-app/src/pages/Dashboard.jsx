@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import apiClient from '../utils/apiClient';
 import AlertBanner from '../components/AlertBanner';
 import { useAuthStore } from '../stores/authStore';
 
@@ -38,7 +38,7 @@ function Dashboard() {
   const fetchMetrics = async () => {
     try {
       const headers = masterToken ? { Authorization: `Bearer ${masterToken}` } : {};
-      const response = await axios.get('/api/v1/dashboard/metrics', { headers });
+      const response = await apiClient.get('/api/v1/dashboard/metrics', { headers });
       setMetrics(response.data);
       setError(null);
     } catch (err) {
@@ -148,7 +148,7 @@ function Dashboard() {
   const handleApproveDevice = async (deviceId) => {
     try {
       const headers = masterToken ? { Authorization: `Bearer ${masterToken}` } : {};
-      await axios.post(`/api/v1/devices/approve/${deviceId}`, 
+      await apiClient.post(`/api/v1/devices/approve/${deviceId}`, 
         { device_name: 'Approved Device' }, 
         { headers }
       );

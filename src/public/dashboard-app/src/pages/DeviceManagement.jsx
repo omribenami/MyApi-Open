@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import apiClient from '../utils/apiClient';
 import './DeviceManagement.css';
 
 const DeviceManagement = () => {
@@ -23,13 +23,13 @@ const DeviceManagement = () => {
     setError(null);
     try {
       if (activeTab === 'approved') {
-        const res = await axios.get('/api/v1/devices/approved');
+        const res = await apiClient.get('/api/v1/devices/approved');
         setApprovedDevices(res.data.devices || []);
       } else if (activeTab === 'pending') {
-        const res = await axios.get('/api/v1/devices/approvals/pending');
+        const res = await apiClient.get('/api/v1/devices/approvals/pending');
         setPendingApprovals(res.data.approvals || []);
       } else if (activeTab === 'activity') {
-        const res = await axios.get('/api/v1/devices/activity/log');
+        const res = await apiClient.get('/api/v1/devices/activity/log');
         setActivityLog(res.data.activity || []);
       }
     } catch (err) {
@@ -46,7 +46,7 @@ const DeviceManagement = () => {
     }
 
     try {
-      await axios.post(`/api/v1/devices/${deviceId}/revoke`);
+      await apiClient.post(`/api/v1/devices/${deviceId}/revoke`);
       setApprovalMessage({ type: 'success', text: 'Device revoked successfully' });
       loadDeviceData();
       setTimeout(() => setApprovalMessage(''), 3000);
@@ -61,7 +61,7 @@ const DeviceManagement = () => {
     }
 
     try {
-      await axios.post(`/api/v1/devices/${deviceId}/rename`, {
+      await apiClient.post(`/api/v1/devices/${deviceId}/rename`, {
         name: newDeviceName,
       });
       setApprovalMessage({ type: 'success', text: 'Device renamed successfully' });
@@ -77,7 +77,7 @@ const DeviceManagement = () => {
 
   const handleApproveDevice = async (approvalId) => {
     try {
-      await axios.post(`/api/v1/devices/approve/${approvalId}`, {
+      await apiClient.post(`/api/v1/devices/approve/${approvalId}`, {
         device_name: newDeviceName || 'Approved Device',
       });
       setApprovalMessage({ type: 'success', text: 'Device approved successfully' });
@@ -91,7 +91,7 @@ const DeviceManagement = () => {
 
   const handleDenyDevice = async (approvalId) => {
     try {
-      await axios.post(`/api/v1/devices/deny/${approvalId}`, {
+      await apiClient.post(`/api/v1/devices/deny/${approvalId}`, {
         reason: 'Device approval denied by user',
       });
       setApprovalMessage({ type: 'success', text: 'Device approval denied' });

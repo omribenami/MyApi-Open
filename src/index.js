@@ -498,9 +498,10 @@ app.get('/api/v1/', (req, res) => {
       quickStart: '/api/v1/quick-start',
     },
     authentication: {
-      type: 'Bearer',
+      type: 'Bearer or Query',
       header: 'Authorization: Bearer <your-token>',
-      hint: 'Use the token provided by the platform owner. Include it in every request.',
+      query_param: '?token=<your-token>',
+      hint: 'Use the token provided by the platform owner. Include it in the Authorization header or as a ?token= query parameter (for AI fetch tools).',
     },
     endpoints: {
       discovery: 'GET /api/v1/',
@@ -753,8 +754,9 @@ const createServicesRoutes = require('./routes/services');
 
 app.use('/api/v1', authRoutes);
 app.use('/api/v1/devices', authenticate, deviceRoutes);
-app.use('/api/v1/dashboard', authenticate, deviceApprovalMiddleware, dashboardRoutes);
-app.use('/api/v1/services', authenticate, deviceApprovalMiddleware, createServicesRoutes());
+// Device approval is now applied globally in the authenticate middleware
+app.use('/api/v1/dashboard', authenticate, dashboardRoutes);
+app.use('/api/v1/services', authenticate, createServicesRoutes());
 
 function authenticate(req, res, next) {
   // 1) Session auth (human dashboard)
@@ -763,16 +765,36 @@ function authenticate(req, res, next) {
     req.authType = 'session';
     // session users are treated as "full" for MVP; we will add RBAC later.
     req.tokenMeta = { tokenId: `sess_${req.user.id}`, scope: 'full', ownerId: String(req.user.id), label: 'session' };
-    return next();
+    
+    // For session users, skip device approval for auth/device routes
+    const skipDeviceApproval = req.path.startsWith('/api/v1/auth/') || 
+                               req.path.startsWith('/api/v1/devices') ||
+                               req.path.startsWith('/api/v1/oauth/authorize');
+    
+    if (skipDeviceApproval) {
+      return next();
+    }
+    
+    // Apply device approval for session users on protected routes
+    return deviceApprovalMiddleware(req, res, next);
   }
 
-  // 2) Bearer token auth (agents)
+  // 2) Bearer token auth (agents) or Query parameter (for basic AI fetch tools)
+  let rawToken = null;
   const authHeader = req.headers["authorization"] || "";
   const parts = authHeader.split(" ");
-  if (parts.length !== 2 || parts[0] !== "Bearer") {
-    return res.status(401).json({ error: "Missing session or Authorization: Bearer token" });
+  
+  if (parts.length === 2 && parts[0] === "Bearer") {
+    rawToken = parts[1];
+  } else if (req.query.token) {
+    rawToken = req.query.token;
+  } else if (req.query.api_key) {
+    rawToken = req.query.api_key;
   }
-  const rawToken = parts[1];
+
+  if (!rawToken) {
+    return res.status(401).json({ error: "Missing session, Authorization: Bearer token, or ?token= query parameter" });
+  }
   const tokens = getAccessTokens();
   let matched = null;
   for (const tokenMeta of tokens) {
@@ -787,7 +809,18 @@ function authenticate(req, res, next) {
   }
   req.tokenMeta = matched;
   req.authType = 'bearer';
-  next();
+  
+  // For Bearer tokens (agents), skip device approval for auth/device routes
+  const skipDeviceApproval = req.path.startsWith('/api/v1/auth/') || 
+                             req.path.startsWith('/api/v1/devices') ||
+                             req.path.startsWith('/api/v1/oauth/authorize');
+  
+  if (skipDeviceApproval) {
+    return next();
+  }
+  
+  // Apply device approval for agents on protected routes
+  return deviceApprovalMiddleware(req, res, next);
 }
 
 function adminOnly(req, res, next) {
