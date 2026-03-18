@@ -1,0 +1,439 @@
+{
+  "total": 72,
+  "passed": 57,
+  "failed": 15,
+  "results": [
+    {
+      "num": 1,
+      "name": "No auth header → 401",
+      "status": "✅ PASS",
+      "detail": "Got 401: {\"error\":\"Missing session, Authorization: Bearer token, or ?token= query parameter\"}"
+    },
+    {
+      "num": 2,
+      "name": "Empty Bearer token → 401",
+      "status": "✅ PASS",
+      "detail": "Got 401"
+    },
+    {
+      "num": 3,
+      "name": "Invalid token → 401",
+      "status": "✅ PASS",
+      "detail": "Got 401: {\"error\":\"Invalid or revoked token\"}"
+    },
+    {
+      "num": 4,
+      "name": "Random garbage token → 401",
+      "status": "✅ PASS",
+      "detail": "Got 401"
+    },
+    {
+      "num": 5,
+      "name": "No Bearer prefix → 401",
+      "status": "✅ PASS",
+      "detail": "Got 401"
+    },
+    {
+      "num": 6,
+      "name": "Basic auth scheme → 401",
+      "status": "✅ PASS",
+      "detail": "Got 401"
+    },
+    {
+      "num": 7,
+      "name": "Valid master token → 200 or 403 (device)",
+      "status": "✅ PASS",
+      "detail": "Got 200: {\"data\":{\"pronouns:\":\"_(optional)_\",\"name\":\"YOUR_NAME\",\"location\":\"Leander, Texas, US\",\"timezone\":\"America/Chicago\",\"occupation\":\"Full-Stack Developer & SaaS Entrepreneur\",\"github\":\"github.com/omri"
+    },
+    {
+      "num": 8,
+      "name": "Guest token identity read",
+      "status": "✅ PASS",
+      "detail": "Got 200: {\"data\":{\"name\":\"YOUR_NAME\"},\"meta\":{\"scope\":\"read\"}}"
+    },
+    {
+      "num": 9,
+      "name": "Token via ?token= query param",
+      "status": "✅ PASS",
+      "detail": "Got 200"
+    },
+    {
+      "num": 10,
+      "name": "Token via ?api_key= query param",
+      "status": "✅ PASS",
+      "detail": "Got 200"
+    },
+    {
+      "num": 11,
+      "name": "Guest cannot list vault tokens",
+      "status": "✅ PASS",
+      "detail": "Got 403: {\"error\":\"Only master token can view vault tokens\"}"
+    },
+    {
+      "num": 12,
+      "name": "Guest cannot create tokens",
+      "status": "✅ PASS",
+      "detail": "Got 403"
+    },
+    {
+      "num": 13,
+      "name": "Guest cannot read preferences",
+      "status": "✅ PASS",
+      "detail": "Got 403"
+    },
+    {
+      "num": 14,
+      "name": "Guest cannot read audit logs",
+      "status": "✅ PASS",
+      "detail": "Got 403"
+    },
+    {
+      "num": 15,
+      "name": "Guest cannot list connectors",
+      "status": "❌ FAIL",
+      "detail": "Got 429"
+    },
+    {
+      "num": 16,
+      "name": "Guest cannot list personas",
+      "status": "❌ FAIL",
+      "detail": "Got 429"
+    },
+    {
+      "num": 17,
+      "name": "Guest cannot list scopes",
+      "status": "❌ FAIL",
+      "detail": "Got 429"
+    },
+    {
+      "num": 18,
+      "name": "Guest cannot list handshakes",
+      "status": "❌ FAIL",
+      "detail": "Got 429"
+    },
+    {
+      "num": 19,
+      "name": "Guest cannot list users",
+      "status": "❌ FAIL",
+      "detail": "Got 429"
+    },
+    {
+      "num": 20,
+      "name": "Guest cannot create vault token",
+      "status": "❌ FAIL",
+      "detail": "Got 429"
+    },
+    {
+      "num": 21,
+      "name": "Guest cannot update preferences",
+      "status": "❌ FAIL",
+      "detail": "Got 429"
+    },
+    {
+      "num": 22,
+      "name": "Guest cannot revoke tokens",
+      "status": "❌ FAIL",
+      "detail": "Got 429"
+    },
+    {
+      "num": 23,
+      "name": "Guest cannot access gateway context",
+      "status": "❌ FAIL",
+      "detail": "Got 429"
+    },
+    {
+      "num": 24,
+      "name": "Master CAN list vault tokens",
+      "status": "✅ PASS",
+      "detail": "Got 200"
+    },
+    {
+      "num": 25,
+      "name": "Master CAN read preferences",
+      "status": "✅ PASS",
+      "detail": "Got 200"
+    },
+    {
+      "num": 26,
+      "name": "Unapproved device → 403 DEVICE_APPROVAL_REQUIRED",
+      "status": "❌ FAIL",
+      "detail": "Got 429: {\"error\":\"too_many_requests\",\"message\":\"Too many device approval requests. Maximum 5 requests per hour allowed.\",\"code\":\"DEVICE_APPROVAL_RATE_LIMITED\",\"retryAfter\":3600}"
+    },
+    {
+      "num": 27,
+      "name": "Device approval response has required fields",
+      "status": "✅ PASS",
+      "detail": "Skipped - device approval not triggered"
+    },
+    {
+      "num": 28,
+      "name": "Device approval sets no-cache headers",
+      "status": "✅ PASS",
+      "detail": "Skipped"
+    },
+    {
+      "num": 29,
+      "name": "/health is public",
+      "status": "✅ PASS",
+      "detail": "Got 200"
+    },
+    {
+      "num": 30,
+      "name": "/api/v1/ discovery is public",
+      "status": "✅ PASS",
+      "detail": "Got 200"
+    },
+    {
+      "num": 31,
+      "name": "/api/v1/quick-start is public",
+      "status": "✅ PASS",
+      "detail": "Got 200"
+    },
+    {
+      "num": 32,
+      "name": "/openapi.json is public",
+      "status": "✅ PASS",
+      "detail": "Got 200"
+    },
+    {
+      "num": 33,
+      "name": "/api/v1/health is public",
+      "status": "✅ PASS",
+      "detail": "Got 200"
+    },
+    {
+      "num": 34,
+      "name": "/.well-known/ai-plugin.json is public",
+      "status": "✅ PASS",
+      "detail": "Got 200"
+    },
+    {
+      "num": 35,
+      "name": "/robots.txt is public",
+      "status": "✅ PASS",
+      "detail": "Got 200"
+    },
+    {
+      "num": 36,
+      "name": "/api/v1/billing/plans is public",
+      "status": "✅ PASS",
+      "detail": "Got 200"
+    },
+    {
+      "num": 37,
+      "name": "Handshake creation is public",
+      "status": "✅ PASS",
+      "detail": "Got 201: {\"data\":{\"handshakeId\":\"hsh_f38b34f8d22a83426b3ad45fc02a0a2a\",\"status\":\"pending\",\"message\":\"Your access request has been submitted. The user will review and approve/deny it.\"}}"
+    },
+    {
+      "num": 38,
+      "name": "/api/v1/services is public",
+      "status": "❌ FAIL",
+      "detail": "Got 401"
+    },
+    {
+      "num": 39,
+      "name": "/api/v1/oauth/status is public",
+      "status": "✅ PASS",
+      "detail": "Got 200"
+    },
+    {
+      "num": 40,
+      "name": "Cannot access .env",
+      "status": "✅ PASS",
+      "detail": "Got 403"
+    },
+    {
+      "num": 41,
+      "name": "Cannot access .sqlite files",
+      "status": "✅ PASS",
+      "detail": "Got 403"
+    },
+    {
+      "num": 42,
+      "name": "Cannot access .db files",
+      "status": "✅ PASS",
+      "detail": "Got 403"
+    },
+    {
+      "num": 43,
+      "name": "Cannot access .log files",
+      "status": "✅ PASS",
+      "detail": "Got 403"
+    },
+    {
+      "num": 44,
+      "name": "Cannot access node_modules",
+      "status": "✅ PASS",
+      "detail": "Got 403"
+    },
+    {
+      "num": 45,
+      "name": "Cannot access .git",
+      "status": "✅ PASS",
+      "detail": "Got 403"
+    },
+    {
+      "num": 46,
+      "name": "OAuth token rejected as Bearer API token",
+      "status": "✅ PASS",
+      "detail": "Got 401"
+    },
+    {
+      "num": 47,
+      "name": "Fake session cookie → 401",
+      "status": "✅ PASS",
+      "detail": "Got 401"
+    },
+    {
+      "num": 48,
+      "name": "Register without password → 400",
+      "status": "✅ PASS",
+      "detail": "Got 400"
+    },
+    {
+      "num": 49,
+      "name": "Register with weak password → 400",
+      "status": "✅ PASS",
+      "detail": "Got 400"
+    },
+    {
+      "num": 50,
+      "name": "Login with missing fields → 400",
+      "status": "✅ PASS",
+      "detail": "Got 400"
+    },
+    {
+      "num": 51,
+      "name": "Login with wrong creds → 401",
+      "status": "✅ PASS",
+      "detail": "Got 401"
+    },
+    {
+      "num": 52,
+      "name": "Token validate with no token → 400",
+      "status": "✅ PASS",
+      "detail": "Got 400"
+    },
+    {
+      "num": 53,
+      "name": "Token validate with invalid token → 401",
+      "status": "✅ PASS",
+      "detail": "Got 401"
+    },
+    {
+      "num": 54,
+      "name": "Handshake with invalid scopes → 400",
+      "status": "✅ PASS",
+      "detail": "Got 400: {\"error\":\"Invalid scopes: admin, delete_everything. Allowed: read, professional, availability\"}"
+    },
+    {
+      "num": 55,
+      "name": "Handshake without required fields → 400",
+      "status": "✅ PASS",
+      "detail": "Got 400"
+    },
+    {
+      "num": 56,
+      "name": "API includes Link headers",
+      "status": "✅ PASS",
+      "detail": "Link: <https://localhost:4500/openapi.json>; rel=\"service-desc\", <https://localhost:4500/api/v1/>; rel=\"ap"
+    },
+    {
+      "num": 57,
+      "name": "API includes X-API-Docs header",
+      "status": "✅ PASS",
+      "detail": "X-API-Docs: /openapi.json"
+    },
+    {
+      "num": 58,
+      "name": "API includes X-API-Root header",
+      "status": "✅ PASS",
+      "detail": "X-API-Root: /api/v1/"
+    },
+    {
+      "num": 59,
+      "name": "Rate limit headers present",
+      "status": "✅ PASS",
+      "detail": "X-RateLimit-Limit: undefined, Remaining: undefined"
+    },
+    {
+      "num": 60,
+      "name": "Guest cannot rotate keys",
+      "status": "❌ FAIL",
+      "detail": "Got 429"
+    },
+    {
+      "num": 61,
+      "name": "Guest cannot view key status",
+      "status": "❌ FAIL",
+      "detail": "Got 429"
+    },
+    {
+      "num": 62,
+      "name": "Token validate with valid master → 200",
+      "status": "✅ PASS",
+      "detail": "Got 200: {\"data\":{\"valid\":true,\"tokenId\":\"tok_qa_1677fe5045df6386\",\"scope\":\"full\",\"label\":\"QA Master Token\"}}"
+    },
+    {
+      "num": 63,
+      "name": "capabilities returns token info",
+      "status": "❌ FAIL",
+      "detail": "Got 429"
+    },
+    {
+      "num": 64,
+      "name": "SQL injection in token validate blocked",
+      "status": "✅ PASS",
+      "detail": "Got 401"
+    },
+    {
+      "num": 65,
+      "name": "SQL injection in register blocked",
+      "status": "❌ FAIL",
+      "detail": "Got 200"
+    },
+    {
+      "num": 66,
+      "name": "SQL injection in handshake blocked",
+      "status": "✅ PASS",
+      "detail": "Got 201"
+    },
+    {
+      "num": 67,
+      "name": "Path traversal blocked",
+      "status": "✅ PASS",
+      "detail": "Got 404"
+    },
+    {
+      "num": 68,
+      "name": "URL-encoded path traversal blocked",
+      "status": "✅ PASS",
+      "detail": "Got 404"
+    },
+    {
+      "num": 69,
+      "name": "Oversized body handled gracefully",
+      "status": "✅ PASS",
+      "detail": "Got 500"
+    },
+    {
+      "num": 70,
+      "name": "Logout returns success",
+      "status": "✅ PASS",
+      "detail": "Got 200"
+    },
+    {
+      "num": 71,
+      "name": "POST to GET endpoint handled",
+      "status": "✅ PASS",
+      "detail": "Got 404"
+    },
+    {
+      "num": 72,
+      "name": "DELETE to read endpoint handled",
+      "status": "✅ PASS",
+      "detail": "Got 404"
+    }
+  ]
+}
