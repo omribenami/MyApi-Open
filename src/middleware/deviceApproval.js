@@ -142,7 +142,8 @@ function deviceApprovalMiddleware(req, res, next) {
     const suspiciousAnalysis = DeviceFingerprint.analyzeSuspiciousActivity(
       currentFingerprint,
       allApprovals.map(a => ({
-        summary: a.device_name ? JSON.parse(a.device_name || '{}') : {},
+        // device_name is a string, not JSON - don't parse it
+        summary: a.device_name ? { name: a.device_name } : {},
         fingerprint: { ipAddress: a.ip_address }
       }))
     );
@@ -195,13 +196,21 @@ function deviceApprovalMiddleware(req, res, next) {
       suspiciousActivity: suspiciousAnalysis.warnings.length > 0 ? suspiciousAnalysis : null,
     });
   } catch (error) {
-    console.error('[Device Approval Middleware ERROR]', {
+    console.error('[Device Approval Middleware CRITICAL ERROR]', {
       message: error.message,
       stack: error.stack,
+      userId,
+      tokenId,
+      path: req.path,
     });
-    // On error, allow request to continue (fail open for security reasons)
-    // but log the error for debugging
-    return next();
+    // FAIL CLOSED: On error, DENY access instead of allowing it
+    // This is critical for security - we must not let errors bypass the gate
+    return res.status(403).json({
+      error: 'device_approval_error',
+      code: 'DEVICE_APPROVAL_FAILED',
+      message: 'Device approval check failed. Please try again or contact support.',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
   }
 }
 

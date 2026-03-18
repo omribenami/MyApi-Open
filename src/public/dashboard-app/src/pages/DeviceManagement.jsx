@@ -14,11 +14,34 @@ const DeviceManagement = () => {
   const [newDeviceName, setNewDeviceName] = useState('');
   const [approvalMessage, setApprovalMessage] = useState('');
 
+  // Load ALL device data on mount AND when tab changes
   useEffect(() => {
-    loadDeviceData();
+    loadAllDeviceData();
+  }, []);
+
+  // Reload current tab data when tab changes
+  useEffect(() => {
+    loadCurrentTabData();
   }, [activeTab]);
 
-  const loadDeviceData = async () => {
+  // Load all data on component mount (shows counts in tab labels)
+  const loadAllDeviceData = async () => {
+    try {
+      const [approvedRes, pendingRes, activityRes] = await Promise.all([
+        apiClient.get('/devices/approved').catch(() => ({ data: { devices: [] } })),
+        apiClient.get('/devices/approvals/pending').catch(() => ({ data: { approvals: [] } })),
+        apiClient.get('/devices/activity/log').catch(() => ({ data: { activity: [] } })),
+      ]);
+      setApprovedDevices(approvedRes.data.devices || []);
+      setPendingApprovals(pendingRes.data.approvals || []);
+      setActivityLog(activityRes.data.activity || []);
+    } catch (err) {
+      console.error('Error loading device data:', err);
+    }
+  };
+
+  // Reload data for current tab (when tab is clicked)
+  const loadCurrentTabData = async () => {
     setLoading(true);
     setError(null);
     try {

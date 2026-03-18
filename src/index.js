@@ -5442,6 +5442,29 @@ if (WebSocketServer) {
   console.log('WebSocket server enabled');
 }
 
+// --- Error Handlers (must be last) ---
+
+// 404 handler - return JSON
+app.use((req, res) => {
+  res.status(404).json({
+    error: 'Not Found',
+    code: 'ROUTE_NOT_FOUND',
+    path: req.path,
+    method: req.method,
+    message: `No route found for ${req.method} ${req.path}`
+  });
+});
+
+// Global error handler - return JSON
+app.use((err, req, res, next) => {
+  console.error('Error:', err.message);
+  res.status(err.status || 500).json({
+    error: err.message || 'Internal Server Error',
+    code: err.code || 'INTERNAL_ERROR',
+    status: err.status || 500
+  });
+});
+
 // --- Start ---
 bootstrap();
 server.listen(PORT, '0.0.0.0', () => {
