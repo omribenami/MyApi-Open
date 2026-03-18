@@ -28,6 +28,10 @@ function Dashboard() {
     lastError: null,
     activeTokens: 0,
     recentActivity: [],
+    personas: 0,
+    skills: 0,
+    marketplace: 0,
+    knowledge: 0,
   });
 
   const [alerts, setAlerts] = useState([]);
@@ -392,6 +396,124 @@ function Dashboard() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
           </Link>
+        </div>
+      </div>
+
+      {/* AI & Data Section - Personas, Skills, Marketplace, Knowledge */}
+      <div className="space-y-4 mt-12">
+        <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-widest">AI & Data</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Personas Card */}
+          <div className="rounded-lg border border-slate-700/50 bg-slate-900/50 backdrop-blur p-6 hover:border-slate-600/50 transition-all duration-200">
+            <div className="mb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
+                  <svg className="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                </div>
+                <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest">Personas</h3>
+              </div>
+              <p className="text-2xl font-bold text-slate-100 tracking-tight">{metrics.personas || 0}</p>
+              <p className="text-xs text-slate-400 mt-1">Active</p>
+            </div>
+            <div className="pt-4 border-t border-slate-700/30">
+              <p className="text-xs text-slate-400 mb-3">AI agents and personas</p>
+            </div>
+            <Link
+              to="/personas"
+              className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors"
+            >
+              Manage
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </Link>
+          </div>
+
+          {/* Skills Card */}
+          <div className="rounded-lg border border-slate-700/50 bg-slate-900/50 backdrop-blur p-6 hover:border-slate-600/50 transition-all duration-200">
+            <div className="mb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
+                  <svg className="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                </div>
+                <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest">Skills</h3>
+              </div>
+              <p className="text-2xl font-bold text-slate-100 tracking-tight">{metrics.skills || 0}</p>
+              <p className="text-xs text-slate-400 mt-1">Available</p>
+            </div>
+            <div className="pt-4 border-t border-slate-700/30">
+              <p className="text-xs text-slate-400 mb-3">Capabilities and tools</p>
+            </div>
+            <Link
+              to="/skills"
+              className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors"
+            >
+              Browse
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </Link>
+          </div>
+
+          {/* Marketplace Card */}
+          <div className="rounded-lg border border-slate-700/50 bg-slate-900/50 backdrop-blur p-6 hover:border-slate-600/50 transition-all duration-200">
+            <div className="mb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                  <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                  </svg>
+                </div>
+                <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest">Marketplace</h3>
+              </div>
+              <p className="text-2xl font-bold text-slate-100 tracking-tight">{metrics.marketplace || 0}</p>
+              <p className="text-xs text-slate-400 mt-1">Listings</p>
+            </div>
+            <div className="pt-4 border-t border-slate-700/30">
+              <p className="text-xs text-slate-400 mb-3">Buy and sell skills</p>
+            </div>
+            <Link
+              to="/marketplace"
+              className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors"
+            >
+              Explore
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </Link>
+          </div>
+
+          {/* Knowledge Base Card */}
+          <div className="rounded-lg border border-slate-700/50 bg-slate-900/50 backdrop-blur p-6 hover:border-slate-600/50 transition-all duration-200">
+            <div className="mb-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-8 h-8 rounded bg-rose-500/10 border border-rose-500/20 flex items-center justify-center">
+                  <svg className="w-4 h-4 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C6.5 6.253 2 10.998 2 17s4.5 10.747 10 10.747c5.5 0 10-4.998 10-10.747S17.5 6.253 12 6.253z" />
+                  </svg>
+                </div>
+                <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest">Knowledge</h3>
+              </div>
+              <p className="text-2xl font-bold text-slate-100 tracking-tight">{metrics.knowledge || 0}</p>
+              <p className="text-xs text-slate-400 mt-1">Documents</p>
+            </div>
+            <div className="pt-4 border-t border-slate-700/30">
+              <p className="text-xs text-slate-400 mb-3">Context and data</p>
+            </div>
+            <Link
+              to="/knowledge"
+              className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors"
+            >
+              View
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </Link>
+          </div>
         </div>
       </div>
 

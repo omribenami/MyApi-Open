@@ -82,6 +82,54 @@ router.get('/metrics', requireAuth, (req, res) => {
     `).get(req.userId);
     const activeTokens = activeTokensResult?.count || 0;
 
+    // Get personas count
+    let personas = 0;
+    try {
+      const personasResult = db.db.prepare(`
+        SELECT COUNT(*) as count FROM personas 
+        WHERE user_id = ?
+      `).get(req.userId);
+      personas = personasResult?.count || 0;
+    } catch (err) {
+      // Table might not exist
+    }
+
+    // Get skills count
+    let skills = 0;
+    try {
+      const skillsResult = db.db.prepare(`
+        SELECT COUNT(*) as count FROM skills 
+        WHERE user_id = ? OR public = 1
+      `).get(req.userId);
+      skills = skillsResult?.count || 0;
+    } catch (err) {
+      // Table might not exist
+    }
+
+    // Get marketplace listings count
+    let marketplace = 0;
+    try {
+      const marketplaceResult = db.db.prepare(`
+        SELECT COUNT(*) as count FROM marketplace_listings 
+        WHERE user_id = ? AND active = 1
+      `).get(req.userId);
+      marketplace = marketplaceResult?.count || 0;
+    } catch (err) {
+      // Table might not exist
+    }
+
+    // Get knowledge base documents count
+    let knowledge = 0;
+    try {
+      const knowledgeResult = db.db.prepare(`
+        SELECT COUNT(*) as count FROM kb_documents 
+        WHERE user_id = ?
+      `).get(req.userId);
+      knowledge = knowledgeResult?.count || 0;
+    } catch (err) {
+      // Table might not exist
+    }
+
     // Get API uptime (from system health - default to 99.8% if no data)
     let apiUptime = 99.8;
     try {
@@ -197,6 +245,10 @@ router.get('/metrics', requireAuth, (req, res) => {
       activeTokens,
       lastActivityTime,
       recentActivity: limitedActivity,
+      personas,
+      skills,
+      marketplace,
+      knowledge,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
