@@ -1,21 +1,22 @@
 # MyApi QA Test Report
 
-**Generated:** 2026-03-18T04:35:47.710Z
+**Generated:** 2026-03-18T04:50:23.641Z
 
 ## Summary
 
 - **Total Tests:** 27
-- **Passed:** ✅ 26
-- **Failed:** ❌ 1
-- **Pass Rate:** 96.3%
+- **Passed:** ✅ 24
+- **Failed:** ❌ 3
+- **Pass Rate:** 88.9%
 
 ## Test Suites
 
 ### Security Tests
-- Passed: 7
-- Failed: 1
+- Passed: 6
+- Failed: 2
 - **Critical Issues:**
-  - Unapproved device blocked with 403: No response received: Should have blocked unapproved device
+  - Approved device can access endpoints: Request failed with status code 403
+  - Token scope enforcement: Request failed with status code 403
 
 ### UI/UX Tests
 - Passed: 9
@@ -27,14 +28,15 @@
   - Endpoint /api/v1/health not in OpenAPI spec
 
 ### Integration Tests
-- Passed: 10
-- Failed: 0
+- Passed: 9
+- Failed: 1
 
 ## Recommendations
 
 - 🔴 CRITICAL: Fix failed tests before production deployment
 - 🔴 SECURITY: Address critical security findings immediately
 - 🟡 UI: Review and address UI warnings
+- 🟡 COVERAGE: Test pass rate below 95% - investigate
 - ✅ Once all critical issues resolved, ready for staging deployment
 
 ## Next Steps
