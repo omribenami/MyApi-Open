@@ -1,28 +1,27 @@
 /**
- * Jest Setup File
- * Runs before all test suites
+ * Jest Setup File (runs after environment is initialized)
+ * Mocks console output during tests
  */
 
-// Suppress console logs during tests
 const originalConsoleError = console.error;
 const originalConsoleWarn = console.warn;
+const originalConsoleLog = console.log;
 
 beforeAll(() => {
-  // Mock console methods
+  // Mock console methods to reduce noise during tests
   console.error = jest.fn((message) => {
-    if (!message.includes('test')) {
-      originalConsoleError(message);
+    if (!message || message.toString().includes('test')) {
+      return;
     }
+    originalConsoleError(message);
   });
+  console.log = jest.fn();
+  console.warn = jest.fn();
 });
 
 afterAll(() => {
   // Restore console
   console.error = originalConsoleError;
   console.warn = originalConsoleWarn;
+  console.log = originalConsoleLog;
 });
-
-// Set test environment
-process.env.NODE_ENV = 'test';
-process.env.DB_PATH = ':memory:';
-process.env.PORT = '3001';

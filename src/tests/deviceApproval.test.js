@@ -9,7 +9,7 @@ describe('Device Approval System', () => {
   const testIp = '192.168.1.100';
 
   // Create test user and token before tests
-  before(() => {
+  beforeAll(() => {
     // Ensure test user exists
     try {
       db.createUser(testUserId, 'testuser' + Date.now(), 'Test User');
