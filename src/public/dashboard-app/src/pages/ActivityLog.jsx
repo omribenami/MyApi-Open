@@ -4,6 +4,7 @@ import apiClient from '../utils/apiClient';
 
 function ActivityLog() {
   const masterToken = useAuthStore((state) => state.masterToken);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const [activity, setActivity] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -18,25 +19,27 @@ function ActivityLog() {
   const [resourceType, setResourceType] = useState('');
   const [result, setResult] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [dateRange, setDateRange] = useState('7days');
+  const [dateRange, setDateRange] = useState('all');
   
   // Real-time updates via WebSocket
   const wsRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
 
   const actionTypes = [
-    'token_used', 'skill_executed', 'persona_invoked', 'guest_token_used',
-    'device_approved', 'device_revoked', 'service_connected', 'skill_liked', 'persona_liked'
+    'token_used', 'token_revoked', 'skill_executed', 'persona_invoked', 'guest_token_used',
+    'device_approval_requested', 'device_approved', 'device_revoked', 'service_connected', 'skill_liked', 'persona_liked'
   ];
 
   const resourceTypes = [
     'token', 'skill', 'persona', 'device', 'service', 'guest_token'
   ];
 
-  const results = ['success', 'failure', 'pending'];
+  const results = ['success', 'failure', 'failed', 'pending'];
 
   // Get date filter
   const getDateFilter = () => {
+    if (dateRange === 'all') return null;
+
     const now = new Date();
     const days = {
       '1day': 1,
@@ -44,7 +47,7 @@ function ActivityLog() {
       '30days': 30,
       '60days': 60,
     };
-    
+
     const daysAgo = days[dateRange] || 7;
     const afterDate = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000);
     return afterDate.toISOString();
@@ -52,26 +55,30 @@ function ActivityLog() {
 
   // Fetch activity log
   const fetchActivityLog = async (isNewSearch = true) => {
-    if (!masterToken) return;
+    if (!isAuthenticated) return;
 
     setLoading(true);
     setError(null);
 
     try {
       const params = new URLSearchParams({
-        limit: 50,
-        offset: isNewSearch ? 0 : offset,
+        limit: String(50),
+        offset: String(isNewSearch ? 0 : offset),
         ...(actionType && { actionType }),
         ...(resourceType && { resourceType }),
         ...(result && { result }),
-        ...(dateRange && { afterDate: getDateFilter() }),
       });
 
-      const headers = { Authorization: `Bearer ${masterToken}` };
-      const response = await apiClient.get(`/api/v1/activity?${params}`, { headers });
-      
-      const newActivity = response.data.activity || [];
-      
+      const afterDate = getDateFilter();
+      if (afterDate) {
+        params.set('afterDate', afterDate);
+      }
+
+      const response = await apiClient.get(`/activity?${params.toString()}`);
+      const payload = response?.data || {};
+      const newActivityRaw = payload.activity || payload.data?.activity || payload.data || [];
+      const newActivity = Array.isArray(newActivityRaw) ? newActivityRaw : [];
+
       if (isNewSearch) {
         setActivity(newActivity);
         setOffset(50);
@@ -81,7 +88,7 @@ function ActivityLog() {
         setOffset(prev => prev + 50);
         setTotalLoaded(prev => prev + newActivity.length);
       }
-      
+
       setHasMore(newActivity.length === 50);
     } catch (err) {
       console.error('Failed to fetch activity log:', err);
@@ -95,8 +102,10 @@ function ActivityLog() {
   useEffect(() => {
     setOffset(0);
     setActivity([]);
-    fetchActivityLog(true);
-  }, [masterToken, actionType, resourceType, result, dateRange]);
+    if (isAuthenticated) {
+      fetchActivityLog(true);
+    }
+  }, [isAuthenticated, actionType, resourceType, result, dateRange]);
 
   // WebSocket for real-time updates
   const setupWebSocket = () => {
@@ -186,6 +195,7 @@ function ActivityLog() {
     const colors = {
       success: 'text-green-400',
       failure: 'text-red-400',
+      failed: 'text-red-400',
       pending: 'text-amber-400',
     };
     return colors[res] || 'text-slate-400';
@@ -194,9 +204,11 @@ function ActivityLog() {
   const getActionIcon = (actionType) => {
     const icons = {
       token_used: '🔑',
+      token_revoked: '🛑',
       skill_executed: '⚡',
       persona_invoked: '🤖',
       guest_token_used: '👤',
+      device_approval_requested: '🆕',
       device_approved: '✅',
       device_revoked: '⛔',
       service_connected: '🔗',
@@ -284,6 +296,7 @@ function ActivityLog() {
               onChange={(e) => setDateRange(e.target.value)}
               className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
+              <option value="all">All time</option>
               <option value="1day">Last 24 hours</option>
               <option value="7days">Last 7 days</option>
               <option value="30days">Last 30 days</option>
