@@ -904,7 +904,8 @@ function authenticate(req, res, next) {
     /^\/oauth\//,
   ];
   
-  if (publicPaths.some(pattern => pattern.test(fullPath))) {
+  const isPublicPath = publicPaths.some(pattern => pattern.test(fullPath));
+  if (isPublicPath) {
     return next();
   }
 
@@ -940,6 +941,7 @@ function authenticate(req, res, next) {
   }
 
   if (!rawToken) {
+    console.warn('[AUTH 401] missing token/session', { method: req.method, fullPath, baseUrl: req.baseUrl, path: req.path, isPublicPath });
     return res.status(401).json({ error: "Missing session, Authorization: Bearer token, or ?token= query parameter" });
   }
   const tokens = getAccessTokens();
