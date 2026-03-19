@@ -389,6 +389,14 @@ function Skills() {
   };
 
   const categoryLabel = (cat) => CATEGORIES.find((c) => c.value === cat)?.label || cat;
+  const formatUpdatedDate = (dateString) => {
+    if (!dateString) return '—';
+    return new Date(dateString).toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  };
 
   if (isLoading && skills.length === 0) {
     return (
@@ -440,57 +448,61 @@ function Skills() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {skills.map((skill) => (
-            <div
+            <article
               key={skill.id}
-              className={`rounded-lg border p-6 transition-all duration-200 ${
+              className={`ui-card p-5 sm:p-6 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-slate-950/40 ${
                 skill.active
-                  ? 'bg-slate-800 border-green-500 shadow-lg shadow-green-500/20'
-                  : 'bg-slate-800 border-slate-700 hover:border-slate-600'
+                  ? 'border-emerald-500/70 shadow-lg shadow-emerald-900/20'
+                  : 'hover:border-slate-600/80'
               }`}
             >
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex-1">
-                  <h3 className="text-lg font-bold text-white">{skill.name}</h3>
-                  <div className="flex items-center gap-2 mt-1 flex-wrap">
-                    <span className="inline-block px-2 py-0.5 bg-blue-900 bg-opacity-50 text-blue-300 text-xs rounded-full border border-blue-700">
-                      {categoryLabel(skill.category)}
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-xl font-semibold text-white truncate">{skill.name}</h3>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <span className="ui-badge">{categoryLabel(skill.category)}</span>
+                    {skill.version && <span className="ui-badge">v{skill.version}</span>}
+                    <span className={skill.active ? 'ui-badge-success' : 'ui-badge'}>
+                      {skill.active ? 'Active' : 'Inactive'}
                     </span>
-                    {skill.version && (
-                      <span className="text-xs text-slate-400">v{skill.version}</span>
-                    )}
-                    {skill.active && (
-                      <span className="inline-block px-2 py-0.5 bg-green-600 text-green-100 text-xs font-medium rounded">
-                        Active
-                      </span>
-                    )}
                     {skill?.config_json?.scanner?.safe_to_use && (
-                      <span className="inline-block px-2 py-0.5 bg-emerald-700 text-emerald-100 text-xs font-medium rounded border border-emerald-500">
-                        Safe to use
-                      </span>
+                      <span className="ui-badge-success">Safe to use</span>
                     )}
                   </div>
                 </div>
               </div>
 
-              {skill.author && (
-                <p className="text-xs text-slate-500 mb-2">by {skill.author}</p>
-              )}
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2 rounded-lg border border-slate-700/60 bg-slate-900/40 px-3 py-2">
+                <div>
+                  <p className="text-[11px] uppercase tracking-wide text-slate-500">Author</p>
+                  <p className="text-sm text-slate-200 truncate">{skill.author || 'Unknown'}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] uppercase tracking-wide text-slate-500">Updated</p>
+                  <p className="text-sm text-slate-200">{formatUpdatedDate(skill.updated_at || skill.created_at)}</p>
+                </div>
+                <div>
+                  <p className="text-[11px] uppercase tracking-wide text-slate-500">Status</p>
+                  <p className={`text-sm font-medium ${skill.active ? 'text-emerald-300' : 'text-slate-300'}`}>
+                    {skill.active ? 'Currently active' : 'Not active'}
+                  </p>
+                </div>
+              </div>
 
               {skill.description && (
-                <p className="text-slate-300 text-sm mb-4 line-clamp-2">{skill.description}</p>
+                <p className="mt-4 text-sm leading-relaxed text-slate-300 line-clamp-3">{skill.description}</p>
               )}
 
-              {/* Token display */}
               {skillTokens[skill.id] && (
-                <div className="mb-4 p-3 bg-slate-900 rounded-lg border border-slate-700">
+                <div className="mt-4 rounded-lg border border-slate-700/70 bg-slate-900/70 p-3">
                   <p className="text-xs text-slate-400 mb-2">Skill Token — copy it now</p>
                   <div className="flex items-center gap-2">
-                    <code className="flex-1 text-xs text-green-300 font-mono break-all bg-slate-800 p-2 rounded">
+                    <code className="flex-1 text-xs text-green-300 font-mono break-all bg-slate-800 p-2 rounded-md">
                       {skillTokens[skill.id].token}
                     </code>
                     <button
                       onClick={() => handleCopyToken(skill.id)}
-                      className="px-3 py-1.5 text-xs text-blue-400 hover:text-blue-300 bg-slate-700 rounded flex-shrink-0"
+                      className="ui-button-secondary px-3 py-1.5 text-xs"
                     >
                       {skillTokens[skill.id].copied ? 'Copied' : 'Copy'}
                     </button>
@@ -498,54 +510,55 @@ function Skills() {
                 </div>
               )}
 
-              {/* Actions */}
-              <div className="flex gap-2 pt-4 border-t border-slate-700">
-                <button
-                  onClick={() => openDetailModal(skill)}
-                  className="flex-1 px-3 py-2 text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded transition-colors"
-                >
-                  View
-                </button>
-                <button
-                  onClick={() => openEditModal(skill)}
-                  className="flex-1 px-3 py-2 text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-700 rounded transition-colors"
-                >
-                  Edit
-                </button>
-                <button
-                  onClick={() => openDeleteConfirmation(skill.id)}
-                  className="flex-1 px-3 py-2 text-sm font-medium text-red-400 hover:text-red-200 hover:bg-red-900 hover:bg-opacity-30 rounded transition-colors"
-                >
-                  Delete
-                </button>
-              </div>
+              <div className="mt-5 space-y-2 border-t border-slate-700/70 pt-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <button
+                    onClick={() => openDetailModal(skill)}
+                    className="ui-button-secondary w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60"
+                  >
+                    View
+                  </button>
+                  <button
+                    onClick={() => openEditModal(skill)}
+                    className="ui-button-secondary w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => openDeleteConfirmation(skill.id)}
+                    className="ui-button-danger w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/60"
+                  >
+                    Delete
+                  </button>
+                </div>
 
-              <div className="flex gap-2 mt-2">
-                <button
-                  onClick={() => handlePublish(skill)}
-                  disabled={publishingId === skill.id}
-                  className="flex-1 px-3 py-2 text-sm font-medium text-purple-400 hover:text-purple-200 hover:bg-purple-900 hover:bg-opacity-30 rounded transition-colors border border-transparent hover:border-purple-700 disabled:opacity-50"
-                >
-                  {publishingId === skill.id ? 'Publishing...' : 'Publish'}
-                </button>
-                <button
-                  onClick={() => handleGenerateToken(skill)}
-                  disabled={generatingTokenId === skill.id}
-                  className="flex-1 px-3 py-2 text-sm font-medium text-amber-400 hover:text-amber-200 hover:bg-amber-900 hover:bg-opacity-30 rounded transition-colors border border-transparent hover:border-amber-700 disabled:opacity-50"
-                >
-                  {generatingTokenId === skill.id ? 'Generating...' : 'Get Token'}
-                </button>
-              </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    onClick={() => handlePublish(skill)}
+                    disabled={publishingId === skill.id}
+                    className="ui-button-primary w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60"
+                  >
+                    {publishingId === skill.id ? 'Publishing...' : 'Publish'}
+                  </button>
+                  <button
+                    onClick={() => handleGenerateToken(skill)}
+                    disabled={generatingTokenId === skill.id}
+                    className="ui-button w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60"
+                  >
+                    {generatingTokenId === skill.id ? 'Generating...' : 'Get Token'}
+                  </button>
+                </div>
 
-              {!skill.active && (
-                <button
-                  onClick={() => handleActivate(skill.id)}
-                  className="w-full mt-2 px-3 py-2 text-sm font-medium text-green-400 hover:text-green-200 hover:bg-green-900 hover:bg-opacity-30 rounded transition-colors border border-transparent hover:border-green-700"
-                >
-                  Set as active
-                </button>
-              )}
-            </div>
+                {!skill.active && (
+                  <button
+                    onClick={() => handleActivate(skill.id)}
+                    className="ui-button-secondary w-full border-emerald-600/60 text-emerald-300 hover:bg-emerald-700/20 hover:text-emerald-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
+                  >
+                    Set as active
+                  </button>
+                )}
+              </div>
+            </article>
           ))}
         </div>
       )}

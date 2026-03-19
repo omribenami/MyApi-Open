@@ -3,13 +3,13 @@ import { useAuthStore } from '../stores/authStore';
 import { useSkillStore } from '../stores/skillStore';
 
 const CATEGORY_LABELS = {
-  automation: '⚡ Automation',
-  integration: '🔗 Integration',
-  analytics: '📊 Analytics',
-  security: '🔒 Security',
-  communication: '💬 Communication',
-  productivity: '📈 Productivity',
-  custom: '🛠️ Custom',
+  automation: 'Automation',
+  integration: 'Integration',
+  analytics: 'Analytics',
+  security: 'Security',
+  communication: 'Communication',
+  productivity: 'Productivity',
+  custom: 'Custom',
 };
 
 function DocumentsSection({ skillId }) {
@@ -83,7 +83,7 @@ function DocumentsSection({ skillId }) {
         <h3 className="text-sm font-medium text-slate-300">📎 Knowledge Base Documents</h3>
         <button
           onClick={() => setShowPicker(!showPicker)}
-          className="text-xs text-blue-400 hover:text-blue-300"
+          className="ui-button-secondary px-3 py-1.5 text-xs"
         >
           {showPicker ? 'Cancel' : '+ Attach Document'}
         </button>
@@ -98,7 +98,7 @@ function DocumentsSection({ skillId }) {
               <button
                 key={doc.id}
                 onClick={() => handleAttach(doc.id)}
-                className="w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-slate-800 rounded flex items-center justify-between"
+                className="w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-slate-800 rounded-md border border-transparent hover:border-slate-600 transition-colors flex items-center justify-between"
               >
                 <span className="truncate">{doc.title || doc.source}</span>
                 <span className="text-blue-400 text-xs flex-shrink-0 ml-2">Attach</span>
@@ -125,7 +125,7 @@ function DocumentsSection({ skillId }) {
               </div>
               <button
                 onClick={() => handleDetach(doc.documentId)}
-                className="text-xs text-red-400 hover:text-red-300 flex-shrink-0 ml-2"
+                className="ui-button-secondary px-2.5 py-1 text-xs text-red-300 hover:text-red-200 border-red-800/70 hover:bg-red-900/20 flex-shrink-0 ml-2"
               >
                 Detach
               </button>
