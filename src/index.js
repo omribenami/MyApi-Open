@@ -986,9 +986,12 @@ function getOAuthUserId(req) {
 const notificationsRoutes = require('./routes/notifications');
 const activityRoutes = require('./routes/activity');
 const emailRoutes = require('./routes/email');
+const workspacesRoutes = require('./routes/workspaces');
 app.use('/api/v1/notifications', authenticate, notificationsRoutes);
 app.use('/api/v1/activity', authenticate, activityRoutes);
 app.use('/api/v1/email', authenticate, emailRoutes);
+app.use('/api/v1/workspaces', authenticate, workspacesRoutes);
+app.use('/api/v1/invitations', authenticate, workspacesRoutes);
 
 function getRequestOwnerId(req) {
   return String(req?.tokenMeta?.ownerId || req?.session?.user?.id || 'owner');
