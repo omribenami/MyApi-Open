@@ -113,32 +113,7 @@ function Login() {
     return null;
   }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-    try {
-      const response = await fetch('/api/v1/tokens/validate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token }),
-      });
-      if (response.ok) {
-        const result = await response.json();
-        setMasterToken(token);
-        localStorage.setItem('sessionToken', token);
-        localStorage.setItem('tokenData', JSON.stringify(result.data));
-        setTimeout(() => { window.location.href = '/dashboard/'; }, 100);
-      } else {
-        const errorData = await response.json();
-        setError(errorData.error || 'Invalid token. Please check and try again.');
-      }
-    } catch {
-      setError('Connection failed. Is the server running?');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Master token login removed - OAuth only
 
   const handleOAuthClick = async (serviceId) => {
     setError('');
@@ -227,7 +202,7 @@ function Login() {
 
               <div className="mt-8 flex flex-wrap items-center gap-3 text-xs text-slate-400 sm:text-sm">
                 <span className="rounded-full border border-slate-700 bg-slate-900/70 px-3 py-1.5">Encrypted token storage</span>
-                <span className="rounded-full border border-slate-700 bg-slate-900/70 px-3 py-1.5">OAuth + Master token access</span>
+                <span className="rounded-full border border-slate-700 bg-slate-900/70 px-3 py-1.5">OAuth authentication</span>
                 <span className="rounded-full border border-slate-700 bg-slate-900/70 px-3 py-1.5">Self-host friendly</span>
               </div>
             </div>
