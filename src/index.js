@@ -3692,21 +3692,12 @@ app.get([
       };
 
       // Ensure each OAuth-logged-in user receives a full master token for dashboard/API actions.
-      // ONLY create if no existing valid master token exists - don't revoke!
-      if (!req.session.masterTokenRaw) {
-        const existingTokens = getAccessTokens();
-        const hasValidMaster = existingTokens.some(t => 
-          t.scope === 'full' && !t.revokedAt && t.ownerId === String(appUser.id)
-        );
-        
-        if (!hasValidMaster) {
-          const rawMasterToken = 'myapi_' + crypto.randomBytes(32).toString("hex");
-          const hash = bcrypt.hashSync(rawMasterToken, 10);
-          const tokenId = createAccessToken(hash, appUser.id, 'full', 'Master Token (OAuth)', null, null);
-          req.session.masterTokenRaw = rawMasterToken;
-          req.session.masterTokenId = tokenId;
-        }
-      }
+      // Always create a fresh master token for this session (can't retrieve hashed ones from DB)
+      const rawMasterToken = 'myapi_' + crypto.randomBytes(32).toString("hex");
+      const hash = bcrypt.hashSync(rawMasterToken, 10);
+      const tokenId = createAccessToken(hash, appUser.id, 'full', 'Master Token (OAuth Session)', null, null);
+      req.session.masterTokenRaw = rawMasterToken;
+      req.session.masterTokenId = tokenId;
     }
 
     // Emit notification for service connection
