@@ -93,7 +93,13 @@ function NotificationDropdown({ open, onClose }) {
   return (
     <div
       ref={dropdownRef}
-      className="absolute right-0 top-12 w-96 max-h-96 rounded-xl border border-slate-700 bg-slate-900 shadow-2xl flex flex-col z-50"
+      className="absolute top-12 max-h-96 rounded-xl border border-slate-700 bg-slate-900 shadow-2xl flex flex-col z-50"
+      style={{
+        right: '-320px',
+        width: '384px',
+        maxWidth: 'calc(100vw - 32px)',
+        minWidth: '280px',
+      }}
     >
       {/* Header */}
       <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-900 rounded-t-xl">
