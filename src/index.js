@@ -3406,7 +3406,7 @@ app.get([
     storeOAuthToken(service, userId, tokenData.accessToken, tokenData.refreshToken || null, expiresAt, tokenData.scope);
     updateOAuthStatus(service, "connected");
 
-    if ((service === 'google' || service === 'facebook') && stateMeta.mode === 'login') {
+    if ((service === 'google' || service === 'facebook' || service === 'github') && stateMeta.mode === 'login') {
       const profileResp = await oauthAdapters[service].verifyToken(tokenData.accessToken).catch(() => ({ valid: false, data: {} }));
       const p = profileResp?.data || {};
       const email = p.email || `${service}_${Date.now()}@local.myapi`;

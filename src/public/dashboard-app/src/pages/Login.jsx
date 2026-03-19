@@ -144,7 +144,7 @@ function Login() {
 
   const handleOAuthClick = async (serviceId) => {
     setError('');
-    const mode = (serviceId === 'google' || serviceId === 'facebook') ? 'login' : 'connect';
+    const mode = (serviceId === 'google' || serviceId === 'facebook' || serviceId === 'github') ? 'login' : 'connect';
     const params = new URLSearchParams({ mode, returnTo: '/dashboard/', redirect: '1' });
     window.location.href = `/api/v1/oauth/authorize/${serviceId}?${params.toString()}`;
   };
