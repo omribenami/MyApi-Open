@@ -539,7 +539,12 @@ export default function Marketplace() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {listings.map(listing => (
-            <ListingCard key={listing.id} listing={listing} onClick={setSelected} />
+            <ListingCard
+              key={listing.id}
+              listing={listing}
+              onClick={setSelected}
+              isInstalled={listing.type === 'skill' && installedSkillListingIds.has(String(listing.id))}
+            />
           ))}
         </div>
       )}
@@ -549,8 +554,17 @@ export default function Marketplace() {
         <ListingModal
           listing={selected}
           masterToken={masterToken}
+          initiallyInstalled={selected.type === 'skill' && installedSkillListingIds.has(String(selected.id))}
           onClose={() => setSelected(null)}
-          onInstall={fetchListings}
+          onInstall={({ listingId, type }) => {
+            if (type === 'skill') {
+              setInstalledSkillListingIds(prev => new Set([...prev, String(listingId)]));
+            }
+            fetchListings();
+          }}
+          onRated={() => {
+            fetchListings();
+          }}
         />
       )}
     </div>
