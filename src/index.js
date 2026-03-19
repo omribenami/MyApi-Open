@@ -376,6 +376,45 @@ app.use(cors({
 }));
 
 app.use(express.json({ limit: "100kb" }));
+
+// Global rate limiter middleware (applies to all requests except exempt paths)
+const globalRateLimitMap = {};
+const GLOBAL_RATE_LIMIT_EXEMPT = [
+  '/api/v1/auth/me',
+  '/api/v1/auth/debug',
+  '/api/v1/dashboard/metrics',
+  '/api/v1/privacy/cookies',
+  '/api/v1/ws',
+  '/health',
+  '/ping',
+];
+
+app.use((req, res, next) => {
+  // Skip rate limiting for exempt paths
+  if (GLOBAL_RATE_LIMIT_EXEMPT.includes(req.path) || GLOBAL_RATE_LIMIT_EXEMPT.some(p => req.path.startsWith(p + '/'))) {
+    return next();
+  }
+
+  const key = `global:${req.ip}`;
+  const now = Date.now();
+  const windowMs = 60000; // 1 minute
+  const maxRequests = process.env.NODE_ENV === 'test' ? 1000 : 120; // 120 req/min default
+
+  if (!globalRateLimitMap[key]) globalRateLimitMap[key] = [];
+  globalRateLimitMap[key] = globalRateLimitMap[key].filter(t => now - t < windowMs);
+
+  if (globalRateLimitMap[key].length >= maxRequests) {
+    const retryAfterSeconds = Math.max(1, Math.ceil((windowMs - (now - globalRateLimitMap[key][0])) / 1000));
+    return res.status(429).json({ 
+      error: 'Rate limit exceeded',
+      retryAfter: retryAfterSeconds 
+    });
+  }
+
+  globalRateLimitMap[key].push(now);
+  next();
+});
+
 const secureCookie = process.env.SESSION_COOKIE_SECURE
   ? String(process.env.SESSION_COOKIE_SECURE).toLowerCase() === 'true'
   : isProd;
@@ -708,8 +747,26 @@ const vault = { identityDocs: {}, preferences: {} };
 
 // --- Rate Limiter ---
 const rateLimitMap = {};
+// Paths exempt from rate limiting (bootstrap/auth critical paths)
+const RATE_LIMIT_EXEMPT_PATHS = [
+  '/api/v1/auth/me',
+  '/api/v1/auth/debug',
+  '/api/v1/auth/logout',
+  '/api/v1/dashboard/metrics',
+  '/api/v1/privacy/cookies',
+  '/api/v1/oauth/status',
+  '/api/v1/ws',
+  '/dashboard/',
+  '/dashboard/myapi-logo.svg',
+];
+
 function rateLimit(windowMs = 60000, maxRequests = (process.env.NODE_ENV === 'test' ? 1000 : 60), namespace = 'default') {
   return (req, res, next) => {
+    // Skip rate limiting for bootstrap/auth endpoints
+    if (RATE_LIMIT_EXEMPT_PATHS.some(p => req.path === p || req.path.startsWith(p))) {
+      return next();
+    }
+
     const key = `${namespace}:${req.ip}`;
     const now = Date.now();
     if (!rateLimitMap[key]) rateLimitMap[key] = [];
