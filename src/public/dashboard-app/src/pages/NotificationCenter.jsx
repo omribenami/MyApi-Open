@@ -58,10 +58,11 @@ function NotificationCenter() {
   };
 
   const getNotificationColor = (type) => {
-    if (type.includes('approval')) return 'border-red-500/30 bg-red-500/5';
-    if (type.includes('liked')) return 'border-pink-500/30 bg-pink-500/5';
-    if (type.includes('revoked')) return 'border-red-500/30 bg-red-500/5';
-    if (type.includes('connected')) return 'border-green-500/30 bg-green-500/5';
+    const safeType = String(type || '');
+    if (safeType.includes('approval')) return 'border-red-500/30 bg-red-500/5';
+    if (safeType.includes('liked')) return 'border-pink-500/30 bg-pink-500/5';
+    if (safeType.includes('revoked')) return 'border-red-500/30 bg-red-500/5';
+    if (safeType.includes('connected')) return 'border-green-500/30 bg-green-500/5';
     return 'border-blue-500/30 bg-blue-500/5';
   };
 

@@ -169,7 +169,7 @@ function Layout({ children, onLogout }) {
             {/* Notification Bell */}
             <div className="relative">
               <Link
-                to="/dashboard/notifications"
+                to="/notifications"
                 className="relative flex items-center justify-center w-10 h-10 rounded-lg border border-slate-700 bg-slate-900 hover:border-slate-600 transition-colors"
                 title="Notifications"
               >

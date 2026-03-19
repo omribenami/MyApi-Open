@@ -3,6 +3,16 @@ const db = require('../database');
 
 const router = express.Router();
 
+function resolveUserId(req) {
+  return (
+    req?.session?.user_id ||
+    req?.session?.user?.id ||
+    req?.user?.id ||
+    req?.tokenMeta?.ownerId ||
+    null
+  );
+}
+
 // Specific routes first (before generic :id routes)
 
 /**
@@ -11,7 +21,7 @@ const router = express.Router();
  */
 router.get('/unread', (req, res) => {
   try {
-    const userId = req.user?.id || req.tokenMeta?.ownerId;
+    const userId = resolveUserId(req);
     
     if (!userId) {
       console.error('userId extraction failed:', { user: req.user, tokenMeta: req.tokenMeta });
@@ -36,7 +46,7 @@ router.get('/unread', (req, res) => {
  */
 router.get('/settings', (req, res) => {
   try {
-    const userId = req.user?.id || req.tokenMeta?.ownerId;
+    const userId = resolveUserId(req);
     
     if (!userId) {
       console.error('userId extraction failed:', { user: req.user, tokenMeta: req.tokenMeta });
@@ -61,7 +71,7 @@ router.get('/settings', (req, res) => {
  */
 router.put('/settings', (req, res) => {
   try {
-    const userId = req.user?.id || req.tokenMeta?.ownerId;
+    const userId = resolveUserId(req);
     
     if (!userId) {
       console.error('userId extraction failed:', { user: req.user, tokenMeta: req.tokenMeta });
@@ -127,7 +137,7 @@ router.delete('/:id', (req, res) => {
  */
 router.get('/', (req, res) => {
   try {
-    const userId = req.user?.id || req.tokenMeta?.ownerId;
+    const userId = resolveUserId(req);
     
     if (!userId) {
       console.error('userId extraction failed:', { user: req.user, tokenMeta: req.tokenMeta });

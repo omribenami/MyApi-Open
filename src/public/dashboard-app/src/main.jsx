@@ -6,7 +6,11 @@ import App from './App.jsx'
 // Emergency client-side guard for rare storage/db corruption errors surfaced by browser/runtime.
 // If detected, clear local auth/session artifacts once and reload cleanly.
 if (typeof window !== 'undefined') {
-  const CORRUPTION_MARKER = 'Corruption: block checksum mismatch';
+  const CORRUPTION_MARKERS = [
+    'Corruption: block checksum mismatch',
+    'block checksum mismatch',
+    'IndexedDB',
+  ];
   const RECOVERY_TS_KEY = '__myapi_corruption_recovery_ts__';
   const RECOVERY_COUNT_KEY = '__myapi_corruption_recovery_count__';
 
@@ -51,7 +55,7 @@ if (typeof window !== 'undefined') {
 
   window.addEventListener('unhandledrejection', (event) => {
     const message = messageFromError(event?.reason);
-    if (!message.includes(CORRUPTION_MARKER)) return;
+    if (!CORRUPTION_MARKERS.some((marker) => message.includes(marker))) return;
 
     event.preventDefault();
     recoverFromCorruption();
@@ -60,7 +64,7 @@ if (typeof window !== 'undefined') {
   // Some environments surface this as a regular error event instead of a rejected promise.
   window.addEventListener('error', (event) => {
     const message = messageFromError(event?.error || event?.message);
-    if (!message.includes(CORRUPTION_MARKER)) return;
+    if (!CORRUPTION_MARKERS.some((marker) => message.includes(marker))) return;
 
     event.preventDefault?.();
     recoverFromCorruption();
