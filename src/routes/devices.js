@@ -249,14 +249,20 @@ router.post('/approve/:approval_id', requireAuth, (req, res) => {
   try {
     const { device_name } = req.body;
     
+    // Validate input
+    if (!req.params.approval_id) {
+      return res.status(400).json({ error: 'Approval ID is required' });
+    }
+    
     const approval = db.getPendingApprovalById(req.params.approval_id);
     
     if (!approval) {
       return res.status(404).json({ error: 'Approval request not found' });
     }
     
-    if (approval.user_id !== req.userId) {
-      return res.status(403).json({ error: 'Unauthorized' });
+    // Convert to string for safe comparison
+    if (String(approval.user_id) !== String(req.userId)) {
+      return res.status(403).json({ error: 'Unauthorized: This approval is for a different user' });
     }
     
     if (approval.status !== 'pending') {
@@ -269,20 +275,31 @@ router.post('/approve/:approval_id', requireAuth, (req, res) => {
       return res.status(410).json({ error: 'Approval request has expired' });
     }
     
-    const deviceId = db.approvePendingDevice(
-      req.params.approval_id,
-      device_name || `Approved Device (${approval.device_info_json ? JSON.parse(approval.device_info_json).browser : 'Unknown'})`
-    );
+    // Determine device name
+    let finalDeviceName = device_name;
+    if (!finalDeviceName || finalDeviceName.trim().length === 0) {
+      try {
+        const deviceInfo = approval.device_info_json ? JSON.parse(approval.device_info_json) : {};
+        finalDeviceName = `Approved Device (${deviceInfo.browser || 'Unknown'})`;
+      } catch {
+        finalDeviceName = 'Approved Device';
+      }
+    }
+    
+    const deviceId = db.approvePendingDevice(req.params.approval_id, finalDeviceName);
+    
+    if (!deviceId) {
+      return res.status(500).json({ error: 'Failed to approve device (database error)' });
+    }
     
     // Emit notification
-    const deviceInfo = device_name || `Approved Device`;
     NotificationService.emitNotification(req.userId, 'device_approved',
       'Device Approved',
-      `Your device "${deviceInfo}" has been approved and can now access your account`,
+      `Your device "${finalDeviceName}" has been approved and can now access your account`,
       {
         relatedEntityType: 'device',
         relatedEntityId: deviceId,
-        data: { deviceName: deviceInfo },
+        data: { deviceName: finalDeviceName },
         actionUrl: '/dashboard/device-management',
       }
     ).catch(err => console.error('Failed to emit device_approved notification:', err));
@@ -290,12 +307,12 @@ router.post('/approve/:approval_id', requireAuth, (req, res) => {
     // Log activity
     NotificationService.logActivity(req.userId, 'device_approved', 'device', {
       resourceId: deviceId,
-      resourceName: deviceInfo,
+      resourceName: finalDeviceName,
       actorType: 'user',
       actorId: req.userId,
       result: 'success',
       ipAddress: req.ip,
-    });
+    }).catch(err => console.error('Failed to log device_approved activity:', err));
     
     db.createAuditLog({
       requesterId: req.userId,
@@ -312,8 +329,8 @@ router.post('/approve/:approval_id', requireAuth, (req, res) => {
       deviceId,
     });
   } catch (error) {
-    console.error('Error approving device:', error);
-    res.status(500).json({ error: 'Failed to approve device' });
+    console.error('Error approving device:', error.message, error.stack);
+    res.status(500).json({ error: 'Failed to approve device', details: error.message });
   }
 });
 
@@ -325,24 +342,33 @@ router.post('/deny/:approval_id', requireAuth, (req, res) => {
   try {
     const { reason } = req.body;
     
+    if (!req.params.approval_id) {
+      return res.status(400).json({ error: 'Approval ID is required' });
+    }
+    
     const approval = db.getPendingApprovalById(req.params.approval_id);
     
     if (!approval) {
       return res.status(404).json({ error: 'Approval request not found' });
     }
     
-    if (approval.user_id !== req.userId) {
-      return res.status(403).json({ error: 'Unauthorized' });
+    // Convert to string for safe comparison
+    if (String(approval.user_id) !== String(req.userId)) {
+      return res.status(403).json({ error: 'Unauthorized: This approval is for a different user' });
     }
     
     if (approval.status !== 'pending') {
       return res.status(400).json({ error: `Approval is already ${approval.status}` });
     }
     
-    db.denyPendingApproval(
+    const denied = db.denyPendingApproval(
       req.params.approval_id,
       reason || 'Device approval denied by user'
     );
+    
+    if (!denied) {
+      return res.status(500).json({ error: 'Failed to deny device (database error)' });
+    }
     
     db.createAuditLog({
       requesterId: req.userId,
@@ -358,8 +384,8 @@ router.post('/deny/:approval_id', requireAuth, (req, res) => {
       message: 'Device approval request denied',
     });
   } catch (error) {
-    console.error('Error denying device:', error);
-    res.status(500).json({ error: 'Failed to deny device' });
+    console.error('Error denying device:', error.message, error.stack);
+    res.status(500).json({ error: 'Failed to deny device', details: error.message });
   }
 });
 
