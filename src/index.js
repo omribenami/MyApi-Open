@@ -993,6 +993,73 @@ app.use('/api/v1/email', authenticate, emailRoutes);
 app.use('/api/v1/workspaces', authenticate, workspacesRoutes);
 app.use('/api/v1/invitations', authenticate, workspacesRoutes);
 
+// --- PUBLIC: BILLING PLANS ENDPOINT (no auth required) ---
+app.get('/api/v1/billing/plans', (req, res) => {
+  try {
+    // Try to get plans from database first
+    const stmt = db.prepare(`
+      SELECT id, name, price_cents, description, features,
+             monthly_api_call_limit, max_services, max_team_members, 
+             max_skills_per_persona, stripe_product_id, active
+      FROM pricing_plans
+      WHERE active = 1
+      ORDER BY display_order ASC
+    `);
+    const dbPlans = stmt.all();
+    
+    if (dbPlans && dbPlans.length > 0) {
+      // Transform database plans to frontend format
+      const plans = dbPlans.map(plan => ({
+        id: plan.id,
+        name: plan.name,
+        price_cents: plan.price_cents,
+        priceMonthly: Math.floor(plan.price_cents / 100), // For backwards compat
+        description: plan.description,
+        features: typeof plan.features === 'string' ? JSON.parse(plan.features) : plan.features,
+        monthlyApiCallLimit: plan.monthly_api_call_limit,
+        maxServices: plan.max_services,
+        maxTeamMembers: plan.max_team_members,
+        maxSkillsPerPersona: plan.max_skills_per_persona,
+        stripe_product_id: plan.stripe_product_id
+      }));
+      return res.json({ data: plans });
+    }
+
+    // Fallback to hardcoded plans if database is empty
+    const plans = Object.values(BILLING_PLANS).map(plan => ({
+      id: plan.id,
+      name: plan.name,
+      price_cents: plan.price_cents,
+      priceMonthly: plan.priceMonthly,
+      description: plan.description,
+      features: plan.features,
+      monthlyApiCallLimit: plan.monthlyApiCallLimit,
+      maxServices: plan.maxServices,
+      maxTeamMembers: plan.maxTeamMembers,
+      maxSkillsPerPersona: plan.maxSkillsPerPersona,
+      stripe_product_id: plan.stripe_product_id
+    }));
+    res.json({ data: plans });
+  } catch (err) {
+    console.error('[Billing] Error fetching plans:', err);
+    // Return hardcoded plans as fallback
+    const plans = Object.values(BILLING_PLANS).map(plan => ({
+      id: plan.id,
+      name: plan.name,
+      price_cents: plan.price_cents,
+      priceMonthly: plan.priceMonthly,
+      description: plan.description,
+      features: plan.features,
+      monthlyApiCallLimit: plan.monthlyApiCallLimit,
+      maxServices: plan.maxServices,
+      maxTeamMembers: plan.maxTeamMembers,
+      maxSkillsPerPersona: plan.maxSkillsPerPersona,
+      stripe_product_id: plan.stripe_product_id
+    }));
+    res.json({ data: plans });
+  }
+});
+
 // Import multi-tenancy middleware
 const { extractWorkspaceContext, enforceMultiTenancy, switchWorkspaceHandler } = require('./middleware/multitenancy');
 
@@ -2300,25 +2367,71 @@ const BILLING_PLANS = {
   free: {
     id: 'free',
     name: 'Free',
-    priceMonthly: 0,
+    price_cents: 0,
+    priceMonthly: 0, // deprecated, kept for backwards compat
     description: 'Perfect for individuals getting started',
-    features: ['1 AI Persona', '3 Service Connections', '10 MB Knowledge Base', '5 Token Vault', 'Attach up to 4 Skills'],
+    features: [
+      '1 AI Persona',
+      '3 Service Connections',
+      '10 MB Knowledge Base',
+      '5 Token Vault entries',
+      'Attach up to 4 Skills per Persona',
+      '1,000 API calls/month',
+      'Up to 2 team members'
+    ],
+    monthlyApiCallLimit: 1000,
+    maxServices: 3,
+    maxTeamMembers: 2,
+    maxSkillsPerPersona: 4,
+    stripe_product_id: null,
     stripePaymentLinkEnv: null,
   },
   pro: {
     id: 'pro',
     name: 'Pro',
-    priceMonthly: 15,
+    price_cents: 2900,
+    priceMonthly: 29, // deprecated, kept for backwards compat
     description: 'For creators and small teams',
-    features: ['5 AI Persona', 'All Service Connections', '50 MB Knowledge Base', 'Token Vault', 'Attach unlimited Skills'],
+    features: [
+      '5 AI Personas',
+      'Unlimited Service Connections',
+      '50 MB Knowledge Base',
+      'Unlimited Token Vault entries',
+      'Attach unlimited Skills per Persona',
+      '100,000 API calls/month',
+      'Up to 10 team members',
+      'Priority support'
+    ],
+    monthlyApiCallLimit: 100000,
+    maxServices: -1, // unlimited
+    maxTeamMembers: 10,
+    maxSkillsPerPersona: -1, // unlimited
+    stripe_product_id: 'prod_pro_myapi',
     stripePaymentLinkEnv: 'STRIPE_PAYMENT_LINK_PRO',
   },
   enterprise: {
     id: 'enterprise',
     name: 'Enterprise',
-    priceMonthly: 30,
-    description: 'Scale with higher limits and priority',
-    features: ['20 AI Persona', 'All Service Connections', '200 MB Knowledge Base', 'Token Vault', 'Attach unlimited Skills'],
+    price_cents: 9900,
+    priceMonthly: 99, // deprecated, kept for backwards compat
+    description: 'Scale with higher limits and custom support',
+    features: [
+      '20 AI Personas',
+      'Unlimited Service Connections',
+      '200 MB Knowledge Base',
+      'Unlimited Token Vault entries',
+      'Attach unlimited Skills per Persona',
+      'Unlimited API calls/month',
+      'Unlimited team members',
+      'Priority 24/7 support',
+      'Custom SLA & onboarding',
+      'Dedicated infrastructure option'
+    ],
+    monthlyApiCallLimit: -1, // unlimited
+    maxServices: -1, // unlimited
+    maxTeamMembers: -1, // unlimited
+    maxSkillsPerPersona: -1, // unlimited
+    stripe_product_id: 'prod_enterprise_myapi',
     stripePaymentLinkEnv: 'STRIPE_PAYMENT_LINK_ENTERPRISE',
   },
 };
@@ -2331,23 +2444,29 @@ const PLAN_LIMITS = {
   free: {
     personas: 1,
     serviceConnections: 3,
-    knowledgeBytes: 10 * 1024 * 1024,
+    knowledgeBytes: 10 * 1024 * 1024, // 10 MB
     vaultTokens: 5,
     skillsPerPersona: 4,
+    monthlyApiCalls: 1000,
+    teamMembers: 2,
   },
   pro: {
     personas: 5,
     serviceConnections: Infinity,
-    knowledgeBytes: 50 * 1024 * 1024,
+    knowledgeBytes: 50 * 1024 * 1024, // 50 MB
     vaultTokens: Infinity,
     skillsPerPersona: Infinity,
+    monthlyApiCalls: 100000,
+    teamMembers: 10,
   },
   enterprise: {
     personas: 20,
     serviceConnections: Infinity,
-    knowledgeBytes: 200 * 1024 * 1024,
+    knowledgeBytes: 200 * 1024 * 1024, // 200 MB
     vaultTokens: Infinity,
     skillsPerPersona: Infinity,
+    monthlyApiCalls: Infinity,
+    teamMembers: Infinity,
   },
 };
 
@@ -2403,10 +2522,6 @@ function getKnowledgeBaseBytesUsed(req) {
   const rows = db.prepare('SELECT content FROM kb_documents WHERE owner_id = ?').all(ownerId);
   return rows.reduce((sum, row) => sum + Buffer.byteLength(String(row.content || ''), 'utf8'), 0);
 }
-
-app.get('/api/v1/billing/plans', (req, res) => {
-  res.json({ data: Object.values(BILLING_PLANS) });
-});
 
 // --- BILLING / STRIPE CHECKOUT ---
 app.post('/api/v1/billing/checkout', (req, res) => {

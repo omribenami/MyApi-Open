@@ -751,6 +751,28 @@ function initDatabase() {
   db.exec('CREATE INDEX IF NOT EXISTS idx_skill_ownership_claims_skill ON skill_ownership_claims(skill_id)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_skill_ownership_claims_claimant ON skill_ownership_claims(claimant_user_id)');
 
+  // Pricing Plans Table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS pricing_plans (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      price_cents INTEGER NOT NULL DEFAULT 0,
+      description TEXT NOT NULL,
+      features TEXT NOT NULL,
+      monthly_api_call_limit INTEGER NOT NULL,
+      max_services INTEGER NOT NULL,
+      max_team_members INTEGER NOT NULL,
+      max_skills_per_persona INTEGER NOT NULL,
+      stripe_product_id TEXT,
+      active INTEGER NOT NULL DEFAULT 1,
+      display_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_pricing_plans_active ON pricing_plans(active)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_pricing_plans_order ON pricing_plans(display_order)');
+
   // Phase: Enhanced Marketplace Filtering - Add provider and official fields
   const marketplaceEnhancementMigrations = [
     "ALTER TABLE marketplace_listings ADD COLUMN provider TEXT DEFAULT 'User'",
@@ -763,6 +785,9 @@ function initDatabase() {
 
   db.exec('CREATE INDEX IF NOT EXISTS idx_marketplace_listings_provider ON marketplace_listings(provider)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_marketplace_listings_official ON marketplace_listings(official)');
+
+  // Seed initial pricing plans if table is empty
+  seedDefaultPricingPlans();
 
   console.log('Database initialized at:', dbPath);
 }
@@ -4061,6 +4086,124 @@ function cleanupExpiredInvitations() {
   return stmt.run(new Date().toISOString()).changes;
 }
 
+function seedDefaultPricingPlans() {
+  try {
+    // Check if plans already exist
+    const existing = db.prepare('SELECT COUNT(*) as count FROM pricing_plans').get();
+    if (existing && existing.count > 0) {
+      return; // Plans already seeded
+    }
+
+    const now = new Date().toISOString();
+    const plans = [
+      {
+        id: 'free',
+        name: 'Free',
+        price_cents: 0,
+        description: 'Perfect for individuals getting started',
+        features: [
+          '1 AI Persona',
+          '3 Service Connections',
+          '10 MB Knowledge Base',
+          '5 Token Vault entries',
+          'Attach up to 4 Skills per Persona',
+          '1,000 API calls/month',
+          'Up to 2 team members'
+        ],
+        monthly_api_call_limit: 1000,
+        max_services: 3,
+        max_team_members: 2,
+        max_skills_per_persona: 4,
+        stripe_product_id: null,
+        active: 1,
+        display_order: 0,
+      },
+      {
+        id: 'pro',
+        name: 'Pro',
+        price_cents: 2900,
+        description: 'For creators and small teams',
+        features: [
+          '5 AI Personas',
+          'Unlimited Service Connections',
+          '50 MB Knowledge Base',
+          'Unlimited Token Vault entries',
+          'Attach unlimited Skills per Persona',
+          '100,000 API calls/month',
+          'Up to 10 team members',
+          'Priority support'
+        ],
+        monthly_api_call_limit: 100000,
+        max_services: -1, // unlimited
+        max_team_members: 10,
+        max_skills_per_persona: -1, // unlimited
+        stripe_product_id: 'prod_pro_myapi',
+        active: 1,
+        display_order: 1,
+      },
+      {
+        id: 'enterprise',
+        name: 'Enterprise',
+        price_cents: 9900,
+        description: 'Scale with higher limits and custom support',
+        features: [
+          '20 AI Personas',
+          'Unlimited Service Connections',
+          '200 MB Knowledge Base',
+          'Unlimited Token Vault entries',
+          'Attach unlimited Skills per Persona',
+          'Unlimited API calls/month',
+          'Unlimited team members',
+          'Priority 24/7 support',
+          'Custom SLA & onboarding',
+          'Dedicated infrastructure option'
+        ],
+        monthly_api_call_limit: -1, // unlimited
+        max_services: -1, // unlimited
+        max_team_members: -1, // unlimited
+        max_skills_per_persona: -1, // unlimited
+        stripe_product_id: 'prod_enterprise_myapi',
+        active: 1,
+        display_order: 2,
+      }
+    ];
+
+    const stmt = db.prepare(`
+      INSERT INTO pricing_plans (
+        id, name, price_cents, description, features,
+        monthly_api_call_limit, max_services, max_team_members, max_skills_per_persona,
+        stripe_product_id, active, display_order, created_at, updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    for (const plan of plans) {
+      stmt.run(
+        plan.id,
+        plan.name,
+        plan.price_cents,
+        plan.description,
+        JSON.stringify(plan.features),
+        plan.monthly_api_call_limit,
+        plan.max_services,
+        plan.max_team_members,
+        plan.max_skills_per_persona,
+        plan.stripe_product_id,
+        plan.active,
+        plan.display_order,
+        now,
+        now
+      );
+    }
+
+    console.log('[Pricing] Seeded 3 default pricing plans (Free, Pro, Enterprise)');
+  } catch (err) {
+    if (!err.message?.includes('already exists')) {
+      console.warn('[Pricing] Error seeding default plans:', err.message);
+    }
+  }
+}
+
 module.exports = {
   db,
   initDatabase,
@@ -4244,4 +4387,6 @@ module.exports = {
   declineWorkspaceInvitation,
   getUserWorkspaceInvitations,
   cleanupExpiredInvitations,
+  // Pricing Plans
+  seedDefaultPricingPlans,
 };
