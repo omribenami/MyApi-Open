@@ -2873,8 +2873,9 @@ const isStrongPassword = (pw) => {
 };
 
 app.post("/api/v1/users", authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can create users" });
+  // Power user check works for both session auth (OAuth) and Bearer token auth
   if (!requirePowerUser(req, res)) return;
+  
   const { username, displayName, email, timezone, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: "username and password are required" });
   
@@ -2884,7 +2885,9 @@ app.post("/api/v1/users", authenticate, (req, res) => {
 
   try {
     const user = createUser(username, displayName, email, timezone, password);
-    createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "create_user", resource: `/users/${user.id}`, scope: req.tokenMeta.scope, ip: req.ip });
+    const requesterId = req.session?.user?.id || req.tokenMeta?.tokenId || 'unknown';
+    const scope = req.tokenMeta?.scope || 'session';
+    createAuditLog({ requesterId, action: "create_user", resource: `/users/${user.id}`, scope, ip: req.ip });
     res.status(201).json({ data: user });
   } catch (e) {
     if (e.message && e.message.includes("UNIQUE")) {
@@ -2895,14 +2898,18 @@ app.post("/api/v1/users", authenticate, (req, res) => {
 });
 
 app.get("/api/v1/users", authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can list users" });
+  // Power user check works for both session auth (OAuth) and Bearer token auth
   if (!requirePowerUser(req, res)) return;
-  createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "list_users", resource: "/users", scope: req.tokenMeta.scope, ip: req.ip });
+  
+  // Log the audit appropriately for session vs token auth
+  const requesterId = req.session?.user?.id || req.tokenMeta?.tokenId || 'unknown';
+  const scope = req.tokenMeta?.scope || 'session';
+  createAuditLog({ requesterId, action: "list_users", resource: "/users", scope, ip: req.ip });
+  
   res.json({ data: getUsers() });
 });
 
 app.put('/api/v1/users/:id/plan', planFeatureRateLimit, authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== 'full') return res.status(403).json({ error: 'Only master token can manage plans' });
   if (!requirePowerUser(req, res)) return;
   try {
     const { id } = req.params;
@@ -2910,11 +2917,13 @@ app.put('/api/v1/users/:id/plan', planFeatureRateLimit, authenticate, (req, res)
     const user = updateUserPlan(id, plan);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
+    const requesterId = req.session?.user?.id || req.tokenMeta?.tokenId || 'unknown';
+    const scope = req.tokenMeta?.scope || 'session';
     createAuditLog({
-      requesterId: req.tokenMeta.tokenId,
+      requesterId,
       action: 'update_user_plan',
       resource: `/users/${id}/plan`,
-      scope: req.tokenMeta.scope,
+      scope,
       ip: req.ip,
       details: { plan }
     });
@@ -2930,18 +2939,19 @@ app.put('/api/v1/users/:id/plan', planFeatureRateLimit, authenticate, (req, res)
 });
 
 app.put('/api/v1/users/:id/subscription', planFeatureRateLimit, authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== 'full') return res.status(403).json({ error: 'Only master token can manage subscriptions' });
   if (!requirePowerUser(req, res)) return;
   try {
     const { id } = req.params;
     const { status, customerId, subscriptionId } = req.body || {};
     const user = updateUserSubscriptionStatus(id, { status, customerId, subscriptionId });
     if (!user) return res.status(404).json({ error: 'User not found' });
+    const requesterId = req.session?.user?.id || req.tokenMeta?.tokenId || 'unknown';
+    const scope = req.tokenMeta?.scope || 'session';
     createAuditLog({
-      requesterId: req.tokenMeta.tokenId,
+      requesterId,
       action: 'update_user_subscription',
       resource: `/users/${id}/subscription`,
-      scope: req.tokenMeta.scope,
+      scope,
       ip: req.ip,
       details: { status, customerId, subscriptionId },
     });
@@ -2956,7 +2966,6 @@ app.put('/api/v1/users/:id/subscription', planFeatureRateLimit, authenticate, (r
 });
 
 app.delete('/api/v1/users/:id', authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== 'full') return res.status(403).json({ error: 'Only master token can delete users' });
   if (!requirePowerUser(req, res)) return;
 
   try {
@@ -2982,7 +2991,9 @@ app.delete('/api/v1/users/:id', authenticate, (req, res) => {
     });
     tx(id);
 
-    createAuditLog({ requesterId: req.tokenMeta.tokenId, action: 'delete_user', resource: `/users/${id}`, scope: req.tokenMeta.scope, ip: req.ip, details: { email: user.email || null } });
+    const requesterId = req.session?.user?.id || req.tokenMeta?.tokenId || 'unknown';
+    const scope = req.tokenMeta?.scope || 'session';
+    createAuditLog({ requesterId, action: 'delete_user', resource: `/users/${id}`, scope, ip: req.ip, details: { email: user.email || null } });
     res.json({ ok: true, deletedUserId: id });
   } catch (error) {
     console.error('Delete user error:', error);
@@ -2991,7 +3002,6 @@ app.delete('/api/v1/users/:id', authenticate, (req, res) => {
 });
 
 app.post('/api/v1/users/cleanup-test-users', authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== 'full') return res.status(403).json({ error: 'Only master token can cleanup users' });
   if (!requirePowerUser(req, res)) return;
 
   const prefix = String(req.body?.prefix || 'phase12a_');

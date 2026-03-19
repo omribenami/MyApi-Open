@@ -51,9 +51,11 @@ function UserManagement() {
     setActionError('');
 
     try {
-      const data = await apiRequest('/api/v1/users', {
-        headers: { Authorization: `Bearer ${masterToken}` },
-      });
+      const options = { credentials: 'include' };
+      if (masterToken) {
+        options.headers = { Authorization: `Bearer ${masterToken}` };
+      }
+      const data = await apiRequest('/api/v1/users', options);
       setUsers(Array.isArray(data?.data) ? data.data : []);
     } catch (err) {
       setLoadError(formatError(err, 'Failed to load users'));
@@ -84,14 +86,18 @@ function UserManagement() {
     setActionError('');
 
     try {
-      const data = await apiRequest(`/api/v1/users/${userId}/plan`, {
+      const options = {
         method: 'PUT',
+        credentials: 'include',
         headers: {
-          Authorization: `Bearer ${masterToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ plan }),
-      });
+      };
+      if (masterToken) {
+        options.headers.Authorization = `Bearer ${masterToken}`;
+      }
+      const data = await apiRequest(`/api/v1/users/${userId}/plan`, options);
 
       setUsers((prev) => prev.map((u) => (u.id === userId ? data.data : u)));
     } catch (err) {
@@ -106,10 +112,14 @@ function UserManagement() {
     setDeletingUserId(user.id);
     setActionError('');
     try {
-      await apiRequest(`/api/v1/users/${user.id}`, {
+      const options = {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${masterToken}` },
-      });
+        credentials: 'include',
+      };
+      if (masterToken) {
+        options.headers = { Authorization: `Bearer ${masterToken}` };
+      }
+      await apiRequest(`/api/v1/users/${user.id}`, options);
       setUsers((prev) => prev.filter((u) => u.id !== user.id));
     } catch (err) {
       setActionError(formatError(err, 'Failed to delete user'));
@@ -123,14 +133,18 @@ function UserManagement() {
     setCleaning(true);
     setActionError('');
     try {
-      await apiRequest('/api/v1/users/cleanup-test-users', {
+      const options = {
         method: 'POST',
+        credentials: 'include',
         headers: {
-          Authorization: `Bearer ${masterToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ prefix: 'phase12a_' }),
-      });
+      };
+      if (masterToken) {
+        options.headers.Authorization = `Bearer ${masterToken}`;
+      }
+      await apiRequest('/api/v1/users/cleanup-test-users', options);
       await fetchUsers();
     } catch (err) {
       setActionError(formatError(err, 'Failed to cleanup test users'));
