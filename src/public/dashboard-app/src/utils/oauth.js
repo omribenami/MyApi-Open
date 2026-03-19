@@ -64,7 +64,7 @@ export const AVAILABLE_SERVICES = [
   { id: 'tiktok', name: 'TikTok', icon: '🎵', color: '#111827', description: 'Connect to TikTok account', scopes: ['user.info.basic'] },
   { id: 'twitter', name: 'X / Twitter', icon: '𝕏', color: '#111827', description: 'Connect to X account', scopes: ['tweet.read', 'users.read'] },
   { id: 'reddit', name: 'Reddit', icon: '👽', color: '#FF4500', description: 'Connect to Reddit account', scopes: ['identity', 'read'] },
-  { id: 'linkedin', name: 'LinkedIn', icon: 'in', color: '#0A66C2', description: 'Connect to LinkedIn profile and pages', scopes: ['openid', 'profile', 'email'] },
+  { id: 'linkedin', name: 'LinkedIn', icon: 'in', color: '#0A66C2', description: 'Connect to LinkedIn profile and pages', scopes: ['r_liteprofile', 'r_emailaddress'] },
   { id: 'slack', name: 'Slack', icon: '💬', color: '#36C5F0', description: 'Connect to Slack workspace and channels', scopes: ['chat:write', 'chat:read'] },
   { id: 'discord', name: 'Discord', icon: '🎮', color: '#5865F2', description: 'Connect to Discord server and channels', scopes: ['identify', 'email'] },
   { id: 'whatsapp', name: 'WhatsApp', icon: '💬', color: '#25D366', description: 'Connect to WhatsApp Business Account', scopes: ['messages', 'contacts'] },

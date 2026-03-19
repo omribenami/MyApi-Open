@@ -271,6 +271,8 @@ const oauthAdapters = {
     scope: 'user.info.basic,video.list',
     redirectUri: process.env.TIKTOK_REDIRECT_URI || oauthConfig.tiktok?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/tiktok`,
     // TikTok docs/UI often call this value "Client Key". Accept both env names.
+    // TikTok expects this key in `client_key` (not `client_id`).
+    clientIdParam: 'client_key',
     clientId: process.env.TIKTOK_CLIENT_ID || process.env.TIKTOK_CLIENT_KEY || oauthConfig.tiktok?.clientId,
     clientSecret: process.env.TIKTOK_CLIENT_SECRET || oauthConfig.tiktok?.clientSecret,
     extraAuthParams: { response_type: 'code' },
@@ -303,7 +305,7 @@ const oauthAdapters = {
     serviceName: 'linkedin',
     authUrl: 'https://www.linkedin.com/oauth/v2/authorization',
     tokenUrl: 'https://www.linkedin.com/oauth/v2/accessToken',
-    scope: 'openid profile email',
+    scope: 'r_liteprofile r_emailaddress',
     redirectUri: process.env.LINKEDIN_REDIRECT_URI || oauthConfig.linkedin?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/linkedin`,
     clientId: process.env.LINKEDIN_CLIENT_ID || oauthConfig.linkedin?.clientId,
     clientSecret: process.env.LINKEDIN_CLIENT_SECRET || oauthConfig.linkedin?.clientSecret,

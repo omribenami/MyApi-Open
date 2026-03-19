@@ -13,6 +13,7 @@ class GenericOAuthAdapter {
     this.verifyUrl = config.verifyUrl || '';
     this.scope = config.scope || '';
     this.tokenAuthStyle = config.tokenAuthStyle || 'body'; // body | basic
+    this.clientIdParam = config.clientIdParam || 'client_id';
     this.revokeMethod = config.revokeMethod || 'POST';
     this.revokeTokenParam = config.revokeTokenParam || 'token';
     this.extraAuthParams = config.extraAuthParams || {};
@@ -28,7 +29,7 @@ class GenericOAuthAdapter {
       throw new Error(`${this.serviceName} OAuth is not configured`);
     }
     const params = {
-      client_id: this.clientId,
+      [this.clientIdParam]: this.clientId,
       redirect_uri: this.redirectUri,
       response_type: 'code',
       state,
@@ -44,7 +45,7 @@ class GenericOAuthAdapter {
     }
     const tokenEndpoint = new URL(this.tokenUrl);
     const postData = querystring.stringify({
-      client_id: this.clientId,
+      [this.clientIdParam]: this.clientId,
       client_secret: this.clientSecret,
       code,
       grant_type: 'authorization_code',
