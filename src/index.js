@@ -773,10 +773,12 @@ function authenticate(req, res, next) {
     // session users are treated as "full" for MVP; we will add RBAC later.
     req.tokenMeta = { tokenId: `sess_${req.user.id}`, scope: 'full', ownerId: String(req.user.id), label: 'session' };
     
-    // For session users, skip device approval for auth/device routes
+    // For session users, skip device approval for auth/device routes and bootstrap-safe reads.
     const skipDeviceApproval = req.path.startsWith('/api/v1/auth/') || 
                                req.path.startsWith('/api/v1/devices') ||
-                               req.path.startsWith('/api/v1/oauth/authorize');
+                               req.path.startsWith('/api/v1/oauth/authorize') ||
+                               req.path.startsWith('/api/v1/ws') ||
+                               (req.method === 'GET' && (req.path === '/api/v1/dashboard/metrics' || req.path === '/api/v1/privacy/cookies'));
     
     if (skipDeviceApproval) {
       return next();
@@ -817,10 +819,12 @@ function authenticate(req, res, next) {
   req.tokenMeta = matched;
   req.authType = 'bearer';
   
-  // For Bearer tokens (agents), skip device approval for auth/device routes
+  // For Bearer tokens (agents), skip device approval for auth/device routes and bootstrap-safe reads.
   const skipDeviceApproval = req.path.startsWith('/api/v1/auth/') || 
                              req.path.startsWith('/api/v1/devices') ||
-                             req.path.startsWith('/api/v1/oauth/authorize');
+                             req.path.startsWith('/api/v1/oauth/authorize') ||
+                             req.path.startsWith('/api/v1/ws') ||
+                             (req.method === 'GET' && (req.path === '/api/v1/dashboard/metrics' || req.path === '/api/v1/privacy/cookies'));
   
   if (skipDeviceApproval) {
     return next();
