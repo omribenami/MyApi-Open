@@ -5512,17 +5512,17 @@ app.post('/api/v1/marketplace/:id/rate', authenticate, (req, res) => {
     const userId = req.tokenMeta.ownerId;
     const result = rateMarketplaceListing(listingId, userId, rating, review);
     
-    // Emit notification to skill owner
-    if (listing && listing.owner_id && listing.owner_id !== userId) {
-      const skillName = listing.name || 'Your skill';
+    // Emit notification to listing owner
+    if (listing && listing.ownerId && listing.ownerId !== userId) {
+      const listingName = listing.title || 'Your listing';
       const userName = req.tokenMeta.displayName || 'Someone';
-      NotificationService.emitNotification(listing.owner_id, 'skill_liked',
-        `Skill Liked`,
-        `${userName} liked your skill "${skillName}" with a ${rating}-star rating`,
-        { relatedEntityType: 'skill', relatedEntityId: listing.skill_id, actionUrl: `/dashboard/skills/${listing.skill_id}` }
+      NotificationService.emitNotification(listing.ownerId, 'skill_liked',
+        `Listing Rated`,
+        `${userName} rated your listing "${listingName}" with a ${rating}-star rating`,
+        { relatedEntityType: listing.type || 'listing', relatedEntityId: listing.id, actionUrl: `/dashboard/my-listings` }
       ).catch(err => console.error('Notification error:', err));
-      NotificationService.logActivity(listing.owner_id, 'skill_liked', 'skill', {
-        resourceId: listing.skill_id, resourceName: skillName, actorType: 'user', actorId: userId, actorName: userName, result: 'success',
+      NotificationService.logActivity(listing.ownerId, 'skill_liked', listing.type || 'listing', {
+        resourceId: listing.id, resourceName: listingName, actorType: 'user', actorId: userId, actorName: userName, result: 'success',
       });
     }
     

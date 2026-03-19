@@ -355,8 +355,36 @@ function ListingModal({ listing, onClose, onInstall, onRated, masterToken, initi
   );
 }
 
-function ListingCard({ listing, onClick, isInstalled = false }) {
+function ListingCard({
+  listing,
+  onClick,
+  isInstalled = false,
+  masterToken,
+  onQuickInstall,
+  quickInstalling = false,
+}) {
   const scanner = listing.type === 'skill' ? extractScanner(listing.content) : null;
+  const [quickError, setQuickError] = useState('');
+
+  async function handleQuickInstall(e) {
+    e.stopPropagation();
+    if (!masterToken || isInstalled || quickInstalling) return;
+
+    setQuickError('');
+    try {
+      const res = await fetch(`/api/v1/marketplace/${listing.id}/install`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${masterToken}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || (res.status === 401 ? 'Session expired. Please sign in again.' : 'Install failed'));
+      }
+      onQuickInstall && onQuickInstall({ listingId: listing.id, type: listing.type, data });
+    } catch (err) {
+      setQuickError(err.message || 'Install failed');
+    }
+  }
 
   return (
     <div
@@ -397,9 +425,19 @@ function ListingCard({ listing, onClick, isInstalled = false }) {
           {listing.tags.length > 3 && <span className="text-slate-500 text-xs">+{listing.tags.length - 3}</span>}
         </div>
       )}
-      <div className="mt-4">
+      <div className="mt-4 flex items-center justify-between gap-2">
         <span className="text-xs font-medium text-blue-400 group-hover:text-blue-300 transition-colors">View Details →</span>
+        {masterToken && (
+          <button
+            onClick={handleQuickInstall}
+            disabled={isInstalled || quickInstalling}
+            className="px-3 py-1.5 text-xs rounded-md bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white"
+          >
+            {quickInstalling ? 'Installing...' : isInstalled ? 'Installed' : 'Install'}
+          </button>
+        )}
       </div>
+      {quickError && <p className="mt-2 text-xs text-red-400">{quickError}</p>}
     </div>
   );
 }
@@ -408,6 +446,7 @@ export default function Marketplace() {
   const masterToken = useAuthStore(s => s.masterToken);
   const [listings, setListings] = useState([]);
   const [installedSkillListingIds, setInstalledSkillListingIds] = useState(() => new Set());
+  const [quickInstallingIds, setQuickInstallingIds] = useState(() => new Set());
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
@@ -472,6 +511,22 @@ export default function Marketplace() {
     { id: 'api', label: 'APIs' },
     { id: 'skill', label: 'Skills' },
   ];
+
+  const handleQuickInstall = async ({ listingId, type }) => {
+    setQuickInstallingIds(prev => new Set([...prev, String(listingId)]));
+    try {
+      if (type === 'skill') {
+        setInstalledSkillListingIds(prev => new Set([...prev, String(listingId)]));
+      }
+      await fetchListings();
+    } finally {
+      setQuickInstallingIds(prev => {
+        const next = new Set(prev);
+        next.delete(String(listingId));
+        return next;
+      });
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -543,6 +598,9 @@ export default function Marketplace() {
               key={listing.id}
               listing={listing}
               onClick={setSelected}
+              masterToken={masterToken}
+              onQuickInstall={handleQuickInstall}
+              quickInstalling={quickInstallingIds.has(String(listing.id))}
               isInstalled={listing.type === 'skill' && installedSkillListingIds.has(String(listing.id))}
             />
           ))}
