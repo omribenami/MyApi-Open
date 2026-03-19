@@ -2598,6 +2598,33 @@ app.get("/api/v1/auth/me", (req, res) => {
   res.status(401).json({ error: "Invalid session" });
 });
 
+// GET /api/v1/auth/debug — Public diagnostic endpoint
+// No auth required; helps diagnose session/token issues
+app.get("/api/v1/auth/debug", (req, res) => {
+  const hasSession = Boolean(req.session && req.session.user);
+  const hasBearer = Boolean(req.headers.authorization?.replace?.("Bearer ", ""));
+  const sessionUserId = req.session?.user?.id || null;
+  const bearerToken = req.headers.authorization?.replace("Bearer ", "") || null;
+  const cookies = req.headers.cookie || '';
+  
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.json({
+    timestamp: new Date().toISOString(),
+    session: hasSession,
+    sessionUserId,
+    hasBearer,
+    bearerToken: bearerToken ? bearerToken.slice(0, 20) + '...' : null,
+    headers: {
+      authorization: req.headers.authorization ? 'present' : 'missing',
+      cookie: cookies ? 'present' : 'missing',
+      userAgent: req.headers['user-agent'] || 'unknown',
+    },
+    ip: req.ip,
+    method: req.method,
+    path: req.path,
+  });
+});
+
 app.post('/api/v1/auth/2fa/setup', authenticate, async (req, res) => {
   try {
     const userId = req?.user?.id || req?.tokenMeta?.ownerId;
