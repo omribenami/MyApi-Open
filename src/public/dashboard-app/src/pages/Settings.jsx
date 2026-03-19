@@ -1242,7 +1242,6 @@ function Settings() {
     setIsDeleting(false);
     setShowDeleteModal(false);
     logout();
-    window.location.href = '/';
   };
 
   return (

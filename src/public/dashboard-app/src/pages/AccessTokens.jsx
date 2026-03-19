@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { isLogoutInProgress } from '../utils/authRuntime';
 import { useAuthStore } from '../stores/authStore';
 import { useTokenStore } from '../stores/tokenStore';
 import EditTokenModal from '../components/EditTokenModal';
@@ -20,6 +21,7 @@ const GUEST_SCOPES = [
 
 function AccessTokens() {
   const masterToken = useAuthStore((state) => state.masterToken);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const setMasterToken = useAuthStore((state) => state.setMasterToken);
   const {
     tokens,
@@ -69,8 +71,8 @@ function AccessTokens() {
   // OAuth session fallback: lazily bootstrap master token if missing.
   // ONLY bootstrap if masterToken doesn't already exist in localStorage
   useEffect(() => {
-    if (masterToken) return;
-    
+    if (!isAuthenticated || isLogoutInProgress() || masterToken) return;
+
     const stored = localStorage.getItem('masterToken');
     if (stored) {
       setMasterToken(stored);
@@ -90,7 +92,7 @@ function AccessTokens() {
         if (t) setMasterToken(t);
       })
       .catch(() => {});
-  }, [masterToken, setMasterToken]);
+  }, [masterToken, setMasterToken, isAuthenticated]);
 
   // Fetch personas when the 'personas' scope is toggled on
   useEffect(() => {

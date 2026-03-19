@@ -1,6 +1,22 @@
 import axios from 'axios';
+import { clearAuthArtifacts, isLogoutInProgress, redirectToLoginOnce } from './authRuntime';
 
-// Create API client instance
+const rateLimitState = new Map();
+
+const getBackoffMs = (url) => {
+  const prev = rateLimitState.get(url) || { count: 0, until: 0 };
+  const nextCount = Math.min(prev.count + 1, 6);
+  const backoffMs = Math.min(1000 * (2 ** nextCount), 60000);
+  const jitter = Math.floor(Math.random() * 250);
+  const until = Date.now() + backoffMs + jitter;
+  rateLimitState.set(url, { count: nextCount, until });
+  return until - Date.now();
+};
+
+const clearBackoff = (url) => {
+  rateLimitState.delete(url);
+};
+
 const apiClient = axios.create({
   baseURL: '/api/v1',
   timeout: 10000,
@@ -10,106 +26,81 @@ const apiClient = axios.create({
   },
 });
 
-// Add request interceptor to include auth token
-// IMPORTANT: Only send Bearer token if we don't have an active session.
-// Session cookies (withCredentials: true) take precedence.
-// Sending both can cause device approval conflicts if the Bearer token is stale/revoked.
 apiClient.interceptors.request.use((config) => {
-  const masterToken = localStorage.getItem('masterToken');
-  const sessionToken = sessionStorage.getItem('sessionToken');
-  
-  // If we have ANY session indication, DON'T add Bearer token.
-  // Session auth takes absolute precedence over token-based auth.
-  if (!sessionToken) {
-    // Only add Bearer token if there's no session.
-    if (masterToken) {
-      config.headers.Authorization = `Bearer ${masterToken}`;
-    }
+  const fullUrl = `${config.baseURL || ''}${config.url || ''}`;
+  const rate = rateLimitState.get(fullUrl);
+  if (rate?.until && Date.now() < rate.until) {
+    const err = new Error('Rate limited: backing off');
+    err.code = 'MYAPI_RATE_LIMIT_BACKOFF';
+    err.retryAfterMs = rate.until - Date.now();
+    return Promise.reject(err);
   }
-  
+
+  if (isLogoutInProgress()) {
+    const err = new Error('Logout in progress');
+    err.code = 'MYAPI_LOGOUT_IN_PROGRESS';
+    return Promise.reject(err);
+  }
+
+  let masterToken = null;
+  let sessionToken = null;
+  try {
+    masterToken = localStorage.getItem('masterToken');
+    sessionToken = sessionStorage.getItem('sessionToken');
+  } catch {
+    // Ignore storage corruption and continue with cookie/session auth only.
+  }
+  if (!sessionToken && masterToken) {
+    config.headers.Authorization = `Bearer ${masterToken}`;
+  }
+
   return config;
 });
 
-// Add response interceptor for error handling
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const fullUrl = `${response.config?.baseURL || ''}${response.config?.url || ''}`;
+    clearBackoff(fullUrl);
+    return response;
+  },
   (error) => {
-    // Handle auth errors
-    if (error.response?.status === 401) {
-      // Clear auth and redirect to login
-      localStorage.removeItem('masterToken');
-      sessionStorage.removeItem('sessionToken');
-      window.location.href = '/';
+    const status = error.response?.status;
+    const fullUrl = `${error.config?.baseURL || ''}${error.config?.url || ''}`;
+
+    if (status === 429) {
+      const retryAfterHeader = Number(error.response?.headers?.['retry-after'] || 0);
+      const retryAfterMs = retryAfterHeader > 0 ? retryAfterHeader * 1000 : getBackoffMs(fullUrl);
+      error.retryAfterMs = retryAfterMs;
+      return Promise.reject(error);
     }
-    
-    // Handle device approval errors (403 Forbidden)
-    // These are expected and should be handled by the UI showing approval form.
-    if (error.response?.status === 403) {
+
+    if ((status === 401 || status === 403) && !isLogoutInProgress()) {
       const errorData = error.response?.data || {};
-      if (errorData.code === 'DEVICE_APPROVAL_REQUIRED' || errorData.error === 'device_not_approved') {
+      if (status === 403 && (errorData.code === 'DEVICE_APPROVAL_REQUIRED' || errorData.error === 'device_not_approved')) {
         return Promise.reject(error);
       }
-
-      // Any other 403 after logout means no auth present
-      // Clear local auth and redirect to login to reauthenticate
-      try {
-        localStorage.removeItem('masterToken');
-        localStorage.removeItem('tokenData');
-        sessionStorage.removeItem('sessionToken');
-      } catch {
-        // no-op
-      }
-      window.location.href = '/';
+      clearAuthArtifacts();
+      redirectToLoginOnce();
     }
 
     return Promise.reject(error);
   }
 );
 
-// OAuth endpoints
 export const oauth = {
-  // Get authorization URL for a service
-  getAuthorizationUrl: (service, options = {}) =>
-    apiClient.get(`/oauth/authorize/${service}`, { params: options }),
-
-  // Get status of all connected services
-  getStatus: () => 
-    apiClient.get('/oauth/status'),
-
-  // Disconnect a service
-  disconnect: (service) => 
-    apiClient.post(`/oauth/disconnect/${service}`),
-
-  // Test OAuth token validity
-  testToken: (service) => 
-    apiClient.get(`/oauth/test/${service}`),
+  getAuthorizationUrl: (service, options = {}) => apiClient.get(`/oauth/authorize/${service}`, { params: options }),
+  getStatus: () => apiClient.get('/oauth/status'),
+  disconnect: (service) => apiClient.post(`/oauth/disconnect/${service}`),
+  testToken: (service) => apiClient.get(`/oauth/test/${service}`),
 };
 
-// Services/Connectors endpoints
 export const services = {
-  // Get all available services
-  getAvailable: () => 
-    apiClient.get('/services/available'),
-
-  // Get connected services
-  getConnected: () => 
-    apiClient.get('/services'),
-
-  // Connect a service (start OAuth flow)
-  connect: (service) => 
-    apiClient.post(`/oauth/authorize/${service}`),
-
-  // Disconnect a service
-  disconnect: (service) => 
-    apiClient.post(`/oauth/disconnect/${service}`),
-
-  // Get service details
-  getServiceDetails: (service) => 
-    apiClient.get(`/services/${service}`),
-
-  // Update service configuration
-  updateServiceConfig: (service, config) => 
-    apiClient.put(`/services/${service}`, config),
+  getAvailable: () => apiClient.get('/services/available'),
+  getConnected: () => apiClient.get('/services'),
+  connect: (service) => apiClient.post(`/oauth/authorize/${service}`),
+  disconnect: (service) => apiClient.post(`/oauth/disconnect/${service}`),
+  getServiceDetails: (service) => apiClient.get(`/services/${service}`),
+  updateServiceConfig: (service, config) => apiClient.put(`/services/${service}`, config),
 };
 
 export default apiClient;

@@ -16,6 +16,7 @@ import { useAuthStore } from '../stores/authStore';
 function Dashboard() {
   const navigate = useNavigate();
   const masterToken = useAuthStore((state) => state.masterToken);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const wsRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
 
@@ -38,18 +39,24 @@ function Dashboard() {
 
   // Fetch dashboard metrics from backend
   const fetchMetrics = async () => {
+    if (!isAuthenticated) return;
     try {
-      // Check if user is still authenticated (session cookie will be sent automatically with credentials: true)
       const response = await apiClient.get('/dashboard/metrics');
       setMetrics(response.data?.data || response.data);
       setError(null);
     } catch (err) {
-      console.error('Failed to fetch dashboard metrics:', err);
-      // 401/403 means user is not authenticated - don't show error, just let auth redirect handle it
+      if (err?.code === 'MYAPI_LOGOUT_IN_PROGRESS' || err?.code === 'MYAPI_RATE_LIMIT_BACKOFF') {
+        return;
+      }
       if (err.response?.status === 401 || err.response?.status === 403) {
         setLoading(false);
         return;
       }
+      if (err.response?.status === 429) {
+        setError('Rate limited. Retrying automatically.');
+        return;
+      }
+      console.error('Failed to fetch dashboard metrics:', err);
       setError('Failed to load dashboard metrics');
     } finally {
       setLoading(false);
@@ -171,10 +178,11 @@ function Dashboard() {
 
   // Initial setup
   useEffect(() => {
+    if (!isAuthenticated) return undefined;
+
     fetchMetrics();
     setupWebSocket();
 
-    // Refresh metrics every 30 seconds
     const metricsInterval = setInterval(fetchMetrics, 30000);
 
     return () => {
@@ -186,7 +194,7 @@ function Dashboard() {
         wsRef.current.close();
       }
     };
-  }, [masterToken]);
+  }, [masterToken, isAuthenticated]);
 
   if (loading) {
     return (

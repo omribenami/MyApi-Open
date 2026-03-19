@@ -130,7 +130,6 @@ function Layout({ children, onLogout }) {
   const handleLogout = () => {
     if (window.confirm('Are you sure you want to log out?')) {
       onLogout();
-      window.location.href = '/';
     }
   };
 

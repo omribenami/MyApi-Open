@@ -45,7 +45,8 @@ if (typeof window !== 'undefined') {
       // Ignore cleanup errors and still try a one-time clean navigation.
     }
 
-    window.location.replace('/dashboard/');
+    // Avoid hard reload storms on storage corruption; let app recover in-place.
+    console.warn('[MyApi] Corruption recovery executed. Auto-reload suppressed to prevent loop.');
   };
 
   const messageFromError = (value) => {

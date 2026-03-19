@@ -50,11 +50,18 @@ function App() {
   const isInitialized = useAuthStore((state) => state.isInitialized);
   const initialize = useAuthStore((state) => state.initialize);
   const handleLogout = useAuthStore((state) => state.logout);
+  const forceUnauthenticated = useAuthStore((state) => state.forceUnauthenticated);
 
   // Initialize auth store on mount
   useEffect(() => {
     initialize();
-  }, []);
+  }, [initialize]);
+
+  useEffect(() => {
+    const onAuthExpired = () => forceUnauthenticated();
+    window.addEventListener('myapi:auth-expired', onAuthExpired);
+    return () => window.removeEventListener('myapi:auth-expired', onAuthExpired);
+  }, [forceUnauthenticated]);
 
   if (!isInitialized) {
     return (
