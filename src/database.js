@@ -1521,6 +1521,16 @@ function storeOAuthToken(serviceName, userId, accessToken, refreshToken, expires
   };
 }
 
+
+function countConnectedOAuthServices(userId) {
+  const row = db.prepare(`
+    SELECT COUNT(DISTINCT service_name) AS cnt
+    FROM oauth_tokens
+    WHERE user_id = ?
+  `).get(String(userId));
+  return Number(row?.cnt || 0);
+}
+
 function getOAuthToken(serviceName, userId) {
   const stmt = db.prepare(`
     SELECT * FROM oauth_tokens
@@ -4055,6 +4065,7 @@ module.exports = {
   deletePersona,
   storeOAuthToken,
   getOAuthToken,
+  countConnectedOAuthServices,
   isTokenExpired,
   refreshOAuthToken,
   revokeOAuthToken,

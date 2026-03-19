@@ -2,7 +2,7 @@ const express = require('express');
 const {
   getApprovedDevices,
   getPendingApprovals,
-  getOAuthToken,
+  countConnectedOAuthServices,
   getAccessTokens,
   getPersonas,
   getSkills,
@@ -51,14 +51,8 @@ function handleDashboardMetrics(req, res) {
       'notion',
     ];
 
-    const connectedServices = oauthServices.filter((svc) => {
-      try {
-        const token = getOAuthToken(svc, userId);
-        return Boolean(token && !token.revokedAt);
-      } catch {
-        return false;
-      }
-    }).length;
+    // Use DB-level count so metrics don't break when encrypted token decryption/key context fails.
+    const connectedServices = countConnectedOAuthServices(userId);
 
     const totalServices = oauthServices.length;
 
