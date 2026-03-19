@@ -1418,7 +1418,7 @@ app.get('/openapi.json', (req, res) => {
       '/api/v1/vault/tokens/{id}/reveal': { get: { summary: 'Reveal vault token', security: [{ bearerAuth: [] }] } },
       '/api/v1/vault/tokens/{id}': { delete: { summary: 'Delete vault token', security: [{ bearerAuth: [] }] } },
 
-      '/api/v1/tokens': { get: { summary: 'List access tokens', security: [{ bearerAuth: [] }] }, post: { summary: 'Create access token', security: [{ bearerAuth: [] }] } },
+      '/api/v1/tokens': { get: { summary: 'List master tokens', security: [{ bearerAuth: [] }] }, post: { summary: 'Create master token', security: [{ bearerAuth: [] }] } },
       '/api/v1/tokens/{id}': { get: { summary: 'Get token', security: [{ bearerAuth: [] }] }, put: { summary: 'Update token', security: [{ bearerAuth: [] }] }, delete: { summary: 'Revoke token', security: [{ bearerAuth: [] }] } },
       '/api/v1/tokens/{id}/regenerate': { post: { summary: 'Regenerate token secret', security: [{ bearerAuth: [] }] } },
       '/api/v1/tokens/master/regenerate': { post: { summary: 'Regenerate master token', security: [{ bearerAuth: [] }] } },
