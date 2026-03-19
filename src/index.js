@@ -3503,7 +3503,7 @@ app.get([
   "/api/oauth/callback/:service",
 ], async (req, res) => {
   const { service } = req.params;
-  const { code, state } = req.query;
+  const { code, state, error: providerError, error_description: providerErrorDescription } = req.query;
 
   if (!OAUTH_SERVICES.includes(service)) {
     return res.status(400).json({ error: "Invalid OAuth service" });
@@ -3511,8 +3511,37 @@ app.get([
   if (!state || !validateStateToken(service, state)) {
     return res.status(400).json({ error: "Invalid or expired state token" });
   }
+
+  // Provider denied/failed before issuing a code (common for scope/config problems)
+  if (providerError) {
+    const details = {
+      service,
+      providerError,
+      providerErrorDescription: providerErrorDescription || null,
+      state,
+    };
+    console.warn('[OAuth] Provider returned error on callback:', details);
+
+    const wantsJson = String(req.query.json || '').toLowerCase() === '1';
+    if (wantsJson) {
+      return res.status(400).json({
+        error: 'OAuth provider rejected authorization',
+        service,
+        providerError,
+        providerErrorDescription: providerErrorDescription || null,
+      });
+    }
+
+    const msg = encodeURIComponent(providerErrorDescription || providerError);
+    return res.redirect(`/dashboard/services?oauth_error=${encodeURIComponent(providerError)}&oauth_error_description=${msg}&service=${encodeURIComponent(service)}`);
+  }
+
   if (!code) {
-    return res.status(400).json({ error: "Missing authorization code" });
+    return res.status(400).json({
+      error: "Missing authorization code",
+      hint: "Provider likely returned an error instead of a code. Check callback query params: error / error_description",
+      service,
+    });
   }
 
   const stateMeta = req.session?.oauthStateMeta?.[state];
