@@ -5698,33 +5698,53 @@ app.post('/api/v1/marketplace/:id/install', authenticate, (req, res) => {
       // Get the current user's ID (owner) from token metadata
       const ownerId = req.tokenMeta.ownerId || req.tokenMeta.userId || 'owner';
 
-      // Create the skill in the database
-      const newSkill = createSkill(
-        skillName,
-        skillDescription,
-        skillVersion,
-        skillAuthor,
-        skillCategory,
-        scriptContent,
-        configJson,
-        repoUrl,
-        ownerId
-      );
+      // Idempotency by marketplace listing id for skill installs
+      const existingSkill = getSkills(ownerId).find((s) => {
+        const cfg = s.config_json && typeof s.config_json === 'object' ? s.config_json : null;
+        return String(cfg?.marketplace_listing_id || '') === String(listing.id);
+      });
 
-      if (!newSkill) {
-        return res.status(500).json({ error: 'Failed to create skill' });
+      if (existingSkill) {
+        provisioned = {
+          type: 'skill',
+          skillId: existingSkill.id,
+          skillName: existingSkill.name,
+          skillVersion: existingSkill.version,
+          skillCategory: existingSkill.category,
+          alreadyInstalled: true,
+        };
+      } else {
+        // Create the skill in the database
+        const newSkill = createSkill(
+          skillName,
+          skillDescription,
+          skillVersion,
+          skillAuthor,
+          skillCategory,
+          scriptContent,
+          configJson,
+          repoUrl,
+          ownerId
+        );
+
+        if (!newSkill) {
+          return res.status(500).json({ error: 'Failed to create skill' });
+        }
+
+        provisioned = {
+          type: 'skill',
+          skillId: newSkill.id,
+          skillName: newSkill.name,
+          skillVersion: newSkill.version,
+          skillCategory: newSkill.category,
+        };
       }
-
-      provisioned = {
-        type: 'skill',
-        skillId: newSkill.id,
-        skillName: newSkill.name,
-        skillVersion: newSkill.version,
-        skillCategory: newSkill.category,
-      };
     }
 
-    incrementInstallCount(listingId);
+    const alreadyInstalled = !!(provisioned && provisioned.alreadyInstalled);
+    if (!alreadyInstalled) {
+      incrementInstallCount(listingId);
+    }
     const updated = getMarketplaceListing(listingId);
 
     createAuditLog({
@@ -5742,6 +5762,7 @@ app.post('/api/v1/marketplace/:id/install', authenticate, (req, res) => {
 
     res.json({
       success: true,
+      alreadyInstalled,
       installCount: updated?.installCount || undefined,
       provisioned,
     });
