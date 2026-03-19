@@ -255,6 +255,9 @@ router.get('/me', (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
+    // Check if this is the user's first login based on session state
+    const isFirstLogin = req.session?.isFirstLogin || false;
+
     res.json({
       success: true,
       user: {
@@ -265,7 +268,8 @@ router.get('/me', (req, res) => {
         avatarUrl: user.avatar_url,
         timezone: user.timezone,
         plan: user.plan,
-      }
+      },
+      isFirstLogin
     });
   } catch (error) {
     console.error('Get user error:', error);

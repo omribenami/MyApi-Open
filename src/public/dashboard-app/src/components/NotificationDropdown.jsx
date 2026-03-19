@@ -16,24 +16,21 @@ function NotificationDropdown({ open, onClose }) {
     addToast,
   } = useNotificationStore();
 
-  const [filter, setFilter] = useState('all');
-  const [displayNotifications, setDisplayNotifications] = useState([]);
+  const [offset, setOffset] = useState(0);
+  const [displayLimit, setDisplayLimit] = useState(15);
+  const [hasMore, setHasMore] = useState(false);
 
   useEffect(() => {
     if (open && masterToken) {
-      fetchNotifications(masterToken, 50, 0);
+      fetchNotifications(masterToken, displayLimit, 0);
+      setOffset(0);
     }
-  }, [open, masterToken, fetchNotifications]);
+  }, [open, masterToken, fetchNotifications, displayLimit]);
 
   useEffect(() => {
-    if (filter === 'all') {
-      setDisplayNotifications(notifications);
-    } else if (filter === 'unread') {
-      setDisplayNotifications(notifications.filter((n) => !n.read_at));
-    } else {
-      setDisplayNotifications(notifications.filter((n) => n.type === filter));
-    }
-  }, [notifications, filter]);
+    // Check if there are more notifications to load
+    setHasMore(notifications.length >= displayLimit);
+  }, [notifications, displayLimit]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -53,6 +50,12 @@ function NotificationDropdown({ open, onClose }) {
 
   const handleDelete = (notificationId) => {
     deleteNotification(masterToken, notificationId);
+  };
+
+  const handleLoadMore = () => {
+    const newOffset = offset + displayLimit;
+    fetchNotifications(masterToken, displayLimit, newOffset);
+    setOffset(newOffset);
   };
 
   const getNotificationIcon = (type) => {
@@ -93,16 +96,27 @@ function NotificationDropdown({ open, onClose }) {
   return (
     <div
       ref={dropdownRef}
-      className="absolute top-12 max-h-96 rounded-xl border border-slate-700 bg-slate-900 shadow-2xl flex flex-col z-50"
+      className="rounded-xl border border-slate-700 bg-slate-900 shadow-2xl flex flex-col z-50 overflow-hidden"
       style={{
+        position: 'absolute',
+        top: '100%',
         right: '0px',
         width: '384px',
-        maxWidth: 'calc(100vw - 16px)',
-        minWidth: '280px',
+        maxHeight: '500px',
+        marginTop: '8px',
+        // Mobile responsive: use fixed positioning and full width
+        ...(typeof window !== 'undefined' && window.innerWidth < 768 ? {
+          position: 'fixed',
+          top: '64px',
+          left: '8px',
+          right: '8px',
+          width: 'auto',
+          maxWidth: 'calc(100vw - 16px)',
+        } : {})
       }}
     >
       {/* Header */}
-      <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-900 rounded-t-xl">
+      <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-900 rounded-t-xl flex-shrink-0">
         <h3 className="text-sm font-semibold text-white">Notifications</h3>
         <button
           onClick={onClose}
@@ -112,25 +126,8 @@ function NotificationDropdown({ open, onClose }) {
         </button>
       </div>
 
-      {/* Filter tabs */}
-      <div className="px-4 py-2 border-b border-slate-800 flex gap-2 overflow-x-auto bg-slate-900">
-        {['all', 'unread', 'device_approval_requested', 'service_connected', 'error'].map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`px-2 py-1 text-xs rounded font-medium whitespace-nowrap transition-all ${
-              filter === f
-                ? 'bg-blue-600 text-white'
-                : 'bg-slate-800 text-slate-400 hover:text-white'
-            }`}
-          >
-            {f === 'all' ? 'All' : f === 'unread' ? 'Unread' : f.replace(/_/g, ' ')}
-          </button>
-        ))}
-      </div>
-
       {/* Notifications list */}
-      <div className="overflow-y-auto flex-1">
+      <div className="overflow-y-auto flex-1 min-h-0">
         {isLoading && !notifications.length ? (
           <div className="px-4 py-8 text-center text-slate-500">
             <p className="text-sm">Loading notifications...</p>
@@ -139,13 +136,13 @@ function NotificationDropdown({ open, onClose }) {
           <div className="px-4 py-8 text-center text-red-400">
             <p className="text-sm">{error}</p>
           </div>
-        ) : displayNotifications.length === 0 ? (
+        ) : notifications.length === 0 ? (
           <div className="px-4 py-8 text-center text-slate-500">
             <p className="text-sm">No notifications</p>
           </div>
         ) : (
           <div className="divide-y divide-slate-800">
-            {displayNotifications.map((notification) => (
+            {notifications.map((notification) => (
               <div
                 key={notification.id}
                 className={`px-4 py-3 hover:bg-slate-800 transition-colors ${
@@ -192,21 +189,15 @@ function NotificationDropdown({ open, onClose }) {
         )}
       </div>
 
-      {/* Footer */}
-      {displayNotifications.length > 0 && (
-        <div className="px-4 py-2 border-t border-slate-800 bg-slate-900 rounded-b-xl">
+      {/* Load more button */}
+      {notifications.length > 0 && hasMore && (
+        <div className="px-4 py-2 border-t border-slate-800 bg-slate-900 rounded-b-xl flex-shrink-0">
           <button
-            onClick={() => {
-              // Mark all as read
-              displayNotifications.forEach((n) => {
-                if (!n.read_at) {
-                  markAsRead(masterToken, n.id);
-                }
-              });
-            }}
-            className="w-full px-3 py-1 text-xs font-medium text-blue-400 hover:text-blue-300 transition-colors"
+            onClick={handleLoadMore}
+            disabled={isLoading}
+            className="w-full px-3 py-2 text-xs font-medium text-blue-400 hover:text-blue-300 disabled:text-slate-500 disabled:cursor-not-allowed transition-colors rounded hover:bg-slate-800"
           >
-            Mark all as read
+            {isLoading ? 'Loading...' : 'Load more'}
           </button>
         </div>
       )}

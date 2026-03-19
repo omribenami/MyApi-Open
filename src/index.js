@@ -3688,6 +3688,7 @@ app.get([
       }
 
       let appUser = getUsers().find((u) => (u.email || '').toLowerCase() === email.toLowerCase()) || existing;
+      let isNewUser = false;
       if (!appUser) {
         appUser = createUser(
           username,
@@ -3698,6 +3699,7 @@ app.get([
           'free',
           avatarUrl
         );
+        isNewUser = true;
       } else {
         appUser = updateUserOAuthProfile(appUser.id, { displayName: name, email, avatarUrl }) || appUser;
       }
@@ -3732,6 +3734,9 @@ app.get([
         two_factor_enabled: Boolean(appUser.twoFactorEnabled),
         roles: appUser.roles || 'user',
       };
+
+      // Mark if this is the user's first login
+      req.session.isFirstLogin = isNewUser;
 
       // Ensure each OAuth-logged-in user receives a full master token for dashboard/API actions.
       // Always create a fresh master token for this session (can't retrieve hashed ones from DB)
