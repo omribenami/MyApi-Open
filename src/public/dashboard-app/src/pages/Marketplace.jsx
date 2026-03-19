@@ -338,7 +338,14 @@ function ListingModal({ listing, onClose, onInstall, onRated, masterToken, initi
 
             {masterToken && (
               <div className="border-t border-slate-800 pt-4">
-                <RatingWidget listingId={detail.id} masterToken={masterToken} onRated={refreshDetail} />
+                <RatingWidget
+                  listingId={detail.id}
+                  masterToken={masterToken}
+                  onRated={() => {
+                    refreshDetail();
+                    onRated && onRated(detail.id);
+                  }}
+                />
               </div>
             )}
           </div>
@@ -348,7 +355,7 @@ function ListingModal({ listing, onClose, onInstall, onRated, masterToken, initi
   );
 }
 
-function ListingCard({ listing, onClick }) {
+function ListingCard({ listing, onClick, isInstalled = false }) {
   const scanner = listing.type === 'skill' ? extractScanner(listing.content) : null;
 
   return (
