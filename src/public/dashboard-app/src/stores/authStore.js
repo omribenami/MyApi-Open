@@ -24,21 +24,22 @@ export const useAuthStore = create((set) => ({
   error: null,
 
   initialize: async () => {
-    // Circuit breaker: if /auth/me has failed 2+ times, skip remaining attempts
-    if (authMeFailureCount >= 2) {
-      console.warn('[Auth] Circuit breaker active: /auth/me failed', authMeFailureCount, 'times. Initializing unauthenticated.');
-      set({ isInitialized: true });
-      return;
-    }
-    let masterToken = null;
-    let sessionToken = null;
-
     try {
-      masterToken = localStorage.getItem('masterToken');
-      sessionToken = sessionStorage.getItem('sessionToken');
-    } catch {
-      // Storage access can fail on corrupted browser storage; continue with cookie bootstrap path.
-    }
+      // Circuit breaker: if /auth/me has failed 2+ times, skip remaining attempts
+      if (authMeFailureCount >= 2) {
+        console.warn('[Auth] Circuit breaker active: /auth/me failed', authMeFailureCount, 'times. Initializing unauthenticated.');
+        set({ isInitialized: true });
+        return;
+      }
+      let masterToken = null;
+      let sessionToken = null;
+
+      try {
+        masterToken = localStorage.getItem('masterToken');
+        sessionToken = sessionStorage.getItem('sessionToken');
+      } catch {
+        // Storage access can fail on corrupted browser storage; continue with cookie bootstrap path.
+      }
 
     // CRITICAL: Check for active session FIRST, before validating any Bearer tokens.
     // If session is active, clear any stale masterToken to prevent device approval conflicts.
@@ -155,6 +156,10 @@ export const useAuthStore = create((set) => ({
 
     console.log('[Auth] Initialization complete (unauthenticated)');
     set({ isInitialized: true });
+    } catch (err) {
+      console.error('[Auth] Fatal error during initialization:', err);
+      set({ isInitialized: true, error: 'Initialization error. Please refresh.' });
+    }
   },
 
   setMasterToken: (token) => {

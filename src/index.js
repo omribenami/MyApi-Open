@@ -379,19 +379,20 @@ app.use(express.json({ limit: "100kb" }));
 
 // Global rate limiter middleware (applies to all requests except exempt paths)
 const globalRateLimitMap = {};
-const GLOBAL_RATE_LIMIT_EXEMPT = [
-  '/api/v1/auth/me',
-  '/api/v1/auth/debug',
-  '/api/v1/dashboard/metrics',
-  '/api/v1/privacy/cookies',
-  '/api/v1/ws',
-  '/health',
-  '/ping',
-];
 
 app.use((req, res, next) => {
-  // Skip rate limiting for exempt paths
-  if (GLOBAL_RATE_LIMIT_EXEMPT.includes(req.path) || GLOBAL_RATE_LIMIT_EXEMPT.some(p => req.path.startsWith(p + '/'))) {
+  // CRITICAL: Exempt all auth/dashboard bootstrap paths from rate limiting
+  const isExempt = req.path === '/api/v1/auth/me' ||
+                   req.path === '/api/v1/auth/debug' ||
+                   req.path === '/api/v1/auth/logout' ||
+                   req.path === '/api/v1/dashboard/metrics' ||
+                   req.path === '/api/v1/privacy/cookies' ||
+                   req.path.startsWith('/api/v1/ws') ||
+                   req.path === '/health' ||
+                   req.path === '/ping' ||
+                   req.path.startsWith('/dashboard/');
+
+  if (isExempt) {
     return next();
   }
 
