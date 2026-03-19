@@ -31,16 +31,25 @@ apiClient.interceptors.response.use(
     }
     
     // Handle device approval errors (403 Forbidden)
-    // These are expected and should be handled by the UI showing approval form
+    // These are expected and should be handled by the UI showing approval form.
     if (error.response?.status === 403) {
       const errorData = error.response?.data || {};
       if (errorData.code === 'DEVICE_APPROVAL_REQUIRED' || errorData.error === 'device_not_approved') {
-        // This is a device approval error, not a permission error
-        // Allow it to propagate so UI can handle it appropriately
         return Promise.reject(error);
       }
+
+      // Any other 403 means token/session is no longer usable for dashboard APIs.
+      // Clear local auth to avoid endless forbidden loops in the UI.
+      try {
+        localStorage.removeItem('masterToken');
+        localStorage.removeItem('tokenData');
+        sessionStorage.removeItem('sessionToken');
+      } catch {
+        // no-op
+      }
+      window.location.href = '/';
     }
-    
+
     return Promise.reject(error);
   }
 );

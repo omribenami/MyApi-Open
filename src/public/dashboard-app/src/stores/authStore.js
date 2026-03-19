@@ -29,10 +29,32 @@ export const useAuthStore = create((set) => ({
       // Storage access can fail on corrupted browser storage; continue with cookie bootstrap path.
     }
 
-    // If we already have a token stored, use it and skip bootstrap
+    // If we already have a token stored, validate it before trusting local state.
     if (masterToken) {
-      set({ masterToken, sessionToken, isAuthenticated: true, isInitialized: true });
-      return;
+      try {
+        const validateRes = await fetch('/api/v1/auth/me', {
+          headers: { Authorization: `Bearer ${masterToken}` },
+          credentials: 'include',
+        });
+
+        if (validateRes.ok) {
+          set({ masterToken, sessionToken, isAuthenticated: true, isInitialized: true, error: null });
+          return;
+        }
+      } catch {
+        // no-op
+      }
+
+      // Stale/invalid token: clear and continue with fallback bootstrap path.
+      try {
+        localStorage.removeItem('masterToken');
+        localStorage.removeItem('tokenData');
+        sessionStorage.removeItem('sessionToken');
+      } catch {
+        // no-op
+      }
+      masterToken = null;
+      sessionToken = null;
     }
 
     // Fallback for OAuth callback flow when session-cookie auth is flaky across redirects.

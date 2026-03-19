@@ -654,13 +654,15 @@ app.post('/api/v1/api_exposure', (req, res) => {
 });
 
 // Cookie preferences (backed, per-user)
-app.get('/api/v1/privacy/cookies', authenticate, (req, res) => {
-  const ownerId = getRequestOwnerId(req);
+// GET is public-safe: returns default when unauthenticated, avoiding noisy 403s on login pages.
+app.get('/api/v1/privacy/cookies', (req, res) => {
   let data = {};
   try {
     if (fs.existsSync(COOKIE_PREFS_PATH)) data = JSON.parse(fs.readFileSync(COOKIE_PREFS_PATH, 'utf8'));
   } catch {}
-  const pref = data[ownerId] || { mode: 'essential', updatedAt: null };
+
+  const ownerId = getRequestOwnerId(req);
+  const pref = ownerId ? (data[ownerId] || { mode: 'essential', updatedAt: null }) : { mode: 'essential', updatedAt: null };
   res.json({ data: pref });
 });
 
