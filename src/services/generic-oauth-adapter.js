@@ -31,10 +31,10 @@ class GenericOAuthAdapter {
       client_id: this.clientId,
       redirect_uri: this.redirectUri,
       response_type: 'code',
-      scope: this.scope,
       state,
       ...this.extraAuthParams,
     };
+    if (this.scope) params.scope = this.scope;
     return `${this.authUrl}?${querystring.stringify(params)}`;
   }
 

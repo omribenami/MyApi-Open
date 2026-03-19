@@ -308,6 +308,17 @@ const oauthAdapters = {
     clientId: process.env.LINKEDIN_CLIENT_ID || oauthConfig.linkedin?.clientId,
     clientSecret: process.env.LINKEDIN_CLIENT_SECRET || oauthConfig.linkedin?.clientSecret,
   }),
+  notion: new GenericOAuthAdapter({
+    serviceName: 'notion',
+    authUrl: 'https://api.notion.com/v1/oauth/authorize',
+    tokenUrl: 'https://api.notion.com/v1/oauth/token',
+    scope: '',
+    redirectUri: process.env.NOTION_REDIRECT_URI || oauthConfig.notion?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/notion`,
+    clientId: process.env.NOTION_CLIENT_ID || oauthConfig.notion?.clientId,
+    clientSecret: process.env.NOTION_CLIENT_SECRET || oauthConfig.notion?.clientSecret,
+    tokenAuthStyle: 'basic',
+    extraAuthParams: { owner: 'user' },
+  }),
 };
 
 const OAUTH_SERVICES = Object.keys(oauthAdapters);
@@ -2360,7 +2371,7 @@ app.post('/api/v1/billing/checkout', (req, res) => {
     if (!paymentLink) {
       return res.status(503).json({
         error: `Stripe payment link for ${selectedPlan} is not configured`,
-        hint: `Set ${definition.stripePaymentLinkEnv} in src/.env`,
+        hint: `Set ${definition.stripePaymentLinkEnv} in .env`,
       });
     }
 
@@ -3370,6 +3381,13 @@ app.delete('/api/v1/personas/:id/skills/:skillId', authenticate, (req, res) => {
 });
 
 // --- OAuth Endpoints ---
+
+// Compatibility alias: some clients use /oauth/authorize/twitter/x
+app.get('/api/v1/oauth/authorize/twitter/x', (req, res) => {
+  const qs = new URLSearchParams(req.query || {}).toString();
+  const suffix = qs ? `?${qs}` : '';
+  return res.redirect(`/api/v1/oauth/authorize/twitter${suffix}`);
+});
 
 // GET /api/v1/oauth/authorize/:service — Start OAuth flow
 app.get("/api/v1/oauth/authorize/:service", (req, res) => {
