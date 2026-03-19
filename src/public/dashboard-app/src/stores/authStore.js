@@ -87,6 +87,18 @@ export const useAuthStore = create((set) => ({
       return;
     }
 
+    // Also check for myapi_user cookie set during OAuth callback (contains session user info).
+    const cookieUser = readCookie('myapi_user');
+    if (cookieUser) {
+      try {
+        const user = JSON.parse(decodeURIComponent(cookieUser));
+        set({ user, isAuthenticated: true, isInitialized: true, error: null });
+        return;
+      } catch {
+        // Ignore parse errors; continue with session/bearer fallback.
+      }
+    }
+
     // Session-cookie fallback for OAuth login (e.g. Google/Facebook)
     // ONLY bootstrap if we don't have a stored token
     try {
