@@ -250,8 +250,20 @@ async function executeServiceMethod({ serviceDef, method, params = {}, token = n
   const provider = getProviderDetails(serviceDef.name);
   const apiRoot = provider?.apiRoot || serviceDef.apiEndpoint;
 
+  // Allow endpoint/path override for generic methods (e.g. default_request)
+  // so callers can hit concrete provider routes like /me.
+  const effectiveParams = (params && typeof params === 'object' && !Array.isArray(params)) ? { ...params } : {};
+  const endpointOverrideRaw = effectiveParams.endpoint || effectiveParams.path;
+  const endpointOverride = (typeof endpointOverrideRaw === 'string' && endpointOverrideRaw.trim())
+    ? endpointOverrideRaw.trim()
+    : null;
+  delete effectiveParams.endpoint;
+  delete effectiveParams.path;
+
+  const methodEndpoint = endpointOverride || method.endpoint;
+
   // If no apiRoot or no endpoint on the method, return a helpful error
-  if (!apiRoot && !method.endpoint) {
+  if (!apiRoot && !methodEndpoint) {
     return {
       ok: false,
       service: serviceDef.name,
@@ -268,20 +280,20 @@ async function executeServiceMethod({ serviceDef, method, params = {}, token = n
       const https = require('https');
       const http = require('http');
 
-      // Build URL: if method.endpoint is absolute use it, otherwise combine with apiRoot
+      // Build URL: if method endpoint is absolute use it, otherwise combine with apiRoot
       let targetUrl;
-      if (method.endpoint && (method.endpoint.startsWith('http://') || method.endpoint.startsWith('https://'))) {
-        targetUrl = new URL(method.endpoint);
+      if (methodEndpoint && (methodEndpoint.startsWith('http://') || methodEndpoint.startsWith('https://'))) {
+        targetUrl = new URL(methodEndpoint);
       } else {
         const base = apiRoot.endsWith('/') ? apiRoot.slice(0, -1) : apiRoot;
-        const ep = (method.endpoint || '').startsWith('/') ? method.endpoint : `/${method.endpoint || ''}`;
+        const ep = (methodEndpoint || '').startsWith('/') ? methodEndpoint : `/${methodEndpoint || ''}`;
         targetUrl = new URL(base + ep);
       }
 
       // Interpolate path params like :owner, :repo, {owner}, {repo}
-      if (params) {
+      if (effectiveParams) {
         let pathname = targetUrl.pathname;
-        for (const [k, v] of Object.entries(params)) {
+        for (const [k, v] of Object.entries(effectiveParams)) {
           pathname = pathname.replace(`:${k}`, encodeURIComponent(v));
           pathname = pathname.replace(`{${k}}`, encodeURIComponent(v));
         }
@@ -290,9 +302,9 @@ async function executeServiceMethod({ serviceDef, method, params = {}, token = n
 
       // For GET requests, add non-path params as query params
       const httpMethod = (method.httpMethod || 'GET').toUpperCase();
-      if (httpMethod === 'GET' && params) {
-        for (const [k, v] of Object.entries(params)) {
-          if (!method.endpoint || (!method.endpoint.includes(`:${k}`) && !method.endpoint.includes(`{${k}}`))) {
+      if (httpMethod === 'GET' && effectiveParams) {
+        for (const [k, v] of Object.entries(effectiveParams)) {
+          if (!methodEndpoint || (!methodEndpoint.includes(`:${k}`) && !methodEndpoint.includes(`{${k}}`))) {
             targetUrl.searchParams.set(k, v);
           }
         }
@@ -316,8 +328,8 @@ async function executeServiceMethod({ serviceDef, method, params = {}, token = n
       }
 
       let body = null;
-      if (['POST', 'PUT', 'PATCH'].includes(httpMethod) && params) {
-        body = JSON.stringify(params);
+      if (['POST', 'PUT', 'PATCH'].includes(httpMethod) && effectiveParams) {
+        body = JSON.stringify(effectiveParams);
         headers['Content-Type'] = 'application/json';
         headers['Content-Length'] = Buffer.byteLength(body);
       }
