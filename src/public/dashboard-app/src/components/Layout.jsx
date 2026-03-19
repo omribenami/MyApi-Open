@@ -5,6 +5,7 @@ import { useNotificationStore } from '../stores/notificationStore';
 import BrandLogo from './BrandLogo';
 import CookieNotice from './CookieNotice';
 import Toast from './Toast';
+import NotificationDropdown from './NotificationDropdown';
 
 function NavDropdown({ label, items, isActiveFn, onMobileClick }) {
   const [open, setOpen] = useState(false);
@@ -67,6 +68,7 @@ function Layout({ children, onLogout }) {
   const { user } = useAuthStore();
   const [menuOpen, setMenuOpen] = useState(false);
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
+  const [notificationDropdownOpen, setNotificationDropdownOpen] = useState(false);
 
   const tokenData = (() => {
     try { return JSON.parse(localStorage.getItem('tokenData') || '{}'); } catch { return {}; }
@@ -167,8 +169,8 @@ function Layout({ children, onLogout }) {
 
             {/* Notification Bell */}
             <div className="relative">
-              <Link
-                to="/notifications"
+              <button
+                onClick={() => setNotificationDropdownOpen(!notificationDropdownOpen)}
                 className="relative flex items-center justify-center w-10 h-10 rounded-lg border border-slate-700 bg-slate-900 hover:border-slate-600 transition-colors"
                 title="Notifications"
               >
@@ -180,7 +182,11 @@ function Layout({ children, onLogout }) {
                     {useNotificationStore(state => state.unreadCount) > 9 ? '9+' : useNotificationStore(state => state.unreadCount)}
                   </span>
                 )}
-              </Link>
+              </button>
+              <NotificationDropdown
+                open={notificationDropdownOpen}
+                onClose={() => setNotificationDropdownOpen(false)}
+              />
             </div>
 
             {/* User Profile Menu */}
