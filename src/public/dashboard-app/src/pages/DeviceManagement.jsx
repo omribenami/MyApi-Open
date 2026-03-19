@@ -288,54 +288,55 @@ const DeviceManagement = () => {
             )}
           </div>
         ) : activeTab === 'pending' ? (
-          <div className="pending-approvals">
+          <div>
             {pendingApprovals.length === 0 ? (
-              <p className="empty-state">No pending device approvals</p>
+              <p className="p-6 text-slate-400">No pending device approvals</p>
             ) : (
-              <div className="approval-list">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {pendingApprovals.map((approval) => (
-                  <div key={approval.id} className="approval-card">
-                    <div className="approval-card-header">
-                      <h3>New Device Request</h3>
-                      <span className="expiry">
+                  <div key={approval.id} className="bg-slate-900 border border-amber-700/50 rounded-lg overflow-hidden">
+                    <div className="p-4 border-b border-slate-700 bg-amber-900/20">
+                      <h3 className="text-lg font-semibold text-amber-300">New Device Request</h3>
+                      <p className="text-sm text-amber-200 mt-1">
                         Expires: {formatDate(approval.expiresAt)}
-                      </span>
+                      </p>
                     </div>
-                    <div className="approval-details">
-                      <div className="detail">
-                        <span className="label">Operating System:</span>
-                        <span className="value">{approval.deviceInfo?.os || 'Unknown'}</span>
+                    <div className="p-4 space-y-2 border-b border-slate-700">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-400">OS:</span>
+                        <span className="text-slate-100 font-mono">{approval.deviceInfo?.os || 'Unknown'}</span>
                       </div>
-                      <div className="detail">
-                        <span className="label">Browser:</span>
-                        <span className="value">{approval.deviceInfo?.browser || 'Unknown'}</span>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-400">Browser:</span>
+                        <span className="text-slate-100 font-mono">{approval.deviceInfo?.browser || 'Unknown'}</span>
                       </div>
-                      <div className="detail">
-                        <span className="label">IP Address:</span>
-                        <span className="value">{approval.ip}</span>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-400">IP Address:</span>
+                        <span className="text-slate-100 font-mono">{approval.ip}</span>
                       </div>
-                      <div className="detail">
-                        <span className="label">Requested:</span>
-                        <span className="value">{formatRelativeTime(approval.createdAt)}</span>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-400">Requested:</span>
+                        <span className="text-slate-100">{formatRelativeTime(approval.createdAt)}</span>
                       </div>
                     </div>
-                    <div className="approval-input">
+                    <div className="p-4 border-b border-slate-700">
                       <input
                         type="text"
                         placeholder="Device name (e.g., 'Work Laptop')"
                         value={newDeviceName}
                         onChange={(e) => setNewDeviceName(e.target.value)}
+                        className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-slate-100 text-sm placeholder-slate-500"
                       />
                     </div>
-                    <div className="approval-actions">
+                    <div className="p-4 flex gap-2">
                       <button
-                        className="btn btn-success"
+                        className="flex-1 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-sm font-medium"
                         onClick={() => handleApproveDevice(approval.id)}
                       >
                         Approve
                       </button>
                       <button
-                        className="btn btn-danger"
+                        className="flex-1 px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded text-sm font-medium"
                         onClick={() => handleDenyDevice(approval.id)}
                       >
                         Deny
@@ -347,26 +348,27 @@ const DeviceManagement = () => {
             )}
           </div>
         ) : (
-          <div className="activity-log">
+          <div>
             {activityLog.length === 0 ? (
-              <p className="empty-state">No device activity yet</p>
+              <p className="p-6 text-slate-400">No device activity yet</p>
             ) : (
-              <div className="timeline">
-                {activityLog.map((event) => (
-                  <div key={event.id} className={`timeline-item ${event.action}`}>
-                    <div className="timeline-icon">
-                      {event.action === 'approval' && '✓'}
-                      {event.action === 'revocation' && '✗'}
-                      {event.action === 'approved' && '✓'}
-                      {event.action === 'denied' && '✗'}
-                    </div>
-                    <div className="timeline-content">
-                      <h4>{event.deviceName}</h4>
-                      <p>
-                        <strong>{event.action.charAt(0).toUpperCase() + event.action.slice(1)}</strong>
-                        {' '} at {event.ip}
-                      </p>
-                      <span className="timestamp">{formatRelativeTime(event.timestamp)}</span>
+              <div className="space-y-4">
+                {activityLog.map((event, idx) => (
+                  <div key={event.id} className="bg-slate-900 border border-slate-700/50 rounded-lg overflow-hidden">
+                    <div className="flex gap-4 p-4">
+                      <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg ${
+                        (event.action === 'approval' || event.action === 'approved') ? 'bg-emerald-600' : 'bg-rose-600'
+                      }`}>
+                        {event.action === 'approval' || event.action === 'approved' ? '✓' : '✗'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-slate-100 font-semibold">{event.deviceName}</h4>
+                        <p className="text-slate-300 text-sm mt-1">
+                          <span className="font-medium">{event.action.charAt(0).toUpperCase() + event.action.slice(1)}</span>
+                          {' '} at <span className="font-mono text-slate-400">{event.ip}</span>
+                        </p>
+                        <p className="text-slate-500 text-xs mt-1">{formatRelativeTime(event.timestamp)}</p>
+                      </div>
                     </div>
                   </div>
                 ))}
