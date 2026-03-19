@@ -541,7 +541,14 @@ function ListingCard({
     >
       {/* Header: Type badge + Pricing badge */}
       <div className="flex items-center justify-between gap-2 mb-3">
-        <TypeBadge type={listingType} />
+        <div className="flex items-center gap-2">
+          <TypeBadge type={listingType} />
+          {listing?.official && (
+            <span className="text-[10px] font-semibold text-emerald-300 bg-emerald-900 bg-opacity-50 border border-emerald-700 rounded-full px-2 py-0.5" title="Official / Verified Provider">
+              ✓ Official
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           {isPaid && (
             <span className="text-[10px] font-semibold text-amber-300 bg-amber-900 bg-opacity-50 border border-amber-700 rounded-full px-2 py-0.5">
@@ -569,6 +576,9 @@ function ListingCard({
       {/* Author - Prominent */}
       <div className="text-sm text-slate-300 font-medium mb-2">
         by <span className="text-slate-100">{listingOwnerName}</span>
+        {listing?.provider && (
+          <span className="ml-2 text-xs text-slate-500">({listing.provider})</span>
+        )}
       </div>
 
       {/* Description */}
