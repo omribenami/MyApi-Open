@@ -5417,30 +5417,9 @@ app.delete('/api/v1/skills/:id/documents/:docId', authenticate, (req, res) => {
 // GET /api/v1/marketplace - public browse
 app.get('/api/v1/marketplace', (req, res) => {
   try {
-    const { type, sort, search, tags, field, includeTotals } = req.query;
-    const normalizedTags = tags || field;
-    const listings = getMarketplaceListings({ type, sort, search, tags: normalizedTags });
-
-    const wantsTotals = includeTotals === '1' || includeTotals === 'true';
-    if (!wantsTotals) {
-      return res.json({ listings });
-    }
-
-    const allActiveListings = getMarketplaceListings({ status: 'active' });
-    const countByType = (items) => ({
-      total: items.length,
-      skills: items.filter((item) => item.type === 'skill').length,
-      personas: items.filter((item) => item.type === 'persona').length,
-      apis: items.filter((item) => item.type === 'api').length,
-    });
-
-    res.json({
-      listings,
-      summary: {
-        filtered: countByType(listings),
-        totals: countByType(allActiveListings),
-      },
-    });
+    const { type, sort, search, tags } = req.query;
+    const listings = getMarketplaceListings({ type, sort, search, tags });
+    res.json({ listings });
   } catch (err) {
     console.error('Marketplace list error:', err);
     res.status(500).json({ error: 'Failed to get listings' });

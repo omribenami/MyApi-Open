@@ -449,49 +449,28 @@ export default function Marketplace() {
   const [quickInstallingIds, setQuickInstallingIds] = useState(() => new Set());
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [fieldFilter, setFieldFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [sort, setSort] = useState('newest');
-  const [summary, setSummary] = useState({
-    filtered: { total: 0, skills: 0, personas: 0, apis: 0 },
-    totals: { total: 0, skills: 0, personas: 0, apis: 0 },
-  });
   const [selected, setSelected] = useState(null);
 
   const fetchListings = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      params.set('includeTotals', '1');
       if (typeFilter !== 'all') params.set('type', typeFilter);
       if (sort !== 'newest') params.set('sort', sort);
       if (search) params.set('search', search);
-      if (fieldFilter.trim()) params.set('field', fieldFilter.trim());
-
       const res = await fetch(`/api/v1/marketplace?${params}`);
       if (res.ok) {
         const data = await res.json();
-        const nextListings = data.listings || [];
-        setListings(nextListings);
-
-        const filteredFallback = {
-          total: nextListings.length,
-          skills: nextListings.filter((item) => item.type === 'skill').length,
-          personas: nextListings.filter((item) => item.type === 'persona').length,
-          apis: nextListings.filter((item) => item.type === 'api').length,
-        };
-
-        setSummary({
-          filtered: data.summary?.filtered || filteredFallback,
-          totals: data.summary?.totals || filteredFallback,
-        });
+        setListings(data.listings || []);
       }
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
-  }, [typeFilter, sort, search, fieldFilter]);
+  }, [typeFilter, sort, search]);
 
   useEffect(() => {
     const t = setTimeout(fetchListings, search ? 300 : 0);
@@ -549,15 +528,6 @@ export default function Marketplace() {
     }
   };
 
-  const hasActiveFilters = Boolean(search.trim() || fieldFilter.trim() || typeFilter !== 'all' || sort !== 'newest');
-
-  const resetFilters = () => {
-    setSearch('');
-    setFieldFilter('');
-    setTypeFilter('all');
-    setSort('newest');
-  };
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -566,24 +536,8 @@ export default function Marketplace() {
         <p className="text-slate-400 mt-1">Discover and share personas, APIs, and skills with the community</p>
       </div>
 
-      {/* Summary counters */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {[
-          { key: 'total', label: 'Total products' },
-          { key: 'skills', label: 'Skills' },
-          { key: 'personas', label: 'Personas' },
-          { key: 'apis', label: 'APIs' },
-        ].map((item) => (
-          <div key={item.key} className="bg-slate-800/60 border border-slate-700 rounded-lg p-3">
-            <p className="text-xs text-slate-400">{item.label}</p>
-            <p className="text-xl font-bold text-white mt-1">{summary.filtered[item.key] ?? 0}</p>
-            <p className="text-[11px] text-slate-500 mt-1">Global: {summary.totals[item.key] ?? 0}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Search + Field + Sort */}
-      <div className="flex flex-col lg:flex-row gap-3">
+      {/* Search + Sort */}
+      <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <span className="absolute inset-y-0 left-3 flex items-center text-slate-400">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -598,36 +552,19 @@ export default function Marketplace() {
             className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-9 pr-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 text-sm"
           />
         </div>
-
-        <input
-          type="text"
-          placeholder="Filter by field/tag (e.g. web design)"
-          value={fieldFilter}
-          onChange={e => setFieldFilter(e.target.value)}
-          className="w-full lg:w-72 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 text-sm"
-        />
-
         <select
           value={sort}
           onChange={e => setSort(e.target.value)}
           className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500"
         >
-          <option value="popular">Most Popular</option>
-          <option value="newest">Most Recent</option>
-          <option value="most_used">Most Used (legacy)</option>
+          <option value="newest">Newest</option>
+          <option value="popular">Top Rated</option>
+          <option value="most_used">Most Used</option>
         </select>
-
-        <button
-          onClick={resetFilters}
-          disabled={!hasActiveFilters}
-          className="px-3 py-2.5 rounded-lg border border-slate-700 text-sm text-slate-300 hover:text-white hover:border-slate-500 disabled:opacity-50"
-        >
-          Reset filters
-        </button>
       </div>
 
       {/* Type filter tabs */}
-      <div className="flex flex-wrap gap-1 bg-slate-800 bg-opacity-50 p-1 rounded-lg w-fit">
+      <div className="flex gap-1 bg-slate-800 bg-opacity-50 p-1 rounded-lg w-fit">
         {tabs.map(tab => (
           <button
             key={tab.id}
