@@ -110,26 +110,39 @@ router.post('/register', (req, res) => {
 
     const { createUser } = require('../database');
     
-    // Create new user
-    const userId = 'user_' + crypto.randomBytes(12).toString('hex');
-    const passwordHash = bcrypt.hashSync(password, 10);
-    
     try {
-      createUser(username, displayName || username, email, 'UTC', password, 'free', null);
+      // Create new user and get the actual user ID from the database
+      const newUser = createUser(username, displayName || username, email, 'UTC', password, 'free', null);
       
       // Generate master token
       const rawToken = 'myapi_' + crypto.randomBytes(32).toString('hex');
       
-      res.json({
-        success: true,
-        userId,
-        masterToken: rawToken,
-        user: {
-          id: userId,
-          email,
-          username,
-          displayName: displayName || username,
+      // Create session for auto-login after registration (use the actual user ID from database)
+      req.session.user = {
+        id: newUser.id,
+        email: newUser.email,
+        username: newUser.username,
+        display_name: newUser.displayName,
+      };
+      req.session.masterToken = rawToken;
+      
+      req.session.save((err) => {
+        if (err) {
+          console.error('Session save error:', err);
+          return res.status(500).json({ error: 'Session error' });
         }
+        
+        res.json({
+          success: true,
+          userId: newUser.id,
+          masterToken: rawToken,
+          user: {
+            id: newUser.id,
+            email: newUser.email,
+            username: newUser.username,
+            displayName: newUser.displayName,
+          }
+        });
       });
     } catch (error) {
       if (error.message?.includes('UNIQUE')) {
@@ -140,6 +153,70 @@ router.post('/register', (req, res) => {
   } catch (error) {
     console.error('Registration error:', error);
     res.status(500).json({ error: 'Registration failed' });
+  }
+});
+
+/**
+ * POST /api/v1/auth/logout
+ * Logout and destroy all authentication state
+ * - Clears Express session
+ * - Removes token from global store
+ * - Clears session cookies
+ * - Returns no-cache headers to prevent auto-login on refresh
+ */
+router.post('/logout', (req, res) => {
+  try {
+    const userId = req.session?.user?.id;
+    const masterToken = req.session?.masterToken;
+    
+    // 1. Clear any in-memory token stores
+    if (global.sessions) {
+      Object.keys(global.sessions).forEach(token => {
+        if (global.sessions[token]?.userId === userId) {
+          delete global.sessions[token];
+        }
+      });
+    }
+    
+    // 2. Destroy the Express session
+    if (req.session) {
+      req.session.destroy((err) => {
+        if (err) {
+          console.error('Session destruction error:', err);
+          return res.status(500).json({ success: false, error: 'Failed to logout' });
+        }
+        
+        // 3. Explicitly clear all auth-related cookies
+        res.clearCookie('connect.sid');
+        res.clearCookie('myapi.sid');
+        res.clearCookie('session');
+        res.clearCookie('auth');
+        res.clearCookie('token');
+        
+        // 4. Set cache control headers to prevent browser caching
+        res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.set('Pragma', 'no-cache');
+        res.set('Expires', '0');
+        
+        res.json({ success: true, message: 'Successfully logged out' });
+      });
+    } else {
+      // No session, but still clear cookies
+      res.clearCookie('connect.sid');
+      res.clearCookie('myapi.sid');
+      res.clearCookie('session');
+      res.clearCookie('auth');
+      res.clearCookie('token');
+      
+      res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.set('Pragma', 'no-cache');
+      res.set('Expires', '0');
+      
+      res.json({ success: true, message: 'No active session' });
+    }
+  } catch (error) {
+    console.error('Logout error:', error);
+    res.status(500).json({ success: false, error: 'Logout failed', details: error.message });
   }
 });
 

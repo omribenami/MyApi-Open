@@ -32,12 +32,20 @@ export const useNotificationStore = create((set, get) => ({
       if (!response.ok) throw new Error('Failed to fetch notifications');
       
       const data = await response.json();
+      const notificationsArray = Array.isArray(data.notifications) ? data.notifications : [];
+      const unreadCountValue = typeof data.unreadCount === 'number' ? data.unreadCount : 0;
+      
       set({
-        notifications: data.notifications || [],
-        unreadCount: data.unreadCount || 0,
+        notifications: notificationsArray,
+        unreadCount: unreadCountValue,
       });
     } catch (error) {
-      set({ error: error.message });
+      // On error, ensure we still have valid default values
+      set({ 
+        error: error.message,
+        notifications: [],
+        unreadCount: 0,
+      });
       console.error('Error fetching notifications:', error);
     } finally {
       set({ isLoading: false });

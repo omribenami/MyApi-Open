@@ -3605,6 +3605,7 @@ app.get([
       const { codeVerifier } = buildPkcePairFromState(state);
       runtimeTokenParams.code_verifier = codeVerifier;
     }
+    console.log(`[OAuth] Exchanging code for token with ${service} adapter...`);
     const tokenData = await adapter.exchangeCodeForToken(code, runtimeTokenParams);
 
     const userId = getOAuthUserId(req);
@@ -3612,7 +3613,9 @@ app.get([
       ? new Date(Date.now() + tokenData.expiresIn * 1000).toISOString()
       : null;
 
-    storeOAuthToken(service, userId, tokenData.accessToken, tokenData.refreshToken || null, expiresAt, tokenData.scope);
+    console.log(`[OAuth] Storing ${service} token for user: ${userId}`);
+    const storeResult = storeOAuthToken(service, userId, tokenData.accessToken, tokenData.refreshToken || null, expiresAt, tokenData.scope);
+    console.log(`[OAuth] Token stored successfully:`, { tokenId: storeResult.id, service, userId, scope: storeResult.scope });
     updateOAuthStatus(service, "connected");
 
     if ((service === 'google' || service === 'facebook' || service === 'github') && stateMeta.mode === 'login') {
@@ -5590,6 +5593,69 @@ app.post('/api/v1/marketplace/:id/install', authenticate, (req, res) => {
         serviceName,
         serviceId: service.id,
         endpoint: apiEndpoint,
+      };
+    } else if (listing.type === 'skill') {
+      // Handle skill installation
+      let content = listing.content;
+      if (typeof content === 'string') {
+        try {
+          content = JSON.parse(content);
+        } catch {
+          content = {};
+        }
+      }
+      if (!content || typeof content !== 'object') {
+        return res.status(400).json({ error: 'Skill listing content is malformed' });
+      }
+
+      // Validate required skill metadata
+      const skillName = String(listing.title || content.skill_name || '').trim();
+      if (!skillName) {
+        return res.status(400).json({ error: 'Skill listing is missing a name' });
+      }
+
+      // Extract skill metadata from listing and content
+      const skillDescription = String(listing.description || content.description || '').trim() || null;
+      const skillVersion = String(content.version || '1.0.0').trim();
+      const skillAuthor = String(listing.ownerName || content.author || 'Unknown').trim();
+      const skillCategory = String(content.category || 'custom').trim().toLowerCase();
+      const scriptContent = String(content.script_content || '').trim() || null;
+      const repoUrl = String(content.repo_url || '').trim() || null;
+
+      // Prepare config_json with marketplace listing metadata
+      const configJson = {
+        ...((typeof content === 'object' && content) || {}),
+        marketplace_listing_id: listing.id,
+        installed_from_marketplace: true,
+        installed_at: new Date().toISOString(),
+      };
+
+      // Get the current user's ID (owner) from token metadata
+      const ownerId = req.tokenMeta.ownerId || req.tokenMeta.userId || 'owner';
+
+      // Create the skill in the database
+      const newSkill = createSkill(
+        skillName,
+        skillDescription,
+        skillVersion,
+        skillAuthor,
+        skillCategory,
+        scriptContent,
+        configJson,
+        repoUrl,
+        ownerId
+      );
+
+      if (!newSkill) {
+        return res.status(500).json({ error: 'Failed to create skill' });
+      }
+
+      provisioned = {
+        type: 'skill',
+        skillId: newSkill.id,
+        skillName: newSkill.name,
+        skillVersion: newSkill.version,
+        skillCategory: newSkill.category,
       };
     }
 

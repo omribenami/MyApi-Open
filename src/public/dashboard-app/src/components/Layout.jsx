@@ -275,7 +275,7 @@ function Layout({ children, onLogout }) {
       
       {/* Toast Container */}
       <div className="fixed top-4 right-4 z-50 space-y-2 max-w-sm">
-        {useNotificationStore(state => state.toasts).map(toast => (
+        {(useNotificationStore(state => state.toasts) || []).map(toast => (
           <Toast
             key={toast.id}
             id={toast.id}

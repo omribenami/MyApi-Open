@@ -155,60 +155,8 @@ function ListingModal({ listing, onClose, onInstall, masterToken }) {
       }
       setInstallInfo(installData.provisioned || null);
 
-      // Install into local resources based on type
-      if (detail.content) {
-        let content = detail.content;
-        if (typeof content === 'string') {
-          try {
-            content = JSON.parse(content);
-          } catch {
-            content = {};
-          }
-        }
-
-        if (detail.type === 'persona') {
-          const personaRes = await fetch('/api/v1/personas', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${masterToken}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              name: detail.title,
-              description: detail.description || '',
-              soul_content: content.soul_content || '',
-            }),
-          });
-          if (!personaRes.ok) {
-            const data = await personaRes.json().catch(() => ({}));
-            throw new Error(data.error || 'Failed to install persona');
-          }
-        }
-
-        if (detail.type === 'skill') {
-          const mergedConfig = {
-            ...(content.config_json && typeof content.config_json === 'object' ? content.config_json : {}),
-            marketplace_listing_id: detail.id,
-          };
-
-          const skillRes = await fetch('/api/v1/skills', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${masterToken}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              name: detail.title,
-              description: detail.description || content.tagline || '',
-              version: content.version || '1.0.0',
-              author: detail.ownerName,
-              category: content.category || 'custom',
-              script_content: content.script_content || '',
-              config_json: mergedConfig,
-              repo_url: content.repo_url || '',
-            }),
-          });
-          if (!skillRes.ok) {
-            const data = await skillRes.json().catch(() => ({}));
-            throw new Error(data.error || 'Failed to install skill');
-          }
-        }
-      }
-
+      // The backend now handles skill/persona creation directly
+      // Just refresh the UI state and call onInstall to refresh lists
       setIsInstalled(true);
       setInstallSuccess(true);
       onInstall && onInstall();

@@ -62,7 +62,7 @@ function NotificationCenter() {
     return 'border-blue-500/30 bg-blue-500/5';
   };
 
-  const filteredNotifications = notifications.filter(n => {
+  const filteredNotifications = (notifications || []).filter(n => {
     if (filter === 'all') return true;
     if (filter === 'unread') return !n.read_at;
     return n.type?.includes(filter);

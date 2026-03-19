@@ -72,12 +72,51 @@ router.post('/auth/login', (req, res) => {
   res.json({ data: { token: sessionToken, user: { id: row.id, username: row.username, displayName: row.display_name, email: row.email, timezone: row.timezone } } });
 });
 
-// Logout
+// Logout - Fully destroy session and clean up all authentication state
 router.post('/auth/logout', (req, res) => {
-  if (req.session) {
-    req.session.destroy(() => res.json({ ok: true }));
-  } else {
-    res.json({ ok: true });
+  try {
+    const userId = req.session?.user?.id;
+    
+    // 1. Clear the in-memory global sessions store
+    if (global.sessions) {
+      // Find and remove all sessions for this user
+      Object.keys(global.sessions).forEach(token => {
+        if (global.sessions[token]?.userId === userId) {
+          delete global.sessions[token];
+        }
+      });
+    }
+
+    // 2. Destroy the Express session
+    if (req.session) {
+      req.session.destroy((err) => {
+        if (err) {
+          console.error('Session destruction error:', err);
+          return res.status(500).json({ error: 'Failed to logout' });
+        }
+        
+        // 3. Clear the session cookie explicitly (redundant but safe)
+        res.clearCookie('connect.sid'); // default express-session cookie
+        res.clearCookie('myapi.sid'); // custom session cookie name used in main app
+        
+        // 4. Return success with cache-control headers to prevent caching
+        res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.set('Pragma', 'no-cache');
+        res.set('Expires', '0');
+        res.json({ ok: true, message: 'Successfully logged out' });
+      });
+    } else {
+      // No session to destroy, but still clear cookies and return success
+      res.clearCookie('connect.sid');
+      res.clearCookie('myapi.sid');
+      res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.set('Pragma', 'no-cache');
+      res.set('Expires', '0');
+      res.json({ ok: true, message: 'No active session' });
+    }
+  } catch (error) {
+    console.error('Logout error:', error);
+    res.status(500).json({ error: 'Logout failed', details: error.message });
   }
 });
 
