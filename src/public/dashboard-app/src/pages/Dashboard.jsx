@@ -53,6 +53,9 @@ function Dashboard() {
 
   // Setup WebSocket for real-time alerts
   const setupWebSocket = () => {
+    const wsEnabled = typeof window !== 'undefined' && window.__MYAPI_WS_ENABLED === true;
+    if (!wsEnabled) return;
+
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       return;
     }

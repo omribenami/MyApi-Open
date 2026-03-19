@@ -28,10 +28,7 @@ function requireAuth(req, res, next) {
   next();
 }
 
-/**
- * GET /api/v1/dashboard/metrics
- */
-router.get('/metrics', requireAuth, (req, res) => {
+function handleDashboardMetrics(req, res) {
   try {
     const userId = req.userId;
 
@@ -103,6 +100,10 @@ router.get('/metrics', requireAuth, (req, res) => {
     console.error('Error fetching dashboard metrics:', error);
     return res.status(500).json({ error: 'Failed to load dashboard metrics' });
   }
-});
+}
+
+// Support both old and new frontend bundles.
+router.get('/metrics', requireAuth, handleDashboardMetrics);
+router.get('/stats', requireAuth, handleDashboardMetrics);
 
 module.exports = router;

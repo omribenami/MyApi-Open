@@ -328,6 +328,8 @@ const isOAuthServiceEnabled = (service) => {
 
 // --- Middleware ---
 const session = require('express-session');
+const BetterSqlite3 = require('better-sqlite3');
+const BetterSqlite3StoreFactory = require('better-sqlite3-session-store')(session);
 const isProd = process.env.NODE_ENV === 'production';
 
 app.use(helmet({ contentSecurityPolicy: false }));
@@ -378,13 +380,24 @@ const secureCookie = process.env.SESSION_COOKIE_SECURE
   ? String(process.env.SESSION_COOKIE_SECURE).toLowerCase() === 'true'
   : isProd;
 
+const sessionDbPath = process.env.SESSION_DB_PATH || path.join(__dirname, 'db.sqlite');
+const sessionDb = new BetterSqlite3(sessionDbPath);
+const sessionStore = new BetterSqlite3StoreFactory({
+  client: sessionDb,
+  expired: {
+    clear: true,
+    intervalMs: 15 * 60 * 1000,
+  },
+});
+
 app.use(session({
+  store: sessionStore,
   secret: process.env.SESSION_SECRET || 'myapi-session-secret-change-me',
   name: 'myapi.sid',
   resave: false,
-  saveUninitialized: true,
+  saveUninitialized: false,
   proxy: true,
-  cookie: { secure: false, httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000, sameSite: 'lax', path: '/' }
+  cookie: { secure: secureCookie, httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000, sameSite: 'lax', path: '/' }
 }));
 
 // Public legal pages (no auth required)
