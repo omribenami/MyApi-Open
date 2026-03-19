@@ -592,6 +592,11 @@ function initDatabase() {
   try { db.exec("ALTER TABLE users ADD COLUMN totp_secret TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE users ADD COLUMN two_factor_enabled INTEGER DEFAULT 0"); } catch (e) {}
 
+  // Onboarding/signup wizard profile columns
+  try { db.exec("ALTER TABLE users ADD COLUMN preferred_name TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE users ADD COLUMN bio TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE users ADD COLUMN onboarding_complete INTEGER DEFAULT 0"); } catch (e) {}
+
   // Phase 5 migrations: Token encryption key rotation, rate limiting, audit logs
   try { db.exec("ALTER TABLE oauth_tokens ADD COLUMN key_version INTEGER DEFAULT 1"); } catch (e) {}
   try { db.exec("ALTER TABLE oauth_tokens ADD COLUMN last_api_call TEXT"); } catch (e) {}

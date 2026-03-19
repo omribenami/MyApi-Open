@@ -6,6 +6,8 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 
 const router = express.Router();
 
@@ -264,8 +266,8 @@ router.get('/me', (req, res) => {
         id: user.id,
         email: user.email,
         username: user.username,
-        displayName: user.display_name,
-        avatarUrl: user.avatar_url,
+        displayName: user.displayName || user.display_name,
+        avatarUrl: user.avatarUrl || user.avatar_url,
         timezone: user.timezone,
         plan: user.plan,
       },
@@ -274,6 +276,89 @@ router.get('/me', (req, res) => {
   } catch (error) {
     console.error('Get user error:', error);
     res.status(500).json({ error: 'Failed to get user' });
+  }
+});
+
+/**
+ * POST /api/v1/auth/signup/complete
+ * Complete signup wizard profile enrichment for OAuth signup.
+ */
+router.post('/signup/complete', (req, res) => {
+  try {
+    const sessionUserId = req.session?.user?.id ? String(req.session.user.id) : null;
+    if (!sessionUserId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const {
+      displayName,
+      preferredName,
+      timezone,
+      bio,
+      userMd,
+      soulMd,
+    } = req.body || {};
+
+    const safeDisplayName = String(displayName || '').trim();
+    if (!safeDisplayName) {
+      return res.status(400).json({ error: 'Display name is required' });
+    }
+
+    const safeTimezone = String(timezone || '').trim() || 'UTC';
+    const safePreferredName = String(preferredName || '').trim() || null;
+    const safeBio = String(bio || '').trim() || null;
+    const safeUserMd = String(userMd || '').trim();
+    const safeSoulMd = String(soulMd || '').trim();
+
+    const { db } = require('../database');
+    const now = new Date().toISOString();
+
+    const existing = db.prepare('SELECT id FROM users WHERE id = ?').get(sessionUserId);
+    if (!existing) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    db.prepare(`
+      UPDATE users
+      SET display_name = ?, preferred_name = ?, timezone = ?, bio = ?, onboarding_complete = 1
+      WHERE id = ?
+    `).run(safeDisplayName, safePreferredName, safeTimezone, safeBio, sessionUserId);
+
+    // Persist USER.md and SOUL.md with backup if file already exists.
+    const userRoot = path.join(__dirname, '..', 'data', 'onboarding', sessionUserId);
+    fs.mkdirSync(userRoot, { recursive: true });
+
+    const writeWithBackup = (targetPath, content) => {
+      if (fs.existsSync(targetPath)) {
+        const backupPath = `${targetPath}.bak.${Date.now()}`;
+        fs.copyFileSync(targetPath, backupPath);
+      }
+      fs.writeFileSync(targetPath, content || '', 'utf8');
+    };
+
+    writeWithBackup(path.join(userRoot, 'USER.md'), safeUserMd);
+    writeWithBackup(path.join(userRoot, 'SOUL.md'), safeSoulMd);
+
+    req.session.isFirstLogin = false;
+
+    req.session.save((err) => {
+      if (err) {
+        console.error('Session save error in signup/complete:', err);
+        return res.status(500).json({ error: 'Session save error' });
+      }
+
+      return res.json({
+        success: true,
+        data: {
+          completedAt: now,
+          onboardingComplete: true,
+          redirectTo: '/dashboard/',
+        },
+      });
+    });
+  } catch (error) {
+    console.error('Signup complete error:', error);
+    return res.status(500).json({ error: 'Failed to complete signup' });
   }
 });
 
