@@ -146,10 +146,27 @@ router.post('/register', (req, res) => {
 /**
  * GET /api/v1/auth/me
  * Get current authenticated user info
+ * IMPORTANT: This endpoint is NOT wrapped in authenticate() middleware,
+ * so it must check req.session.user directly (for OAuth session auth).
  */
 router.get('/me', (req, res) => {
   try {
-    const userId = req.user?.id || req.tokenMeta?.ownerId;
+    // Check session auth FIRST (OAuth login via browser)
+    let userId = null;
+    if (req.session && req.session.user && req.session.user.id) {
+      userId = String(req.session.user.id);
+    }
+    
+    // Fallback to Bearer token if no session
+    if (!userId && req.tokenMeta?.ownerId) {
+      userId = String(req.tokenMeta.ownerId);
+    }
+    
+    // Fallback to req.user (in case this route is later wrapped in authenticate())
+    if (!userId && req.user?.id) {
+      userId = String(req.user.id);
+    }
+
     if (!userId) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
