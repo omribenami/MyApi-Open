@@ -365,7 +365,12 @@ function ListingCard({ listing, onClick, isInstalled = false }) {
     >
       <div className="flex items-start justify-between mb-3">
         <TypeBadge type={listing.type} />
-        <span className="text-xs text-green-400">{listing.price === 'free' ? 'Free' : listing.price}</span>
+        <div className="flex items-center gap-2">
+          {isInstalled && (
+            <span className="text-[10px] text-emerald-300 border border-emerald-700 rounded-full px-2 py-0.5">Installed</span>
+          )}
+          <span className="text-xs text-green-400">{listing.price === 'free' ? 'Free' : listing.price}</span>
+        </div>
       </div>
       <h3 className="font-semibold text-white group-hover:text-blue-300 transition-colors line-clamp-1 mb-1">{listing.title}</h3>
       <p className="text-slate-400 text-sm line-clamp-2 mb-3">{listing.description || 'No description.'}</p>
