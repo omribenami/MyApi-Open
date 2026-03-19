@@ -92,13 +92,10 @@ const {
   getMarketplaceListings,
   getMarketplaceListing,
   updateMarketplaceListing,
-  setMarketplaceListingStatus,
-  transferMarketplaceOwnership,
   removeMarketplaceListing,
   rateMarketplaceListing,
   incrementInstallCount,
   getMyMarketplaceListings,
-  getMarketplaceProviders,
   // Skills
   createSkill,
   getSkills,
@@ -5420,45 +5417,9 @@ app.delete('/api/v1/skills/:id/documents/:docId', authenticate, (req, res) => {
 // GET /api/v1/marketplace - public browse
 app.get('/api/v1/marketplace', (req, res) => {
   try {
-    const {
-      type,
-      product_type,
-      sort,
-      search,
-      tags,
-      tag,
-      field,
-      provider,
-      official,
-      visibility,
-      pricing,
-      status,
-    } = req.query;
-
-    const listings = getMarketplaceListings({
-      type,
-      productType: product_type,
-      sort,
-      search,
-      tags: tags || tag || field,
-      provider,
-      officialOnly: official,
-      visibility,
-      pricing,
-      status,
-    });
-
-    // Counters are computed from the currently returned dataset (post-filter)
-    const summary = listings.reduce((acc, l) => {
-      acc.total += 1;
-      const t = l.productType || l.type;
-      if (t === 'skill') acc.skills += 1;
-      if (t === 'persona') acc.personas += 1;
-      if (t === 'api') acc.apis += 1;
-      return acc;
-    }, { total: 0, skills: 0, personas: 0, apis: 0 });
-
-    res.json({ listings, summary });
+    const { type, sort, search, tags } = req.query;
+    const listings = getMarketplaceListings({ type, sort, search, tags });
+    res.json({ listings });
   } catch (err) {
     console.error('Marketplace list error:', err);
     res.status(500).json({ error: 'Failed to get listings' });
@@ -5480,13 +5441,12 @@ app.get('/api/v1/marketplace/:id', (req, res) => {
 // POST /api/v1/marketplace - create listing
 app.post('/api/v1/marketplace', authenticate, (req, res) => {
   try {
-    const { type, product_type, title, description, content, tags, price } = req.body;
-    const resolvedType = String(product_type || type || '').trim().toLowerCase();
-    if (!resolvedType || !title) return res.status(400).json({ error: 'product_type/type and title are required' });
-    if (!['persona', 'api', 'skill', 'template', 'connector'].includes(resolvedType)) return res.status(400).json({ error: 'product_type must be persona, api, skill, template, or connector' });
+    const { type, title, description, content, tags, price } = req.body;
+    if (!type || !title) return res.status(400).json({ error: 'type and title are required' });
+    if (!['persona', 'api', 'skill'].includes(type)) return res.status(400).json({ error: 'type must be persona, api, or skill' });
 
     const ownerId = req.tokenMeta.ownerId;
-    const listing = createMarketplaceListing(ownerId, resolvedType, title, description, content, tags, price, req.body || {});
+    const listing = createMarketplaceListing(ownerId, type, title, description, content, tags, price);
 
     createAuditLog({
       requesterId: req.tokenMeta.tokenId,
@@ -5809,58 +5769,6 @@ app.post('/api/v1/marketplace/:id/install', authenticate, (req, res) => {
   } catch (err) {
     console.error('Marketplace install error:', err);
     res.status(500).json({ error: err.message || 'Failed to install listing locally' });
-  }
-});
-
-// PATCH /api/v1/marketplace/:id/status - publish/unpublish/archive
-app.patch('/api/v1/marketplace/:id/status', authenticate, (req, res) => {
-  try {
-    const ownerId = req.tokenMeta.ownerId;
-    const { status } = req.body || {};
-    const listing = setMarketplaceListingStatus(parseInt(req.params.id, 10), ownerId, status);
-    if (!listing) return res.status(404).json({ error: 'Listing not found, not yours, or invalid status' });
-    res.json({ listing });
-  } catch (err) {
-    console.error('Marketplace status error:', err);
-    res.status(500).json({ error: 'Failed to update listing status' });
-  }
-});
-
-// POST /api/v1/marketplace/:id/transfer - ownership transfer placeholder (future-safe)
-app.post('/api/v1/marketplace/:id/transfer', authenticate, (req, res) => {
-  try {
-    const fromOwnerId = req.tokenMeta.ownerId;
-    const { toOwnerId, dryRun = true } = req.body || {};
-    if (!toOwnerId) return res.status(400).json({ error: 'toOwnerId is required' });
-
-    if (dryRun) {
-      return res.json({
-        supported: true,
-        executed: false,
-        message: 'Ownership transfer endpoint is a future-safe placeholder. Pass dryRun=false to execute.',
-        listingId: parseInt(req.params.id, 10),
-        fromOwnerId,
-        toOwnerId,
-      });
-    }
-
-    const ok = transferMarketplaceOwnership(parseInt(req.params.id, 10), fromOwnerId, toOwnerId);
-    if (!ok) return res.status(404).json({ error: 'Listing not found or not owned by requester' });
-    return res.json({ supported: true, executed: true });
-  } catch (err) {
-    console.error('Marketplace transfer error:', err);
-    res.status(500).json({ error: 'Failed to transfer ownership' });
-  }
-});
-
-// GET /api/v1/marketplace/providers - provider filter values
-app.get('/api/v1/marketplace/providers', (req, res) => {
-  try {
-    const providers = getMarketplaceProviders();
-    res.json({ providers });
-  } catch (err) {
-    console.error('Marketplace providers error:', err);
-    res.status(500).json({ error: 'Failed to get providers' });
   }
 });
 

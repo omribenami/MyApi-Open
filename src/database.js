@@ -751,9 +751,6 @@ function initDatabase() {
   db.exec('CREATE INDEX IF NOT EXISTS idx_skill_ownership_claims_skill ON skill_ownership_claims(skill_id)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_skill_ownership_claims_claimant ON skill_ownership_claims(claimant_user_id)');
 
-  // Marketplace v2 schema + backward-compatible data mappings
-  runMarketplaceV2Migrations();
-
   console.log('Database initialized at:', dbPath);
 }
 
@@ -2702,165 +2699,18 @@ function getSkillOwnershipClaims(skillId, ownerId = 'owner') {
 }
 
 // Marketplace
-const PRODUCT_TYPES = ['skill', 'persona', 'api', 'template', 'connector'];
-const ORIGIN_TYPES = ['official', 'community', 'fork'];
-const PRICING_MODELS = ['free', 'one_time', 'subscription'];
-const VISIBILITY_TYPES = ['public', 'private', 'unlisted'];
-const MARKETPLACE_STATUS = ['draft', 'active', 'archived', 'removed'];
-
-function runMarketplaceV2Migrations() {
-  const migrations = [
-    "ALTER TABLE marketplace_listings ADD COLUMN product_type TEXT",
-    "ALTER TABLE marketplace_listings ADD COLUMN provider_name TEXT",
-    "ALTER TABLE marketplace_listings ADD COLUMN official INTEGER DEFAULT 0",
-    "ALTER TABLE marketplace_listings ADD COLUMN verified_source INTEGER DEFAULT 0",
-    "ALTER TABLE marketplace_listings ADD COLUMN source_url TEXT",
-    "ALTER TABLE marketplace_listings ADD COLUMN origin_type TEXT DEFAULT 'community'",
-    "ALTER TABLE marketplace_listings ADD COLUMN origin_listing_id INTEGER",
-    "ALTER TABLE marketplace_listings ADD COLUMN origin_owner TEXT",
-    "ALTER TABLE marketplace_listings ADD COLUMN license TEXT",
-    "ALTER TABLE marketplace_listings ADD COLUMN pricing_model TEXT DEFAULT 'free'",
-    "ALTER TABLE marketplace_listings ADD COLUMN price_cents INTEGER",
-    "ALTER TABLE marketplace_listings ADD COLUMN currency TEXT DEFAULT 'USD'",
-    "ALTER TABLE marketplace_listings ADD COLUMN visibility TEXT DEFAULT 'public'",
-    "ALTER TABLE marketplace_listings ADD COLUMN compatibility TEXT",
-    "ALTER TABLE marketplace_listings ADD COLUMN capabilities TEXT",
-    "ALTER TABLE marketplace_listings ADD COLUMN trust_score REAL DEFAULT 0",
-  ];
-  for (const migration of migrations) {
-    try { db.exec(migration); } catch (e) {}
-  }
-
-  db.exec(`
-    UPDATE marketplace_listings
-    SET
-      product_type = COALESCE(NULLIF(product_type, ''), type, 'skill'),
-      pricing_model = CASE
-        WHEN COALESCE(NULLIF(price, ''), 'free') = 'free' THEN 'free'
-        WHEN LOWER(price) LIKE '%month%' OR LOWER(price) LIKE '%subscription%' THEN 'subscription'
-        ELSE COALESCE(NULLIF(pricing_model, ''), 'one_time')
-      END,
-      price_cents = CASE
-        WHEN price_cents IS NOT NULL THEN price_cents
-        WHEN price IS NULL OR LOWER(price) = 'free' THEN NULL
-        ELSE CAST(REPLACE(REPLACE(REPLACE(REPLACE(LOWER(price), '$', ''), 'usd', ''), '/month', ''), '/mo', '') AS INTEGER) * 100
-      END,
-      currency = COALESCE(NULLIF(currency, ''), 'USD'),
-      visibility = COALESCE(NULLIF(visibility, ''), 'public'),
-      origin_type = COALESCE(NULLIF(origin_type, ''), CASE WHEN COALESCE(official, 0) = 1 THEN 'official' ELSE 'community' END),
-      trust_score = COALESCE(trust_score, CASE WHEN COALESCE(official, 0) = 1 THEN 100 ELSE 50 END),
-      status = CASE
-        WHEN status IN ('active','draft','archived','removed') THEN status
-        WHEN status = 'published' THEN 'active'
-        ELSE 'active'
-      END
-  `);
-
-  db.exec('CREATE INDEX IF NOT EXISTS idx_marketplace_product_type ON marketplace_listings(product_type)');
-  db.exec('CREATE INDEX IF NOT EXISTS idx_marketplace_official ON marketplace_listings(official)');
-  db.exec('CREATE INDEX IF NOT EXISTS idx_marketplace_provider ON marketplace_listings(provider_name)');
-  db.exec('CREATE INDEX IF NOT EXISTS idx_marketplace_pricing_model ON marketplace_listings(pricing_model)');
-  db.exec('CREATE INDEX IF NOT EXISTS idx_marketplace_visibility ON marketplace_listings(visibility)');
-}
-
-function parseMaybeJson(value, fallback = null) {
-  if (value == null) return fallback;
-  if (typeof value === 'object') return value;
-  try { return JSON.parse(value); } catch { return fallback; }
-}
-
-function normalizeMarketplaceInput(input = {}) {
-  const type = String(input.type || input.product_type || '').trim().toLowerCase();
-  const productType = PRODUCT_TYPES.includes(type) ? type : 'skill';
-
-  const pricingModelRaw = String(input.pricing_model || '').trim().toLowerCase();
-  let pricingModel = PRICING_MODELS.includes(pricingModelRaw) ? pricingModelRaw : null;
-  if (!pricingModel) {
-    const p = String(input.price || '').trim().toLowerCase();
-    pricingModel = (!p || p === 'free') ? 'free' : 'one_time';
-  }
-
-  const priceCentsRaw = input.price_cents;
-  const priceCents = (priceCentsRaw === null || priceCentsRaw === undefined || priceCentsRaw === '')
-    ? null
-    : Number.parseInt(priceCentsRaw, 10);
-
-  const visibility = VISIBILITY_TYPES.includes(String(input.visibility || '').trim().toLowerCase())
-    ? String(input.visibility).trim().toLowerCase()
-    : 'public';
-
-  const status = MARKETPLACE_STATUS.includes(String(input.status || '').trim().toLowerCase())
-    ? String(input.status).trim().toLowerCase()
-    : 'active';
-
-  const originTypeRaw = String(input.origin_type || '').trim().toLowerCase();
-  const originType = ORIGIN_TYPES.includes(originTypeRaw)
-    ? originTypeRaw
-    : ((input.official || input.verified_source) ? 'official' : 'community');
-
-  const tags = Array.isArray(input.tags)
-    ? input.tags.map((t) => String(t).trim()).filter(Boolean).join(',')
-    : String(input.tags || '').trim();
-
-  const normalized = {
-    product_type: productType,
-    type: productType,
-    provider_name: input.provider_name ? String(input.provider_name).trim() : null,
-    official: input.official ? 1 : 0,
-    verified_source: input.verified_source ? 1 : 0,
-    source_url: input.source_url ? String(input.source_url).trim() : null,
-    origin_type: originType,
-    origin_listing_id: input.origin_listing_id ? Number.parseInt(input.origin_listing_id, 10) : null,
-    origin_owner: input.origin_owner ? String(input.origin_owner).trim() : null,
-    license: input.license ? String(input.license).trim() : null,
-    pricing_model: pricingModel,
-    price_cents: Number.isFinite(priceCents) ? priceCents : null,
-    currency: String(input.currency || 'USD').trim().toUpperCase() || 'USD',
-    visibility,
-    status,
-    compatibility: input.compatibility ? JSON.stringify(input.compatibility) : null,
-    capabilities: input.capabilities ? JSON.stringify(input.capabilities) : null,
-    trust_score: Number.isFinite(Number(input.trust_score)) ? Number(input.trust_score) : null,
-    tags,
-  };
-
-  normalized.price = normalized.pricing_model === 'free'
-    ? 'free'
-    : (Number.isFinite(normalized.price_cents) ? `${normalized.currency} ${(normalized.price_cents / 100).toFixed(2)}` : 'paid');
-
-  return normalized;
-}
-
 function _formatListing(row) {
-  const pricingModel = row.pricing_model || ((row.price && row.price !== 'free') ? 'one_time' : 'free');
-  const productType = row.product_type || row.type || 'skill';
   return {
     id: row.id,
     ownerId: row.owner_id,
     ownerName: row.owner_display_name || row.owner_name || row.owner_id,
-    type: row.type || productType,
-    productType,
+    type: row.type,
     title: row.title,
     description: row.description,
-    content: parseMaybeJson(row.content, row.content || null),
+    content: row.content ? (() => { try { return JSON.parse(row.content); } catch { return row.content; } })() : null,
     tags: row.tags ? row.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
-    price: row.price || (pricingModel === 'free' ? 'free' : 'paid'),
-    pricingModel,
-    priceCents: row.price_cents,
-    currency: row.currency || 'USD',
-    providerName: row.provider_name || null,
-    official: Boolean(row.official),
-    verifiedSource: Boolean(row.verified_source),
-    sourceUrl: row.source_url || null,
-    originType: row.origin_type || (row.official ? 'official' : 'community'),
-    originListingId: row.origin_listing_id || null,
-    originOwner: row.origin_owner || null,
-    license: row.license || null,
-    visibility: row.visibility || 'public',
+    price: row.price,
     status: row.status,
-    compatibility: parseMaybeJson(row.compatibility, null),
-    capabilities: parseMaybeJson(row.capabilities, null),
-    trustScore: Number.isFinite(row.trust_score) ? row.trust_score : 0,
     avgRating: row.avg_rating,
     ratingCount: row.rating_count,
     installCount: row.install_count,
@@ -2869,85 +2719,45 @@ function _formatListing(row) {
   };
 }
 
-function createMarketplaceListing(ownerId, type, title, description, content, tags, price, extra = {}) {
+function createMarketplaceListing(ownerId, type, title, description, content, tags, price) {
   const now = new Date().toISOString();
   const contentStr = content ? (typeof content === 'object' ? JSON.stringify(content) : content) : null;
-  const normalized = normalizeMarketplaceInput({ type, tags, price, ...extra });
   const stmt = db.prepare(`
-    INSERT INTO marketplace_listings (
-      owner_id, type, product_type, title, description, content, tags, price, pricing_model, price_cents, currency,
-      provider_name, official, verified_source, source_url, origin_type, origin_listing_id, origin_owner,
-      license, visibility, status, compatibility, capabilities, trust_score,
-      avg_rating, rating_count, install_count, created_at, updated_at
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?)
+    INSERT INTO marketplace_listings (owner_id, type, title, description, content, tags, price, status, avg_rating, rating_count, install_count, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'active', 0, 0, 0, ?, ?)
   `);
-  const result = stmt.run(
-    ownerId, normalized.type, normalized.product_type, title, description || null, contentStr, normalized.tags,
-    normalized.price, normalized.pricing_model, normalized.price_cents, normalized.currency,
-    normalized.provider_name, normalized.official, normalized.verified_source, normalized.source_url,
-    normalized.origin_type, normalized.origin_listing_id, normalized.origin_owner, normalized.license,
-    normalized.visibility, normalized.status, normalized.compatibility, normalized.capabilities, normalized.trust_score,
-    now, now
-  );
+  const result = stmt.run(ownerId, type, title, description || null, contentStr, tags || '', price || 'free', now, now);
   return getMarketplaceListing(result.lastInsertRowid);
 }
 
-function getMarketplaceListings(filters = {}) {
-  const {
-    type, productType, sort, search, tags, status = 'active', officialOnly, provider,
-    pricing, visibility = 'public', originType,
-  } = filters;
-
+function getMarketplaceListings({ type, sort, search, tags, status = 'active' } = {}) {
   let query = `
     SELECT ml.*, u.username as owner_name, u.display_name as owner_display_name
     FROM marketplace_listings ml
     LEFT JOIN users u ON ml.owner_id = u.id
-    WHERE 1=1
+    WHERE ml.status = ?
   `;
-  const params = [];
+  const params = [status];
 
-  if (status) { query += ' AND ml.status = ?'; params.push(status); }
-  if (visibility) { query += ' AND ml.visibility = ?'; params.push(visibility); }
-  const typeFilter = productType || type;
-  if (typeFilter && typeFilter !== 'all') {
-    query += ' AND COALESCE(ml.product_type, ml.type) = ?';
-    params.push(typeFilter);
-  }
-  if (officialOnly === true || officialOnly === 'true' || officialOnly === '1') {
-    query += ' AND COALESCE(ml.official, 0) = 1';
-  }
-  if (provider) {
-    query += " AND LOWER(COALESCE(ml.provider_name, '')) = LOWER(?)";
-    params.push(provider);
-  }
-  if (pricing === 'free') {
-    query += " AND COALESCE(ml.pricing_model, CASE WHEN ml.price='free' THEN 'free' ELSE 'one_time' END) = 'free'";
-  } else if (pricing === 'paid') {
-    query += " AND COALESCE(ml.pricing_model, CASE WHEN ml.price='free' THEN 'free' ELSE 'one_time' END) != 'free'";
-  }
-  if (originType && originType !== 'all') {
-    query += " AND COALESCE(ml.origin_type, CASE WHEN ml.official = 1 THEN 'official' ELSE 'community' END) = ?";
-    params.push(originType);
+  if (type && type !== 'all') {
+    query += ' AND ml.type = ?';
+    params.push(type);
   }
   if (search) {
-    query += ' AND (ml.title LIKE ? OR ml.description LIKE ? OR ml.tags LIKE ?)';
-    const q = `%${search}%`;
-    params.push(q, q, q);
+    query += ' AND (ml.title LIKE ? OR ml.description LIKE ?)';
+    params.push(`%${search}%`, `%${search}%`);
   }
   if (tags) {
     query += ' AND ml.tags LIKE ?';
     params.push(`%${tags}%`);
   }
 
-  if (sort === 'popular' || sort === 'most_used' || sort === 'most_installed') {
-    query += ' ORDER BY ml.install_count DESC, ml.avg_rating DESC, ml.rating_count DESC';
-  } else if (sort === 'rating' || sort === 'highest_rated') {
-    query += ' ORDER BY ml.avg_rating DESC, ml.rating_count DESC, ml.install_count DESC';
-  } else if (sort === 'recent' || sort === 'newest') {
-    query += ' ORDER BY ml.created_at DESC';
+  if (sort === 'popular') {
+    query += ' ORDER BY ml.avg_rating DESC, ml.rating_count DESC';
+  } else if (sort === 'most_used') {
+    query += ' ORDER BY ml.install_count DESC';
   } else {
-    query += ' ORDER BY ml.install_count DESC, ml.avg_rating DESC, ml.rating_count DESC';
+    query += ' ORDER BY ml.created_at DESC';
   }
 
   return db.prepare(query).all(...params).map(_formatListing);
@@ -2985,38 +2795,18 @@ function updateMarketplaceListing(id, ownerId, updates) {
   if (!existing) return null;
 
   const now = new Date().toISOString();
-  const normalized = normalizeMarketplaceInput({ ...existing, ...updates });
   const title = updates.title !== undefined ? updates.title : existing.title;
   const description = updates.description !== undefined ? updates.description : existing.description;
   const contentVal = updates.content !== undefined
     ? (typeof updates.content === 'object' ? JSON.stringify(updates.content) : updates.content)
     : existing.content;
+  const tags = updates.tags !== undefined ? updates.tags : existing.tags;
+  const status = updates.status !== undefined ? updates.status : existing.status;
 
   db.prepare(`
-    UPDATE marketplace_listings SET
-      title=?, description=?, content=?, tags=?, status=?,
-      type=?, product_type=?, provider_name=?, official=?, verified_source=?, source_url=?,
-      origin_type=?, origin_listing_id=?, origin_owner=?, license=?,
-      pricing_model=?, price_cents=?, currency=?, price=?, visibility=?, compatibility=?, capabilities=?, trust_score=?, updated_at=?
-    WHERE id=?
-  `).run(
-    title, description, contentVal, normalized.tags, normalized.status,
-    normalized.type, normalized.product_type, normalized.provider_name, normalized.official, normalized.verified_source, normalized.source_url,
-    normalized.origin_type, normalized.origin_listing_id, normalized.origin_owner, normalized.license,
-    normalized.pricing_model, normalized.price_cents, normalized.currency, normalized.price, normalized.visibility,
-    normalized.compatibility, normalized.capabilities, normalized.trust_score,
-    now, id
-  );
+    UPDATE marketplace_listings SET title=?, description=?, content=?, tags=?, status=?, updated_at=? WHERE id=?
+  `).run(title, description, contentVal, tags, status, now, id);
 
-  return getMarketplaceListing(id);
-}
-
-function setMarketplaceListingStatus(id, ownerId, status) {
-  const s = String(status || '').trim().toLowerCase();
-  if (!MARKETPLACE_STATUS.includes(s)) return null;
-  const result = db.prepare('UPDATE marketplace_listings SET status = ?, updated_at = ? WHERE id = ? AND owner_id = ?')
-    .run(s, new Date().toISOString(), id, ownerId);
-  if (result.changes === 0) return null;
   return getMarketplaceListing(id);
 }
 
@@ -3024,12 +2814,6 @@ function removeMarketplaceListing(id, ownerId) {
   const result = db.prepare(
     `UPDATE marketplace_listings SET status='removed', updated_at=? WHERE id=? AND owner_id=?`
   ).run(new Date().toISOString(), id, ownerId);
-  return result.changes > 0;
-}
-
-function transferMarketplaceOwnership(id, fromOwnerId, toOwnerId) {
-  const result = db.prepare('UPDATE marketplace_listings SET owner_id = ?, updated_at = ? WHERE id = ? AND owner_id = ?')
-    .run(toOwnerId, new Date().toISOString(), id, fromOwnerId);
   return result.changes > 0;
 }
 
@@ -3045,14 +2829,14 @@ function rateMarketplaceListing(listingId, userId, rating, review) {
     `SELECT AVG(rating) as avg, COUNT(*) as cnt FROM marketplace_ratings WHERE listing_id=?`
   ).get(listingId);
   const newAvg = Math.round((stats.avg || 0) * 10) / 10;
-  db.prepare(`UPDATE marketplace_listings SET avg_rating=?, rating_count=?, trust_score = MIN(100, COALESCE(trust_score, 50) + 0.2), updated_at=? WHERE id=?`)
+  db.prepare(`UPDATE marketplace_listings SET avg_rating=?, rating_count=?, updated_at=? WHERE id=?`)
     .run(newAvg, stats.cnt, now, listingId);
 
   return { avgRating: newAvg, ratingCount: stats.cnt };
 }
 
 function incrementInstallCount(listingId) {
-  db.prepare(`UPDATE marketplace_listings SET install_count=install_count+1, trust_score = MIN(100, COALESCE(trust_score, 50) + 0.1), updated_at=? WHERE id=?`)
+  db.prepare(`UPDATE marketplace_listings SET install_count=install_count+1, updated_at=? WHERE id=?`)
     .run(new Date().toISOString(), listingId);
 }
 
@@ -3064,16 +2848,6 @@ function getMyMarketplaceListings(ownerId) {
     WHERE ml.owner_id = ? AND ml.status != 'removed'
     ORDER BY ml.created_at DESC
   `).all(ownerId).map(_formatListing);
-}
-
-function getMarketplaceProviders() {
-  return db.prepare(`
-    SELECT provider_name as providerName, COUNT(*) as count
-    FROM marketplace_listings
-    WHERE provider_name IS NOT NULL AND TRIM(provider_name) != '' AND status = 'active'
-    GROUP BY provider_name
-    ORDER BY provider_name ASC
-  `).all();
 }
 
 // Services & Categories
@@ -4350,13 +4124,10 @@ module.exports = {
   getMarketplaceListings,
   getMarketplaceListing,
   updateMarketplaceListing,
-  setMarketplaceListingStatus,
-  transferMarketplaceOwnership,
   removeMarketplaceListing,
   rateMarketplaceListing,
   incrementInstallCount,
   getMyMarketplaceListings,
-  getMarketplaceProviders,
   // Services
   seedServiceCategories,
   seedServices,
