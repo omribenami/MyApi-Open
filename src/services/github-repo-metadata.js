@@ -173,7 +173,7 @@ class GitHubRepoMetadata {
     // Match various GitHub URL formats
     const patterns = [
       /^https?:\/\/github\.com\/([^\/]+)\/([^\/]+?)(?:\.git)?\/?$/,
-      /^git@github\.com:([^\/]+)\/([^\/]+?)(?:\.git)?$/',
+      /^git@github\.com:([^\/]+)\/([^\/]+?)(?:\.git)?$/,
       /^github\.com\/([^\/]+)\/([^\/]+?)(?:\.git)?$/
     ];
 
