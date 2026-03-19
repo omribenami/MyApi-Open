@@ -26,9 +26,7 @@ function NotificationSettings() {
 
   // Fetch settings on mount
   useEffect(() => {
-    if (masterToken) {
-      fetchSettings();
-    }
+    fetchSettings();
   }, [masterToken]);
 
   const fetchSettings = async () => {
@@ -36,7 +34,7 @@ function NotificationSettings() {
     setError(null);
 
     try {
-      const headers = { Authorization: `Bearer ${masterToken}` };
+      const headers = masterToken ? { Authorization: `Bearer ${masterToken}` } : undefined;
       const response = await apiClient.get('/notifications/settings', { headers });
       setSettings(response.data.settings || {});
     } catch (err) {
@@ -52,7 +50,7 @@ function NotificationSettings() {
     setError(null);
 
     try {
-      const headers = { Authorization: `Bearer ${masterToken}` };
+      const headers = masterToken ? { Authorization: `Bearer ${masterToken}` } : undefined;
       const response = await apiClient.put('/notifications/settings', updates, { headers });
       setSettings(response.data.settings || {});
       addToast('Notification settings saved', 'success');

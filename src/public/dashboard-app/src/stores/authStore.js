@@ -62,10 +62,22 @@ export const useAuthStore = create((set, get) => ({
           const sessionCheckRes = await fetch('/api/v1/auth/me', { credentials: 'include' });
           if (sessionCheckRes.ok) {
             resetAuthMeFailureCountOnSuccess();
-            clearAuthArtifacts();
             const sessionData = await sessionCheckRes.json();
             const user = normalizeUserPayload(sessionData);
-            set({ user, masterToken: null, sessionToken: null, isAuthenticated: true, isInitialized: true, error: null });
+            const bootstrapToken = sessionData?.bootstrap?.masterToken || null;
+
+            if (bootstrapToken) {
+              try { localStorage.setItem('masterToken', bootstrapToken); } catch {}
+            }
+
+            set({
+              user,
+              masterToken: bootstrapToken || masterToken || null,
+              sessionToken: null,
+              isAuthenticated: true,
+              isInitialized: true,
+              error: null,
+            });
             return;
           }
           if (sessionCheckRes.status === 401) {

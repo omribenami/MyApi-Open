@@ -4,13 +4,16 @@ const db = require('../database');
 const router = express.Router();
 
 function resolveUserId(req) {
-  return (
+  const resolved = (
     req?.session?.user_id ||
     req?.session?.user?.id ||
     req?.user?.id ||
     req?.tokenMeta?.ownerId ||
     null
   );
+
+  if (resolved === null || resolved === undefined || resolved === '') return null;
+  return String(resolved);
 }
 
 // Specific routes first (before generic :id routes)
@@ -98,12 +101,25 @@ router.put('/settings', (req, res) => {
  */
 router.post('/:id/read', (req, res) => {
   try {
-    const success = db.markNotificationAsRead(req.params.id);
-    
-    if (!success) {
+    const userId = resolveUserId(req);
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized - no user ID' });
+    }
+
+    const notification = db.db
+      .prepare('SELECT id FROM notifications WHERE id = ? AND user_id = ?')
+      .get(req.params.id, userId);
+
+    if (!notification) {
       return res.status(404).json({ error: 'Notification not found' });
     }
-    
+
+    const success = db.markNotificationAsRead(req.params.id);
+    if (!success) {
+      console.error('Failed to mark notification as read after ownership check', { notificationId: req.params.id, userId });
+      return res.status(500).json({ error: 'Failed to mark notification as read' });
+    }
+
     res.json({ success: true });
   } catch (error) {
     console.error('Error marking notification as read:', error);
@@ -117,12 +133,26 @@ router.post('/:id/read', (req, res) => {
  */
 router.delete('/:id', (req, res) => {
   try {
-    const success = db.deleteNotification(req.params.id);
-    
-    if (!success) {
+    const userId = resolveUserId(req);
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized - no user ID' });
+    }
+
+    const notification = db.db
+      .prepare('SELECT id FROM notifications WHERE id = ? AND user_id = ?')
+      .get(req.params.id, userId);
+
+    if (!notification) {
       return res.status(404).json({ error: 'Notification not found' });
     }
-    
+
+    const success = db.deleteNotification(req.params.id);
+
+    if (!success) {
+      console.error('Failed to delete notification after ownership check', { notificationId: req.params.id, userId });
+      return res.status(500).json({ error: 'Failed to delete notification' });
+    }
+
     res.json({ success: true });
   } catch (error) {
     console.error('Error deleting notification:', error);
@@ -150,11 +180,22 @@ router.get('/', (req, res) => {
     const notifications = db.getNotifications(userId, limit, offset);
     const unreadCount = db.getUnreadNotificationCount(userId);
     
-    // Parse JSON fields
-    const parsed = notifications.map(n => ({
-      ...n,
-      data: n.data ? JSON.parse(n.data) : null,
-    }));
+    // Parse JSON fields safely so malformed legacy rows do not break the whole feed
+    const parsed = notifications.map((n) => {
+      let parsedData = null;
+      if (n.data) {
+        try {
+          parsedData = JSON.parse(n.data);
+        } catch (error) {
+          console.error('Malformed notification data JSON', { notificationId: n.id, userId, error: error.message });
+        }
+      }
+
+      return {
+        ...n,
+        data: parsedData,
+      };
+    });
     
     res.json({
       success: true,

@@ -18,14 +18,13 @@ export const useNotificationStore = create((set, get) => ({
   
   // Fetch notifications
   fetchNotifications: async (masterToken, limit = 50, offset = 0) => {
-    if (!masterToken) return;
-    
     set({ isLoading: true, error: null });
     try {
+      const headers = masterToken ? { Authorization: `Bearer ${masterToken}` } : {};
       const response = await fetch(
         `/api/v1/notifications?limit=${limit}&offset=${offset}`,
         {
-          headers: { Authorization: `Bearer ${masterToken}` },
+          headers,
           credentials: 'include',
         }
       );
@@ -47,11 +46,10 @@ export const useNotificationStore = create((set, get) => ({
   
   // Get unread count
   fetchUnreadCount: async (masterToken) => {
-    if (!masterToken) return;
-    
     try {
+      const headers = masterToken ? { Authorization: `Bearer ${masterToken}` } : {};
       const response = await fetch('/api/v1/notifications/unread', {
-        headers: { Authorization: `Bearer ${masterToken}` },
+        headers,
         credentials: 'include',
       });
       
@@ -67,11 +65,12 @@ export const useNotificationStore = create((set, get) => ({
   // Mark notification as read
   markAsRead: async (masterToken, notificationId) => {
     try {
+      const headers = masterToken ? { Authorization: `Bearer ${masterToken}` } : {};
       const response = await fetch(
         `/api/v1/notifications/${notificationId}/read`,
         {
           method: 'POST',
-          headers: { Authorization: `Bearer ${masterToken}` },
+          headers,
           credentials: 'include',
         }
       );
@@ -92,11 +91,12 @@ export const useNotificationStore = create((set, get) => ({
   // Delete notification
   deleteNotification: async (masterToken, notificationId) => {
     try {
+      const headers = masterToken ? { Authorization: `Bearer ${masterToken}` } : {};
       const response = await fetch(
         `/api/v1/notifications/${notificationId}`,
         {
           method: 'DELETE',
-          headers: { Authorization: `Bearer ${masterToken}` },
+          headers,
           credentials: 'include',
         }
       );

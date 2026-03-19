@@ -20,9 +20,7 @@ function NotificationCenter() {
   const [hasMore, setHasMore] = useState(true);
 
   useEffect(() => {
-    if (masterToken) {
-      fetchNotifications(masterToken, 50, 0);
-    }
+    fetchNotifications(masterToken, 50, 0);
   }, [masterToken, fetchNotifications]);
 
   const handleMarkAsRead = (notificationId) => {
@@ -36,10 +34,8 @@ function NotificationCenter() {
   };
 
   const handleLoadMore = () => {
-    if (masterToken) {
-      fetchNotifications(masterToken, 50, offset + 50);
-      setOffset(prev => prev + 50);
-    }
+    fetchNotifications(masterToken, 50, offset + 50);
+    setOffset(prev => prev + 50);
   };
 
   const getNotificationIcon = (type) => {
