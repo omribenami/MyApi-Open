@@ -4019,7 +4019,13 @@ app.post('/api/v1/services/:serviceName/execute', authenticate, async (req, res)
     });
 
     if (!execution.ok) {
-      return res.status(execution.statusCode || 500).json({ error: execution.error?.message || 'Execution failed', data: result });
+      const safeMessage = typeof execution.error?.message === 'string'
+        ? execution.error.message
+        : (() => {
+            try { return JSON.stringify(execution.error?.message ?? execution.error ?? 'Execution failed'); }
+            catch { return String(execution.error?.message ?? execution.error ?? 'Execution failed'); }
+          })();
+      return res.status(execution.statusCode || 500).json({ error: safeMessage, data: result });
     }
 
     res.json({ data: result });

@@ -216,7 +216,18 @@ async function withRetry(fn, retries = DEFAULT_EXECUTION_CONTRACT.retries) {
   throw lastError;
 }
 
+function toErrorMessage(value, fallback = 'Service execution failed') {
+  if (value == null) return fallback;
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
 function normalizeExecutionError(error, serviceName, methodName) {
+  const message = toErrorMessage(error?.message ?? error, 'Service execution failed');
   return {
     ok: false,
     service: serviceName,
@@ -225,7 +236,7 @@ function normalizeExecutionError(error, serviceName, methodName) {
     data: null,
     error: {
       code: error?.code || 'INTEGRATION_ERROR',
-      message: error?.message || 'Service execution failed',
+      message,
       retryable: !error?.statusCode || error.statusCode === 429 || error.statusCode >= 500,
     },
     meta: {
