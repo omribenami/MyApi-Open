@@ -29,6 +29,23 @@ export const useAuthStore = create((set) => ({
       // Storage access can fail on corrupted browser storage; continue with cookie bootstrap path.
     }
 
+    // CRITICAL: Check for active session FIRST, before validating any Bearer tokens.
+    // If session is active, clear any stale masterToken to prevent device approval conflicts.
+    try {
+      const sessionCheckRes = await fetch('/api/v1/auth/me', { credentials: 'include' });
+      if (sessionCheckRes.ok) {
+        // Session auth is active. Don't use Bearer token auth.
+        try {
+          localStorage.removeItem('masterToken');
+          localStorage.removeItem('tokenData');
+        } catch {}
+        set({ masterToken: null, sessionToken: null, isAuthenticated: true, isInitialized: true, error: null });
+        return;
+      }
+    } catch {
+      // no-op; session check failed, continue with token validation
+    }
+
     // If we already have a token stored, validate it before trusting local state.
     if (masterToken) {
       try {

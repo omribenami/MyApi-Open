@@ -11,11 +11,22 @@ const apiClient = axios.create({
 });
 
 // Add request interceptor to include auth token
+// IMPORTANT: Only send Bearer token if we don't have an active session.
+// Session cookies (withCredentials: true) take precedence.
+// Sending both can cause device approval conflicts if the Bearer token is stale/revoked.
 apiClient.interceptors.request.use((config) => {
   const masterToken = localStorage.getItem('masterToken');
-  if (masterToken) {
-    config.headers.Authorization = `Bearer ${masterToken}`;
+  const sessionToken = sessionStorage.getItem('sessionToken');
+  
+  // If we have ANY session indication, DON'T add Bearer token.
+  // Session auth takes absolute precedence over token-based auth.
+  if (!sessionToken) {
+    // Only add Bearer token if there's no session.
+    if (masterToken) {
+      config.headers.Authorization = `Bearer ${masterToken}`;
+    }
   }
+  
   return config;
 });
 

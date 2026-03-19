@@ -779,8 +779,9 @@ app.use('/api/v1/dashboard', authenticate, dashboardRoutes);
 app.use('/api/v1/services', authenticate, createServicesRoutes());
 
 function authenticate(req, res, next) {
-  // 1) Session auth (human dashboard)
-  // CRITICAL: Device approval only applies to API tokens, not session auth.
+  // 1) Session auth (human dashboard) — HIGHEST PRIORITY
+  // CRITICAL: If session exists, use it EXCLUSIVELY. Never fall through to Bearer token auth.
+  // Device approval only applies to API tokens, not session auth.
   // Sessions are from OAuth logins (browser), which are already protected by session cookies + CORS.
   if (req.session && req.session.user) {
     req.user = req.session.user;
@@ -791,10 +792,12 @@ function authenticate(req, res, next) {
     // SKIP device approval entirely for session auth.
     // Browsers don't have "devices" in the master-token sense; they have sessions.
     // Device approval is only for API token/agent access.
+    // Session auth is complete and secure — return immediately.
     return next();
   }
 
   // 2) Bearer token auth (agents) or Query parameter (for basic AI fetch tools)
+  // ONLY used if there's NO session.
   let rawToken = null;
   const authHeader = req.headers["authorization"] || "";
   const parts = authHeader.split(" ");
