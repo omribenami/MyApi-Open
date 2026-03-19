@@ -154,9 +154,15 @@ export const useAuthStore = create((set) => ({
       }
     }
 
-    console.log('[Auth] Initialization complete (unauthenticated)');
+    console.log('[Auth] Initialization complete (unauthenticated, circuit breaker at', authMeFailureCount, ')');
     set({ isInitialized: true });
     } catch (err) {
+      if (err?.message?.includes('Corruption')) {
+        // Suppress storage/runtime errors - they're handled by global error handler
+        console.warn('[Auth] Storage corruption detected but handled - initializing unauthenticated');
+        set({ isInitialized: true });
+        return;
+      }
       console.error('[Auth] Fatal error during initialization:', err);
       set({ isInitialized: true, error: 'Initialization error. Please refresh.' });
     }
