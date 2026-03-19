@@ -3709,9 +3709,9 @@ app.get("/api/v1/oauth/status", (req, res) => {
   
   const services = OAUTH_SERVICES.map(service => {
     const status = statuses.find(s => s.serviceName === service);
-    // Only show tokens for authenticated users
-    const userId = req.tokenMeta?.userId || (req.session?.user?.id ? String(req.session.user.id) : null);
-    const token = userId ? getOAuthToken(service, userId) : null;
+    // Extract user ID from session or Bearer token
+    const userId = req.session?.user?.id || req.tokenMeta?.ownerId;
+    const token = userId ? getOAuthToken(service, String(userId)) : null;
     
     return {
       name: service,
@@ -3765,11 +3765,13 @@ app.post("/api/v1/oauth/disconnect/:service", authenticate, async (req, res) => 
     updateOAuthStatus(service, "disconnected");
     
     // Log disconnection
+    const requesterId = req.session?.user?.id || req.tokenMeta?.tokenId || 'unknown';
+    const scope = req.tokenMeta?.scope || 'session';
     createAuditLog({
-      requesterId: req.tokenMeta.tokenId,
+      requesterId,
       action: "oauth_disconnect",
       resource: `/oauth/disconnect/${service}`,
-      scope: req.tokenMeta.scope,
+      scope,
       ip: req.ip,
       details: { service }
     });
@@ -3778,11 +3780,13 @@ app.post("/api/v1/oauth/disconnect/:service", authenticate, async (req, res) => 
   } catch (error) {
     console.error(`OAuth disconnect error for ${service}:`, error.message);
     
+    const requesterId = req.session?.user?.id || req.tokenMeta?.tokenId || 'unknown';
+    const scope = req.tokenMeta?.scope || 'session';
     createAuditLog({
-      requesterId: req.tokenMeta.tokenId,
+      requesterId,
       action: "oauth_disconnect_error",
       resource: `/oauth/disconnect/${service}`,
-      scope: req.tokenMeta.scope,
+      scope,
       ip: req.ip,
       details: { service, error: error.message }
     });
