@@ -5,7 +5,8 @@ const {
   getServicePreferences,
   updateServicePreference,
   deleteServicePreference,
-  createAuditLog
+  createAuditLog,
+  getOAuthToken,
 } = require('../database');
 
 function createServicesRoutes() {
@@ -14,8 +15,8 @@ function createServicesRoutes() {
   // GET /api/v1/services - List all services with their connection status
   router.get('/', (req, res) => {
     try {
-      const userId = req.user?.id || req.tokenMeta?.ownerId || 'owner';
-      
+      const userId = String(req.user?.id || req.tokenMeta?.ownerId || req.tokenMeta?.userId || 'owner');
+
       // Define all available services
       const allServices = [
         { id: 'github', name: 'GitHub', description: 'Version control and collaboration', icon: 'github', category: 'Developer Tools' },
@@ -29,26 +30,29 @@ function createServicesRoutes() {
         { id: 'twitter', name: 'Twitter/X', description: 'Social media platform', icon: 'twitter', category: 'Social Media' },
         { id: 'notion', name: 'Notion', description: 'Workspace and documentation', icon: 'notion', category: 'Productivity' }
       ];
-      
-      // Get connected services for this user
-      const connectedServices = req.tokenMeta?.ownerId 
-        ? db.db.prepare(`
-            SELECT service_name, created_at, expires_at 
-            FROM oauth_tokens 
-            WHERE user_id = ?
-          `).all(req.tokenMeta.ownerId)
-        : [];
-      
-      const connectedMap = Object.fromEntries(
-        connectedServices.map(s => [s.service_name, s])
-      );
+
+      // Get connected services for this user safely via exported DB helpers.
+      const connectedMap = {};
+      for (const svc of allServices) {
+        try {
+          const token = getOAuthToken(svc.id, userId);
+          if (token && !token.revokedAt) {
+            connectedMap[svc.id] = {
+              created_at: token.createdAt || null,
+              expires_at: token.expiresAt || null,
+            };
+          }
+        } catch {
+          // Keep endpoint resilient: one bad service lookup should not break the list.
+        }
+      }
       
       // Enrich services with connection status
       const servicesWithStatus = allServices.map(svc => ({
         ...svc,
-        status: connectedMap[svc.name] ? 'connected' : 'available',
-        connectedAt: connectedMap[svc.name]?.created_at || null,
-        expiresAt: connectedMap[svc.name]?.expires_at || null,
+        status: connectedMap[svc.id] ? 'connected' : 'available',
+        connectedAt: connectedMap[svc.id]?.created_at || null,
+        expiresAt: connectedMap[svc.id]?.expires_at || null,
       }));
       
       res.json({
