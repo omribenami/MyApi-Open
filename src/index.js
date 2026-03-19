@@ -3754,6 +3754,11 @@ app.get([
       const tokenId = createAccessToken(hash, appUser.id, 'full', 'Master Token (OAuth Session)', null, null);
       req.session.masterTokenRaw = rawMasterToken;
       req.session.masterTokenId = tokenId;
+
+      // NOW store the OAuth token under the correct user ID
+      console.log(`[OAuth] Storing ${service} token for user: ${appUser.id}`);
+      const storeResult = storeOAuthToken(service, appUser.id, tokenData.accessToken, tokenData.refreshToken || null, expiresAt, tokenData.scope);
+      console.log(`[OAuth] Token stored successfully:`, { tokenId: storeResult.id, service, userId: appUser.id, scope: storeResult.scope });
     }
 
     // Emit notification for service connection
@@ -5414,8 +5419,8 @@ app.delete('/api/v1/skills/:id/documents/:docId', authenticate, (req, res) => {
 // GET /api/v1/marketplace - public browse
 app.get('/api/v1/marketplace', (req, res) => {
   try {
-    const { type, sort, search, tags } = req.query;
-    const listings = getMarketplaceListings({ type, sort, search, tags });
+    const { type, sort, search, tags, provider, price, rating, official } = req.query;
+    const listings = getMarketplaceListings({ type, sort, search, tags, provider, price, rating, official });
     res.json({ listings });
   } catch (err) {
     console.error('Marketplace list error:', err);
