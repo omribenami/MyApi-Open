@@ -283,7 +283,7 @@ const oauthAdapters = {
     authUrl: 'https://twitter.com/i/oauth2/authorize',
     tokenUrl: 'https://api.twitter.com/2/oauth2/token',
     verifyUrl: 'https://api.twitter.com/2/users/me',
-    scope: 'tweet.read users.read offline.access',
+    scope: process.env.TWITTER_SCOPE || 'tweet.read users.read',
     redirectUri: process.env.TWITTER_REDIRECT_URI || oauthConfig.twitter?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/twitter`,
     clientId: process.env.TWITTER_CLIENT_ID || oauthConfig.twitter?.clientId,
     clientSecret: process.env.TWITTER_CLIENT_SECRET || oauthConfig.twitter?.clientSecret,
