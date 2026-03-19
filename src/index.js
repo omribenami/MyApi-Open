@@ -3968,7 +3968,7 @@ app.post('/api/v1/services/:serviceName/execute', authenticate, async (req, res)
     const { serviceName } = req.params;
     const { method, params } = req.body;
 
-    const { getServiceByName, getServiceMethods, getOAuthToken } = require('./database');
+    const { getServiceByName, getServiceMethods, getOAuthToken, isTokenExpired, refreshOAuthToken } = require('./database');
     const service = getServiceByName(serviceName);
 
     if (!service) {
@@ -3983,9 +3983,27 @@ app.post('/api/v1/services/:serviceName/execute', authenticate, async (req, res)
     }
 
     const userId = getOAuthUserId(req);
-    const token = getOAuthToken(serviceName, userId);
-    if (!token && service.auth_type !== 'webhook' && service.auth_type !== 'none') {
+    let token = getOAuthToken(serviceName, userId);
+    const authType = service.auth_type || service.authType;
+    if (!token && authType !== 'webhook' && authType !== 'none') {
       return res.status(403).json({ error: `Service '${serviceName}' not connected. Please connect it first.` });
+    }
+
+    // Auto-refresh expired OAuth tokens for execute endpoint (parity with /proxy)
+    if (token && isTokenExpired(token)) {
+      const provider = OAUTH_PROVIDER_DETAILS[serviceName];
+      if (provider?.tokenUrl && token.refreshToken) {
+        const clientId = process.env[`${serviceName.toUpperCase()}_CLIENT_ID`];
+        const clientSecret = process.env[`${serviceName.toUpperCase()}_CLIENT_SECRET`];
+        if (clientId && clientSecret) {
+          const refreshResult = await refreshOAuthToken(serviceName, userId, provider.tokenUrl, clientId, clientSecret);
+          if (refreshResult.ok) {
+            token = refreshResult.token;
+          } else {
+            return res.status(401).json({ error: 'Token expired and refresh failed', details: refreshResult.error });
+          }
+        }
+      }
     }
 
     // Allow default_request to dynamically target provider endpoints (e.g. /me)
