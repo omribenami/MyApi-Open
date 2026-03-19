@@ -106,6 +106,25 @@ const {
   getSkillDocuments,
   attachDocumentToSkill,
   detachDocumentFromSkill,
+  // Skill Origin & Attribution (Phase 1)
+  updateSkillOrigin,
+  // Skill Versioning & Immutability (Phase 2)
+  createSkillVersion,
+  getSkillVersions,
+  getSkillVersion,
+  // Skill Fork & Derivative Tracking (Phase 3)
+  createSkillFork,
+  getSkillForks,
+  getSkillForkInfo,
+  // Skill Licenses (Phase 4)
+  getLicenses,
+  getLicense,
+  validateLicenseOperation,
+  // Skill Ownership Verification (Phase 4)
+  createOwnershipClaim,
+  getOwnershipClaim,
+  verifyOwnershipClaim,
+  getSkillOwnershipClaims,
   // Services
   seedServiceCategories,
   seedServices,
@@ -838,6 +857,7 @@ const authRoutes = require('./auth');
 const deviceRoutes = require('./routes/devices');
 const dashboardRoutes = require('./routes/dashboard');
 const createServicesRoutes = require('./routes/services');
+const createSkillsRoutes = require('./routes/skills');
 
 // Import new auth routes
 const newAuthRoutes = require('./routes/auth');
@@ -848,6 +868,28 @@ app.use('/api/v1/devices', authenticate, deviceRoutes);
 // Device approval is now applied globally in the authenticate middleware
 app.use('/api/v1/dashboard', authenticate, dashboardRoutes);
 app.use('/api/v1/services', authenticate, createServicesRoutes());
+app.use('/api/v1/skills', authenticate, createSkillsRoutes(
+  db,
+  createSkill,
+  getSkills,
+  getSkillById,
+  updateSkill,
+  deleteSkill,
+  updateSkillOrigin,
+  createSkillVersion,
+  getSkillVersions,
+  getSkillVersion,
+  createSkillFork,
+  getSkillForks,
+  getSkillForkInfo,
+  getLicenses,
+  getLicense,
+  validateLicenseOperation,
+  createOwnershipClaim,
+  getOwnershipClaim,
+  verifyOwnershipClaim,
+  getSkillOwnershipClaims
+));
 
 function authenticate(req, res, next) {
   // 1) Session auth (human dashboard) — HIGHEST PRIORITY

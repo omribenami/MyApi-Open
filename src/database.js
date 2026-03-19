@@ -578,6 +578,110 @@ function initDatabase() {
   db.exec('CREATE INDEX IF NOT EXISTS idx_skills_owner ON skills(owner_id)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_kb_documents_owner ON kb_documents(owner_id)');
 
+  // Phase 1: Skill Origin & Attribution - Add origin tracking columns to skills table
+  const skillOriginMigrations = [
+    "ALTER TABLE skills ADD COLUMN origin_type TEXT DEFAULT 'local'",
+    "ALTER TABLE skills ADD COLUMN origin_source_id TEXT",
+    "ALTER TABLE skills ADD COLUMN origin_owner TEXT",
+    "ALTER TABLE skills ADD COLUMN origin_owner_type TEXT DEFAULT 'myapi_user'",
+    "ALTER TABLE skills ADD COLUMN is_fork INTEGER DEFAULT 0",
+    "ALTER TABLE skills ADD COLUMN upstream_owner TEXT",
+    "ALTER TABLE skills ADD COLUMN upstream_repo_url TEXT",
+    "ALTER TABLE skills ADD COLUMN license TEXT DEFAULT 'Proprietary'",
+    "ALTER TABLE skills ADD COLUMN published_at TEXT"
+  ];
+  
+  for (const migration of skillOriginMigrations) {
+    try { db.exec(migration); } catch (e) {}
+  }
+
+  // Create skill_versions table for Phase 2: Skill Versioning & Immutability
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS skill_versions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      skill_id INTEGER NOT NULL,
+      version_number TEXT NOT NULL,
+      content_hash TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      creator_id TEXT NOT NULL,
+      release_notes TEXT,
+      script_content TEXT,
+      config_json TEXT,
+      FOREIGN KEY (skill_id) REFERENCES skills(id),
+      UNIQUE(skill_id, version_number)
+    );
+  `);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_skill_versions_skill ON skill_versions(skill_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_skill_versions_number ON skill_versions(skill_id, version_number)');
+
+  // Create skill_licenses table for Phase 4: License System
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS skill_licenses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      license_name TEXT NOT NULL UNIQUE,
+      description TEXT,
+      can_fork INTEGER DEFAULT 1,
+      can_sell INTEGER DEFAULT 0,
+      can_modify INTEGER DEFAULT 1,
+      attribution_required INTEGER DEFAULT 0,
+      license_text TEXT,
+      created_at TEXT NOT NULL
+    );
+  `);
+
+  // Insert default licenses
+  const defaultLicenses = [
+    { name: 'MIT', can_fork: 1, can_sell: 1, can_modify: 1, attribution_required: 1, desc: 'Permissive open-source license' },
+    { name: 'Apache 2.0', can_fork: 1, can_sell: 1, can_modify: 1, attribution_required: 1, desc: 'Permissive open-source license with explicit patent rights' },
+    { name: 'GPL', can_fork: 1, can_sell: 0, can_modify: 1, attribution_required: 1, desc: 'Copyleft open-source license; derivatives must be open-source' },
+    { name: 'Proprietary', can_fork: 0, can_sell: 1, can_modify: 0, attribution_required: 0, desc: 'Proprietary license; no forking or modification allowed' },
+    { name: 'Custom', can_fork: 0, can_sell: 0, can_modify: 0, attribution_required: 1, desc: 'Custom license with specific terms' }
+  ];
+  
+  for (const lic of defaultLicenses) {
+    try {
+      db.prepare(`
+        INSERT OR IGNORE INTO skill_licenses (license_name, description, can_fork, can_sell, can_modify, attribution_required, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(lic.name, lic.desc, lic.can_fork, lic.can_sell, lic.can_modify, lic.attribution_required, new Date().toISOString());
+    } catch (e) {}
+  }
+
+  // Create skill_forks table for Phase 3: Fork & Derivative Tracking
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS skill_forks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      original_skill_id INTEGER NOT NULL,
+      fork_skill_id INTEGER NOT NULL,
+      forked_by_user_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (original_skill_id) REFERENCES skills(id),
+      FOREIGN KEY (fork_skill_id) REFERENCES skills(id),
+      UNIQUE(original_skill_id, fork_skill_id)
+    );
+  `);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_skill_forks_original ON skill_forks(original_skill_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_skill_forks_fork ON skill_forks(fork_skill_id)');
+
+  // Create skill_ownership_claims table for Phase 4: Ownership Verification
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS skill_ownership_claims (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      skill_id INTEGER NOT NULL,
+      claimant_user_id TEXT NOT NULL,
+      github_username TEXT,
+      marketplace_user_id TEXT,
+      verified INTEGER DEFAULT 0,
+      verification_code TEXT,
+      verified_at TEXT,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (skill_id) REFERENCES skills(id),
+      UNIQUE(skill_id, claimant_user_id)
+    );
+  `);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_skill_ownership_claims_skill ON skill_ownership_claims(skill_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_skill_ownership_claims_claimant ON skill_ownership_claims(claimant_user_id)');
+
   console.log('Database initialized at:', dbPath);
 }
 
@@ -2210,6 +2314,321 @@ function detachDocumentFromSkill(skillId, documentId) {
   return db.prepare('DELETE FROM skill_documents WHERE skill_id = ? AND document_id = ?').run(skillId, documentId).changes > 0;
 }
 
+// Phase 1: Skill Origin & Attribution
+function updateSkillOrigin(skillId, originData, ownerId = 'owner') {
+  const owner = normalizeOwnerId(ownerId);
+  const skill = getSkillById(skillId, owner);
+  if (!skill) return null;
+  
+  const now = new Date().toISOString();
+  const {
+    origin_type,
+    origin_source_id,
+    origin_owner,
+    origin_owner_type,
+    is_fork,
+    upstream_owner,
+    upstream_repo_url,
+    license
+  } = originData;
+  
+  db.prepare(`
+    UPDATE skills SET
+      origin_type = COALESCE(?, origin_type),
+      origin_source_id = COALESCE(?, origin_source_id),
+      origin_owner = COALESCE(?, origin_owner),
+      origin_owner_type = COALESCE(?, origin_owner_type),
+      is_fork = COALESCE(?, is_fork),
+      upstream_owner = COALESCE(?, upstream_owner),
+      upstream_repo_url = COALESCE(?, upstream_repo_url),
+      license = COALESCE(?, license),
+      updated_at = ?
+    WHERE id = ? AND owner_id = ?
+  `).run(
+    origin_type,
+    origin_source_id,
+    origin_owner,
+    origin_owner_type,
+    is_fork !== undefined ? (is_fork ? 1 : 0) : null,
+    upstream_owner,
+    upstream_repo_url,
+    license,
+    now,
+    skillId,
+    owner
+  );
+  
+  return getSkillById(skillId, owner);
+}
+
+// Phase 2: Skill Versioning & Immutability
+function createSkillVersion(skillId, versionNumber, contentHash, creatorId, releaseNotes, scriptContent, configJson, ownerId = 'owner') {
+  const owner = normalizeOwnerId(ownerId);
+  const skill = getSkillById(skillId, owner);
+  if (!skill) return null;
+  
+  const now = new Date().toISOString();
+  const configStr = typeof configJson === 'object' ? JSON.stringify(configJson) : configJson;
+  
+  const stmt = db.prepare(`
+    INSERT INTO skill_versions (skill_id, version_number, content_hash, created_at, creator_id, release_notes, script_content, config_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  
+  const result = stmt.run(skillId, versionNumber, contentHash, now, creatorId, releaseNotes || null, scriptContent || null, configStr || null);
+  
+  // Update skill to reference this version
+  db.prepare(`
+    UPDATE skills SET version = ?, updated_at = ?, published_at = COALESCE(published_at, ?)
+    WHERE id = ? AND owner_id = ?
+  `).run(versionNumber, now, now, skillId, owner);
+  
+  return {
+    id: result.lastInsertRowid,
+    skillId,
+    versionNumber,
+    contentHash,
+    createdAt: now,
+    creatorId,
+    releaseNotes
+  };
+}
+
+function getSkillVersions(skillId, ownerId = 'owner') {
+  const owner = normalizeOwnerId(ownerId);
+  return db.prepare(`
+    SELECT sv.id, sv.skill_id, sv.version_number, sv.content_hash, sv.created_at, sv.creator_id, sv.release_notes
+    FROM skill_versions sv
+    JOIN skills s ON sv.skill_id = s.id
+    WHERE sv.skill_id = ? AND s.owner_id = ?
+    ORDER BY sv.created_at DESC
+  `).all(skillId, owner).map(row => ({
+    id: row.id,
+    skillId: row.skill_id,
+    versionNumber: row.version_number,
+    contentHash: row.content_hash,
+    createdAt: row.created_at,
+    creatorId: row.creator_id,
+    releaseNotes: row.release_notes
+  }));
+}
+
+function getSkillVersion(skillId, versionNumber, ownerId = 'owner') {
+  const owner = normalizeOwnerId(ownerId);
+  const row = db.prepare(`
+    SELECT sv.id, sv.skill_id, sv.version_number, sv.content_hash, sv.created_at, sv.creator_id, sv.release_notes, sv.script_content, sv.config_json
+    FROM skill_versions sv
+    JOIN skills s ON sv.skill_id = s.id
+    WHERE sv.skill_id = ? AND sv.version_number = ? AND s.owner_id = ?
+  `).get(skillId, versionNumber, owner);
+  
+  if (!row) return null;
+  
+  return {
+    id: row.id,
+    skillId: row.skill_id,
+    versionNumber: row.version_number,
+    contentHash: row.content_hash,
+    createdAt: row.created_at,
+    creatorId: row.creator_id,
+    releaseNotes: row.release_notes,
+    scriptContent: row.script_content,
+    configJson: row.config_json ? (() => { try { return JSON.parse(row.config_json); } catch { return row.config_json; } })() : null
+  };
+}
+
+// Phase 3: Fork & Derivative Tracking
+function createSkillFork(originalSkillId, newSkillId, forkedByUserId, ownerId = 'owner') {
+  const owner = normalizeOwnerId(ownerId);
+  const skill = getSkillById(newSkillId, owner);
+  if (!skill) return null;
+  
+  const now = new Date().toISOString();
+  const stmt = db.prepare(`
+    INSERT INTO skill_forks (original_skill_id, fork_skill_id, forked_by_user_id, created_at)
+    VALUES (?, ?, ?, ?)
+  `);
+  
+  const result = stmt.run(originalSkillId, newSkillId, forkedByUserId, now);
+  
+  // Update the fork skill with fork information
+  const originalSkill = db.prepare('SELECT * FROM skills WHERE id = ?').get(originalSkillId);
+  if (originalSkill) {
+    db.prepare(`
+      UPDATE skills SET
+        is_fork = 1,
+        upstream_owner = ?,
+        upstream_repo_url = ?
+      WHERE id = ? AND owner_id = ?
+    `).run(originalSkill.origin_owner || originalSkill.author, null, newSkillId, owner);
+  }
+  
+  return {
+    id: result.lastInsertRowid,
+    originalSkillId,
+    forkSkillId: newSkillId,
+    forkedByUserId,
+    createdAt: now
+  };
+}
+
+function getSkillForks(skillId) {
+  return db.prepare(`
+    SELECT id, original_skill_id, fork_skill_id, forked_by_user_id, created_at
+    FROM skill_forks
+    WHERE original_skill_id = ?
+    ORDER BY created_at DESC
+  `).all(skillId).map(row => ({
+    id: row.id,
+    originalSkillId: row.original_skill_id,
+    forkSkillId: row.fork_skill_id,
+    forkedByUserId: row.forked_by_user_id,
+    createdAt: row.created_at
+  }));
+}
+
+function getSkillForkInfo(skillId) {
+  const row = db.prepare(`
+    SELECT original_skill_id, forked_by_user_id, created_at
+    FROM skill_forks
+    WHERE fork_skill_id = ?
+  `).get(skillId);
+  
+  if (!row) return null;
+  return {
+    originalSkillId: row.original_skill_id,
+    forkedByUserId: row.forked_by_user_id,
+    createdAt: row.created_at
+  };
+}
+
+// Phase 4: License System
+function getLicenses() {
+  return db.prepare(`
+    SELECT id, license_name, description, can_fork, can_sell, can_modify, attribution_required
+    FROM skill_licenses
+    ORDER BY license_name
+  `).all().map(row => ({
+    id: row.id,
+    licenseName: row.license_name,
+    description: row.description,
+    canFork: Boolean(row.can_fork),
+    canSell: Boolean(row.can_sell),
+    canModify: Boolean(row.can_modify),
+    attributionRequired: Boolean(row.attribution_required)
+  }));
+}
+
+function getLicense(licenseName) {
+  const row = db.prepare(`
+    SELECT id, license_name, description, can_fork, can_sell, can_modify, attribution_required, license_text
+    FROM skill_licenses
+    WHERE license_name = ?
+  `).get(licenseName);
+  
+  if (!row) return null;
+  return {
+    id: row.id,
+    licenseName: row.license_name,
+    description: row.description,
+    canFork: Boolean(row.can_fork),
+    canSell: Boolean(row.can_sell),
+    canModify: Boolean(row.can_modify),
+    attributionRequired: Boolean(row.attribution_required),
+    licenseText: row.license_text
+  };
+}
+
+function validateLicenseOperation(skillLicense, operation) {
+  const license = getLicense(skillLicense);
+  if (!license) return false;
+  
+  switch(operation) {
+    case 'fork': return license.canFork;
+    case 'sell': return license.canSell;
+    case 'modify': return license.canModify;
+    default: return false;
+  }
+}
+
+// Phase 4: Ownership Verification
+function createOwnershipClaim(skillId, claimantUserId, githubUsername = null, marketplaceUserId = null, ownerId = 'owner') {
+  const owner = normalizeOwnerId(ownerId);
+  const skill = getSkillById(skillId, owner);
+  if (!skill) return null;
+  
+  const now = new Date().toISOString();
+  const stmt = db.prepare(`
+    INSERT OR REPLACE INTO skill_ownership_claims (skill_id, claimant_user_id, github_username, marketplace_user_id, created_at)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+  
+  const result = stmt.run(skillId, claimantUserId, githubUsername || null, marketplaceUserId || null, now);
+  
+  return {
+    id: result.lastInsertRowid,
+    skillId,
+    claimantUserId,
+    githubUsername,
+    marketplaceUserId,
+    verified: false,
+    createdAt: now
+  };
+}
+
+function getOwnershipClaim(skillId, claimantUserId, ownerId = 'owner') {
+  const owner = normalizeOwnerId(ownerId);
+  const row = db.prepare(`
+    SELECT soc.id, soc.skill_id, soc.claimant_user_id, soc.github_username, soc.marketplace_user_id, soc.verified, soc.verified_at
+    FROM skill_ownership_claims soc
+    JOIN skills s ON soc.skill_id = s.id
+    WHERE soc.skill_id = ? AND soc.claimant_user_id = ? AND s.owner_id = ?
+  `).get(skillId, claimantUserId, owner);
+  
+  if (!row) return null;
+  return {
+    id: row.id,
+    skillId: row.skill_id,
+    claimantUserId: row.claimant_user_id,
+    githubUsername: row.github_username,
+    marketplaceUserId: row.marketplace_user_id,
+    verified: Boolean(row.verified),
+    verifiedAt: row.verified_at
+  };
+}
+
+function verifyOwnershipClaim(skillId, claimantUserId, ownerId = 'owner') {
+  const owner = normalizeOwnerId(ownerId);
+  const now = new Date().toISOString();
+  
+  const result = db.prepare(`
+    UPDATE skill_ownership_claims
+    SET verified = 1, verified_at = ?
+    WHERE skill_id = ? AND claimant_user_id = ? AND EXISTS (
+      SELECT 1 FROM skills WHERE id = ? AND owner_id = ?
+    )
+  `).run(now, skillId, claimantUserId, skillId, owner);
+  
+  return result.changes > 0;
+}
+
+function getSkillOwnershipClaims(skillId, ownerId = 'owner') {
+  const owner = normalizeOwnerId(ownerId);
+  return db.prepare(`
+    SELECT soc.id, soc.claimant_user_id, soc.github_username, soc.marketplace_user_id, soc.verified, soc.verified_at
+    FROM skill_ownership_claims soc
+    JOIN skills s ON soc.skill_id = s.id
+    WHERE soc.skill_id = ? AND s.owner_id = ?
+  `).all(skillId, owner).map(row => ({
+    id: row.id,
+    claimantUserId: row.claimant_user_id,
+    githubUsername: row.github_username,
+    marketplaceUserId: row.marketplace_user_id,
+    verified: Boolean(row.verified),
+    verifiedAt: row.verified_at
+  }));
+}
+
 // Marketplace
 function _formatListing(row) {
   return {
@@ -3309,6 +3728,25 @@ module.exports = {
   getSkillDocuments,
   attachDocumentToSkill,
   detachDocumentFromSkill,
+  // Skill Origin & Attribution (Phase 1)
+  updateSkillOrigin,
+  // Skill Versioning & Immutability (Phase 2)
+  createSkillVersion,
+  getSkillVersions,
+  getSkillVersion,
+  // Skill Fork & Derivative Tracking (Phase 3)
+  createSkillFork,
+  getSkillForks,
+  getSkillForkInfo,
+  // Skill Licenses (Phase 4)
+  getLicenses,
+  getLicense,
+  validateLicenseOperation,
+  // Skill Ownership Verification (Phase 4)
+  createOwnershipClaim,
+  getOwnershipClaim,
+  verifyOwnershipClaim,
+  getSkillOwnershipClaims,
   // Marketplace
   createMarketplaceListing,
   getPersonaDocuments,
