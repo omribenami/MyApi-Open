@@ -88,7 +88,7 @@ function Layout({ children, onLogout }) {
       label: 'Security',
       items: [
         { path: '/tokens', label: 'Token Vault' },
-        { path: '/access-tokens', label: 'Access Tokens' },
+        { path: '/access-tokens', label: 'Master Tokens' },
         { path: '/devices', label: 'Device Management' },
         { path: '/identity', label: 'Identity' },
       ]

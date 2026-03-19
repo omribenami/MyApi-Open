@@ -353,7 +353,7 @@ function AccessTokens() {
     <div className="space-y-10">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-white">Access Tokens</h1>
+        <h1 className="text-3xl font-bold text-white">Master Tokens</h1>
         <p className="mt-2 text-slate-400">
           Manage your master platform token and generate limited guest tokens for external access
         </p>

@@ -121,7 +121,7 @@ function DashboardHome() {
 
   const statCards = [
     {
-      label: 'Access Tokens',
+      label: 'Master Tokens',
       value: stats.tokens,
       link: '/access-tokens',
       description: 'Master & guest tokens',
@@ -269,7 +269,7 @@ function DashboardHome() {
             <span className="text-blue-400">📚</span> Platform Documentation
           </h2>
           <p className="text-sm text-slate-400 mb-4">
-            Learn how to use MyApi to connect services, build custom AI personas, and manage access tokens.
+            Learn how to use MyApi to connect services, build custom AI personas, and manage master tokens.
           </p>
           <div className="mt-4">
             <Link to="/platform-docs" className="inline-block px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded transition-colors">

@@ -4,7 +4,7 @@ const sections = [
   { id: 'intro', title: 'Introduction' },
   { id: 'services', title: 'Services (OAuth Connectors)' },
   { id: 'vault', title: 'Token Vault' },
-  { id: 'access', title: 'Access Tokens' },
+  { id: 'access', title: 'Master Tokens' },
   { id: 'personas', title: 'Personas' },
   { id: 'skills', title: 'Skills' },
   { id: 'knowledge', title: 'Knowledge Base' },
@@ -127,7 +127,7 @@ function PlatformDocs() {
             </Block>
           </Section>
 
-          <Section id="access" title="Access Tokens">
+          <Section id="access" title="Master Tokens">
             <Block title="Definition">
               <p>Scoped tokens for external clients/agents to use MyApi safely.</p>
             </Block>
