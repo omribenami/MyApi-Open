@@ -49,7 +49,6 @@ function App() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const isInitialized = useAuthStore((state) => state.isInitialized);
   const initialize = useAuthStore((state) => state.initialize);
-  const fetchWorkspaces = useAuthStore((state) => state.fetchWorkspaces);
   const handleLogout = useAuthStore((state) => state.logout);
   const forceUnauthenticated = useAuthStore((state) => state.forceUnauthenticated);
 
@@ -59,12 +58,6 @@ function App() {
   }, [initialize]);
 
   // Load workspaces once authenticated
-  useEffect(() => {
-    if (isAuthenticated && isInitialized) {
-      fetchWorkspaces();
-    }
-  }, [isAuthenticated, isInitialized, fetchWorkspaces]);
-
   useEffect(() => {
     const onAuthExpired = () => forceUnauthenticated();
     window.addEventListener('myapi:auth-expired', onAuthExpired);

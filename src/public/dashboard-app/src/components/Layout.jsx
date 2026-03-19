@@ -6,7 +6,6 @@ import BrandLogo from './BrandLogo';
 import CookieNotice from './CookieNotice';
 import Toast from './Toast';
 import NotificationDropdown from './NotificationDropdown';
-import WorkspaceSwitcher from './WorkspaceSwitcher';
 
 function NavDropdown({ label, items, isActiveFn, onMobileClick }) {
   const [open, setOpen] = useState(false);
@@ -154,9 +153,6 @@ function Layout({ children, onLogout }) {
                 <BrandLogo size="sm" withWordmark={false} className="gap-2" />
                 <span className="text-lg font-semibold tracking-tight text-slate-100">MyApi</span>
               </Link>
-              <div className="hidden sm:block border-l border-slate-700 pl-4 ml-4">
-                <WorkspaceSwitcher />
-              </div>
             </div>
 
             {/* Desktop Navigation */}
