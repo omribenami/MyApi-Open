@@ -9,6 +9,11 @@ const readCookie = (name) => {
   }
 };
 
+// Circuit breaker: prevent endless /auth/me retry loops
+let authMeFailureCount = 0;
+const resetAuthMeFailureCountOnSuccess = () => { authMeFailureCount = 0; };
+const incrementAuthMeFailureCount = () => { authMeFailureCount++; };
+
 export const useAuthStore = create((set) => ({
   user: null,
   masterToken: null,
@@ -19,6 +24,12 @@ export const useAuthStore = create((set) => ({
   error: null,
 
   initialize: async () => {
+    // Circuit breaker: if /auth/me has failed 2+ times, skip remaining attempts
+    if (authMeFailureCount >= 2) {
+      console.warn('[Auth] Circuit breaker active: /auth/me failed', authMeFailureCount, 'times. Initializing unauthenticated.');
+      set({ isInitialized: true });
+      return;
+    }
     let masterToken = null;
     let sessionToken = null;
 
@@ -34,6 +45,7 @@ export const useAuthStore = create((set) => ({
     try {
       const sessionCheckRes = await fetch('/api/v1/auth/me', { credentials: 'include' });
       if (sessionCheckRes.ok) {
+        resetAuthMeFailureCountOnSuccess();
         // Session auth is active. Don't use Bearer token auth.
         try {
           localStorage.removeItem('masterToken');
@@ -42,8 +54,9 @@ export const useAuthStore = create((set) => ({
         set({ masterToken: null, sessionToken: null, isAuthenticated: true, isInitialized: true, error: null });
         return;
       }
-    } catch {
-      // no-op; session check failed, continue with token validation
+      incrementAuthMeFailureCount();
+    } catch (e) {
+      incrementAuthMeFailureCount();
     }
 
     // If we already have a token stored, validate it before trusting local state.
@@ -100,42 +113,47 @@ export const useAuthStore = create((set) => ({
     }
 
     // Session-cookie fallback for OAuth login (e.g. Google/Facebook)
-    // ONLY bootstrap if we don't have a stored token
-    try {
-      const res = await fetch('/api/v1/auth/me', { credentials: 'include' });
-      if (res.ok) {
-        const payload = await res.json();
-        const user = payload?.data || payload;
-        let bootstrapToken = payload?.bootstrap?.masterToken;
+    // ONLY bootstrap if we don't have a stored token and haven't already failed too many times
+    if (authMeFailureCount < 2) {
+      try {
+        const res = await fetch('/api/v1/auth/me', { credentials: 'include' });
+        if (res.ok) {
+          resetAuthMeFailureCountOnSuccess();
+          const payload = await res.json();
+          const user = payload?.data || payload;
+          let bootstrapToken = payload?.bootstrap?.masterToken;
 
-        if (!bootstrapToken) {
-          try {
-            const bootRes = await fetch('/api/v1/tokens/master/bootstrap', { method: 'POST', credentials: 'include' });
-            if (bootRes.ok) {
-              const bootData = await bootRes.json();
-              bootstrapToken = bootData?.data?.token || null;
+          if (!bootstrapToken) {
+            try {
+              const bootRes = await fetch('/api/v1/tokens/master/bootstrap', { method: 'POST', credentials: 'include' });
+              if (bootRes.ok) {
+                const bootData = await bootRes.json();
+                bootstrapToken = bootData?.data?.token || null;
+              }
+            } catch {
+              // no-op
             }
-          } catch {
-            // no-op
           }
-        }
 
-        if (bootstrapToken) {
-          localStorage.setItem('masterToken', bootstrapToken);
+          if (bootstrapToken) {
+            localStorage.setItem('masterToken', bootstrapToken);
+          }
+          set({
+            user,
+            masterToken: bootstrapToken || null,
+            isAuthenticated: true,
+            error: null,
+            isInitialized: true,
+          });
+          return;
         }
-        set({
-          user,
-          masterToken: bootstrapToken || null,
-          isAuthenticated: true,
-          error: null,
-          isInitialized: true,
-        });
-        return;
+        incrementAuthMeFailureCount();
+      } catch {
+        incrementAuthMeFailureCount();
       }
-    } catch {
-      // no-op
     }
 
+    console.log('[Auth] Initialization complete (unauthenticated)');
     set({ isInitialized: true });
   },
 
