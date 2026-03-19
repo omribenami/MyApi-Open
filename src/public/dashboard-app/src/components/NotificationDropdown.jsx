@@ -19,6 +19,7 @@ function NotificationDropdown({ open, onClose }) {
   const [offset, setOffset] = useState(0);
   const [displayLimit, setDisplayLimit] = useState(15);
   const [hasMore, setHasMore] = useState(false);
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
 
   useEffect(() => {
     if (open && masterToken) {
@@ -26,6 +27,14 @@ function NotificationDropdown({ open, onClose }) {
       setOffset(0);
     }
   }, [open, masterToken, fetchNotifications, displayLimit]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     // Check if there are more notifications to load
@@ -97,22 +106,23 @@ function NotificationDropdown({ open, onClose }) {
     <div
       ref={dropdownRef}
       className="rounded-xl border border-slate-700 bg-slate-900 shadow-2xl flex flex-col z-50 overflow-hidden"
-      style={{
+      style={isMobile ? {
+        // Mobile: full screen width with padding, positioned below navbar
+        position: 'fixed',
+        top: '64px',
+        left: '8px',
+        right: '8px',
+        width: 'auto',
+        maxHeight: '500px',
+        maxWidth: 'calc(100vw - 16px)',
+      } : {
+        // Desktop: right-aligned to bell icon, constrained width
         position: 'absolute',
         top: '100%',
         right: '0px',
         width: '384px',
         maxHeight: '500px',
         marginTop: '8px',
-        // Mobile responsive: use fixed positioning and full width
-        ...(typeof window !== 'undefined' && window.innerWidth < 768 ? {
-          position: 'fixed',
-          top: '64px',
-          left: '8px',
-          right: '8px',
-          width: 'auto',
-          maxWidth: 'calc(100vw - 16px)',
-        } : {})
       }}
     >
       {/* Header */}
