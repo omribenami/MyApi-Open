@@ -592,6 +592,11 @@ function initDatabase() {
   try { db.exec("ALTER TABLE users ADD COLUMN totp_secret TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE users ADD COLUMN two_factor_enabled INTEGER DEFAULT 0"); } catch (e) {}
 
+  // Signup wizard profile/onboarding columns
+  try { db.exec("ALTER TABLE users ADD COLUMN onboarding_completed INTEGER DEFAULT 0"); } catch (e) {}
+  try { db.exec("ALTER TABLE users ADD COLUMN preferred_name TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE users ADD COLUMN bio TEXT"); } catch (e) {}
+
   // Phase 5 migrations: Token encryption key rotation, rate limiting, audit logs
   try { db.exec("ALTER TABLE oauth_tokens ADD COLUMN key_version INTEGER DEFAULT 1"); } catch (e) {}
   try { db.exec("ALTER TABLE oauth_tokens ADD COLUMN last_api_call TEXT"); } catch (e) {}
@@ -1178,11 +1183,18 @@ function getUserById(id) {
   const hasStripeCustomerId = cols.has('stripe_customer_id');
   const hasStripeSubscriptionId = cols.has('stripe_subscription_id');
   const hasTwoFactorEnabled = cols.has('two_factor_enabled');
+  const hasOnboardingCompleted = cols.has('onboarding_completed');
+  const hasPreferredName = cols.has('preferred_name');
+  const hasBio = cols.has('bio');
 
-  const stmt = db.prepare(`SELECT id, username, display_name as displayName, email, avatar_url as avatarUrl, timezone, ${hasTwoFactorEnabled ? 'COALESCE(two_factor_enabled, 0)' : '0'} as twoFactorEnabled, created_at as createdAt, status, ${hasPlan ? "COALESCE(plan, 'free')" : "'free'"} as plan, ${hasStripeStatus ? 'stripe_subscription_status' : 'NULL'} as stripeSubscriptionStatus, ${hasStripeCustomerId ? 'stripe_customer_id' : 'NULL'} as stripeCustomerId, ${hasStripeSubscriptionId ? 'stripe_subscription_id' : 'NULL'} as stripeSubscriptionId FROM users WHERE id = ?`);
+  const stmt = db.prepare(`SELECT id, username, display_name as displayName, email, avatar_url as avatarUrl, timezone, ${hasTwoFactorEnabled ? 'COALESCE(two_factor_enabled, 0)' : '0'} as twoFactorEnabled, ${hasOnboardingCompleted ? 'COALESCE(onboarding_completed, 0)' : '0'} as onboardingCompleted, ${hasPreferredName ? 'preferred_name' : 'NULL'} as preferredName, ${hasBio ? 'bio' : 'NULL'} as bio, created_at as createdAt, status, ${hasPlan ? "COALESCE(plan, 'free')" : "'free'"} as plan, ${hasStripeStatus ? 'stripe_subscription_status' : 'NULL'} as stripeSubscriptionStatus, ${hasStripeCustomerId ? 'stripe_customer_id' : 'NULL'} as stripeCustomerId, ${hasStripeSubscriptionId ? 'stripe_subscription_id' : 'NULL'} as stripeSubscriptionId FROM users WHERE id = ?`);
   const u = stmt.get(id);
   if (!u) return null;
-  return { ...u, twoFactorEnabled: Boolean(u.twoFactorEnabled) };
+  return {
+    ...u,
+    twoFactorEnabled: Boolean(u.twoFactorEnabled),
+    onboardingCompleted: Boolean(u.onboardingCompleted),
+  };
 }
 
 function updateUserPlan(userId, plan) {
@@ -1203,6 +1215,25 @@ function updateUserOAuthProfile(userId, { displayName, email, avatarUrl } = {}) 
   const nextEmail = (email || '').trim() || current.email || null;
   const nextAvatar = (avatarUrl || '').trim() || current.avatarUrl || null;
   db.prepare('UPDATE users SET display_name = ?, email = ?, avatar_url = ? WHERE id = ?').run(nextDisplay, nextEmail, nextAvatar, userId);
+  return getUserById(userId);
+}
+
+function updateUserOnboardingProfile(userId, { displayName, preferredName, timezone, bio, onboardingCompleted } = {}) {
+  const current = getUserById(userId);
+  if (!current) return null;
+
+  const nextDisplay = (displayName || '').trim() || current.displayName || current.username;
+  const nextPreferred = (preferredName || '').trim() || null;
+  const nextTimezone = (timezone || '').trim() || current.timezone || 'UTC';
+  const nextBio = (bio || '').trim() || null;
+  const completed = onboardingCompleted ? 1 : 0;
+
+  db.prepare(`
+    UPDATE users
+    SET display_name = ?, preferred_name = ?, timezone = ?, bio = ?, onboarding_completed = ?
+    WHERE id = ?
+  `).run(nextDisplay, nextPreferred, nextTimezone, nextBio, completed, userId);
+
   return getUserById(userId);
 }
 
@@ -4036,6 +4067,7 @@ module.exports = {
   getUserById,
   updateUserPlan,
   updateUserOAuthProfile,
+  updateUserOnboardingProfile,
   updateUserSubscriptionStatus,
   getUserTotpSecret,
   setUserTotpSecret,

@@ -6,6 +6,8 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 
 const router = express.Router();
 
@@ -264,9 +266,12 @@ router.get('/me', (req, res) => {
         id: user.id,
         email: user.email,
         username: user.username,
-        displayName: user.display_name,
-        avatarUrl: user.avatar_url,
+        displayName: user.displayName || user.display_name,
+        avatarUrl: user.avatarUrl || user.avatar_url,
+        preferredName: user.preferredName || null,
         timezone: user.timezone,
+        bio: user.bio || null,
+        onboardingCompleted: Boolean(user.onboardingCompleted),
         plan: user.plan,
       },
       isFirstLogin
@@ -274,6 +279,72 @@ router.get('/me', (req, res) => {
   } catch (error) {
     console.error('Get user error:', error);
     res.status(500).json({ error: 'Failed to get user' });
+  }
+});
+
+router.post('/signup/complete', (req, res) => {
+  try {
+    const userId = req.session?.user?.id;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const {
+      displayName,
+      preferredName,
+      timezone,
+      bio,
+      userMdContent,
+      soulMdContent,
+    } = req.body || {};
+
+    if (!displayName || !String(displayName).trim()) {
+      return res.status(400).json({ error: 'displayName is required' });
+    }
+
+    const { getUserById, updateUserOnboardingProfile } = require('../database');
+    const user = getUserById(String(userId));
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const workspaceRoot = process.env.USER_WORKSPACES_ROOT
+      ? path.resolve(process.env.USER_WORKSPACES_ROOT)
+      : path.resolve(process.cwd(), 'src/data/user-workspaces');
+    const userDir = path.join(workspaceRoot, String(userId));
+    fs.mkdirSync(userDir, { recursive: true });
+
+    const safeWrite = (fileName, content) => {
+      const filePath = path.join(userDir, fileName);
+      if (fs.existsSync(filePath)) {
+        const backupPath = `${filePath}.bak-${Date.now()}`;
+        fs.copyFileSync(filePath, backupPath);
+      }
+      fs.writeFileSync(filePath, String(content || '').trim() + '\n', 'utf8');
+      return filePath;
+    };
+
+    const userFilePath = safeWrite('USER.md', userMdContent || '');
+    const soulFilePath = safeWrite('SOUL.md', soulMdContent || '');
+
+    const updatedUser = updateUserOnboardingProfile(String(userId), {
+      displayName,
+      preferredName,
+      timezone,
+      bio,
+      onboardingCompleted: true,
+    });
+
+    if (!updatedUser) {
+      return res.status(500).json({ error: 'Failed to update user profile' });
+    }
+
+    req.session.isFirstLogin = false;
+
+    return res.json({
+      success: true,
+      user: updatedUser,
+      files: { userFilePath, soulFilePath },
+    });
+  } catch (error) {
+    console.error('Signup completion error:', error);
+    return res.status(500).json({ error: 'Failed to complete signup' });
   }
 });
 
