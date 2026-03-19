@@ -899,6 +899,7 @@ function authenticate(req, res, next) {
     /^\/api\/v1\/auth\/login/,
     /^\/api\/v1\/auth\/signup/,
     /^\/api\/v1\/auth\/me/,
+    /^\/api\/v1\/auth\/2fa\/challenge/,
     /^\/api\/v1\/billing\/plans/,
     /^\/oauth\//,
   ];
