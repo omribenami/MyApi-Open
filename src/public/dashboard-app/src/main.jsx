@@ -11,6 +11,14 @@ if (typeof window !== 'undefined') {
   const RECOVERY_COUNT_KEY = '__myapi_corruption_recovery_count__';
 
   const recoverFromCorruption = () => {
+    // Hard runtime guard: if browser storage itself is corrupted/unavailable,
+    // sessionStorage-based guards may fail and cause infinite reload loops.
+    if (window.__myapiCorruptionRecovered) {
+      console.warn('[MyApi] Corruption detected again; auto-reload disabled to prevent loop.');
+      return;
+    }
+    window.__myapiCorruptionRecovered = true;
+
     try {
       const now = Date.now();
       const lastTs = Number(sessionStorage.getItem(RECOVERY_TS_KEY) || 0);
