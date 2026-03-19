@@ -23,6 +23,7 @@ import MyListings from './pages/MyListings';
 import Skills from './pages/Skills';
 import DeviceManagement from './pages/DeviceManagement';
 import ActivityLog from './pages/ActivityLog';
+import TeamSettings from './pages/TeamSettings';
 import Layout from './components/Layout';
 
 // Create React Query client
@@ -51,6 +52,7 @@ function App() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const isInitialized = useAuthStore((state) => state.isInitialized);
   const initialize = useAuthStore((state) => state.initialize);
+  const fetchWorkspaces = useAuthStore((state) => state.fetchWorkspaces);
   const handleLogout = useAuthStore((state) => state.logout);
   const forceUnauthenticated = useAuthStore((state) => state.forceUnauthenticated);
 
@@ -58,6 +60,13 @@ function App() {
   useEffect(() => {
     initialize();
   }, [initialize]);
+
+  // Load workspaces once authenticated
+  useEffect(() => {
+    if (isAuthenticated && isInitialized) {
+      fetchWorkspaces();
+    }
+  }, [isAuthenticated, isInitialized, fetchWorkspaces]);
 
   useEffect(() => {
     const onAuthExpired = () => forceUnauthenticated();
@@ -220,6 +229,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <ActivityLog />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings/team"
+              element={
+                <ProtectedRoute>
+                  <TeamSettings />
                 </ProtectedRoute>
               }
             />

@@ -35,6 +35,10 @@ export const useAuthStore = create((set, get) => ({
   isLoading: false,
   isInitialized: false,
   error: null,
+  // Phase 1: Workspaces & Multi-Tenancy
+  workspaces: [],
+  currentWorkspace: null,
+  workspacesLoading: false,
 
   initialize: async () => {
     if (initializePromise) return initializePromise;
@@ -217,4 +221,70 @@ export const useAuthStore = create((set, get) => ({
   startOAuthFlow: () => set({ isLoading: true }),
   completeOAuthFlow: () => set({ isLoading: false }),
   clearError: () => set({ error: null }),
+
+  // Phase 1: Workspaces & Multi-Tenancy
+  fetchWorkspaces: async () => {
+    set({ workspacesLoading: true });
+    try {
+      const response = await fetch('/api/v1/workspaces', {
+        credentials: 'include',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const workspaces = data.workspaces || [];
+        let currentWorkspace = null;
+
+        try {
+          const stored = localStorage.getItem('currentWorkspace');
+          if (stored) {
+            currentWorkspace = workspaces.find(w => w.id === stored);
+          }
+        } catch {}
+
+        if (!currentWorkspace && workspaces.length > 0) {
+          currentWorkspace = workspaces[0];
+        }
+
+        set({ workspaces, currentWorkspace, workspacesLoading: false });
+        return { success: true, workspaces };
+      }
+      set({ workspacesLoading: false });
+      return { success: false, error: 'Failed to fetch workspaces' };
+    } catch (error) {
+      set({ workspacesLoading: false });
+      return { success: false, error: error.message };
+    }
+  },
+
+  switchWorkspace: async (workspaceId) => {
+    try {
+      const response = await fetch(`/api/v1/workspace-switch/${workspaceId}`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const workspace = data.workspace;
+        try {
+          localStorage.setItem('currentWorkspace', workspaceId);
+        } catch {}
+        set({ currentWorkspace: workspace });
+        return { success: true, workspace };
+      }
+      return { success: false, error: 'Failed to switch workspace' };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  },
+
+  setCurrentWorkspace: (workspace) => {
+    try {
+      if (workspace) {
+        localStorage.setItem('currentWorkspace', workspace.id);
+      } else {
+        localStorage.removeItem('currentWorkspace');
+      }
+    } catch {}
+    set({ currentWorkspace: workspace });
+  },
 }));

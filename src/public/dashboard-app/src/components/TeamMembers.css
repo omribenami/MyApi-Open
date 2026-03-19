@@ -1,0 +1,179 @@
+/* TeamMembers Styles */
+
+.team-members {
+  margin-top: 20px;
+}
+
+.members-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  border: 1px solid #eee;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.members-table thead {
+  background-color: #f5f5f5;
+}
+
+.members-table th {
+  padding: 12px 16px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 13px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 2px solid #eee;
+}
+
+.members-table tbody tr {
+  border-bottom: 1px solid #eee;
+  transition: background-color 0.2s ease;
+}
+
+.members-table tbody tr:hover {
+  background-color: #fafafa;
+}
+
+.members-table tbody tr.current {
+  background-color: #f9f9ff;
+}
+
+.members-table td {
+  padding: 14px 16px;
+  font-size: 14px;
+  color: #333;
+}
+
+.member-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 500;
+}
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 50%;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  background-color: #e8f0fe;
+  color: #667eea;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  margin-left: 8px;
+}
+
+.member-email {
+  color: #999;
+  font-size: 13px;
+}
+
+.member-role {
+  font-weight: 500;
+}
+
+.role-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.role-badge.owner {
+  background-color: #fff3cd;
+  color: #856404;
+}
+
+.role-badge.admin {
+  background-color: #e8f0fe;
+  color: #667eea;
+}
+
+.role-badge.member {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+}
+
+.role-badge.viewer {
+  background-color: #f5f5f5;
+  color: #666;
+}
+
+.member-role select {
+  padding: 6px 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.member-joined {
+  color: #999;
+  font-size: 13px;
+}
+
+.member-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.action-button {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.action-button.edit {
+  background-color: #e8f0fe;
+  color: #667eea;
+}
+
+.action-button.edit:hover {
+  background-color: #d4e4f7;
+}
+
+.action-button.delete {
+  background-color: #fee;
+  color: #c33;
+}
+
+.action-button.delete:hover {
+  background-color: #fdd;
+}
+
+.action-button.save {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+}
+
+.action-button.save:hover {
+  background-color: #c8e6c9;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px;
+  color: #999;
+}
