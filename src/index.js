@@ -3709,6 +3709,15 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
   return res.redirect(authUrl);
 });
 
+// Catch incomplete OAuth callbacks (e.g., /api/v1/oauth without :service)
+// and provide helpful error message
+app.get(["/api/v1/oauth", "/oauth"], (req, res) => {
+  return res.status(400).json({ 
+    error: "OAuth callback incomplete - missing service parameter",
+    hint: "Expected /api/v1/oauth/callback/:service (e.g., /api/v1/oauth/callback/google)"
+  });
+});
+
 // GET /api/v1/oauth/callback/:service — Handle OAuth callback
 // Also support legacy/public callback paths to avoid provider-side 404s when
 // an app is configured without the /api/v1 prefix.
