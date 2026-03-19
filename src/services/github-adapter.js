@@ -97,10 +97,10 @@ class GitHubAdapter {
   }
 
   async verifyToken(token) {
-    return new Promise((resolve, reject) => {
+    const requestJson = (path) => new Promise((resolve, reject) => {
       const options = {
         hostname: 'api.github.com',
-        path: '/user',
+        path,
         method: 'GET',
         headers: {
           'Authorization': `token ${token}`,
@@ -114,21 +114,44 @@ class GitHubAdapter {
         res.on('data', chunk => data += chunk);
         res.on('end', () => {
           try {
-            const result = JSON.parse(data);
-            resolve({
-              valid: res.statusCode === 200 && !result.message,
-              error: result.message || null,
-              data: result
-            });
+            resolve({ statusCode: res.statusCode, body: JSON.parse(data || '{}') });
           } catch (e) {
-            resolve({ valid: false, error: e.message });
+            reject(e);
           }
         });
       });
 
-      req.on('error', (e) => resolve({ valid: false, error: e.message }));
+      req.on('error', reject);
       req.end();
     });
+
+    try {
+      const userResp = await requestJson('/user');
+      const user = userResp.body || {};
+      if (userResp.statusCode !== 200 || user.message) {
+        return { valid: false, error: user.message || 'GitHub token invalid', data: user };
+      }
+
+      // GitHub may omit email on /user when it's private; fetch primary email explicitly.
+      if (!user.email) {
+        try {
+          const emailResp = await requestJson('/user/emails');
+          const emails = Array.isArray(emailResp.body) ? emailResp.body : [];
+          const primary = emails.find(e => e && e.primary) || emails.find(e => e && e.verified) || emails[0];
+          if (primary?.email) user.email = primary.email;
+        } catch (_) {
+          // best effort; keep user payload even without email
+        }
+      }
+
+      return {
+        valid: true,
+        error: null,
+        data: user
+      };
+    } catch (e) {
+      return { valid: false, error: e.message };
+    }
   }
 }
 
