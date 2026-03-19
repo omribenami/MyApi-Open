@@ -44,6 +44,7 @@ const SERVICE_ENV_REQUIREMENTS = {
 
 const AUTH_TYPE_STYLES = {
   oauth2: 'bg-indigo-500/15 text-indigo-300 border border-indigo-400/40',
+  oauth: 'bg-indigo-500/15 text-indigo-300 border border-indigo-400/40',
   token: 'bg-sky-500/15 text-sky-300 border border-sky-400/40',
   key: 'bg-cyan-500/15 text-cyan-300 border border-cyan-400/40',
   webhook: 'bg-purple-500/15 text-purple-300 border border-purple-400/40',
@@ -72,13 +73,39 @@ function toDisplayLabel(value, fallback = null) {
 
 const KNOWN_STATUS = new Set(['connected', 'pending', 'error', 'disconnected']);
 
+const OAUTH_SERVICES = new Set([
+  'google', 'github', 'facebook', 'instagram', 'tiktok', 'twitter', 'reddit',
+  'linkedin', 'slack', 'discord', 'whatsapp', 'notion', 'gitlab', 'bitbucket', 'telegram'
+]);
+
+const API_ROOT_FALLBACKS = {
+  google: 'https://www.googleapis.com',
+  github: 'https://api.github.com',
+  facebook: 'https://graph.facebook.com',
+  instagram: 'https://graph.instagram.com',
+  tiktok: 'https://open.tiktokapis.com',
+  twitter: 'https://api.twitter.com/2',
+  reddit: 'https://oauth.reddit.com',
+  linkedin: 'https://api.linkedin.com/v2',
+  slack: 'https://slack.com/api',
+  discord: 'https://discord.com/api/v10',
+  notion: 'https://api.notion.com/v1',
+};
+
 function normalizeStatus(status) {
   const normalized = String(status || '').trim().toLowerCase();
   return KNOWN_STATUS.has(normalized) ? normalized : 'disconnected';
 }
 
-export function formatAuthTypeLabel(authType) {
+function inferAuthType(serviceName, authType) {
   const normalized = typeof authType === 'string' ? authType.trim().toLowerCase() : '';
+  if (normalized) return normalized;
+  if (OAUTH_SERVICES.has(String(serviceName || '').toLowerCase())) return 'oauth2';
+  return '';
+}
+
+export function formatAuthTypeLabel(authType, serviceName = '') {
+  const normalized = inferAuthType(serviceName, authType);
   if (!normalized) return 'Auth Unspecified';
 
   const labels = {
@@ -102,8 +129,8 @@ export function formatCategoryLabel(category, categoryLabel) {
 export function normalizeService(rawService, oauthMeta) {
   const serviceName = rawService.name || rawService.service || 'unknown';
   const label = rawService.label || toDisplayLabel(serviceName, serviceName);
-  const authType = rawService.auth_type || rawService.authType || null;
-  const apiEndpoint = rawService.api_endpoint || rawService.apiEndpoint || null;
+  const inferredAuthType = inferAuthType(serviceName, rawService.auth_type || rawService.authType || null);
+  const apiEndpoint = rawService.api_endpoint || rawService.apiEndpoint || API_ROOT_FALLBACKS[String(serviceName).toLowerCase()] || null;
   const documentationUrl = rawService.documentation_url || rawService.documentationUrl || null;
   const category = rawService.category_name || rawService.categoryName || rawService.category || null;
   const categoryLabel = formatCategoryLabel(category, rawService.category_label || rawService.categoryLabel);
@@ -113,8 +140,8 @@ export function normalizeService(rawService, oauthMeta) {
     label,
     icon: getServiceLogo({ ...rawService, name: serviceName }),
     description: rawService.description || `Connect to ${label}`,
-    auth_type: authType,
-    auth_type_label: formatAuthTypeLabel(authType),
+    auth_type: inferredAuthType || null,
+    auth_type_label: formatAuthTypeLabel(inferredAuthType, serviceName),
     api_endpoint: apiEndpoint,
     documentation_url: documentationUrl,
     category,
