@@ -912,7 +912,16 @@ function adminOnly(req, res, next) {
 }
 
 function getOAuthUserId(req) {
-  return req?.session?.user?.id ? String(req.session.user.id) : 'oauth_user';
+  // Check session auth first (OAuth browser login)
+  if (req?.session?.user?.id) {
+    return String(req.session.user.id);
+  }
+  // Check Bearer token auth (API access)
+  if (req?.tokenMeta?.ownerId) {
+    return String(req.tokenMeta.ownerId);
+  }
+  // Fallback (shouldn't happen if authenticate() worked)
+  return 'oauth_user';
 }
 
 // Register notification system routes (after authenticate is defined)
