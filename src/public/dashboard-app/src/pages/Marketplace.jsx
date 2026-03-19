@@ -407,6 +407,7 @@ function ListingCard({ listing, onClick, isInstalled = false }) {
 export default function Marketplace() {
   const masterToken = useAuthStore(s => s.masterToken);
   const [listings, setListings] = useState([]);
+  const [installedSkillListingIds, setInstalledSkillListingIds] = useState(() => new Set());
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
@@ -436,6 +437,34 @@ export default function Marketplace() {
     const t = setTimeout(fetchListings, search ? 300 : 0);
     return () => clearTimeout(t);
   }, [fetchListings]);
+
+  const fetchInstalledSkills = useCallback(async () => {
+    if (!masterToken) {
+      setInstalledSkillListingIds(new Set());
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/v1/skills', {
+        headers: { 'Authorization': `Bearer ${masterToken}` },
+      });
+      if (!res.ok) return;
+      const payload = await res.json();
+      const ids = (payload.data || [])
+        .map((s) => {
+          const cfg = s.config_json && typeof s.config_json === 'object' ? s.config_json : null;
+          return cfg?.marketplace_listing_id ? String(cfg.marketplace_listing_id) : null;
+        })
+        .filter(Boolean);
+      setInstalledSkillListingIds(new Set(ids));
+    } catch {
+      // ignore non-critical installed-state failures
+    }
+  }, [masterToken]);
+
+  useEffect(() => {
+    fetchInstalledSkills();
+  }, [fetchInstalledSkills]);
 
   const tabs = [
     { id: 'all', label: 'All' },
