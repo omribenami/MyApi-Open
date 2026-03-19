@@ -227,7 +227,7 @@ function toErrorMessage(value, fallback = 'Service execution failed') {
 }
 
 function normalizeExecutionError(error, serviceName, methodName) {
-  const message = toErrorMessage(error?.message ?? error, 'Service execution failed');
+  const message = toErrorMessage(error?.providerError ?? error?.message ?? error, 'Service execution failed');
   return {
     ok: false,
     service: serviceName,
@@ -238,6 +238,7 @@ function normalizeExecutionError(error, serviceName, methodName) {
       code: error?.code || 'INTEGRATION_ERROR',
       message,
       retryable: !error?.statusCode || error.statusCode === 429 || error.statusCode >= 500,
+      providerError: error?.providerError || null,
     },
     meta: {
       timestamp: new Date().toISOString(),
@@ -337,8 +338,14 @@ async function executeServiceMethod({ serviceDef, method, params = {}, token = n
       });
 
       if (result.statusCode >= 400) {
-        const error = new Error(typeof result.data === 'object' ? (result.data.message || result.data.error || JSON.stringify(result.data)) : result.data);
+        const providerError = (result.data && typeof result.data === 'object')
+          ? (result.data.error ?? result.data.message ?? result.data)
+          : result.data;
+
+        const error = new Error(toErrorMessage(providerError, 'Service execution failed'));
         error.statusCode = result.statusCode;
+        error.code = result.data?.code || 'PROVIDER_ERROR';
+        error.providerError = providerError;
         throw error;
       }
 
