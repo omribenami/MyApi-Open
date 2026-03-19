@@ -891,11 +891,13 @@ function authenticate(req, res, next) {
   // still needs to approve the device fingerprint before accessing protected APIs.
   // Exceptions: auth setup routes, device management, OAuth flows, user management (already protected by requirePowerUser),
   // and read-only activity don't require approval.
-  const skipDeviceApproval = req.path.startsWith('/api/v1/auth/') || 
-                             req.path.startsWith('/api/v1/devices') ||
-                             req.path.startsWith('/api/v1/oauth/') ||
-                             req.path.startsWith('/api/v1/users') ||
-                             (req.path.startsWith('/api/v1/activity') && req.method === 'GET');
+  // Use req.baseUrl to get the full path (req.path is relative to mount point)
+  const fullPath = req.baseUrl + req.path;
+  const skipDeviceApproval = fullPath.startsWith('/api/v1/auth/') || 
+                             fullPath.startsWith('/api/v1/devices') ||
+                             fullPath.startsWith('/api/v1/oauth/') ||
+                             fullPath.startsWith('/api/v1/users') ||
+                             (fullPath.startsWith('/api/v1/activity') && req.method === 'GET');
   
   if (skipDeviceApproval) {
     return next();
