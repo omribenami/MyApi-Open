@@ -3774,15 +3774,19 @@ app.get([
 app.get("/api/v1/oauth/status", (req, res) => {
   const statuses = getOAuthStatus();
   
+  // Get user ID for token lookup
+  const userId = req.session?.user?.id ? String(req.session.user.id) : (req.tokenMeta?.ownerId ? String(req.tokenMeta.ownerId) : null);
+  
   const services = OAUTH_SERVICES.map(service => {
     const status = statuses.find(s => s.serviceName === service);
-    // Only show tokens for authenticated users
-    const userId = req.session?.user?.id ? String(req.session.user.id) : (req.tokenMeta?.ownerId ? String(req.tokenMeta.ownerId) : null);
+    // Check if user has an active token for this service
     const token = userId ? getOAuthToken(service, userId) : null;
+    // Status is "connected" if user has a non-revoked token, otherwise based on global status
+    const connectionStatus = token && !token.revoked_at ? "connected" : (status?.status || "disconnected");
     
     return {
       name: service,
-      status: status?.status || "disconnected",
+      status: connectionStatus,
       lastSync: status?.lastSyncedAt || null,
       lastApiCall: token?.lastApiCall || null,  // Phase 5.4: Last API call timestamp
       scope: token?.scope || null,
