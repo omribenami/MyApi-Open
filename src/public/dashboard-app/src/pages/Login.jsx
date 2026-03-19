@@ -26,21 +26,19 @@ const OAuthIcons = {
 };
 
 const features = [
-  { title: 'Launch faster', desc: 'Unify APIs, tools, and automations in one secure dashboard.' },
-  { title: 'Stay in control', desc: 'Manage token access and service permissions with confidence.' },
-  { title: 'Scale with clarity', desc: 'Grow from solo workflow to team operations without chaos.' },
+  {
+    title: 'Launch faster',
+    desc: 'Unify APIs, tools, and automations in one secure dashboard.',
+  },
+  {
+    title: 'Stay in control',
+    desc: 'Manage token access and service permissions with confidence.',
+  },
+  {
+    title: 'Scale with clarity',
+    desc: 'Grow from solo workflow to team operations without chaos.',
+  },
 ];
-
-const SIGNUP_PROVIDERS = ['google', 'github', 'facebook'];
-
-const defaultWizardData = {
-  displayName: '',
-  preferredName: '',
-  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
-  bio: '',
-  userMd: '',
-  soulMd: '',
-};
 
 function Login() {
   const [error, setError] = useState('');
@@ -50,18 +48,7 @@ function Login() {
   const [plansLoading, setPlansLoading] = useState(true);
   const [twoFactorRequired, setTwoFactorRequired] = useState(false);
   const [twoFactorCode, setTwoFactorCode] = useState('');
-
-  const [wizardOpen, setWizardOpen] = useState(false);
-  const [wizardStep, setWizardStep] = useState('provider');
-  const [wizardData, setWizardData] = useState(defaultWizardData);
-  const [wizardSubmitting, setWizardSubmitting] = useState(false);
-
   const { setMasterToken, setUser, isAuthenticated } = useAuthStore();
-
-  const callbackParams = new URLSearchParams(window.location.search);
-  const callbackMode = callbackParams.get('mode');
-  const callbackStatus = callbackParams.get('oauth_status');
-  const holdForSignupWizard = callbackMode === 'signup' && callbackStatus === 'connected';
 
   useEffect(() => {
     const callback = handleOAuthCallback();
@@ -78,25 +65,7 @@ function Login() {
                 setMasterToken(sessionUser.bootstrap.masterToken);
               }
               setUser(sessionUser);
-
-              if (callback.mode === 'signup') {
-                const user = sessionUser?.user || {};
-                setWizardData((prev) => ({
-                  ...prev,
-                  displayName: user.displayName || user.username || prev.displayName,
-                  timezone: user.timezone || prev.timezone,
-                }));
-              }
             }
-
-            if (callback.mode === 'signup') {
-              setViewMode('login');
-              setWizardOpen(true);
-              setWizardStep('profile');
-              window.history.replaceState({}, document.title, '/dashboard/');
-              return;
-            }
-
             window.history.replaceState({}, document.title, '/dashboard/');
             window.location.href = '/dashboard/';
           });
@@ -139,14 +108,16 @@ function Login() {
     loadPlans();
   }, []);
 
-  if (isAuthenticated && !holdForSignupWizard && !wizardOpen) {
+  if (isAuthenticated) {
     window.location.href = '/dashboard/';
     return null;
   }
 
-  const handleOAuthClick = async (serviceId, forcedMode = null) => {
+  // Master token login removed - OAuth only
+
+  const handleOAuthClick = async (serviceId) => {
     setError('');
-    const mode = forcedMode || ((serviceId === 'google' || serviceId === 'facebook' || serviceId === 'github') ? 'login' : 'connect');
+    const mode = (serviceId === 'google' || serviceId === 'facebook' || serviceId === 'github') ? 'login' : 'connect';
     const params = new URLSearchParams({ mode, returnTo: '/dashboard/', redirect: '1' });
     window.location.href = `/api/v1/oauth/authorize/${serviceId}?${params.toString()}`;
   };
@@ -200,57 +171,6 @@ function Login() {
       setError('Connection failed. Is the server running?');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const openSignupWizard = () => {
-    setError('');
-    setViewMode('login');
-    setWizardOpen(true);
-    setWizardStep('provider');
-    setWizardData(defaultWizardData);
-  };
-
-  const closeSignupWizard = () => {
-    setWizardOpen(false);
-    setWizardStep('provider');
-  };
-
-  const submitSignupCompletion = async () => {
-    setError('');
-    if (!wizardData.displayName.trim()) {
-      setError('Display name is required.');
-      setWizardStep('profile');
-      return;
-    }
-
-    setWizardSubmitting(true);
-    try {
-      const response = await fetch('/api/v1/auth/signup/complete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          displayName: wizardData.displayName,
-          preferredName: wizardData.preferredName,
-          timezone: wizardData.timezone,
-          bio: wizardData.bio,
-          userMd: wizardData.userMd,
-          soulMd: wizardData.soulMd,
-        }),
-      });
-
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        setError(payload.error || 'Failed to complete signup.');
-        return;
-      }
-
-      window.location.href = '/dashboard/';
-    } catch {
-      setError('Failed to complete signup. Please try again.');
-    } finally {
-      setWizardSubmitting(false);
     }
   };
 
@@ -351,21 +271,10 @@ function Login() {
                           </button>
                         ))}
                       </div>
-
-                      <div className="mt-6 border-t border-slate-700 pt-5 text-center text-xs text-slate-400">
-                        Need an account?{' '}
-                        <button
-                          type="button"
-                          onClick={openSignupWizard}
-                          className="font-semibold text-blue-400 transition-colors hover:text-blue-300"
-                        >
-                          Go to signup
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              ) : (
+                </>
+              )}
+            </div>
+          ) : (
                 <div>
                   <h2 className="text-2xl font-semibold">Choose your plan</h2>
                   <p className="mb-6 mt-2 text-sm text-slate-400 sm:text-base">Start free, then upgrade when your automation grows.</p>
@@ -416,131 +325,6 @@ function Login() {
           <a href="/terms" className="hover:text-slate-200 transition-colors">Terms of Use</a>
         </div>
       </div>
-
-      {wizardOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-8">
-          <div className="w-full max-w-2xl rounded-3xl border border-slate-700 bg-slate-900 p-5 shadow-2xl sm:p-7">
-            <div className="mb-5 flex items-center justify-between">
-              <h3 className="text-xl font-semibold">Signup Wizard</h3>
-              <button type="button" onClick={closeSignupWizard} className="text-slate-400 hover:text-slate-200">✕</button>
-            </div>
-
-            {wizardStep === 'provider' && (
-              <div className="space-y-3">
-                <p className="text-sm text-slate-300">Choose a provider to create your account:</p>
-                {SIGNUP_PROVIDERS.map((id) => {
-                  const service = oauthServices.find((s) => s.id === id);
-                  if (!service) return null;
-                  return (
-                    <button
-                      key={service.id}
-                      onClick={() => handleOAuthClick(service.id, 'signup')}
-                      className="flex min-h-[48px] w-full items-center justify-center gap-3 rounded-xl border border-slate-700 bg-slate-800/70 px-4 py-3 text-sm font-medium text-white transition-colors hover:border-slate-500 hover:bg-slate-800"
-                    >
-                      <span>{OAuthIcons[service.id] || null}</span>
-                      <span>Continue with {service.name}</span>
-                    </button>
-                  );
-                })}
-                <p className="text-xs text-slate-400">After OAuth, we'll quickly finish profile setup.</p>
-              </div>
-            )}
-
-            {wizardStep === 'profile' && (
-              <div className="space-y-4">
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-300">Display name *</label>
-                  <input
-                    value={wizardData.displayName}
-                    onChange={(e) => setWizardData((prev) => ({ ...prev, displayName: e.target.value }))}
-                    className="min-h-[48px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm"
-                    placeholder="How should people see your name?"
-                  />
-                </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-300">Preferred name</label>
-                  <input
-                    value={wizardData.preferredName}
-                    onChange={(e) => setWizardData((prev) => ({ ...prev, preferredName: e.target.value }))}
-                    className="min-h-[48px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm"
-                    placeholder="Optional"
-                  />
-                </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-300">Timezone *</label>
-                  <input
-                    value={wizardData.timezone}
-                    onChange={(e) => setWizardData((prev) => ({ ...prev, timezone: e.target.value }))}
-                    className="min-h-[48px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm"
-                    placeholder="e.g. America/Chicago"
-                  />
-                </div>
-                <div className="flex justify-end">
-                  <button type="button" onClick={() => setWizardStep('bio')} className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold hover:bg-blue-500">Continue</button>
-                </div>
-              </div>
-            )}
-
-            {wizardStep === 'bio' && (
-              <div className="space-y-4">
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-300">Bio (optional)</label>
-                  <textarea
-                    value={wizardData.bio}
-                    onChange={(e) => setWizardData((prev) => ({ ...prev, bio: e.target.value }))}
-                    className="min-h-[120px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm"
-                    placeholder="Tell us a bit about yourself"
-                  />
-                </div>
-                <div className="flex justify-between">
-                  <button type="button" onClick={() => setWizardStep('usermd')} className="text-sm font-medium text-slate-400 hover:text-slate-200">Skip for now</button>
-                  <button type="button" onClick={() => setWizardStep('usermd')} className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold hover:bg-blue-500">Continue</button>
-                </div>
-              </div>
-            )}
-
-            {wizardStep === 'usermd' && (
-              <div className="space-y-4">
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-300">USER.md content (optional)</label>
-                  <p className="mb-2 text-xs text-slate-400">Describe your preferences, communication style, and goals so MyApi can personalize your workspace.</p>
-                  <textarea
-                    value={wizardData.userMd}
-                    onChange={(e) => setWizardData((prev) => ({ ...prev, userMd: e.target.value }))}
-                    className="min-h-[150px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm"
-                    placeholder={'Example (optional):\n# USER.md\n- I prefer concise updates\n- My timezone is America/Chicago\n- Focus on product and shipping velocity'}
-                  />
-                </div>
-                <div className="flex justify-between">
-                  <button type="button" onClick={() => setWizardStep('soulmd')} className="text-sm font-medium text-slate-400 hover:text-slate-200">Skip for now</button>
-                  <button type="button" onClick={() => setWizardStep('soulmd')} className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold hover:bg-blue-500">Continue</button>
-                </div>
-              </div>
-            )}
-
-            {wizardStep === 'soulmd' && (
-              <div className="space-y-4">
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-300">SOUL.md content (optional)</label>
-                  <p className="mb-2 text-xs text-slate-400">Define principles, guardrails, and the tone/personality you want your assistant to follow.</p>
-                  <textarea
-                    value={wizardData.soulMd}
-                    onChange={(e) => setWizardData((prev) => ({ ...prev, soulMd: e.target.value }))}
-                    className="min-h-[150px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm"
-                    placeholder={'Example (optional):\n# SOUL.md\n- Be honest and practical\n- Prioritize security and privacy\n- Communicate clearly, no fluff'}
-                  />
-                </div>
-                <div className="flex justify-between">
-                  <button type="button" onClick={submitSignupCompletion} className="text-sm font-medium text-slate-400 hover:text-slate-200">Skip for now</button>
-                  <button type="button" disabled={wizardSubmitting} onClick={submitSignupCompletion} className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold hover:bg-emerald-500 disabled:opacity-50">
-                    {wizardSubmitting ? 'Saving...' : 'Finish'}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

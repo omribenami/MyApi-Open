@@ -3672,7 +3672,7 @@ app.get([
     console.log(`[OAuth] Token stored successfully:`, { tokenId: storeResult.id, service, userId, scope: storeResult.scope });
     updateOAuthStatus(service, "connected");
 
-    if ((service === 'google' || service === 'facebook' || service === 'github') && (stateMeta.mode === 'login' || stateMeta.mode === 'signup')) {
+    if ((service === 'google' || service === 'facebook' || service === 'github') && stateMeta.mode === 'login') {
       const profileResp = await oauthAdapters[service].verifyToken(tokenData.accessToken).catch(() => ({ valid: false, data: {} }));
       const p = profileResp?.data || {};
 
