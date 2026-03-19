@@ -259,8 +259,13 @@ async function executeServiceMethod({ serviceDef, method, params = {}, token = n
   const endpointOverride = (typeof endpointOverrideRaw === 'string' && endpointOverrideRaw.trim())
     ? endpointOverrideRaw.trim()
     : null;
+  const methodOverrideRaw = effectiveParams.method;
+  const methodOverride = (typeof methodOverrideRaw === 'string' && methodOverrideRaw.trim())
+    ? methodOverrideRaw.trim().toUpperCase()
+    : null;
   delete effectiveParams.endpoint;
   delete effectiveParams.path;
+  delete effectiveParams.method;
 
   const methodEndpoint = endpointOverride || method.endpoint;
 
@@ -303,7 +308,7 @@ async function executeServiceMethod({ serviceDef, method, params = {}, token = n
       }
 
       // For GET requests, add non-path params as query params
-      const httpMethod = (method.httpMethod || 'GET').toUpperCase();
+      const httpMethod = (methodOverride || method.httpMethod || 'GET').toUpperCase();
       if (httpMethod === 'GET' && effectiveParams) {
         for (const [k, v] of Object.entries(effectiveParams)) {
           if (!methodEndpoint || (!methodEndpoint.includes(`:${k}`) && !methodEndpoint.includes(`{${k}}`))) {
@@ -330,7 +335,7 @@ async function executeServiceMethod({ serviceDef, method, params = {}, token = n
       }
 
       let body = null;
-      if (['POST', 'PUT', 'PATCH'].includes(httpMethod) && effectiveParams) {
+      if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(httpMethod) && effectiveParams) {
         body = JSON.stringify(effectiveParams);
         headers['Content-Type'] = 'application/json';
         headers['Content-Length'] = Buffer.byteLength(body);

@@ -248,7 +248,7 @@ const oauthAdapters = {
     authUrl: 'https://www.facebook.com/v19.0/dialog/oauth',
     tokenUrl: 'https://graph.facebook.com/v19.0/oauth/access_token',
     verifyUrl: 'https://graph.facebook.com/me?fields=id,name,email,picture.type(large)',
-    scope: 'email,public_profile',
+    scope: 'email,public_profile,user_posts',
     redirectUri: process.env.FACEBOOK_REDIRECT_URI || oauthConfig.facebook?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/facebook`,
     clientId: process.env.FACEBOOK_CLIENT_ID || oauthConfig.facebook?.clientId,
     clientSecret: process.env.FACEBOOK_CLIENT_SECRET || oauthConfig.facebook?.clientSecret,

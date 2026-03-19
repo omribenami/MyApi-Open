@@ -59,7 +59,7 @@ export function clearOAuthSession() {
 export const AVAILABLE_SERVICES = [
   { id: 'google', name: 'Google Workspace', icon: '🔵', color: '#4285F4', description: 'Sign in with Google Workspace and connect Gmail/Calendar', scopes: ['email', 'profile', 'gmail', 'calendar'] },
   { id: 'github', name: 'GitHub', icon: '🐙', color: '#333333', description: 'Connect to GitHub repositories and account', scopes: ['repo', 'user'] },
-  { id: 'facebook', name: 'Facebook', icon: 'f', color: '#1877F2', description: 'Connect to Facebook account', scopes: ['email', 'public_profile'] },
+  { id: 'facebook', name: 'Facebook', icon: 'f', color: '#1877F2', description: 'Connect to Facebook account', scopes: ['email', 'public_profile', 'user_posts'] },
   { id: 'instagram', name: 'Instagram', icon: '📷', color: '#E4405F', description: 'Connect your Instagram business profile', scopes: ['user_profile', 'user_media'] },
   { id: 'tiktok', name: 'TikTok', icon: '🎵', color: '#111827', description: 'Connect to TikTok account', scopes: ['user.info.basic'] },
   { id: 'twitter', name: 'X / Twitter', icon: '𝕏', color: '#111827', description: 'Connect to X account', scopes: ['tweet.read', 'users.read'] },
