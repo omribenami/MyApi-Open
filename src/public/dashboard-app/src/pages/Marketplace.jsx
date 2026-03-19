@@ -47,20 +47,26 @@ function RatingWidget({ listingId, onRated, masterToken }) {
   const [review, setReview] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  const [error, setError] = useState('');
 
   async function submit() {
     if (!selected) return;
     setSubmitting(true);
+    setError('');
     try {
       const res = await fetch(`/api/v1/marketplace/${listingId}/rate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${masterToken}` },
         body: JSON.stringify({ rating: selected, review: review || undefined }),
       });
-      if (res.ok) {
-        setDone(true);
-        onRated && onRated();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || (res.status === 401 ? 'Session expired. Please sign in again.' : 'Failed to submit rating'));
       }
+      setDone(true);
+      onRated && onRated(data);
+    } catch (err) {
+      setError(err.message || 'Failed to submit rating');
     } finally {
       setSubmitting(false);
     }
@@ -96,18 +102,24 @@ function RatingWidget({ listingId, onRated, masterToken }) {
       >
         {submitting ? 'Submitting...' : 'Submit Rating'}
       </button>
+      {error && <p className="text-sm text-red-400">{error}</p>}
     </div>
   );
 }
 
-function ListingModal({ listing, onClose, onInstall, masterToken }) {
+function ListingModal({ listing, onClose, onInstall, onRated, masterToken, initiallyInstalled = false }) {
   const [detail, setDetail] = useState(listing);
   const scanner = extractScanner(listing?.content) || extractScanner(detail?.content);
   const [installing, setInstalling] = useState(false);
-  const [isInstalled, setIsInstalled] = useState(false);
+  const [isInstalled, setIsInstalled] = useState(initiallyInstalled);
   const [installSuccess, setInstallSuccess] = useState(false);
   const [installError, setInstallError] = useState('');
   const [installInfo, setInstallInfo] = useState(null);
+
+  useEffect(() => {
+    setIsInstalled(initiallyInstalled);
+    if (initiallyInstalled) setInstallSuccess(true);
+  }, [initiallyInstalled]);
 
   useEffect(() => {
     let cancelled = false;
@@ -151,16 +163,21 @@ function ListingModal({ listing, onClose, onInstall, masterToken }) {
       });
       const installData = await installRes.json().catch(() => ({}));
       if (!installRes.ok) {
-        throw new Error(installData.error || 'Failed to install listing');
+        throw new Error(installData?.error || (installRes.status === 401 ? 'Session expired. Please sign in again.' : 'Failed to install listing'));
       }
-      setInstallInfo(installData.provisioned || null);
 
-      // The backend now handles skill/persona creation directly
-      // Just refresh the UI state and call onInstall to refresh lists
+      const alreadyInstalled = !!(installData?.alreadyInstalled || installData?.already_installed);
+      setInstallInfo(installData?.provisioned || null);
       setIsInstalled(true);
       setInstallSuccess(true);
-      onInstall && onInstall();
-      setDetail(d => ({ ...d, installCount: (d.installCount || 0) + 1 }));
+      onInstall && onInstall({ listingId: listing.id, type: listing.type, alreadyInstalled });
+
+      setDetail(d => ({
+        ...d,
+        installCount: Number.isFinite(installData?.installCount)
+          ? installData.installCount
+          : ((d.installCount || 0) + (alreadyInstalled ? 0 : 1)),
+      }));
     } catch (err) {
       setInstallError(err.message || 'Install failed');
     } finally {
@@ -197,6 +214,7 @@ function ListingModal({ listing, onClose, onInstall, masterToken }) {
             <StarRating value={detail.avgRating || 0} count={detail.ratingCount || 0} size="sm" />
             <span>{detail.installCount || 0} installs</span>
             <span className="text-green-400">{detail.price === 'free' ? 'Free' : detail.price}</span>
+            {isInstalled && <span className="text-emerald-300 text-xs border border-emerald-700 rounded-full px-2 py-0.5">Installed</span>}
             {detail.type === 'skill' && scanner && (
               <span
                 className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs border ${scanner.safe_to_use ? 'bg-emerald-900/40 text-emerald-300 border-emerald-700' : 'bg-amber-900/40 text-amber-300 border-amber-700'}`}
@@ -261,7 +279,7 @@ function ListingModal({ listing, onClose, onInstall, masterToken }) {
           )}
 
           {/* Install button */}
-          {masterToken && !installSuccess && (
+          {masterToken && (
             <>
               <button
                 onClick={handleInstall}
