@@ -993,6 +993,15 @@ app.use('/api/v1/email', authenticate, emailRoutes);
 app.use('/api/v1/workspaces', authenticate, workspacesRoutes);
 app.use('/api/v1/invitations', authenticate, workspacesRoutes);
 
+// Import multi-tenancy middleware
+const { extractWorkspaceContext, enforceMultiTenancy, switchWorkspaceHandler } = require('./middleware/multitenancy');
+
+// Extract workspace context for all authenticated requests
+app.use('/api/v1', authenticate, extractWorkspaceContext, enforceMultiTenancy);
+
+// Workspace switching endpoint
+app.post('/api/v1/workspace-switch/:workspaceId', authenticate, switchWorkspaceHandler);
+
 function getRequestOwnerId(req) {
   return String(req?.tokenMeta?.ownerId || req?.session?.user?.id || 'owner');
 }
