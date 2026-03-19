@@ -1,9 +1,22 @@
+import { useEffect, useMemo, useState } from 'react';
 import { formatAuthTypeLabel, getAuthTypeStyle, getStatusMeta } from '../utils/serviceCatalog';
 
 function ServiceCard({ service, onConnect, onRevoke, onDetails, onConfigure, compact = false }) {
   const statusMeta = getStatusMeta(service.status, service.notConfigured);
 
   const logoFallback = (service.label || service.name || '?').slice(0, 1).toUpperCase();
+  const logoCandidates = useMemo(() => {
+    const candidates = [service.icon, ...(service.logoFallbacks || [])].filter(Boolean);
+    return Array.from(new Set(candidates));
+  }, [service.icon, service.logoFallbacks]);
+
+  const [logoIndex, setLogoIndex] = useState(0);
+
+  useEffect(() => {
+    setLogoIndex(0);
+  }, [service.name, service.icon, service.logoFallbacks]);
+
+  const activeLogo = logoCandidates[logoIndex] || null;
 
   return (
     <article
@@ -16,20 +29,28 @@ function ServiceCard({ service, onConnect, onRevoke, onDetails, onConfigure, com
         aria-label={`View details for ${service.label}`}
       >
         <div className="flex items-start gap-4">
-          <div className="relative w-14 h-14 rounded-xl bg-gradient-to-br from-slate-700 to-slate-800 border border-slate-600/60 flex items-center justify-center overflow-hidden shrink-0 group-hover:shadow-lg group-hover:shadow-blue-500/10 transition-all duration-300">
-            {service.icon ? (
+          <div
+            className="relative w-14 h-14 rounded-xl bg-gradient-to-br from-slate-700 to-slate-800 border border-slate-600/60 flex items-center justify-center overflow-hidden shrink-0 group-hover:shadow-lg group-hover:shadow-blue-500/10 transition-all duration-300"
+            role="img"
+            aria-label={`${service.label} logo`}
+          >
+            {activeLogo ? (
               <img
-                src={service.icon}
+                src={activeLogo}
                 alt=""
+                aria-hidden="true"
                 className="w-8 h-8 object-contain"
                 loading="lazy"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                  e.currentTarget.parentElement.textContent = logoFallback;
+                onError={() => {
+                  if (logoIndex < logoCandidates.length - 1) {
+                    setLogoIndex((prev) => prev + 1);
+                  } else {
+                    setLogoIndex(logoCandidates.length);
+                  }
                 }}
               />
             ) : (
-              <span className="text-lg font-bold text-slate-200">{logoFallback}</span>
+              <span className="text-lg font-bold text-slate-200" aria-hidden="true">{logoFallback}</span>
             )}
           </div>
 

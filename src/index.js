@@ -2650,9 +2650,19 @@ app.post("/api/v1/auth/token-login", authRateLimit, (req, res) => {
 app.get("/api/v1/auth/me", (req, res) => {
   // Cookie-session auth (OAuth login path)
   if (req.session && req.session.user) {
-    // Just return existing token if it exists — don't generate new ones on every refresh!
+    const sessionUser = req.session.user;
+    const normalizedUser = {
+      ...sessionUser,
+      displayName: sessionUser.displayName || sessionUser.display_name || sessionUser.username || null,
+      avatarUrl: sessionUser.avatarUrl || sessionUser.avatar_url || null,
+      email: sessionUser.email || null,
+    };
+
+    // Keep backward compatibility (flat shape) while exposing canonical user payload.
     return res.json({
-      ...req.session.user,
+      success: true,
+      ...normalizedUser,
+      user: normalizedUser,
       bootstrap: req.session.masterTokenRaw && req.session.masterTokenId
         ? { masterToken: req.session.masterTokenRaw, tokenId: req.session.masterTokenId }
         : null,
@@ -2667,8 +2677,17 @@ app.get("/api/v1/auth/me", (req, res) => {
     const session = global.sessions[token];
     const user = getUserById(session.userId);
     if (user) {
-      return res.json({ 
-        data: user,
+      const normalizedUser = {
+        ...user,
+        displayName: user.displayName || user.display_name || user.username || null,
+        avatarUrl: user.avatarUrl || user.avatar_url || null,
+        email: user.email || null,
+      };
+
+      return res.json({
+        success: true,
+        user: normalizedUser,
+        data: normalizedUser,
         bootstrap: session.masterTokenRaw && session.masterTokenId
           ? { masterToken: session.masterTokenRaw, tokenId: session.masterTokenId }
           : null,
@@ -3571,9 +3590,21 @@ app.get([
     if ((service === 'google' || service === 'facebook' || service === 'github') && stateMeta.mode === 'login') {
       const profileResp = await oauthAdapters[service].verifyToken(tokenData.accessToken).catch(() => ({ valid: false, data: {} }));
       const p = profileResp?.data || {};
-      const email = p.email || `${service}_${Date.now()}@local.myapi`;
-      const name = p.name || p.given_name || email.split('@')[0] || `${service}_user`;
-      const avatarUrl = p.picture?.data?.url || p.picture || null;
+
+      let idTokenPayload = {};
+      if (service === 'google' && tokenData?.idToken) {
+        try {
+          const [, payload = ''] = String(tokenData.idToken).split('.');
+          const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+          idTokenPayload = JSON.parse(Buffer.from(base64, 'base64').toString('utf8')) || {};
+        } catch {
+          idTokenPayload = {};
+        }
+      }
+
+      const email = p.email || idTokenPayload.email || `${service}_${Date.now()}@local.myapi`;
+      const name = p.name || idTokenPayload.name || p.given_name || idTokenPayload.given_name || email.split('@')[0] || `${service}_user`;
+      const avatarUrl = p.picture?.data?.url || p.picture || idTokenPayload.picture || null;
 
       const usernameBase = email.split('@')[0].replace(/[^a-zA-Z0-9_.-]/g, '').slice(0, 30) || `${service}_${Date.now()}`;
       let username = usernameBase;
@@ -3603,8 +3634,10 @@ app.get([
           id: appUser.id,
           username: appUser.username,
           display_name: appUser.displayName || appUser.username,
+          displayName: appUser.displayName || appUser.username,
           email: appUser.email || email,
           avatar_url: appUser.avatarUrl || avatarUrl || null,
+          avatarUrl: appUser.avatarUrl || avatarUrl || null,
           two_factor_enabled: true,
           roles: appUser.roles || 'user',
         };
@@ -3619,8 +3652,10 @@ app.get([
         id: appUser.id,
         username: appUser.username,
         display_name: appUser.displayName || appUser.username,
+        displayName: appUser.displayName || appUser.username,
         email: appUser.email || email,
         avatar_url: appUser.avatarUrl || avatarUrl || null,
+        avatarUrl: appUser.avatarUrl || avatarUrl || null,
         two_factor_enabled: Boolean(appUser.twoFactorEnabled),
         roles: appUser.roles || 'user',
       };

@@ -1,4 +1,19 @@
 const SIMPLE_ICONS_BASE = 'https://cdn.simpleicons.org';
+const JSDELIVR_SIMPLE_ICONS_BASE = 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons';
+
+const BRAND_ALIASES = {
+  x: 'twitter',
+  googleanalytics: 'google',
+  googleanalytics4: 'google',
+  gmail: 'google',
+  googledrive: 'google',
+  googlesheets: 'google',
+  googleslides: 'google',
+  googlecalendar: 'google',
+  googlephotos: 'google',
+  googlecontacts: 'google',
+  youtubedatapi: 'google',
+};
 
 const BRAND_LOGOS = {
   google: `${SIMPLE_ICONS_BASE}/google/4285F4`,
@@ -28,6 +43,24 @@ const BRAND_LOGOS = {
   airtable: `${SIMPLE_ICONS_BASE}/airtable/18BFFF`,
 };
 
+const BRAND_LOGO_FALLBACKS = {
+  google: `${JSDELIVR_SIMPLE_ICONS_BASE}/google.svg`,
+  github: `${JSDELIVR_SIMPLE_ICONS_BASE}/github.svg`,
+  facebook: `${JSDELIVR_SIMPLE_ICONS_BASE}/facebook.svg`,
+  instagram: `${JSDELIVR_SIMPLE_ICONS_BASE}/instagram.svg`,
+  tiktok: `${JSDELIVR_SIMPLE_ICONS_BASE}/tiktok.svg`,
+  twitter: `${JSDELIVR_SIMPLE_ICONS_BASE}/x.svg`,
+  reddit: `${JSDELIVR_SIMPLE_ICONS_BASE}/reddit.svg`,
+  linkedin: `${JSDELIVR_SIMPLE_ICONS_BASE}/linkedin.svg`,
+  slack: `${JSDELIVR_SIMPLE_ICONS_BASE}/slack.svg`,
+  discord: `${JSDELIVR_SIMPLE_ICONS_BASE}/discord.svg`,
+  whatsapp: `${JSDELIVR_SIMPLE_ICONS_BASE}/whatsapp.svg`,
+  gitlab: `${JSDELIVR_SIMPLE_ICONS_BASE}/gitlab.svg`,
+  bitbucket: `${JSDELIVR_SIMPLE_ICONS_BASE}/bitbucket.svg`,
+  azuredevops: `${JSDELIVR_SIMPLE_ICONS_BASE}/azuredevops.svg`,
+  notion: `${JSDELIVR_SIMPLE_ICONS_BASE}/notion.svg`,
+};
+
 const SERVICE_ENV_REQUIREMENTS = {
   google: ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_REDIRECT_URI'],
   github: ['GITHUB_CLIENT_ID', 'GITHUB_CLIENT_SECRET', 'GITHUB_REDIRECT_URI'],
@@ -50,8 +83,23 @@ const AUTH_TYPE_STYLES = {
   webhook: 'bg-purple-500/15 text-purple-300 border border-purple-400/40',
 };
 
+function canonicalBrandName(serviceName) {
+  const normalized = String(serviceName || '').toLowerCase();
+  return BRAND_ALIASES[normalized] || normalized;
+}
+
 export function getServiceLogo(service) {
-  return service.icon || BRAND_LOGOS[service.name] || null;
+  return service.icon || BRAND_LOGOS[canonicalBrandName(service.name)] || null;
+}
+
+export function getServiceLogoFallbacks(service) {
+  const canonicalName = canonicalBrandName(service?.name);
+  const urls = [
+    BRAND_LOGOS[canonicalName],
+    BRAND_LOGO_FALLBACKS[canonicalName],
+  ].filter(Boolean);
+
+  return Array.from(new Set(urls));
 }
 
 export function getServiceEnvRequirements(serviceName) {
@@ -139,6 +187,7 @@ export function normalizeService(rawService, oauthMeta) {
     name: serviceName,
     label,
     icon: getServiceLogo({ ...rawService, name: serviceName }),
+    logoFallbacks: getServiceLogoFallbacks({ ...rawService, name: serviceName }),
     description: rawService.description || `Connect to ${label}`,
     auth_type: inferredAuthType || null,
     auth_type_label: formatAuthTypeLabel(inferredAuthType, serviceName),

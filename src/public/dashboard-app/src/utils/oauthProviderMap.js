@@ -28,6 +28,7 @@ const OAUTH_PROVIDER_MAP = {
   'x': 'twitter', // X/Twitter alias
   'reddit': 'reddit',
   'linkedin': 'linkedin',
+  'notion': 'notion',
 };
 
 /**

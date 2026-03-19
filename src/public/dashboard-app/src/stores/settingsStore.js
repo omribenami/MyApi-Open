@@ -46,11 +46,11 @@ export const useSettingsStore = create((set) => ({
     set((state) => ({
       profile: data,
       profileDraft: {
-        displayName: data.identity?.Name || data.user?.username || '',
+        displayName: data.identity?.Name || data.user?.displayName || data.user?.display_name || data.user?.username || '',
         email: data.user?.email || data.identity?.Email || '',
         timezone: data.identity?.Timezone || 'UTC',
         language: 'en',
-        avatarUrl: data.identity?.AvatarUrl || '',
+        avatarUrl: data.identity?.AvatarUrl || data.user?.avatarUrl || data.user?.avatar_url || '',
       },
       profileDirty: false,
     })),
@@ -72,11 +72,11 @@ export const useSettingsStore = create((set) => ({
     set((state) => ({
       profileDraft: state.profile
         ? {
-            displayName: state.profile.identity?.Name || state.profile.user?.username || '',
+            displayName: state.profile.identity?.Name || state.profile.user?.displayName || state.profile.user?.display_name || state.profile.user?.username || '',
             email: state.profile.user?.email || state.profile.identity?.Email || '',
             timezone: state.profile.identity?.Timezone || 'UTC',
             language: 'en',
-            avatarUrl: state.profile.identity?.AvatarUrl || '',
+            avatarUrl: state.profile.identity?.AvatarUrl || state.profile.user?.avatarUrl || state.profile.user?.avatar_url || '',
           }
         : { displayName: '', email: '', timezone: 'UTC', language: 'en', avatarUrl: '' },
       profileDirty: false,

@@ -68,6 +68,7 @@ class GoogleAdapter {
               resolve({
                 accessToken: result.access_token,
                 refreshToken: result.refresh_token || null,
+                idToken: result.id_token || null,
                 expiresIn: result.expires_in,
                 tokenType: result.token_type,
                 scope: 'email profile gmail.readonly calendar.readonly'

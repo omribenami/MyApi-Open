@@ -15,6 +15,18 @@ let initializePromise = null;
 const resetAuthMeFailureCountOnSuccess = () => { authMeFailureCount = 0; };
 const incrementAuthMeFailureCount = () => { authMeFailureCount++; };
 
+const normalizeUserPayload = (payload) => {
+  const raw = payload?.user || payload?.data || payload || null;
+  if (!raw || typeof raw !== 'object') return null;
+
+  return {
+    ...raw,
+    displayName: raw.displayName || raw.display_name || raw.name || raw.username || '',
+    avatarUrl: raw.avatarUrl || raw.avatar_url || '',
+    email: raw.email || '',
+  };
+};
+
 export const useAuthStore = create((set, get) => ({
   user: null,
   masterToken: null,
@@ -52,7 +64,7 @@ export const useAuthStore = create((set, get) => ({
             resetAuthMeFailureCountOnSuccess();
             clearAuthArtifacts();
             const sessionData = await sessionCheckRes.json();
-            const user = sessionData?.user || sessionData?.data || null;
+            const user = normalizeUserPayload(sessionData);
             set({ user, masterToken: null, sessionToken: null, isAuthenticated: true, isInitialized: true, error: null });
             return;
           }
@@ -92,7 +104,7 @@ export const useAuthStore = create((set, get) => ({
         const cookieUser = readCookie('myapi_user');
         if (cookieUser) {
           try {
-            const user = JSON.parse(decodeURIComponent(cookieUser));
+            const user = normalizeUserPayload(JSON.parse(decodeURIComponent(cookieUser)));
             set({ user, isAuthenticated: true, isInitialized: true, error: null });
             return;
           } catch {}
@@ -104,7 +116,7 @@ export const useAuthStore = create((set, get) => ({
             if (res.ok) {
               resetAuthMeFailureCountOnSuccess();
               const payload = await res.json();
-              const user = payload?.data || payload;
+              const user = normalizeUserPayload(payload);
               let bootstrapToken = payload?.bootstrap?.masterToken;
 
               if (!bootstrapToken) {
@@ -158,7 +170,8 @@ export const useAuthStore = create((set, get) => ({
 
   setUser: (user) => {
     setLogoutInProgress(false);
-    set({ user, isAuthenticated: !!user });
+    const normalized = normalizeUserPayload(user);
+    set({ user: normalized, isAuthenticated: !!normalized });
   },
 
   forceUnauthenticated: () => {
