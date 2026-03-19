@@ -8,21 +8,29 @@ import App from './App.jsx'
 if (typeof window !== 'undefined') {
   const CORRUPTION_MARKER = 'Corruption: block checksum mismatch';
   const RECOVERY_TS_KEY = '__myapi_corruption_recovery_ts__';
+  const RECOVERY_COUNT_KEY = '__myapi_corruption_recovery_count__';
 
   const recoverFromCorruption = () => {
     try {
       const now = Date.now();
       const lastTs = Number(sessionStorage.getItem(RECOVERY_TS_KEY) || 0);
+      const recoveries = Number(sessionStorage.getItem(RECOVERY_COUNT_KEY) || 0);
 
-      // Guard against tight redirect loops, but still allow repeated recovery attempts.
-      if (Number.isFinite(lastTs) && now - lastTs < 1500) return;
+      // Prevent runaway reload storms that can trigger Cloudflare 1015 bans.
+      // Allow only one auto-recovery every 30 minutes per tab.
+      if (Number.isFinite(lastTs) && now - lastTs < 30 * 60 * 1000 && recoveries >= 1) {
+        console.warn('[MyApi] Corruption detected again; skipping auto-reload to avoid loop.');
+        return;
+      }
+
       sessionStorage.setItem(RECOVERY_TS_KEY, String(now));
+      sessionStorage.setItem(RECOVERY_COUNT_KEY, String(recoveries + 1));
 
       localStorage.removeItem('masterToken');
       sessionStorage.removeItem('sessionToken');
       sessionStorage.removeItem('tokenData');
     } catch {
-      // Ignore cleanup errors and still force a clean reload.
+      // Ignore cleanup errors and still try a one-time clean navigation.
     }
 
     window.location.replace('/dashboard/');
