@@ -207,7 +207,7 @@ function Skills() {
   const [deleteUsage, setDeleteUsage] = useState({ personas: [], total: 0 });
 
   useEffect(() => {
-    if (masterToken) fetchSkills();
+    fetchSkills();
   }, [masterToken]);
 
   useEffect(() => {
@@ -231,7 +231,8 @@ function Skills() {
     setFetchError(null);
     try {
       const res = await fetch('/api/v1/skills', {
-        headers: { Authorization: `Bearer ${masterToken}` },
+        headers: masterToken ? { Authorization: `Bearer ${masterToken}` } : {},
+        credentials: 'include',
       });
       if (!res.ok) throw new Error('Failed to fetch skills');
       const data = await res.json();

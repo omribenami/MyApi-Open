@@ -17,7 +17,7 @@ function Personas() {
   const [sortBy, setSortBy] = useState('updated_desc');
 
   useEffect(() => {
-    if (token) fetchPersonas();
+    fetchPersonas();
   }, [token]);
 
   const handleSelectPersona = async (persona) => {
@@ -46,7 +46,8 @@ function Personas() {
     setIsLoading(true);
     try {
       const response = await fetch('/api/v1/personas', {
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        credentials: 'include',
       });
 
       if (response.ok) {
