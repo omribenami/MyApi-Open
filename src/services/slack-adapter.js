@@ -15,9 +15,8 @@ class SlackAdapter {
   getAuthorizationUrl(state) {
     const params = {
       client_id: this.clientId,
-      // Slack v2: bot scopes go in `scope`, user scopes in `user_scope`
-      scope: 'chat:write',
-      user_scope: 'users:read,users.profile:read',
+      // Request user token only (no bot install), to avoid "doesn't have a bot user" failures
+      user_scope: 'chat:write,users:read,users.profile:read',
       redirect_uri: this.redirectUri,
       state: state
     };
@@ -52,11 +51,15 @@ class SlackAdapter {
             if (!result.ok) {
               reject(new Error(`Slack OAuth error: ${result.error}`));
             } else {
+              const resolvedAccessToken = result.access_token || result.authed_user?.access_token || null;
+              if (!resolvedAccessToken) {
+                return reject(new Error('Slack OAuth error: no access token returned'));
+              }
               resolve({
-                accessToken: result.access_token,
+                accessToken: resolvedAccessToken,
                 refreshToken: null,
                 tokenType: 'bearer',
-                scope: result.scope || 'chat:write users:read users.profile:read',
+                scope: result.scope || result.authed_user?.scope || 'chat:write users:read users.profile:read',
                 teamId: result.team?.id,
                 userId: result.authed_user?.id
               });
