@@ -892,6 +892,21 @@ app.use('/api/v1/skills', authenticate, createSkillsRoutes(
 ));
 
 function authenticate(req, res, next) {
+  // SKIP authentication for public endpoints (OAuth authorize/callback, login signup)
+  const fullPath = req.baseUrl + req.path;
+  const publicPaths = [
+    /^\/api\/v1\/oauth\//,
+    /^\/api\/v1\/auth\/login/,
+    /^\/api\/v1\/auth\/signup/,
+    /^\/api\/v1\/auth\/me/,
+    /^\/api\/v1\/billing\/plans/,
+    /^\/oauth\//,
+  ];
+  
+  if (publicPaths.some(pattern => pattern.test(fullPath))) {
+    return next();
+  }
+
   // 1) Session auth (human dashboard) — HIGHEST PRIORITY
   // CRITICAL: If session exists, use it EXCLUSIVELY. Never fall through to Bearer token auth.
   // Device approval only applies to API tokens, not session auth.
@@ -947,12 +962,12 @@ function authenticate(req, res, next) {
   // Exceptions: auth setup routes, device management, OAuth flows, user management (already protected by requirePowerUser),
   // and read-only activity don't require approval.
   // Use req.baseUrl to get the full path (req.path is relative to mount point)
-  const fullPath = req.baseUrl + req.path;
-  const skipDeviceApproval = fullPath.startsWith('/api/v1/auth/') || 
-                             fullPath.startsWith('/api/v1/devices') ||
-                             fullPath.startsWith('/api/v1/oauth/') ||
-                             fullPath.startsWith('/api/v1/users') ||
-                             (fullPath.startsWith('/api/v1/activity') && req.method === 'GET');
+  const routePath = req.baseUrl + req.path;
+  const skipDeviceApproval = routePath.startsWith('/api/v1/auth/') || 
+                             routePath.startsWith('/api/v1/devices') ||
+                             routePath.startsWith('/api/v1/oauth/') ||
+                             routePath.startsWith('/api/v1/users') ||
+                             (routePath.startsWith('/api/v1/activity') && req.method === 'GET');
   
   if (skipDeviceApproval) {
     return next();
