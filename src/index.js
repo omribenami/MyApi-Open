@@ -3662,14 +3662,11 @@ app.get([
     console.log(`[OAuth] Exchanging code for token with ${service} adapter...`);
     const tokenData = await adapter.exchangeCodeForToken(code, runtimeTokenParams);
 
-    const userId = getOAuthUserId(req);
+    // Token will be stored AFTER user is created/authenticated
     const expiresAt = tokenData.expiresIn
       ? new Date(Date.now() + tokenData.expiresIn * 1000).toISOString()
       : null;
 
-    console.log(`[OAuth] Storing ${service} token for user: ${userId}`);
-    const storeResult = storeOAuthToken(service, userId, tokenData.accessToken, tokenData.refreshToken || null, expiresAt, tokenData.scope);
-    console.log(`[OAuth] Token stored successfully:`, { tokenId: storeResult.id, service, userId, scope: storeResult.scope });
     updateOAuthStatus(service, "connected");
 
     if ((service === 'google' || service === 'facebook' || service === 'github') && stateMeta.mode === 'login') {
