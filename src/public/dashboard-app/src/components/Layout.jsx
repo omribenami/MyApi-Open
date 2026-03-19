@@ -81,10 +81,10 @@ function Layout({ children, onLogout }) {
     {
       label: 'Core',
       items: [
+        { path: '/access-tokens', label: 'Master Tokens' },
         { path: '/', label: 'Dashboard' },
         { path: '/services', label: 'Services' },
         { path: '/marketplace', label: 'Marketplace' },
-        { path: '/access-tokens', label: 'Master Tokens' },
       ]
     },
     {
