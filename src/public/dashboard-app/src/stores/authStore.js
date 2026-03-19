@@ -112,18 +112,15 @@ export const useAuthStore = create((set, get) => ({
 
         const cookieMasterToken = readCookie('myapi_master_token');
         if (cookieMasterToken) {
+          // Keep token for later validation, but DO NOT mark authenticated yet.
+          // Otherwise app may route into dashboard and trigger /metrics 401 storms.
           try { localStorage.setItem('masterToken', cookieMasterToken); } catch {}
-          set({ masterToken: cookieMasterToken, isAuthenticated: true, isInitialized: true, error: null });
-          return;
         }
 
         const cookieUser = readCookie('myapi_user');
         if (cookieUser) {
-          try {
-            const user = normalizeUserPayload(JSON.parse(decodeURIComponent(cookieUser)));
-            set({ user, isAuthenticated: true, isInitialized: true, error: null });
-            return;
-          } catch {}
+          // Advisory only; authentication must still be confirmed via /auth/me.
+          try { JSON.parse(decodeURIComponent(cookieUser)); } catch {}
         }
 
         if (authMeFailureCount < 2) {
