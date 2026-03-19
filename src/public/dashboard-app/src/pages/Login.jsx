@@ -258,22 +258,31 @@ function Login() {
                       </button>
                     </form>
                   ) : (
-                    <>
-                      <div className="space-y-3">
-                        {oauthServices.map((service) => (
-                          <button
-                            key={service.id}
-                            onClick={() => handleOAuthClick(service.id)}
-                            className="flex min-h-[48px] w-full items-center justify-center gap-3 rounded-xl border border-slate-700 bg-slate-800/70 px-4 py-3 text-sm font-medium text-white transition-colors hover:border-slate-500 hover:bg-slate-800"
-                          >
-                            <span>{OAuthIcons[service.id] || null}</span>
-                            <span>Continue with {service.name}</span>
-                          </button>
-                        ))}
-                      </div>
-                </>
-              )}
-            </div>
+                    <div className="space-y-3">
+                      {oauthServices.map((service) => (
+                        <button
+                          key={service.id}
+                          onClick={() => handleOAuthClick(service.id)}
+                          className="flex min-h-[48px] w-full items-center justify-center gap-3 rounded-xl border border-slate-700 bg-slate-800/70 px-4 py-3 text-sm font-medium text-white transition-colors hover:border-slate-500 hover:bg-slate-800"
+                        >
+                          <span>{OAuthIcons[service.id] || null}</span>
+                          <span>Continue with {service.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="mt-6 text-center text-sm text-slate-400">
+                    Need an account?{' '}
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('pricing')}
+                      className="font-semibold text-blue-300 underline-offset-2 transition-colors hover:text-blue-200 hover:underline"
+                    >
+                      Sign up
+                    </button>
+                  </div>
+                </div>
           ) : (
                 <div>
                   <h2 className="text-2xl font-semibold">Choose your plan</h2>
