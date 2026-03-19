@@ -573,6 +573,14 @@ export default function Marketplace() {
     }
   }, [typeFilter, sort, search]);
 
+  // Compute counters for current filtered results AND global totals
+  const currentCounts = {
+    total: (listings || []).length,
+    skills: (listings || []).filter(l => l?.type === 'skill').length,
+    personas: (listings || []).filter(l => l?.type === 'persona').length,
+    apis: (listings || []).filter(l => l?.type === 'api').length,
+  };
+
   useEffect(() => {
     const t = setTimeout(fetchListings, search ? 300 : 0);
     return () => clearTimeout(t);
@@ -638,8 +646,28 @@ export default function Marketplace() {
           <p className="text-slate-400 mt-1">Discover and share personas, APIs, and skills with the community</p>
         </div>
 
-        {/* Search + Sort */}
-        <div className="flex flex-col sm:flex-row gap-3">
+        {/* Top Summary Counters */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="bg-slate-800 border border-slate-700 rounded-lg p-3">
+            <p className="text-slate-400 text-xs font-medium">Total Products</p>
+            <p className="text-2xl font-bold text-blue-400 mt-1">{currentCounts.total}</p>
+          </div>
+          <div className="bg-slate-800 border border-slate-700 rounded-lg p-3">
+            <p className="text-slate-400 text-xs font-medium">Skills</p>
+            <p className="text-2xl font-bold text-green-400 mt-1">{currentCounts.skills}</p>
+          </div>
+          <div className="bg-slate-800 border border-slate-700 rounded-lg p-3">
+            <p className="text-slate-400 text-xs font-medium">Personas</p>
+            <p className="text-2xl font-bold text-purple-400 mt-1">{currentCounts.personas}</p>
+          </div>
+          <div className="bg-slate-800 border border-slate-700 rounded-lg p-3">
+            <p className="text-slate-400 text-xs font-medium">APIs</p>
+            <p className="text-2xl font-bold text-indigo-400 mt-1">{currentCounts.apis}</p>
+          </div>
+        </div>
+
+        {/* Search + Sort + Reset */}
+        <div className="flex flex-col sm:flex-row gap-3 items-end">
           <div className="relative flex-1">
             <span className="absolute inset-y-0 left-3 flex items-center text-slate-400">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -659,10 +687,22 @@ export default function Marketplace() {
             onChange={e => setSort(e.target.value)}
             className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-white text-sm focus:outline-none focus:border-blue-500"
           >
-            <option value="newest">Newest</option>
-            <option value="popular">Top Rated</option>
+            <option value="newest">Most Recent</option>
+            <option value="popular">Most Popular</option>
             <option value="most_used">Most Used</option>
           </select>
+          {(search || typeFilter !== 'all' || sort !== 'newest') && (
+            <button
+              onClick={() => {
+                setSearch('');
+                setTypeFilter('all');
+                setSort('newest');
+              }}
+              className="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm rounded-lg transition-colors whitespace-nowrap"
+            >
+              Reset Filters
+            </button>
+          )}
         </div>
 
         {/* Type filter tabs */}
