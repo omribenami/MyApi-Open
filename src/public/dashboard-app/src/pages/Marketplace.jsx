@@ -402,63 +402,6 @@ function ListingModal({ listing, onClose, onInstall, onRated, masterToken, initi
   );
 }
 
-function InlineStarRating({ value = 0, count = 0, onRate, disabled = false, listingId, masterToken }) {
-  const [hovered, setHovered] = useState(0);
-  const [isRating, setIsRating] = useState(false);
-  const [ratingError, setRatingError] = useState('');
-
-  async function handleRate(rating) {
-    if (!listingId || !masterToken || disabled) return;
-    setIsRating(true);
-    setRatingError('');
-    try {
-      const res = await fetch(`/api/v1/marketplace/${listingId}/rate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${masterToken}` },
-        body: JSON.stringify({ rating }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data?.error || 'Failed to submit rating');
-      }
-      onRate && onRate(data);
-    } catch (err) {
-      setRatingError(err.message || 'Failed to rate');
-      console.error('[InlineStarRating] error:', err);
-    } finally {
-      setIsRating(false);
-    }
-  }
-
-  return (
-    <div className="space-y-2">
-      {/* Interactive stars */}
-      <div className="flex items-center gap-1.5">
-        <div className="flex gap-0.5">
-          {[1, 2, 3, 4, 5].map(s => (
-            <button
-              key={s}
-              onMouseEnter={() => !disabled && setHovered(s)}
-              onMouseLeave={() => setHovered(0)}
-              onClick={() => handleRate(s)}
-              disabled={disabled || isRating}
-              className={`text-lg transition-all ${
-                s <= (hovered || value)
-                  ? 'text-amber-400 scale-110'
-                  : 'text-slate-600 hover:text-amber-300'
-              } ${disabled || isRating ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
-            >★</button>
-          ))}
-        </div>
-        {count > 0 && <span className="text-xs text-slate-400">{value.toFixed(1)} ({count})</span>}
-        {count === 0 && <span className="text-xs text-slate-500">No ratings</span>}
-      </div>
-      {isRating && <p className="text-xs text-blue-400">Rating...</p>}
-      {ratingError && <p className="text-xs text-red-400">{ratingError}</p>}
-    </div>
-  );
-}
-
 function ListingCard({
   listing = {},
   onClick,
@@ -485,11 +428,10 @@ function ListingCard({
 
   const scanner = listingType === 'skill' ? extractScanner(listing.content) : null;
   const [quickError, setQuickError] = useState('');
-  const [localInstalled, setLocalInstalled] = useState(isInstalled);
 
   async function handleQuickInstall(e) {
     e.stopPropagation();
-    if (!masterToken || localInstalled || quickInstalling || !listingId) return;
+    if (!masterToken || isInstalled || quickInstalling || !listingId) return;
 
     setQuickError('');
     try {
@@ -501,7 +443,6 @@ function ListingCard({
       if (!res.ok) {
         throw new Error(data?.error || (res.status === 401 ? 'Session expired. Please sign in again.' : 'Install failed'));
       }
-      setLocalInstalled(true);
       onQuickInstall && onQuickInstall({ listingId, type: listingType, data });
     } catch (err) {
       setQuickError(err.message || 'Install failed');
@@ -509,173 +450,66 @@ function ListingCard({
     }
   }
 
-  async function handleQuickRemove(e) {
-    e.stopPropagation();
-    if (!masterToken || !localInstalled || !listingId) return;
-
-    setQuickError('');
-    // Note: This calls uninstall endpoint - ensure backend supports it
-    try {
-      const res = await fetch(`/api/v1/marketplace/${listingId}/uninstall`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${masterToken}` },
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data?.error || (res.status === 401 ? 'Session expired. Please sign in again.' : 'Remove failed'));
-      }
-      setLocalInstalled(false);
-      onQuickInstall && onQuickInstall({ listingId, type: listingType, data });
-    } catch (err) {
-      setQuickError(err.message || 'Remove failed');
-      console.error('[ListingCard] quickRemove error:', err);
-    }
-  }
-
-  const isPaid = listingPrice !== 'free' && listingPrice !== 'price unknown';
-
   return (
     <div
       onClick={() => onClick && onClick(listing)}
-      className="bg-slate-900 border border-slate-700 rounded-lg p-4 cursor-pointer hover:border-blue-500 hover:bg-slate-850 transition-all group flex flex-col h-full"
+      className="bg-white bg-opacity-5 border border-white border-opacity-10 rounded-xl p-5 cursor-pointer hover:border-blue-500 hover:border-opacity-50 hover:bg-opacity-10 transition-all group"
     >
-      {/* Header: Type badge + Pricing badge */}
-      <div className="flex items-center justify-between gap-2 mb-3">
+      <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-2">
           <TypeBadge type={listingType} />
           {listing?.official && (
-            <span className="text-[10px] font-semibold text-emerald-300 bg-emerald-900 bg-opacity-50 border border-emerald-700 rounded-full px-2 py-0.5" title="Official / Verified Provider">
-              ✓ Official
-            </span>
+            <span className="text-[10px] text-emerald-300 border border-emerald-700 rounded-full px-2 py-0.5 bg-emerald-900 bg-opacity-30" title="Official / Verified">✓ Official</span>
           )}
         </div>
         <div className="flex items-center gap-2">
-          {isPaid && (
-            <span className="text-[10px] font-semibold text-amber-300 bg-amber-900 bg-opacity-50 border border-amber-700 rounded-full px-2 py-0.5">
-              Paid
-            </span>
+          {isInstalled && (
+            <span className="text-[10px] text-emerald-300 border border-emerald-700 rounded-full px-2 py-0.5">Installed</span>
           )}
-          {!isPaid && (
-            <span className="text-[10px] font-semibold text-green-300 bg-green-900 bg-opacity-50 border border-green-700 rounded-full px-2 py-0.5">
-              Free
-            </span>
-          )}
-          {localInstalled && (
-            <span className="text-[10px] font-semibold text-emerald-300 bg-emerald-900 bg-opacity-50 border border-emerald-700 rounded-full px-2 py-0.5">
-              ✓ Installed
-            </span>
-          )}
+          <span className="text-xs text-green-400">{listingPrice === 'free' ? 'Free' : listingPrice}</span>
         </div>
       </div>
-
-      {/* Title - Larger and prominent */}
-      <h3 className="font-bold text-lg text-white group-hover:text-blue-300 transition-colors line-clamp-2 mb-2">
-        {listingTitle}
-      </h3>
-
-      {/* Author - Prominent */}
-      <div className="text-sm text-slate-300 font-medium mb-2">
-        by <span className="text-slate-100">{listingOwnerName}</span>
-        {listing?.provider && (
-          <span className="ml-2 text-xs text-slate-500">({listing.provider})</span>
-        )}
-      </div>
-
-      {/* Description */}
-      <p className="text-slate-400 text-sm line-clamp-2 mb-3 flex-grow">
-        {listingDescription}
-      </p>
-
-      {/* Scanner badge for skills */}
+      <h3 className="font-semibold text-white group-hover:text-blue-300 transition-colors line-clamp-1 mb-1">{listingTitle}</h3>
+      <p className="text-slate-400 text-sm line-clamp-2 mb-3">{listingDescription}</p>
       {scanner && (
-        <div className="mb-3">
-          <span
-            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs border ${
-              scanner.safe_to_use
-                ? 'bg-emerald-900/40 text-emerald-300 border-emerald-700'
-                : 'bg-amber-900/40 text-amber-300 border-amber-700'
-            }`}
-            title="Skill scanner checks README/SKILL.md/package.json for risky patterns."
-          >
-            {scanner.safe_to_use ? '✓ Safe' : '⚠ Review'} · score {scanner.score}
-          </span>
+        <div
+          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs border mb-3 ${scanner.safe_to_use ? 'bg-emerald-900/40 text-emerald-300 border-emerald-700' : 'bg-amber-900/40 text-amber-300 border-amber-700'}`}
+          title="Skill scanner checks README/SKILL.md/package.json for risky patterns."
+        >
+          {scanner.safe_to_use ? 'Safe' : 'Review'} · score {scanner.score}
         </div>
       )}
-
-      {/* Tags */}
+      <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
+        <span>by {listingOwnerName}</span>
+        <span>{listingInstallCount} installs</span>
+      </div>
+      {listing?.provider && (
+        <div className="text-xs text-slate-500 mb-2">Provider: {listing.provider}</div>
+      )}
+      <div className="mt-2">
+        <StarRating value={listingAvgRating} count={listingRatingCount} />
+      </div>
       {listingTags && Array.isArray(listingTags) && listingTags.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-3">
-          {listingTags.slice(0, 2).map(tag => (
-            <span
-              key={tag}
-              className="px-2 py-0.5 bg-slate-800 text-slate-300 text-xs rounded-full border border-slate-700"
-            >
-              {tag}
-            </span>
+        <div className="flex flex-wrap gap-1 mt-3">
+          {listingTags.slice(0, 3).map(tag => (
+            <span key={tag} className="px-2 py-0.5 bg-slate-800 text-slate-400 text-xs rounded-full">{tag}</span>
           ))}
-          {listingTags.length > 2 && (
-            <span className="px-2 py-0.5 text-slate-500 text-xs">+{listingTags.length - 2} more</span>
-          )}
+          {listingTags.length > 3 && <span className="text-slate-500 text-xs">+{listingTags.length - 3}</span>}
         </div>
       )}
-
-      {/* Stats: Install count + Rating */}
-      <div className="flex items-center justify-between text-xs text-slate-400 border-t border-slate-800 pt-3 mb-3">
-        <span className="flex items-center gap-1">
-          <span className="text-slate-500">📊</span> {listingInstallCount} installs
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="text-slate-500">⭐</span> {listingRatingCount} reviews
-        </span>
-      </div>
-
-      {/* Inline Rating Controls */}
-      {masterToken && (
-        <div className="mb-4 pb-4 border-b border-slate-800">
-          <InlineStarRating
-            value={listingAvgRating}
-            count={listingRatingCount}
-            listingId={listingId}
-            masterToken={masterToken}
-            disabled={!masterToken}
-            onRate={(data) => {
-              // Optional: refresh card data here
-            }}
-          />
-        </div>
-      )}
-
-      {/* Install/Remove buttons + View Details link */}
-      <div className="mt-auto space-y-3">
+      <div className="mt-4 flex items-center justify-between gap-2">
+        <span className="text-xs font-medium text-blue-400 group-hover:text-blue-300 transition-colors">View Details →</span>
         {masterToken && (
-          <>
-            {localInstalled ? (
-              <button
-                onClick={handleQuickRemove}
-                className="w-full py-2.5 bg-red-900 bg-opacity-50 hover:bg-opacity-70 text-red-300 border border-red-700 text-sm font-medium rounded-lg transition-colors"
-              >
-                Remove
-              </button>
-            ) : (
-              <button
-                onClick={handleQuickInstall}
-                disabled={quickInstalling}
-                className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors"
-              >
-                {quickInstalling ? 'Installing...' : 'Install'}
-              </button>
-            )}
-            {quickError && <p className="text-xs text-red-400 text-center">{quickError}</p>}
-          </>
+          <button
+            onClick={handleQuickInstall}
+            disabled={isInstalled || quickInstalling}
+            className="px-3 py-1.5 text-xs rounded-md bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white"
+          >
+            {quickInstalling ? 'Installing...' : isInstalled ? 'Installed' : 'Install'}
+          </button>
         )}
-
-        {/* View Details link */}
-        <div className="text-center">
-          <span className="text-sm font-medium text-blue-400 group-hover:text-blue-300 transition-colors cursor-pointer">
-            View Details →
-          </span>
-        </div>
       </div>
+      {quickError && <p className="mt-2 text-xs text-red-400">{quickError}</p>}
     </div>
   );
 }
@@ -725,6 +559,15 @@ export default function Marketplace() {
   const [sort, setSort] = useState('newest');
   const [selected, setSelected] = useState(null);
 
+  // Enhanced filter states
+  const [fieldFilter, setFieldFilter] = useState('all');
+  const [providerFilter, setProviderFilter] = useState('all');
+  const [priceFilter, setPriceFilter] = useState('all');
+  const [ratingFilter, setRatingFilter] = useState('all');
+  const [officialFilter, setOfficialFilter] = useState(false);
+  const [availableFields, setAvailableFields] = useState([]);
+  const [availableProviders, setAvailableProviders] = useState([]);
+
   const fetchListings = useCallback(async () => {
     setLoading(true);
     try {
@@ -732,12 +575,32 @@ export default function Marketplace() {
       if (typeFilter !== 'all') params.set('type', typeFilter);
       if (sort !== 'newest') params.set('sort', sort);
       if (search) params.set('search', search);
+      if (fieldFilter !== 'all') params.set('tags', fieldFilter);
+      if (providerFilter !== 'all') params.set('provider', providerFilter);
+      if (priceFilter !== 'all') params.set('price', priceFilter);
+      if (ratingFilter !== 'all') params.set('rating', ratingFilter);
+      if (officialFilter) params.set('official', '1');
+
       const res = await fetch(`/api/v1/marketplace?${params}`);
       if (res.ok) {
         const data = await res.json();
         // Defensive: ensure listings is array
         const fetchedListings = Array.isArray(data?.listings) ? data.listings : [];
         setListings(fetchedListings);
+
+        // Extract available fields and providers from listings
+        const fields = new Set();
+        const providers = new Set();
+        fetchedListings.forEach(listing => {
+          if (Array.isArray(listing.tags)) {
+            listing.tags.forEach(tag => fields.add(tag));
+          }
+          if (listing.provider) {
+            providers.add(listing.provider);
+          }
+        });
+        setAvailableFields(Array.from(fields).sort());
+        setAvailableProviders(Array.from(providers).sort());
       }
     } catch (err) {
       console.error('[Marketplace] fetchListings error:', err);
@@ -745,7 +608,7 @@ export default function Marketplace() {
     } finally {
       setLoading(false);
     }
-  }, [typeFilter, sort, search]);
+  }, [typeFilter, sort, search, fieldFilter, providerFilter, priceFilter, ratingFilter, officialFilter]);
 
   // Compute counters for current filtered results AND global totals
   const currentCounts = {
@@ -799,8 +662,7 @@ export default function Marketplace() {
     setQuickInstallingIds(prev => new Set([...prev, String(listingId)]));
     try {
       if (type === 'skill') {
-        // Refresh installed skills to get updated state from server
-        await fetchInstalledSkills();
+        setInstalledSkillListingIds(prev => new Set([...prev, String(listingId)]));
       }
       await fetchListings();
     } finally {
@@ -811,6 +673,17 @@ export default function Marketplace() {
       });
     }
   };
+
+  const activeFilterCount = [
+    search ? 1 : 0,
+    typeFilter !== 'all' ? 1 : 0,
+    fieldFilter !== 'all' ? 1 : 0,
+    providerFilter !== 'all' ? 1 : 0,
+    priceFilter !== 'all' ? 1 : 0,
+    ratingFilter !== 'all' ? 1 : 0,
+    officialFilter ? 1 : 0,
+    sort !== 'newest' ? 1 : 0,
+  ].reduce((a, b) => a + b, 0);
 
   return (
     <MarketplaceErrorBoundary>
@@ -841,7 +714,7 @@ export default function Marketplace() {
           </div>
         </div>
 
-        {/* Search + Sort + Reset */}
+        {/* Search + Sort */}
         <div className="flex flex-col sm:flex-row gap-3 items-end">
           <div className="relative flex-1">
             <span className="absolute inset-y-0 left-3 flex items-center text-slate-400">
@@ -866,19 +739,197 @@ export default function Marketplace() {
             <option value="popular">Most Popular</option>
             <option value="most_used">Most Used</option>
           </select>
-          {(search || typeFilter !== 'all' || sort !== 'newest') && (
-            <button
-              onClick={() => {
-                setSearch('');
-                setTypeFilter('all');
-                setSort('newest');
-              }}
-              className="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm rounded-lg transition-colors whitespace-nowrap"
-            >
-              Reset Filters
-            </button>
-          )}
         </div>
+
+        {/* Enhanced Filter Bar */}
+        <div className="bg-slate-800 bg-opacity-50 border border-slate-700 rounded-lg p-4 space-y-4">
+          {/* Filter Row 1: Field, Provider, Price */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {/* Field/Category Filter */}
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-2">Field / Category</label>
+              <select
+                value={fieldFilter}
+                onChange={e => setFieldFilter(e.target.value)}
+                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
+              >
+                <option value="all">All Fields</option>
+                {availableFields.map(field => (
+                  <option key={field} value={field}>{field}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Provider Filter */}
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-2">Provider</label>
+              <select
+                value={providerFilter}
+                onChange={e => setProviderFilter(e.target.value)}
+                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-500"
+              >
+                <option value="all">All Providers</option>
+                {availableProviders.map(provider => (
+                  <option key={provider} value={provider}>{provider}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Price Filter */}
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-2">Price</label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPriceFilter('all')}
+                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    priceFilter === 'all'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
+                  }`}
+                >
+                  All
+                </button>
+                <button
+                  onClick={() => setPriceFilter('free')}
+                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    priceFilter === 'free'
+                      ? 'bg-green-600 text-white'
+                      : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
+                  }`}
+                >
+                  Free
+                </button>
+                <button
+                  onClick={() => setPriceFilter('paid')}
+                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    priceFilter === 'paid'
+                      ? 'bg-amber-600 text-white'
+                      : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
+                  }`}
+                >
+                  Paid
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Filter Row 2: Rating, Official, Clear Button */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {/* Rating Filter */}
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-2">Rating</label>
+              <button
+                onClick={() => setRatingFilter(ratingFilter === '4+' ? 'all' : '4+')}
+                className={`w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  ratingFilter === '4+'
+                    ? 'bg-yellow-600 text-white'
+                    : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
+                }`}
+              >
+                ★★★★+ (4+ Stars)
+              </button>
+            </div>
+
+            {/* Official/Verified Filter */}
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-2">Verification</label>
+              <button
+                onClick={() => setOfficialFilter(!officialFilter)}
+                className={`w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  officialFilter
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
+                }`}
+              >
+                {officialFilter ? '✓ Official Only' : 'Show All'}
+              </button>
+            </div>
+
+            {/* Clear Filters Button with count badge */}
+            <div className="flex items-end">
+              <button
+                onClick={() => {
+                  setSearch('');
+                  setTypeFilter('all');
+                  setFieldFilter('all');
+                  setProviderFilter('all');
+                  setPriceFilter('all');
+                  setRatingFilter('all');
+                  setOfficialFilter(false);
+                  setSort('newest');
+                }}
+                className={`w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors relative ${
+                  activeFilterCount > 0
+                    ? 'bg-red-700 hover:bg-red-600 text-white'
+                    : 'bg-slate-700 text-slate-500 cursor-default'
+                }`}
+                disabled={activeFilterCount === 0}
+              >
+                Clear All
+                {activeFilterCount > 0 && (
+                  <span className="ml-2 inline-flex items-center justify-center w-5 h-5 text-xs font-bold bg-red-500 rounded-full">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Active Filters Chips */}
+        {activeFilterCount > 0 && (
+          <div className="flex flex-wrap gap-2 items-center">
+            <span className="text-xs text-slate-400 font-medium">Active filters ({activeFilterCount}):</span>
+            {search && (
+              <div className="inline-flex items-center gap-2 bg-blue-900 bg-opacity-50 text-blue-300 px-3 py-1.5 rounded-full border border-blue-700 text-xs">
+                <span>Search: {search}</span>
+                <button onClick={() => setSearch('')} className="text-blue-400 hover:text-blue-200 font-bold">×</button>
+              </div>
+            )}
+            {typeFilter !== 'all' && (
+              <div className="inline-flex items-center gap-2 bg-purple-900 bg-opacity-50 text-purple-300 px-3 py-1.5 rounded-full border border-purple-700 text-xs">
+                <span>Type: {typeFilter}</span>
+                <button onClick={() => setTypeFilter('all')} className="text-purple-400 hover:text-purple-200 font-bold">×</button>
+              </div>
+            )}
+            {fieldFilter !== 'all' && (
+              <div className="inline-flex items-center gap-2 bg-green-900 bg-opacity-50 text-green-300 px-3 py-1.5 rounded-full border border-green-700 text-xs">
+                <span>Field: {fieldFilter}</span>
+                <button onClick={() => setFieldFilter('all')} className="text-green-400 hover:text-green-200 font-bold">×</button>
+              </div>
+            )}
+            {providerFilter !== 'all' && (
+              <div className="inline-flex items-center gap-2 bg-indigo-900 bg-opacity-50 text-indigo-300 px-3 py-1.5 rounded-full border border-indigo-700 text-xs">
+                <span>Provider: {providerFilter}</span>
+                <button onClick={() => setProviderFilter('all')} className="text-indigo-400 hover:text-indigo-200 font-bold">×</button>
+              </div>
+            )}
+            {priceFilter !== 'all' && (
+              <div className="inline-flex items-center gap-2 bg-amber-900 bg-opacity-50 text-amber-300 px-3 py-1.5 rounded-full border border-amber-700 text-xs">
+                <span>Price: {priceFilter}</span>
+                <button onClick={() => setPriceFilter('all')} className="text-amber-400 hover:text-amber-200 font-bold">×</button>
+              </div>
+            )}
+            {ratingFilter !== 'all' && (
+              <div className="inline-flex items-center gap-2 bg-yellow-900 bg-opacity-50 text-yellow-300 px-3 py-1.5 rounded-full border border-yellow-700 text-xs">
+                <span>Rating: {ratingFilter}</span>
+                <button onClick={() => setRatingFilter('all')} className="text-yellow-400 hover:text-yellow-200 font-bold">×</button>
+              </div>
+            )}
+            {officialFilter && (
+              <div className="inline-flex items-center gap-2 bg-emerald-900 bg-opacity-50 text-emerald-300 px-3 py-1.5 rounded-full border border-emerald-700 text-xs">
+                <span>Official Only</span>
+                <button onClick={() => setOfficialFilter(false)} className="text-emerald-400 hover:text-emerald-200 font-bold">×</button>
+              </div>
+            )}
+            {sort !== 'newest' && (
+              <div className="inline-flex items-center gap-2 bg-cyan-900 bg-opacity-50 text-cyan-300 px-3 py-1.5 rounded-full border border-cyan-700 text-xs">
+                <span>Sort: {sort === 'popular' ? 'Most Popular' : 'Most Used'}</span>
+                <button onClick={() => setSort('newest')} className="text-cyan-400 hover:text-cyan-200 font-bold">×</button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Type filter tabs */}
         <div className="flex gap-1 bg-slate-800 bg-opacity-50 p-1 rounded-lg w-fit">
