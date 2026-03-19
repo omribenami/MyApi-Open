@@ -65,7 +65,13 @@ export const useAuthStore = create((set) => ({
         });
         return;
       }
-      incrementAuthMeFailureCount();
+      // 401 is expected when user is logged out — this is not a failure, just no session
+      if (sessionCheckRes.status === 401) {
+        resetAuthMeFailureCountOnSuccess();
+        // No session, continue to Bearer token check below
+      } else {
+        incrementAuthMeFailureCount();
+      }
     } catch (e) {
       incrementAuthMeFailureCount();
     }
@@ -211,7 +217,13 @@ export const useAuthStore = create((set) => ({
   logout: () => {
     try {
       localStorage.removeItem('masterToken');
+      localStorage.removeItem('tokenData');
+      localStorage.removeItem('profileAvatarUrl');
       sessionStorage.removeItem('sessionToken');
+      sessionStorage.removeItem('tokenData');
+      // Clear any corruption recovery markers so fresh init works
+      sessionStorage.removeItem('__myapi_corruption_recovery_ts__');
+      sessionStorage.removeItem('__myapi_corruption_recovery_count__');
     } catch {
       // Ignore storage cleanup failures on logout.
     }

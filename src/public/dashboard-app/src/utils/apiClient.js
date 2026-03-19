@@ -50,8 +50,8 @@ apiClient.interceptors.response.use(
         return Promise.reject(error);
       }
 
-      // Any other 403 means token/session is no longer usable for dashboard APIs.
-      // Clear local auth to avoid endless forbidden loops in the UI.
+      // Any other 403 after logout means no auth present
+      // Clear local auth and redirect to login to reauthenticate
       try {
         localStorage.removeItem('masterToken');
         localStorage.removeItem('tokenData');
