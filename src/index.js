@@ -1028,6 +1028,10 @@ function requirePowerUser(req, res) {
 
   let email = String(req?.session?.user?.email || req?.user?.email || '').toLowerCase();
   if (!email && req?.tokenMeta?.ownerId) {
+    // Special case: tokens with owner_id = 'owner' are admin tokens (legacy support)
+    if (req.tokenMeta.ownerId === 'owner') {
+      return true;
+    }
     const tokenOwnerUser = getUserById(req.tokenMeta.ownerId);
     email = String(tokenOwnerUser?.email || '').toLowerCase();
   }
