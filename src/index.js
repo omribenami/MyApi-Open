@@ -780,25 +780,18 @@ app.use('/api/v1/services', authenticate, createServicesRoutes());
 
 function authenticate(req, res, next) {
   // 1) Session auth (human dashboard)
+  // CRITICAL: Device approval only applies to API tokens, not session auth.
+  // Sessions are from OAuth logins (browser), which are already protected by session cookies + CORS.
   if (req.session && req.session.user) {
     req.user = req.session.user;
     req.authType = 'session';
     // session users are treated as "full" for MVP; we will add RBAC later.
     req.tokenMeta = { tokenId: `sess_${req.user.id}`, scope: 'full', ownerId: String(req.user.id), label: 'session' };
     
-    // For session users, skip device approval for auth/device routes and bootstrap-safe reads.
-    const skipDeviceApproval = req.path.startsWith('/api/v1/auth/') || 
-                               req.path.startsWith('/api/v1/devices') ||
-                               req.path.startsWith('/api/v1/oauth/authorize') ||
-                               req.path.startsWith('/api/v1/ws') ||
-                               (req.method === 'GET' && (req.path === '/api/v1/dashboard/metrics' || req.path === '/api/v1/privacy/cookies'));
-    
-    if (skipDeviceApproval) {
-      return next();
-    }
-    
-    // Apply device approval for session users on protected routes
-    return deviceApprovalMiddleware(req, res, next);
+    // SKIP device approval entirely for session auth.
+    // Browsers don't have "devices" in the master-token sense; they have sessions.
+    // Device approval is only for API token/agent access.
+    return next();
   }
 
   // 2) Bearer token auth (agents) or Query parameter (for basic AI fetch tools)
@@ -832,12 +825,13 @@ function authenticate(req, res, next) {
   req.tokenMeta = matched;
   req.authType = 'bearer';
   
-  // For Bearer tokens (agents), skip device approval for auth/device routes and bootstrap-safe reads.
+  // For Bearer tokens (agents/APIs), enforce device approval.
+  // This adds a layer of security: even if a master token is leaked, the attacker
+  // still needs to approve the device fingerprint before accessing protected APIs.
+  // Exceptions: auth setup routes, device management, and OAuth flows don't require approval.
   const skipDeviceApproval = req.path.startsWith('/api/v1/auth/') || 
                              req.path.startsWith('/api/v1/devices') ||
-                             req.path.startsWith('/api/v1/oauth/authorize') ||
-                             req.path.startsWith('/api/v1/ws') ||
-                             (req.method === 'GET' && (req.path === '/api/v1/dashboard/metrics' || req.path === '/api/v1/privacy/cookies'));
+                             req.path.startsWith('/api/v1/oauth/');
   
   if (skipDeviceApproval) {
     return next();
