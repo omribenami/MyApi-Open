@@ -489,6 +489,45 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_email_queue_status ON email_queue(status);
     CREATE INDEX IF NOT EXISTS idx_service_preferences_user ON service_preferences(user_id);
     CREATE INDEX IF NOT EXISTS idx_service_preferences_service ON service_preferences(service_name);
+
+    -- Phase 1: Teams & Multi-Tenancy Tables
+    CREATE TABLE IF NOT EXISTS workspaces (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      owner_id TEXT NOT NULL REFERENCES users(id),
+      slug TEXT UNIQUE NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS workspace_members (
+      id TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      role TEXT NOT NULL DEFAULT 'member',
+      joined_at TEXT NOT NULL,
+      UNIQUE(workspace_id, user_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS workspace_invitations (
+      id TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      email TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'member',
+      created_by_user_id TEXT NOT NULL REFERENCES users(id),
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      accepted_at TEXT,
+      accepted_by_user_id TEXT REFERENCES users(id),
+      UNIQUE(workspace_id, email)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_workspaces_owner ON workspaces(owner_id);
+    CREATE INDEX IF NOT EXISTS idx_workspace_members_workspace ON workspace_members(workspace_id);
+    CREATE INDEX IF NOT EXISTS idx_workspace_members_user ON workspace_members(user_id);
+    CREATE INDEX IF NOT EXISTS idx_workspace_invitations_workspace ON workspace_invitations(workspace_id);
+    CREATE INDEX IF NOT EXISTS idx_workspace_invitations_email ON workspace_invitations(email);
+    CREATE INDEX IF NOT EXISTS idx_workspace_invitations_expires ON workspace_invitations(expires_at);
   `);
 
   // Add device_id column to access_logs if not already present
@@ -577,6 +616,36 @@ function initDatabase() {
   db.exec('CREATE INDEX IF NOT EXISTS idx_personas_owner ON personas(owner_id)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_skills_owner ON skills(owner_id)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_kb_documents_owner ON kb_documents(owner_id)');
+
+  // Phase 1: Teams & Multi-Tenancy - Add workspace_id to relevant tables
+  const phase1MultiTenancyMigrations = [
+    "ALTER TABLE access_tokens ADD COLUMN workspace_id TEXT",
+    "ALTER TABLE oauth_tokens ADD COLUMN workspace_id TEXT",
+    "ALTER TABLE vault_tokens ADD COLUMN workspace_id TEXT",
+    "ALTER TABLE marketplace_listings ADD COLUMN workspace_id TEXT",
+    "ALTER TABLE skills ADD COLUMN workspace_id TEXT",
+    "ALTER TABLE personas ADD COLUMN workspace_id TEXT",
+    "ALTER TABLE services ADD COLUMN workspace_id TEXT",
+    "ALTER TABLE conversations ADD COLUMN workspace_id TEXT",
+    "ALTER TABLE kb_documents ADD COLUMN workspace_id TEXT"
+  ];
+  
+  for (const migration of phase1MultiTenancyMigrations) {
+    try { db.exec(migration); } catch (e) {}
+  }
+
+  // Create workspace indexes for multi-tenancy
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_access_tokens_workspace ON access_tokens(workspace_id);
+    CREATE INDEX IF NOT EXISTS idx_oauth_tokens_workspace ON oauth_tokens(workspace_id);
+    CREATE INDEX IF NOT EXISTS idx_vault_tokens_workspace ON vault_tokens(workspace_id);
+    CREATE INDEX IF NOT EXISTS idx_marketplace_listings_workspace ON marketplace_listings(workspace_id);
+    CREATE INDEX IF NOT EXISTS idx_skills_workspace ON skills(workspace_id);
+    CREATE INDEX IF NOT EXISTS idx_personas_workspace ON personas(workspace_id);
+    CREATE INDEX IF NOT EXISTS idx_services_workspace ON services(workspace_id);
+    CREATE INDEX IF NOT EXISTS idx_conversations_workspace ON conversations(workspace_id);
+    CREATE INDEX IF NOT EXISTS idx_kb_documents_workspace ON kb_documents(workspace_id);
+  `);
 
   // Phase 1: Skill Origin & Attribution - Add origin tracking columns to skills table
   const skillOriginMigrations = [
@@ -3643,6 +3712,301 @@ function markEmailAsFailed(emailId, reason) {
   `).run(reason, emailId).changes > 0;
 }
 
+// ========== PHASE 1: WORKSPACES & TEAMS ==========
+
+function createWorkspace(name, ownerId, slug = null) {
+  const id = 'ws_' + crypto.randomBytes(16).toString('hex');
+  const now = new Date().toISOString();
+  const finalSlug = slug || name.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 50);
+  
+  const stmt = db.prepare(`
+    INSERT INTO workspaces (id, name, owner_id, slug, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  
+  stmt.run(id, name, ownerId, finalSlug, now, now);
+  
+  // Add owner as member with owner role
+  addWorkspaceMember(id, ownerId, 'owner');
+  
+  return {
+    id,
+    name,
+    ownerId,
+    slug: finalSlug,
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+function getWorkspaces(userId = null, workspaceId = null) {
+  if (workspaceId) {
+    const stmt = db.prepare('SELECT * FROM workspaces WHERE id = ?');
+    const workspace = stmt.get(workspaceId);
+    return workspace ? {
+      id: workspace.id,
+      name: workspace.name,
+      ownerId: workspace.owner_id,
+      slug: workspace.slug,
+      createdAt: workspace.created_at,
+      updatedAt: workspace.updated_at
+    } : null;
+  }
+  
+  if (userId) {
+    const stmt = db.prepare(`
+      SELECT DISTINCT w.*
+      FROM workspaces w
+      LEFT JOIN workspace_members wm ON w.id = wm.workspace_id
+      WHERE w.owner_id = ? OR wm.user_id = ?
+      ORDER BY w.created_at DESC
+    `);
+    return stmt.all(userId, userId).map(w => ({
+      id: w.id,
+      name: w.name,
+      ownerId: w.owner_id,
+      slug: w.slug,
+      createdAt: w.created_at,
+      updatedAt: w.updated_at
+    }));
+  }
+  
+  const stmt = db.prepare('SELECT * FROM workspaces ORDER BY created_at DESC');
+  return stmt.all().map(w => ({
+    id: w.id,
+    name: w.name,
+    ownerId: w.owner_id,
+    slug: w.slug,
+    createdAt: w.created_at,
+    updatedAt: w.updated_at
+  }));
+}
+
+function updateWorkspace(workspaceId, updates) {
+  const now = new Date().toISOString();
+  const allowed = ['name', 'slug'];
+  const setClauses = [];
+  const params = [];
+  
+  for (const [key, value] of Object.entries(updates)) {
+    if (allowed.includes(key)) {
+      setClauses.push(`${key} = ?`);
+      params.push(value);
+    }
+  }
+  
+  if (setClauses.length === 0) return false;
+  
+  params.push(now);
+  params.push(workspaceId);
+  
+  const stmt = db.prepare(`
+    UPDATE workspaces
+    SET ${setClauses.join(', ')}, updated_at = ?
+    WHERE id = ?
+  `);
+  
+  return stmt.run(...params).changes > 0;
+}
+
+function deleteWorkspace(workspaceId) {
+  const stmt = db.prepare('DELETE FROM workspaces WHERE id = ?');
+  return stmt.run(workspaceId).changes > 0;
+}
+
+function addWorkspaceMember(workspaceId, userId, role = 'member') {
+  const id = 'wm_' + crypto.randomBytes(16).toString('hex');
+  const now = new Date().toISOString();
+  
+  const stmt = db.prepare(`
+    INSERT OR IGNORE INTO workspace_members (id, workspace_id, user_id, role, joined_at)
+    VALUES (?, ?, ?, ?, ?)
+  `);
+  
+  stmt.run(id, workspaceId, userId, role, now);
+  return id;
+}
+
+function getWorkspaceMembers(workspaceId) {
+  const stmt = db.prepare(`
+    SELECT wm.id, wm.workspace_id, wm.user_id, wm.role, wm.joined_at, u.username, u.email, u.display_name
+    FROM workspace_members wm
+    LEFT JOIN users u ON wm.user_id = u.id
+    WHERE wm.workspace_id = ?
+    ORDER BY wm.joined_at ASC
+  `);
+  
+  return stmt.all(workspaceId).map(m => ({
+    id: m.id,
+    workspaceId: m.workspace_id,
+    userId: m.user_id,
+    role: m.role,
+    joinedAt: m.joined_at,
+    username: m.username,
+    email: m.email,
+    displayName: m.display_name
+  }));
+}
+
+function updateWorkspaceMemberRole(workspaceMemberId, newRole) {
+  const stmt = db.prepare('UPDATE workspace_members SET role = ? WHERE id = ?');
+  return stmt.run(newRole, workspaceMemberId).changes > 0;
+}
+
+function removeWorkspaceMember(workspaceMemberId) {
+  const stmt = db.prepare('DELETE FROM workspace_members WHERE id = ?');
+  return stmt.run(workspaceMemberId).changes > 0;
+}
+
+function getWorkspaceMember(workspaceId, userId) {
+  const stmt = db.prepare(`
+    SELECT wm.id, wm.workspace_id, wm.user_id, wm.role, wm.joined_at
+    FROM workspace_members wm
+    WHERE wm.workspace_id = ? AND wm.user_id = ?
+  `);
+  
+  const member = stmt.get(workspaceId, userId);
+  return member ? {
+    id: member.id,
+    workspaceId: member.workspace_id,
+    userId: member.user_id,
+    role: member.role,
+    joinedAt: member.joined_at
+  } : null;
+}
+
+function createWorkspaceInvitation(workspaceId, email, createdByUserId, role = 'member') {
+  const id = 'inv_' + crypto.randomBytes(16).toString('hex');
+  const now = new Date().toISOString();
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days
+  
+  const stmt = db.prepare(`
+    INSERT INTO workspace_invitations (id, workspace_id, email, role, created_by_user_id, created_at, expires_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+  
+  stmt.run(id, workspaceId, email, role, createdByUserId, now, expiresAt);
+  return {
+    id,
+    workspaceId,
+    email,
+    role,
+    createdByUserId,
+    createdAt: now,
+    expiresAt
+  };
+}
+
+function getWorkspaceInvitations(workspaceId = null) {
+  if (workspaceId) {
+    const stmt = db.prepare(`
+      SELECT * FROM workspace_invitations
+      WHERE workspace_id = ? AND (accepted_at IS NULL OR accepted_at = '')
+      ORDER BY created_at DESC
+    `);
+    return stmt.all(workspaceId).map(inv => ({
+      id: inv.id,
+      workspaceId: inv.workspace_id,
+      email: inv.email,
+      role: inv.role,
+      createdByUserId: inv.created_by_user_id,
+      createdAt: inv.created_at,
+      expiresAt: inv.expires_at,
+      acceptedAt: inv.accepted_at,
+      acceptedByUserId: inv.accepted_by_user_id
+    }));
+  }
+  
+  const stmt = db.prepare(`
+    SELECT * FROM workspace_invitations
+    WHERE accepted_at IS NULL OR accepted_at = ''
+    ORDER BY created_at DESC
+  `);
+  
+  return stmt.all().map(inv => ({
+    id: inv.id,
+    workspaceId: inv.workspace_id,
+    email: inv.email,
+    role: inv.role,
+    createdByUserId: inv.created_by_user_id,
+    createdAt: inv.created_at,
+    expiresAt: inv.expires_at,
+    acceptedAt: inv.accepted_at,
+    acceptedByUserId: inv.accepted_by_user_id
+  }));
+}
+
+function getInvitationById(invitationId) {
+  const stmt = db.prepare('SELECT * FROM workspace_invitations WHERE id = ?');
+  const inv = stmt.get(invitationId);
+  return inv ? {
+    id: inv.id,
+    workspaceId: inv.workspace_id,
+    email: inv.email,
+    role: inv.role,
+    createdByUserId: inv.created_by_user_id,
+    createdAt: inv.created_at,
+    expiresAt: inv.expires_at,
+    acceptedAt: inv.accepted_at,
+    acceptedByUserId: inv.accepted_by_user_id
+  } : null;
+}
+
+function acceptWorkspaceInvitation(invitationId, userId) {
+  const invitation = getInvitationById(invitationId);
+  if (!invitation) return false;
+  
+  const now = new Date().toISOString();
+  
+  // Add user as member with the invitation's role
+  addWorkspaceMember(invitation.workspaceId, userId, invitation.role);
+  
+  // Mark invitation as accepted
+  const stmt = db.prepare(`
+    UPDATE workspace_invitations
+    SET accepted_at = ?, accepted_by_user_id = ?
+    WHERE id = ?
+  `);
+  
+  return stmt.run(now, userId, invitationId).changes > 0;
+}
+
+function declineWorkspaceInvitation(invitationId) {
+  const stmt = db.prepare('DELETE FROM workspace_invitations WHERE id = ?');
+  return stmt.run(invitationId).changes > 0;
+}
+
+function getUserWorkspaceInvitations(email) {
+  const stmt = db.prepare(`
+    SELECT wi.*, w.name as workspace_name, w.owner_id
+    FROM workspace_invitations wi
+    LEFT JOIN workspaces w ON wi.workspace_id = w.id
+    WHERE wi.email = ? AND (wi.accepted_at IS NULL OR wi.accepted_at = '')
+    ORDER BY wi.created_at DESC
+  `);
+  
+  return stmt.all(email).map(inv => ({
+    id: inv.id,
+    workspaceId: inv.workspace_id,
+    workspaceName: inv.workspace_name,
+    email: inv.email,
+    role: inv.role,
+    createdByUserId: inv.created_by_user_id,
+    createdAt: inv.created_at,
+    expiresAt: inv.expires_at,
+    acceptedAt: inv.accepted_at,
+    acceptedByUserId: inv.accepted_by_user_id
+  }));
+}
+
+function cleanupExpiredInvitations() {
+  const stmt = db.prepare(`
+    DELETE FROM workspace_invitations
+    WHERE expires_at < ? AND (accepted_at IS NULL OR accepted_at = '')
+  `);
+  return stmt.run(new Date().toISOString()).changes;
+}
+
 module.exports = {
   db,
   initDatabase,
@@ -3808,4 +4172,21 @@ module.exports = {
   getPendingEmails,
   markEmailAsSent,
   markEmailAsFailed,
+  // Phase 1: Workspaces & Teams
+  createWorkspace,
+  getWorkspaces,
+  updateWorkspace,
+  deleteWorkspace,
+  addWorkspaceMember,
+  getWorkspaceMembers,
+  updateWorkspaceMemberRole,
+  removeWorkspaceMember,
+  getWorkspaceMember,
+  createWorkspaceInvitation,
+  getWorkspaceInvitations,
+  getInvitationById,
+  acceptWorkspaceInvitation,
+  declineWorkspaceInvitation,
+  getUserWorkspaceInvitations,
+  cleanupExpiredInvitations,
 };
