@@ -52,7 +52,17 @@ export const useAuthStore = create((set) => ({
           localStorage.removeItem('masterToken');
           localStorage.removeItem('tokenData');
         } catch {}
-        set({ masterToken: null, sessionToken: null, isAuthenticated: true, isInitialized: true, error: null });
+        const sessionData = await sessionCheckRes.json();
+        // CRITICAL: Ensure user object includes email for isPowerUser check in Layout component
+        const user = sessionData?.user || sessionData?.data || null;
+        set({ 
+          user, 
+          masterToken: null, 
+          sessionToken: null, 
+          isAuthenticated: true, 
+          isInitialized: true, 
+          error: null 
+        });
         return;
       }
       incrementAuthMeFailureCount();
