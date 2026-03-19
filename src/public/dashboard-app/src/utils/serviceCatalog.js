@@ -61,23 +61,69 @@ export function getAuthTypeStyle(authType) {
   return AUTH_TYPE_STYLES[authType] || 'bg-slate-500/15 text-slate-300 border border-slate-500/40';
 }
 
+function toDisplayLabel(value, fallback = null) {
+  const text = typeof value === 'string' ? value.trim() : '';
+  if (!text) return fallback;
+  return text
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+const KNOWN_STATUS = new Set(['connected', 'pending', 'error', 'disconnected']);
+
+function normalizeStatus(status) {
+  const normalized = String(status || '').trim().toLowerCase();
+  return KNOWN_STATUS.has(normalized) ? normalized : 'disconnected';
+}
+
+export function formatAuthTypeLabel(authType) {
+  const normalized = typeof authType === 'string' ? authType.trim().toLowerCase() : '';
+  if (!normalized) return 'Auth Unspecified';
+
+  const labels = {
+    oauth2: 'OAuth 2.0',
+    oauth: 'OAuth',
+    api_key: 'API Key',
+    apikey: 'API Key',
+    key: 'API Key',
+    bearer: 'Bearer Token',
+    token: 'Access Token',
+    webhook: 'Webhook',
+  };
+
+  return labels[normalized] || toDisplayLabel(normalized, 'Auth Unspecified');
+}
+
+export function formatCategoryLabel(category, categoryLabel) {
+  return toDisplayLabel(categoryLabel || category, 'Uncategorized');
+}
+
 export function normalizeService(rawService, oauthMeta) {
-  const label = rawService.label || rawService.name;
+  const serviceName = rawService.name || rawService.service || 'unknown';
+  const label = rawService.label || toDisplayLabel(serviceName, serviceName);
+  const authType = rawService.auth_type || rawService.authType || null;
+  const apiEndpoint = rawService.api_endpoint || rawService.apiEndpoint || null;
+  const documentationUrl = rawService.documentation_url || rawService.documentationUrl || null;
+  const category = rawService.category_name || rawService.categoryName || rawService.category || null;
+  const categoryLabel = formatCategoryLabel(category, rawService.category_label || rawService.categoryLabel);
+
   return {
-    name: rawService.name,
+    name: serviceName,
     label,
-    icon: getServiceLogo(rawService),
+    icon: getServiceLogo({ ...rawService, name: serviceName }),
     description: rawService.description || `Connect to ${label}`,
-    auth_type: rawService.auth_type,
-    api_endpoint: rawService.api_endpoint,
-    documentation_url: rawService.documentation_url,
-    category: rawService.category_name || rawService.category,
-    category_label: rawService.category_label || rawService.category_name || rawService.category,
-    status: oauthMeta?.status || 'disconnected',
-    lastApiCall: oauthMeta?.lastApiCall || null,  // Phase 5.4: Track last API call
+    auth_type: authType,
+    auth_type_label: formatAuthTypeLabel(authType),
+    api_endpoint: apiEndpoint,
+    documentation_url: documentationUrl,
+    category,
+    category_label: categoryLabel,
+    status: normalizeStatus(oauthMeta?.status),
+    lastApiCall: oauthMeta?.lastApiCall || oauthMeta?.last_sync || null,
     enabled: oauthMeta?.enabled !== false,
     notConfigured: oauthMeta?.enabled === false,
-    env_requirements: getServiceEnvRequirements(rawService.name),
+    env_requirements: getServiceEnvRequirements(serviceName),
   };
 }
 

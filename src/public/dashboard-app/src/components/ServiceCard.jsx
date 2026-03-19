@@ -1,4 +1,4 @@
-import { getAuthTypeStyle, getStatusMeta } from '../utils/serviceCatalog';
+import { formatAuthTypeLabel, getAuthTypeStyle, getStatusMeta } from '../utils/serviceCatalog';
 
 function ServiceCard({ service, onConnect, onRevoke, onDetails, onConfigure, compact = false }) {
   const statusMeta = getStatusMeta(service.status, service.notConfigured);
@@ -54,7 +54,7 @@ function ServiceCard({ service, onConnect, onRevoke, onDetails, onConfigure, com
             
             <div className="mt-4 flex flex-wrap gap-2">
               <span className={`px-3 py-1.5 rounded-lg text-xs uppercase font-semibold tracking-wide ${getAuthTypeStyle(service.auth_type)}`}>
-                {service.auth_type || 'unknown'}
+                {service.auth_type_label || formatAuthTypeLabel(service.auth_type)}
               </span>
               {service.category_label || service.category ? (
                 <span className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-700/40 text-slate-300 border border-slate-600/50">

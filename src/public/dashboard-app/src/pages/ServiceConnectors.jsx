@@ -6,7 +6,7 @@ import ServiceDetailModal from '../components/ServiceDetailModal';
 import ServiceConfigModal from '../components/ServiceConfigModal';
 import { startOAuthFlow } from '../utils/oauth';
 import { oauth } from '../utils/apiClient';
-import { normalizeService, getStatusMeta } from '../utils/serviceCatalog';
+import { normalizeService, getStatusMeta, formatAuthTypeLabel } from '../utils/serviceCatalog';
 import { getOAuthProvider } from '../utils/oauthProviderMap';
 
 function ServiceConnectors() {
@@ -334,7 +334,7 @@ function ServiceConnectors() {
                           {statusMeta.label}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-slate-300 uppercase text-xs font-mono tracking-wide">{service.auth_type || 'Unknown'}</td>
+                      <td className="px-6 py-4 text-slate-300 uppercase text-xs font-mono tracking-wide">{service.auth_type_label || formatAuthTypeLabel(service.auth_type)}</td>
                       <td className="px-6 py-4 text-slate-400 font-mono text-xs break-all max-w-xs">{service.api_endpoint || '—'}</td>
                     </tr>
                   );

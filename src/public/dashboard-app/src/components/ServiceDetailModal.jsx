@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { getAuthTypeStyle, getStatusMeta } from '../utils/serviceCatalog';
+import { formatAuthTypeLabel, getAuthTypeStyle, getStatusMeta } from '../utils/serviceCatalog';
 
 function ServiceDetailModal({ service, onClose, onConnect, onRevoke }) {
   const [testingConnection, setTestingConnection] = useState(false);
@@ -62,7 +62,7 @@ function ServiceDetailModal({ service, onClose, onConnect, onRevoke }) {
                   {statusMeta.label}
                 </span>
                 <span className={`px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide ${getAuthTypeStyle(service.auth_type)}`}>
-                  {service.auth_type || 'unknown'}
+                  {service.auth_type_label || formatAuthTypeLabel(service.auth_type)}
                 </span>
                 <span className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-700/50 text-slate-200 border border-slate-600/50">
                   {service.category_label || service.category || 'Uncategorized'}
