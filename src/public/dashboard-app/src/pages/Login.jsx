@@ -41,10 +41,8 @@ const features = [
 ];
 
 function Login() {
-  const [token, setToken] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showToken, setShowToken] = useState(false);
   const [viewMode, setViewMode] = useState('pricing');
   const [billingPlans, setBillingPlans] = useState([]);
   const [plansLoading, setPlansLoading] = useState(true);
@@ -259,7 +257,7 @@ function Login() {
               {viewMode === 'login' ? (
                 <div className="max-w-xl">
                   <h2 className="text-2xl font-semibold">Welcome back</h2>
-                  <p className="mb-6 mt-2 text-sm text-slate-400 sm:text-base">Sign in securely with OAuth or your master token.</p>
+                  <p className="mb-6 mt-2 text-sm text-slate-400 sm:text-base">Sign in securely with OAuth.</p>
 
                   {twoFactorRequired ? (
                     <form onSubmit={handleTwoFactorChallenge} className="space-y-4">
@@ -298,45 +296,6 @@ function Login() {
                           </button>
                         ))}
                       </div>
-
-                      <div className="relative my-6">
-                        <div className="border-t border-slate-700/80" />
-                        <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 bg-slate-900 px-3 text-xs text-slate-500">or use master token</span>
-                      </div>
-
-                      <form onSubmit={handleSubmit} className="space-y-4">
-                    <div>
-                      <label htmlFor="token" className="mb-2 block text-sm font-medium text-slate-300">Master Token</label>
-                      <div className="relative">
-                        <input
-                          id="token"
-                          type={showToken ? 'text' : 'password'}
-                          autoComplete="off"
-                          required
-                          value={token}
-                          onChange={(e) => setToken(e.target.value)}
-                          className="min-h-[48px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 pr-12 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
-                          placeholder="Paste your master token"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowToken(!showToken)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 transition hover:text-white"
-                          aria-label={showToken ? 'Hide token' : 'Show token'}
-                        >
-                          {showToken ? '🙈' : '👁️'}
-                        </button>
-                      </div>
-                    </div>
-
-                    <button
-                      type="submit"
-                      disabled={loading || !token}
-                      className="min-h-[48px] w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {loading ? 'Verifying...' : 'Sign In'}
-                    </button>
-                  </form>
                 </>
               )}
             </div>

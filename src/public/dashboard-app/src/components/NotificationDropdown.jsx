@@ -95,9 +95,9 @@ function NotificationDropdown({ open, onClose }) {
       ref={dropdownRef}
       className="absolute top-12 max-h-96 rounded-xl border border-slate-700 bg-slate-900 shadow-2xl flex flex-col z-50"
       style={{
-        right: '-320px',
+        right: '0px',
         width: '384px',
-        maxWidth: 'calc(100vw - 32px)',
+        maxWidth: 'calc(100vw - 16px)',
         minWidth: '280px',
       }}
     >
