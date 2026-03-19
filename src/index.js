@@ -3518,13 +3518,16 @@ app.get([
     const adapter = oauthAdapters[service];
     const tokenData = await adapter.exchangeCodeForToken(code);
 
-    const userId = getOAuthUserId(req);
     const expiresAt = tokenData.expiresIn
       ? new Date(Date.now() + tokenData.expiresIn * 1000).toISOString()
       : null;
 
-    storeOAuthToken(service, userId, tokenData.accessToken, tokenData.refreshToken || null, expiresAt, tokenData.scope);
-    updateOAuthStatus(service, "connected");
+    // CRITICAL: Store OAuth token with the CORRECT user ID
+    // For login mode: user will be created/found, then we store with appUser.id
+    // For connect mode: user already exists in session, get ID before storing
+    
+    let appUser = null;
+    let userId = null;
 
     if ((service === 'google' || service === 'facebook' || service === 'github') && stateMeta.mode === 'login') {
       const profileResp = await oauthAdapters[service].verifyToken(tokenData.accessToken).catch(() => ({ valid: false, data: {} }));
@@ -3541,7 +3544,7 @@ app.get([
         existing = getUserByUsername(username);
       }
 
-      let appUser = getUsers().find((u) => (u.email || '').toLowerCase() === email.toLowerCase()) || existing;
+      appUser = getUsers().find((u) => (u.email || '').toLowerCase() === email.toLowerCase()) || existing;
       if (!appUser) {
         appUser = createUser(
           username,
@@ -3556,6 +3559,8 @@ app.get([
         appUser = updateUserOAuthProfile(appUser.id, { displayName: name, email, avatarUrl }) || appUser;
       }
 
+      userId = appUser.id;
+
       if (appUser.twoFactorEnabled) {
         req.session.pending_2fa_user = {
           id: appUser.id,
@@ -3566,6 +3571,10 @@ app.get([
           two_factor_enabled: true,
           roles: appUser.roles || 'user',
         };
+        // CRITICAL: Store OAuth token with correct user ID BEFORE redirecting
+        storeOAuthToken(service, userId, tokenData.accessToken, tokenData.refreshToken || null, expiresAt, tokenData.scope);
+        updateOAuthStatus(service, "connected");
+        
         const next = encodeURIComponent(safeReturnTo);
         const redirectUrl = `/dashboard/?oauth_service=${service}&oauth_status=pending_2fa&next=${next}`;
         return req.session.save(() => {
@@ -3582,10 +3591,18 @@ app.get([
         two_factor_enabled: Boolean(appUser.twoFactorEnabled),
         roles: appUser.roles || 'user',
       };
+    } else {
+      // Connect mode: user is already in session, use that ID
+      userId = getOAuthUserId(req);
+    }
+
+    // Store OAuth token with correct user ID
+    storeOAuthToken(service, userId, tokenData.accessToken, tokenData.refreshToken || null, expiresAt, tokenData.scope);
+    updateOAuthStatus(service, "connected");
 
       // Ensure each OAuth-logged-in user receives a full master token for dashboard/API actions.
       // ONLY create if no existing valid master token exists - don't revoke!
-      if (!req.session.masterTokenRaw) {
+      if (appUser && !req.session.masterTokenRaw) {
         const existingTokens = getAccessTokens();
         const hasValidMaster = existingTokens.some(t => 
           t.scope === 'full' && !t.revokedAt && t.ownerId === String(appUser.id)
