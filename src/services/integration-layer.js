@@ -242,6 +242,8 @@ function normalizeExecutionError(error, serviceName, methodName) {
     },
     meta: {
       timestamp: new Date().toISOString(),
+      endpoint: error?.endpoint || null,
+      httpMethod: error?.httpMethod || null,
     },
   };
 }
@@ -358,6 +360,8 @@ async function executeServiceMethod({ serviceDef, method, params = {}, token = n
         error.statusCode = result.statusCode;
         error.code = result.data?.code || 'PROVIDER_ERROR';
         error.providerError = providerError;
+        error.endpoint = targetUrl.toString();
+        error.httpMethod = httpMethod;
         throw error;
       }
 
