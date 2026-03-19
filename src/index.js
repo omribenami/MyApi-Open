@@ -3403,6 +3403,23 @@ app.delete('/api/v1/personas/:id/skills/:skillId', authenticate, (req, res) => {
 
 // --- OAuth Endpoints ---
 
+function base64UrlNoPad(buf) {
+  return Buffer.from(buf)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+}
+
+function buildPkcePairFromState(state) {
+  const secret = String(process.env.SESSION_SECRET || 'myapi-session-secret-change-me');
+  // Deterministic per-state verifier (lets callback recompute without extra storage)
+  const verifierRaw = crypto.createHmac('sha256', secret).update(`pkce:${state}`).digest();
+  const codeVerifier = base64UrlNoPad(Buffer.concat([verifierRaw, verifierRaw])).slice(0, 64);
+  const codeChallenge = base64UrlNoPad(crypto.createHash('sha256').update(codeVerifier).digest());
+  return { codeVerifier, codeChallenge };
+}
+
 // Compatibility alias: some clients use /oauth/authorize/twitter/x
 app.get('/api/v1/oauth/authorize/twitter/x', (req, res) => {
   const qs = new URLSearchParams(req.query || {}).toString();
@@ -3477,7 +3494,13 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
   let authUrl;
   try {
     const adapter = oauthAdapters[service];
-    authUrl = adapter.getAuthorizationUrl(state);
+    const runtimeAuthParams = {};
+    if (service === 'twitter') {
+      const { codeChallenge } = buildPkcePairFromState(state);
+      runtimeAuthParams.code_challenge = codeChallenge;
+      runtimeAuthParams.code_challenge_method = 'S256';
+    }
+    authUrl = adapter.getAuthorizationUrl(state, runtimeAuthParams);
   } catch (authError) {
     console.error(`[OAuth] Failed to generate authorization URL for ${service}:`, authError);
     return res.status(500).json({ 
@@ -3577,7 +3600,12 @@ app.get([
 
   try {
     const adapter = oauthAdapters[service];
-    const tokenData = await adapter.exchangeCodeForToken(code);
+    const runtimeTokenParams = {};
+    if (service === 'twitter') {
+      const { codeVerifier } = buildPkcePairFromState(state);
+      runtimeTokenParams.code_verifier = codeVerifier;
+    }
+    const tokenData = await adapter.exchangeCodeForToken(code, runtimeTokenParams);
 
     const userId = getOAuthUserId(req);
     const expiresAt = tokenData.expiresIn

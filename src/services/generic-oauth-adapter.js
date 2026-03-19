@@ -24,7 +24,7 @@ class GenericOAuthAdapter {
     return Boolean(this.clientId && this.clientSecret && this.redirectUri && this.authUrl && this.tokenUrl);
   }
 
-  getAuthorizationUrl(state) {
+  getAuthorizationUrl(state, runtimeAuthParams = {}) {
     if (!this.isConfigured()) {
       throw new Error(`${this.serviceName} OAuth is not configured`);
     }
@@ -34,12 +34,13 @@ class GenericOAuthAdapter {
       response_type: 'code',
       state,
       ...this.extraAuthParams,
+      ...(runtimeAuthParams || {}),
     };
     if (this.scope) params.scope = this.scope;
     return `${this.authUrl}?${querystring.stringify(params)}`;
   }
 
-  async exchangeCodeForToken(code) {
+  async exchangeCodeForToken(code, runtimeTokenParams = {}) {
     if (!this.isConfigured()) {
       throw new Error(`${this.serviceName} OAuth is not configured`);
     }
@@ -51,6 +52,7 @@ class GenericOAuthAdapter {
       grant_type: 'authorization_code',
       redirect_uri: this.redirectUri,
       ...this.extraTokenParams,
+      ...(runtimeTokenParams || {}),
     });
 
     return this._request({
