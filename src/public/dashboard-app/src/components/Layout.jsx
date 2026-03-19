@@ -82,13 +82,13 @@ function Layout({ children, onLogout }) {
         { path: '/', label: 'Dashboard' },
         { path: '/services', label: 'Services' },
         { path: '/marketplace', label: 'Marketplace' },
+        { path: '/access-tokens', label: 'Master Tokens' },
       ]
     },
     {
       label: 'Security',
       items: [
         { path: '/tokens', label: 'Token Vault' },
-        { path: '/access-tokens', label: 'Master Tokens' },
         { path: '/devices', label: 'Device Management' },
         { path: '/identity', label: 'Identity' },
       ]
