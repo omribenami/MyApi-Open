@@ -3779,8 +3779,19 @@ app.get("/api/v1/oauth/status", (req, res) => {
   
   const services = OAUTH_SERVICES.map(service => {
     const status = statuses.find(s => s.serviceName === service);
-    // Check if user has an active token for this service
-    const token = userId ? getOAuthToken(service, userId) : null;
+    
+    // Check if user has an active token for this service (with error handling)
+    let token = null;
+    if (userId) {
+      try {
+        token = getOAuthToken(service, userId);
+      } catch (err) {
+        // Log decryption errors but don't crash
+        console.warn(`[OAuth Status] Failed to decrypt token for ${service}:`, err.message);
+        token = null;
+      }
+    }
+    
     // Status is "connected" if user has a non-revoked token, otherwise based on global status
     const connectionStatus = token && !token.revoked_at ? "connected" : (status?.status || "disconnected");
     
