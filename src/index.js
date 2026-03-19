@@ -3988,9 +3988,19 @@ app.post('/api/v1/services/:serviceName/execute', authenticate, async (req, res)
       return res.status(403).json({ error: `Service '${serviceName}' not connected. Please connect it first.` });
     }
 
+    // Allow default_request to dynamically target provider endpoints (e.g. /me)
+    const methodToExecute = { ...validation.method };
+    if (
+      methodToExecute?.methodName === 'default_request' &&
+      params &&
+      (typeof params.endpoint === 'string' || typeof params.path === 'string')
+    ) {
+      methodToExecute.endpoint = params.endpoint || params.path;
+    }
+
     const execution = await executeServiceMethod({
       serviceDef,
-      method: validation.method,
+      method: methodToExecute,
       params: params || {},
       token,
     });
