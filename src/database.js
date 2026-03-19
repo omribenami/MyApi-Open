@@ -751,6 +751,19 @@ function initDatabase() {
   db.exec('CREATE INDEX IF NOT EXISTS idx_skill_ownership_claims_skill ON skill_ownership_claims(skill_id)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_skill_ownership_claims_claimant ON skill_ownership_claims(claimant_user_id)');
 
+  // Phase: Enhanced Marketplace Filtering - Add provider and official fields
+  const marketplaceEnhancementMigrations = [
+    "ALTER TABLE marketplace_listings ADD COLUMN provider TEXT DEFAULT 'User'",
+    "ALTER TABLE marketplace_listings ADD COLUMN official INTEGER DEFAULT 0"
+  ];
+  
+  for (const migration of marketplaceEnhancementMigrations) {
+    try { db.exec(migration); } catch (e) {}
+  }
+
+  db.exec('CREATE INDEX IF NOT EXISTS idx_marketplace_listings_provider ON marketplace_listings(provider)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_marketplace_listings_official ON marketplace_listings(official)');
+
   console.log('Database initialized at:', dbPath);
 }
 
@@ -2720,6 +2733,8 @@ function _formatListing(row) {
     content: row.content ? (() => { try { return JSON.parse(row.content); } catch { return row.content; } })() : null,
     tags: row.tags ? row.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
     price: row.price,
+    provider: row.provider || 'User',
+    official: row.official ? true : false,
     status: row.status,
     avgRating: row.avg_rating,
     ratingCount: row.rating_count,
@@ -2740,7 +2755,7 @@ function createMarketplaceListing(ownerId, type, title, description, content, ta
   return getMarketplaceListing(result.lastInsertRowid);
 }
 
-function getMarketplaceListings({ type, sort, search, tags, status = 'active' } = {}) {
+function getMarketplaceListings({ type, sort, search, tags, provider, price, rating, official, status = 'active' } = {}) {
   let query = `
     SELECT ml.*, u.username as owner_name, u.display_name as owner_display_name
     FROM marketplace_listings ml
@@ -2749,19 +2764,48 @@ function getMarketplaceListings({ type, sort, search, tags, status = 'active' } 
   `;
   const params = [status];
 
+  // Type filter
   if (type && type !== 'all') {
     query += ' AND ml.type = ?';
     params.push(type);
   }
+
+  // Search filter
   if (search) {
     query += ' AND (ml.title LIKE ? OR ml.description LIKE ?)';
     params.push(`%${search}%`, `%${search}%`);
   }
+
+  // Tags/Field filter
   if (tags) {
     query += ' AND ml.tags LIKE ?';
     params.push(`%${tags}%`);
   }
 
+  // Provider filter
+  if (provider && provider !== 'all') {
+    query += ' AND ml.provider = ?';
+    params.push(provider);
+  }
+
+  // Price filter (free, paid, or all)
+  if (price === 'free') {
+    query += " AND ml.price = 'free'";
+  } else if (price === 'paid') {
+    query += " AND ml.price != 'free'";
+  }
+
+  // Rating filter (4+ stars)
+  if (rating === '4+') {
+    query += ' AND ml.avg_rating >= 4';
+  }
+
+  // Official/Verified filter
+  if (official === '1' || official === true) {
+    query += ' AND ml.official = 1';
+  }
+
+  // Sorting
   if (sort === 'popular') {
     query += ' ORDER BY ml.avg_rating DESC, ml.rating_count DESC';
   } else if (sort === 'most_used') {

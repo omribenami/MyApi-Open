@@ -402,6 +402,63 @@ function ListingModal({ listing, onClose, onInstall, onRated, masterToken, initi
   );
 }
 
+function InlineStarRating({ value = 0, count = 0, onRate, disabled = false, listingId, masterToken }) {
+  const [hovered, setHovered] = useState(0);
+  const [isRating, setIsRating] = useState(false);
+  const [ratingError, setRatingError] = useState('');
+
+  async function handleRate(rating) {
+    if (!listingId || !masterToken || disabled) return;
+    setIsRating(true);
+    setRatingError('');
+    try {
+      const res = await fetch(`/api/v1/marketplace/${listingId}/rate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${masterToken}` },
+        body: JSON.stringify({ rating }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || 'Failed to submit rating');
+      }
+      onRate && onRate(data);
+    } catch (err) {
+      setRatingError(err.message || 'Failed to rate');
+      console.error('[InlineStarRating] error:', err);
+    } finally {
+      setIsRating(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      {/* Interactive stars */}
+      <div className="flex items-center gap-1.5">
+        <div className="flex gap-0.5">
+          {[1, 2, 3, 4, 5].map(s => (
+            <button
+              key={s}
+              onMouseEnter={() => !disabled && setHovered(s)}
+              onMouseLeave={() => setHovered(0)}
+              onClick={() => handleRate(s)}
+              disabled={disabled || isRating}
+              className={`text-lg transition-all ${
+                s <= (hovered || value)
+                  ? 'text-amber-400 scale-110'
+                  : 'text-slate-600 hover:text-amber-300'
+              } ${disabled || isRating ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+            >★</button>
+          ))}
+        </div>
+        {count > 0 && <span className="text-xs text-slate-400">{value.toFixed(1)} ({count})</span>}
+        {count === 0 && <span className="text-xs text-slate-500">No ratings</span>}
+      </div>
+      {isRating && <p className="text-xs text-blue-400">Rating...</p>}
+      {ratingError && <p className="text-xs text-red-400">{ratingError}</p>}
+    </div>
+  );
+}
+
 function ListingCard({
   listing = {},
   onClick,
@@ -428,10 +485,11 @@ function ListingCard({
 
   const scanner = listingType === 'skill' ? extractScanner(listing.content) : null;
   const [quickError, setQuickError] = useState('');
+  const [localInstalled, setLocalInstalled] = useState(isInstalled);
 
   async function handleQuickInstall(e) {
     e.stopPropagation();
-    if (!masterToken || isInstalled || quickInstalling || !listingId) return;
+    if (!masterToken || localInstalled || quickInstalling || !listingId) return;
 
     setQuickError('');
     try {
@@ -443,6 +501,7 @@ function ListingCard({
       if (!res.ok) {
         throw new Error(data?.error || (res.status === 401 ? 'Session expired. Please sign in again.' : 'Install failed'));
       }
+      setLocalInstalled(true);
       onQuickInstall && onQuickInstall({ listingId, type: listingType, data });
     } catch (err) {
       setQuickError(err.message || 'Install failed');
@@ -450,58 +509,163 @@ function ListingCard({
     }
   }
 
+  async function handleQuickRemove(e) {
+    e.stopPropagation();
+    if (!masterToken || !localInstalled || !listingId) return;
+
+    setQuickError('');
+    // Note: This calls uninstall endpoint - ensure backend supports it
+    try {
+      const res = await fetch(`/api/v1/marketplace/${listingId}/uninstall`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${masterToken}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || (res.status === 401 ? 'Session expired. Please sign in again.' : 'Remove failed'));
+      }
+      setLocalInstalled(false);
+      onQuickInstall && onQuickInstall({ listingId, type: listingType, data });
+    } catch (err) {
+      setQuickError(err.message || 'Remove failed');
+      console.error('[ListingCard] quickRemove error:', err);
+    }
+  }
+
+  const isPaid = listingPrice !== 'free' && listingPrice !== 'price unknown';
+
   return (
     <div
       onClick={() => onClick && onClick(listing)}
-      className="bg-white bg-opacity-5 border border-white border-opacity-10 rounded-xl p-5 cursor-pointer hover:border-blue-500 hover:border-opacity-50 hover:bg-opacity-10 transition-all group"
+      className="bg-slate-900 border border-slate-700 rounded-lg p-4 cursor-pointer hover:border-blue-500 hover:bg-slate-850 transition-all group flex flex-col h-full"
     >
-      <div className="flex items-start justify-between mb-3">
+      {/* Header: Type badge + Pricing badge */}
+      <div className="flex items-center justify-between gap-2 mb-3">
         <TypeBadge type={listingType} />
         <div className="flex items-center gap-2">
-          {isInstalled && (
-            <span className="text-[10px] text-emerald-300 border border-emerald-700 rounded-full px-2 py-0.5">Installed</span>
+          {isPaid && (
+            <span className="text-[10px] font-semibold text-amber-300 bg-amber-900 bg-opacity-50 border border-amber-700 rounded-full px-2 py-0.5">
+              Paid
+            </span>
           )}
-          <span className="text-xs text-green-400">{listingPrice === 'free' ? 'Free' : listingPrice}</span>
+          {!isPaid && (
+            <span className="text-[10px] font-semibold text-green-300 bg-green-900 bg-opacity-50 border border-green-700 rounded-full px-2 py-0.5">
+              Free
+            </span>
+          )}
+          {localInstalled && (
+            <span className="text-[10px] font-semibold text-emerald-300 bg-emerald-900 bg-opacity-50 border border-emerald-700 rounded-full px-2 py-0.5">
+              ✓ Installed
+            </span>
+          )}
         </div>
       </div>
-      <h3 className="font-semibold text-white group-hover:text-blue-300 transition-colors line-clamp-1 mb-1">{listingTitle}</h3>
-      <p className="text-slate-400 text-sm line-clamp-2 mb-3">{listingDescription}</p>
+
+      {/* Title - Larger and prominent */}
+      <h3 className="font-bold text-lg text-white group-hover:text-blue-300 transition-colors line-clamp-2 mb-2">
+        {listingTitle}
+      </h3>
+
+      {/* Author - Prominent */}
+      <div className="text-sm text-slate-300 font-medium mb-2">
+        by <span className="text-slate-100">{listingOwnerName}</span>
+      </div>
+
+      {/* Description */}
+      <p className="text-slate-400 text-sm line-clamp-2 mb-3 flex-grow">
+        {listingDescription}
+      </p>
+
+      {/* Scanner badge for skills */}
       {scanner && (
-        <div
-          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs border mb-3 ${scanner.safe_to_use ? 'bg-emerald-900/40 text-emerald-300 border-emerald-700' : 'bg-amber-900/40 text-amber-300 border-amber-700'}`}
-          title="Skill scanner checks README/SKILL.md/package.json for risky patterns."
-        >
-          {scanner.safe_to_use ? 'Safe' : 'Review'} · score {scanner.score}
-        </div>
-      )}
-      <div className="flex items-center justify-between text-xs text-slate-500">
-        <span>by {listingOwnerName}</span>
-        <span>{listingInstallCount} installs</span>
-      </div>
-      <div className="mt-2">
-        <StarRating value={listingAvgRating} count={listingRatingCount} />
-      </div>
-      {listingTags && Array.isArray(listingTags) && listingTags.length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-3">
-          {listingTags.slice(0, 3).map(tag => (
-            <span key={tag} className="px-2 py-0.5 bg-slate-800 text-slate-400 text-xs rounded-full">{tag}</span>
-          ))}
-          {listingTags.length > 3 && <span className="text-slate-500 text-xs">+{listingTags.length - 3}</span>}
-        </div>
-      )}
-      <div className="mt-4 flex items-center justify-between gap-2">
-        <span className="text-xs font-medium text-blue-400 group-hover:text-blue-300 transition-colors">View Details →</span>
-        {masterToken && (
-          <button
-            onClick={handleQuickInstall}
-            disabled={isInstalled || quickInstalling}
-            className="px-3 py-1.5 text-xs rounded-md bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white"
+        <div className="mb-3">
+          <span
+            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs border ${
+              scanner.safe_to_use
+                ? 'bg-emerald-900/40 text-emerald-300 border-emerald-700'
+                : 'bg-amber-900/40 text-amber-300 border-amber-700'
+            }`}
+            title="Skill scanner checks README/SKILL.md/package.json for risky patterns."
           >
-            {quickInstalling ? 'Installing...' : isInstalled ? 'Installed' : 'Install'}
-          </button>
-        )}
+            {scanner.safe_to_use ? '✓ Safe' : '⚠ Review'} · score {scanner.score}
+          </span>
+        </div>
+      )}
+
+      {/* Tags */}
+      {listingTags && Array.isArray(listingTags) && listingTags.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-3">
+          {listingTags.slice(0, 2).map(tag => (
+            <span
+              key={tag}
+              className="px-2 py-0.5 bg-slate-800 text-slate-300 text-xs rounded-full border border-slate-700"
+            >
+              {tag}
+            </span>
+          ))}
+          {listingTags.length > 2 && (
+            <span className="px-2 py-0.5 text-slate-500 text-xs">+{listingTags.length - 2} more</span>
+          )}
+        </div>
+      )}
+
+      {/* Stats: Install count + Rating */}
+      <div className="flex items-center justify-between text-xs text-slate-400 border-t border-slate-800 pt-3 mb-3">
+        <span className="flex items-center gap-1">
+          <span className="text-slate-500">📊</span> {listingInstallCount} installs
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="text-slate-500">⭐</span> {listingRatingCount} reviews
+        </span>
       </div>
-      {quickError && <p className="mt-2 text-xs text-red-400">{quickError}</p>}
+
+      {/* Inline Rating Controls */}
+      {masterToken && (
+        <div className="mb-4 pb-4 border-b border-slate-800">
+          <InlineStarRating
+            value={listingAvgRating}
+            count={listingRatingCount}
+            listingId={listingId}
+            masterToken={masterToken}
+            disabled={!masterToken}
+            onRate={(data) => {
+              // Optional: refresh card data here
+            }}
+          />
+        </div>
+      )}
+
+      {/* Install/Remove buttons + View Details link */}
+      <div className="mt-auto space-y-3">
+        {masterToken && (
+          <>
+            {localInstalled ? (
+              <button
+                onClick={handleQuickRemove}
+                className="w-full py-2.5 bg-red-900 bg-opacity-50 hover:bg-opacity-70 text-red-300 border border-red-700 text-sm font-medium rounded-lg transition-colors"
+              >
+                Remove
+              </button>
+            ) : (
+              <button
+                onClick={handleQuickInstall}
+                disabled={quickInstalling}
+                className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-semibold rounded-lg transition-colors"
+              >
+                {quickInstalling ? 'Installing...' : 'Install'}
+              </button>
+            )}
+            {quickError && <p className="text-xs text-red-400 text-center">{quickError}</p>}
+          </>
+        )}
+
+        {/* View Details link */}
+        <div className="text-center">
+          <span className="text-sm font-medium text-blue-400 group-hover:text-blue-300 transition-colors cursor-pointer">
+            View Details →
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -625,7 +789,8 @@ export default function Marketplace() {
     setQuickInstallingIds(prev => new Set([...prev, String(listingId)]));
     try {
       if (type === 'skill') {
-        setInstalledSkillListingIds(prev => new Set([...prev, String(listingId)]));
+        // Refresh installed skills to get updated state from server
+        await fetchInstalledSkills();
       }
       await fetchListings();
     } finally {
