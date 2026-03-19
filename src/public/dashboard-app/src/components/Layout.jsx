@@ -67,9 +67,6 @@ function NavDropdown({ label, items, isActiveFn, onMobileClick }) {
 function Layout({ children, onLogout }) {
   const location = useLocation();
   const { user } = useAuthStore();
-  const unreadCount = useNotificationStore((state) => state.unreadCount);
-  const toasts = useNotificationStore((state) => state.toasts) || [];
-  const removeToast = useNotificationStore((state) => state.removeToast);
   const [menuOpen, setMenuOpen] = useState(false);
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const [notificationDropdownOpen, setNotificationDropdownOpen] = useState(false);
@@ -184,9 +181,9 @@ function Layout({ children, onLogout }) {
                 <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                 </svg>
-                {unreadCount > 0 && (
+                {useNotificationStore(state => state.unreadCount) > 0 && (
                   <span className="absolute top-0 right-0 h-5 w-5 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center transform translate-x-1 -translate-y-1">
-                    {unreadCount > 9 ? '9+' : unreadCount}
+                    {useNotificationStore(state => state.unreadCount) > 9 ? '9+' : useNotificationStore(state => state.unreadCount)}
                   </span>
                 )}
               </button>
@@ -288,13 +285,13 @@ function Layout({ children, onLogout }) {
       
       {/* Toast Container */}
       <div className="fixed top-4 right-4 z-50 space-y-2 max-w-sm">
-        {toasts.map((toast) => (
+        {(useNotificationStore(state => state.toasts) || []).map(toast => (
           <Toast
             key={toast.id}
             id={toast.id}
             message={toast.message}
             type={toast.type}
-            onClose={() => removeToast(toast.id)}
+            onClose={() => useNotificationStore(state => state.removeToast(toast.id))}
           />
         ))}
       </div>

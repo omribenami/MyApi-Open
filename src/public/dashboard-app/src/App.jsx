@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from './stores/authStore';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
+import DashboardHome from './pages/DashboardHome';
 import ServiceConnectors from './pages/ServiceConnectors';
 import TokenVault from './pages/TokenVault';
 import AccessTokens from './pages/AccessTokens';
@@ -22,28 +23,26 @@ import ActivityLog from './pages/ActivityLog';
 import TeamSettings from './pages/TeamSettings';
 import Layout from './components/Layout';
 
+// Create React Query client
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       refetchOnWindowFocus: false,
       retry: 1,
-      staleTime: 5 * 60 * 1000,
+      staleTime: 5 * 60 * 1000, // 5 minutes
     },
   },
 });
 
+// Protected route wrapper
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuthStore();
-  if (!isAuthenticated) return <Navigate to="/" replace />;
-  return children;
-}
 
-function AuthedLayout({ children, onLogout }) {
-  return (
-    <ProtectedRoute>
-      <Layout onLogout={onLogout}>{children}</Layout>
-    </ProtectedRoute>
-  );
+  if (!isAuthenticated) {
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
 }
 
 function App() {
@@ -54,10 +53,12 @@ function App() {
   const handleLogout = useAuthStore((state) => state.logout);
   const forceUnauthenticated = useAuthStore((state) => state.forceUnauthenticated);
 
+  // Initialize auth store on mount
   useEffect(() => {
     initialize();
   }, [initialize]);
 
+  // Load workspaces once authenticated
   useEffect(() => {
     if (isAuthenticated && isInitialized) {
       fetchWorkspaces();
@@ -81,32 +82,165 @@ function App() {
     );
   }
 
+  // Authenticated - show dashboard with router
+  // Unauthenticated users get routed through landing/signup/login pages
   return (
     <QueryClientProvider client={queryClient}>
       <Router basename="/dashboard">
         <Routes>
-          <Route path="/" element={isAuthenticated ? <Navigate to="/home" replace /> : <Login />} />
+          {/* Unauthenticated Routes */}
+          {!isAuthenticated && (
+            <>
+              <Route path="/" element={<Login />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </>
+          )}
 
-          <Route path="/home" element={<AuthedLayout onLogout={handleLogout}><Dashboard /></AuthedLayout>} />
-          <Route path="/services" element={<AuthedLayout onLogout={handleLogout}><ServiceConnectors /></AuthedLayout>} />
-          <Route path="/tokens" element={<AuthedLayout onLogout={handleLogout}><TokenVault /></AuthedLayout>} />
-          <Route path="/access-tokens" element={<AuthedLayout onLogout={handleLogout}><AccessTokens /></AuthedLayout>} />
-          <Route path="/personas" element={<AuthedLayout onLogout={handleLogout}><Personas /></AuthedLayout>} />
-          <Route path="/identity" element={<AuthedLayout onLogout={handleLogout}><Identity /></AuthedLayout>} />
-          <Route path="/knowledge" element={<AuthedLayout onLogout={handleLogout}><KnowledgeBase /></AuthedLayout>} />
-          <Route path="/settings" element={<AuthedLayout onLogout={handleLogout}><Settings /></AuthedLayout>} />
-          <Route path="/users" element={<AuthedLayout onLogout={handleLogout}><UserManagement /></AuthedLayout>} />
-          <Route path="/platform-docs" element={<AuthedLayout onLogout={handleLogout}><PlatformDocs /></AuthedLayout>} />
-          <Route path="/api-docs" element={<AuthedLayout onLogout={handleLogout}><ApiDocs /></AuthedLayout>} />
-          <Route path="/skills" element={<AuthedLayout onLogout={handleLogout}><Skills /></AuthedLayout>} />
-          <Route path="/marketplace" element={<AuthedLayout onLogout={handleLogout}><Marketplace /></AuthedLayout>} />
-          <Route path="/my-listings" element={<AuthedLayout onLogout={handleLogout}><MyListings /></AuthedLayout>} />
-          <Route path="/devices" element={<AuthedLayout onLogout={handleLogout}><DeviceManagement /></AuthedLayout>} />
-          <Route path="/device-management" element={<AuthedLayout onLogout={handleLogout}><DeviceManagement /></AuthedLayout>} />
-          <Route path="/activity" element={<AuthedLayout onLogout={handleLogout}><ActivityLog /></AuthedLayout>} />
-          <Route path="/settings/team" element={<AuthedLayout onLogout={handleLogout}><TeamSettings /></AuthedLayout>} />
-
-          <Route path="*" element={<Navigate to={isAuthenticated ? '/home' : '/'} replace />} />
+          {/* Authenticated Routes */}
+          {isAuthenticated && (
+            <>
+              <Route
+                path="/*"
+                element={
+                  <Layout onLogout={handleLogout}>
+                    <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route
+              path="/services"
+              element={
+                <ProtectedRoute>
+                  <ServiceConnectors />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/tokens"
+              element={
+                <ProtectedRoute>
+                  <TokenVault />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/access-tokens"
+              element={
+                <ProtectedRoute>
+                  <AccessTokens />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/personas"
+              element={
+                <ProtectedRoute>
+                  <Personas />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/identity"
+              element={
+                <ProtectedRoute>
+                  <Identity />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/knowledge"
+              element={
+                <ProtectedRoute>
+                  <KnowledgeBase />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <ProtectedRoute>
+                  <Settings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/users"
+              element={
+                <ProtectedRoute>
+                  <UserManagement />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/platform-docs"
+              element={
+                <ProtectedRoute>
+                  <PlatformDocs />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/api-docs"
+              element={
+                <ProtectedRoute>
+                  <ApiDocs />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/skills"
+              element={
+                <ProtectedRoute>
+                  <Skills />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="/marketplace" element={<Marketplace />} />
+            <Route
+              path="/my-listings"
+              element={
+                <ProtectedRoute>
+                  <MyListings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/devices"
+              element={
+                <ProtectedRoute>
+                  <DeviceManagement />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/device-management"
+              element={
+                <ProtectedRoute>
+                  <DeviceManagement />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/activity"
+              element={
+                <ProtectedRoute>
+                  <ActivityLog />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/settings/team"
+              element={
+                <ProtectedRoute>
+                  <TeamSettings />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="*" element={<Navigate to="/" replace />} />
+                    </Routes>
+                  </Layout>
+                }
+              />
+            </>
+          )}
         </Routes>
       </Router>
     </QueryClientProvider>
