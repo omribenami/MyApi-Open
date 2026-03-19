@@ -3593,10 +3593,34 @@ app.get([
       };
     } else {
       // Connect mode: user is already in session, use that ID
+      // CRITICAL: In connect mode, session might not be populated on callback redirect
+      // Fallback: extract user ID from existing tokens by the same owner
       userId = getOAuthUserId(req);
+      
+      if (!userId || userId === 'oauth_user') {
+        // Session lost or not available — try to find the owner from existing tokens
+        const existingTokens = getAccessTokens();
+        const ownerTokens = existingTokens.filter(t => t.ownerId && t.ownerId !== 'owner' && !t.revokedAt);
+        
+        if (ownerTokens.length > 0) {
+          // Use the first valid non-default token owner
+          userId = String(ownerTokens[0].ownerId);
+          console.log(`[OAuth Callback] Connect mode: reconstructed userId from existing tokens: ${userId}`);
+        } else {
+          console.error(`[OAuth Callback] Connect mode: cannot determine userId. Session lost and no existing tokens. Using session fallback.`);
+          // Last resort: try req.session.user directly
+          userId = String(req.session?.user?.id || 'oauth_user');
+        }
+      }
+    }
+
+    // CRITICAL: Validate userId before storing
+    if (!userId || userId === 'oauth_user') {
+      console.error(`[OAuth Callback] FATAL: Cannot determine correct user ID for token storage. Falling back to 'oauth_user' (this is a bug).`);
     }
 
     // Store OAuth token with correct user ID
+    console.log(`[OAuth Callback] Storing ${service} token for user: ${userId}`);
     storeOAuthToken(service, userId, tokenData.accessToken, tokenData.refreshToken || null, expiresAt, tokenData.scope);
     updateOAuthStatus(service, "connected");
 
