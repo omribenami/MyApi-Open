@@ -1,5 +1,14 @@
 import { create } from 'zustand';
 
+const readCookie = (name) => {
+  try {
+    const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+    return match ? decodeURIComponent(match[1]) : null;
+  } catch {
+    return null;
+  }
+};
+
 export const useAuthStore = create((set) => ({
   user: null,
   masterToken: null,
@@ -23,6 +32,19 @@ export const useAuthStore = create((set) => ({
     // If we already have a token stored, use it and skip bootstrap
     if (masterToken) {
       set({ masterToken, sessionToken, isAuthenticated: true, isInitialized: true });
+      return;
+    }
+
+    // Fallback for OAuth callback flow when session-cookie auth is flaky across redirects.
+    // Backend sets myapi_master_token intentionally as JS-readable cookie.
+    const cookieMasterToken = readCookie('myapi_master_token');
+    if (cookieMasterToken) {
+      try {
+        localStorage.setItem('masterToken', cookieMasterToken);
+      } catch {
+        // Ignore storage errors; still continue with in-memory auth.
+      }
+      set({ masterToken: cookieMasterToken, isAuthenticated: true, isInitialized: true, error: null });
       return;
     }
 
