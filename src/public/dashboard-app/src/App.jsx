@@ -2,10 +2,7 @@ import { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from './stores/authStore';
-import LandingPage from './pages/LandingPage';
-import SignUp from './pages/SignUp';
-import LogIn from './pages/LogIn';
-import Onboarding from './pages/Onboarding';
+import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import DashboardHome from './pages/DashboardHome';
 import ServiceConnectors from './pages/ServiceConnectors';
@@ -94,9 +91,7 @@ function App() {
           {/* Unauthenticated Routes */}
           {!isAuthenticated && (
             <>
-              <Route path="/" element={<LandingPage />} />
-              <Route path="/signup" element={<SignUp />} />
-              <Route path="/login" element={<LogIn />} />
+              <Route path="/" element={<Login />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </>
           )}
@@ -104,7 +99,6 @@ function App() {
           {/* Authenticated Routes */}
           {isAuthenticated && (
             <>
-              <Route path="/onboarding" element={<Onboarding />} />
               <Route
                 path="/*"
                 element={

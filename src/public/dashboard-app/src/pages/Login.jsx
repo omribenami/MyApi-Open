@@ -271,6 +271,16 @@ function Login() {
                           </button>
                         ))}
                       </div>
+                      <p className="mt-4 text-center text-sm text-slate-400">
+                        Need an account?{' '}
+                        <button
+                          type="button"
+                          onClick={() => setViewMode('pricing')}
+                          className="text-blue-400 hover:text-blue-300 font-medium"
+                        >
+                          Go to signup
+                        </button>
+                      </p>
                 </>
               )}
             </div>
