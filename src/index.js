@@ -912,15 +912,13 @@ function adminOnly(req, res, next) {
 }
 
 function getOAuthUserId(req) {
-  // Check session auth first (OAuth browser login)
+  // Check session auth first, then Bearer token auth
   if (req?.session?.user?.id) {
     return String(req.session.user.id);
   }
-  // Check Bearer token auth (API access)
   if (req?.tokenMeta?.ownerId) {
     return String(req.tokenMeta.ownerId);
   }
-  // Fallback (shouldn't happen if authenticate() worked)
   return 'oauth_user';
 }
 
@@ -2882,9 +2880,8 @@ const isStrongPassword = (pw) => {
 };
 
 app.post("/api/v1/users", authenticate, (req, res) => {
-  // Power user check works for both session auth (OAuth) and Bearer token auth
+  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can create users" });
   if (!requirePowerUser(req, res)) return;
-  
   const { username, displayName, email, timezone, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: "username and password are required" });
   
@@ -2894,9 +2891,7 @@ app.post("/api/v1/users", authenticate, (req, res) => {
 
   try {
     const user = createUser(username, displayName, email, timezone, password);
-    const requesterId = req.session?.user?.id || req.tokenMeta?.tokenId || 'unknown';
-    const scope = req.tokenMeta?.scope || 'session';
-    createAuditLog({ requesterId, action: "create_user", resource: `/users/${user.id}`, scope, ip: req.ip });
+    createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "create_user", resource: `/users/${user.id}`, scope: req.tokenMeta.scope, ip: req.ip });
     res.status(201).json({ data: user });
   } catch (e) {
     if (e.message && e.message.includes("UNIQUE")) {
@@ -2907,18 +2902,14 @@ app.post("/api/v1/users", authenticate, (req, res) => {
 });
 
 app.get("/api/v1/users", authenticate, (req, res) => {
-  // Power user check works for both session auth (OAuth) and Bearer token auth
+  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can list users" });
   if (!requirePowerUser(req, res)) return;
-  
-  // Log the audit appropriately for session vs token auth
-  const requesterId = req.session?.user?.id || req.tokenMeta?.tokenId || 'unknown';
-  const scope = req.tokenMeta?.scope || 'session';
-  createAuditLog({ requesterId, action: "list_users", resource: "/users", scope, ip: req.ip });
-  
+  createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "list_users", resource: "/users", scope: req.tokenMeta.scope, ip: req.ip });
   res.json({ data: getUsers() });
 });
 
 app.put('/api/v1/users/:id/plan', planFeatureRateLimit, authenticate, (req, res) => {
+  if (req.tokenMeta.scope !== 'full') return res.status(403).json({ error: 'Only master token can manage plans' });
   if (!requirePowerUser(req, res)) return;
   try {
     const { id } = req.params;
@@ -2926,13 +2917,11 @@ app.put('/api/v1/users/:id/plan', planFeatureRateLimit, authenticate, (req, res)
     const user = updateUserPlan(id, plan);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const requesterId = req.session?.user?.id || req.tokenMeta?.tokenId || 'unknown';
-    const scope = req.tokenMeta?.scope || 'session';
     createAuditLog({
-      requesterId,
+      requesterId: req.tokenMeta.tokenId,
       action: 'update_user_plan',
       resource: `/users/${id}/plan`,
-      scope,
+      scope: req.tokenMeta.scope,
       ip: req.ip,
       details: { plan }
     });
@@ -2948,19 +2937,18 @@ app.put('/api/v1/users/:id/plan', planFeatureRateLimit, authenticate, (req, res)
 });
 
 app.put('/api/v1/users/:id/subscription', planFeatureRateLimit, authenticate, (req, res) => {
+  if (req.tokenMeta.scope !== 'full') return res.status(403).json({ error: 'Only master token can manage subscriptions' });
   if (!requirePowerUser(req, res)) return;
   try {
     const { id } = req.params;
     const { status, customerId, subscriptionId } = req.body || {};
     const user = updateUserSubscriptionStatus(id, { status, customerId, subscriptionId });
     if (!user) return res.status(404).json({ error: 'User not found' });
-    const requesterId = req.session?.user?.id || req.tokenMeta?.tokenId || 'unknown';
-    const scope = req.tokenMeta?.scope || 'session';
     createAuditLog({
-      requesterId,
+      requesterId: req.tokenMeta.tokenId,
       action: 'update_user_subscription',
       resource: `/users/${id}/subscription`,
-      scope,
+      scope: req.tokenMeta.scope,
       ip: req.ip,
       details: { status, customerId, subscriptionId },
     });
@@ -2975,6 +2963,7 @@ app.put('/api/v1/users/:id/subscription', planFeatureRateLimit, authenticate, (r
 });
 
 app.delete('/api/v1/users/:id', authenticate, (req, res) => {
+  if (req.tokenMeta.scope !== 'full') return res.status(403).json({ error: 'Only master token can delete users' });
   if (!requirePowerUser(req, res)) return;
 
   try {
@@ -3000,9 +2989,7 @@ app.delete('/api/v1/users/:id', authenticate, (req, res) => {
     });
     tx(id);
 
-    const requesterId = req.session?.user?.id || req.tokenMeta?.tokenId || 'unknown';
-    const scope = req.tokenMeta?.scope || 'session';
-    createAuditLog({ requesterId, action: 'delete_user', resource: `/users/${id}`, scope, ip: req.ip, details: { email: user.email || null } });
+    createAuditLog({ requesterId: req.tokenMeta.tokenId, action: 'delete_user', resource: `/users/${id}`, scope: req.tokenMeta.scope, ip: req.ip, details: { email: user.email || null } });
     res.json({ ok: true, deletedUserId: id });
   } catch (error) {
     console.error('Delete user error:', error);
@@ -3011,6 +2998,7 @@ app.delete('/api/v1/users/:id', authenticate, (req, res) => {
 });
 
 app.post('/api/v1/users/cleanup-test-users', authenticate, (req, res) => {
+  if (req.tokenMeta.scope !== 'full') return res.status(403).json({ error: 'Only master token can cleanup users' });
   if (!requirePowerUser(req, res)) return;
 
   const prefix = String(req.body?.prefix || 'phase12a_');
@@ -3518,16 +3506,13 @@ app.get([
     const adapter = oauthAdapters[service];
     const tokenData = await adapter.exchangeCodeForToken(code);
 
+    const userId = getOAuthUserId(req);
     const expiresAt = tokenData.expiresIn
       ? new Date(Date.now() + tokenData.expiresIn * 1000).toISOString()
       : null;
 
-    // CRITICAL: Store OAuth token with the CORRECT user ID
-    // For login mode: user will be created/found, then we store with appUser.id
-    // For connect mode: user already exists in session, get ID before storing
-    
-    let appUser = null;
-    let userId = null;
+    storeOAuthToken(service, userId, tokenData.accessToken, tokenData.refreshToken || null, expiresAt, tokenData.scope);
+    updateOAuthStatus(service, "connected");
 
     if ((service === 'google' || service === 'facebook' || service === 'github') && stateMeta.mode === 'login') {
       const profileResp = await oauthAdapters[service].verifyToken(tokenData.accessToken).catch(() => ({ valid: false, data: {} }));
@@ -3544,7 +3529,7 @@ app.get([
         existing = getUserByUsername(username);
       }
 
-      appUser = getUsers().find((u) => (u.email || '').toLowerCase() === email.toLowerCase()) || existing;
+      let appUser = getUsers().find((u) => (u.email || '').toLowerCase() === email.toLowerCase()) || existing;
       if (!appUser) {
         appUser = createUser(
           username,
@@ -3559,8 +3544,6 @@ app.get([
         appUser = updateUserOAuthProfile(appUser.id, { displayName: name, email, avatarUrl }) || appUser;
       }
 
-      userId = appUser.id;
-
       if (appUser.twoFactorEnabled) {
         req.session.pending_2fa_user = {
           id: appUser.id,
@@ -3571,10 +3554,6 @@ app.get([
           two_factor_enabled: true,
           roles: appUser.roles || 'user',
         };
-        // CRITICAL: Store OAuth token with correct user ID BEFORE redirecting
-        storeOAuthToken(service, userId, tokenData.accessToken, tokenData.refreshToken || null, expiresAt, tokenData.scope);
-        updateOAuthStatus(service, "connected");
-        
         const next = encodeURIComponent(safeReturnTo);
         const redirectUrl = `/dashboard/?oauth_service=${service}&oauth_status=pending_2fa&next=${next}`;
         return req.session.save(() => {
@@ -3591,42 +3570,10 @@ app.get([
         two_factor_enabled: Boolean(appUser.twoFactorEnabled),
         roles: appUser.roles || 'user',
       };
-    } else {
-      // Connect mode: user is already in session, use that ID
-      // CRITICAL: In connect mode, session might not be populated on callback redirect
-      // Fallback: extract user ID from existing tokens by the same owner
-      userId = getOAuthUserId(req);
-      
-      if (!userId || userId === 'oauth_user') {
-        // Session lost or not available — try to find the owner from existing tokens
-        const existingTokens = getAccessTokens();
-        const ownerTokens = existingTokens.filter(t => t.ownerId && t.ownerId !== 'owner' && !t.revokedAt);
-        
-        if (ownerTokens.length > 0) {
-          // Use the first valid non-default token owner
-          userId = String(ownerTokens[0].ownerId);
-          console.log(`[OAuth Callback] Connect mode: reconstructed userId from existing tokens: ${userId}`);
-        } else {
-          console.error(`[OAuth Callback] Connect mode: cannot determine userId. Session lost and no existing tokens. Using session fallback.`);
-          // Last resort: try req.session.user directly
-          userId = String(req.session?.user?.id || 'oauth_user');
-        }
-      }
-    }
-
-    // CRITICAL: Validate userId before storing
-    if (!userId || userId === 'oauth_user') {
-      console.error(`[OAuth Callback] FATAL: Cannot determine correct user ID for token storage. Falling back to 'oauth_user' (this is a bug).`);
-    }
-
-    // Store OAuth token with correct user ID
-    console.log(`[OAuth Callback] Storing ${service} token for user: ${userId}`);
-    storeOAuthToken(service, userId, tokenData.accessToken, tokenData.refreshToken || null, expiresAt, tokenData.scope);
-    updateOAuthStatus(service, "connected");
 
       // Ensure each OAuth-logged-in user receives a full master token for dashboard/API actions.
       // ONLY create if no existing valid master token exists - don't revoke!
-      if (appUser && !req.session.masterTokenRaw) {
+      if (!req.session.masterTokenRaw) {
         const existingTokens = getAccessTokens();
         const hasValidMaster = existingTokens.some(t => 
           t.scope === 'full' && !t.revokedAt && t.ownerId === String(appUser.id)
@@ -3709,9 +3656,9 @@ app.get("/api/v1/oauth/status", (req, res) => {
   
   const services = OAUTH_SERVICES.map(service => {
     const status = statuses.find(s => s.serviceName === service);
-    // Extract user ID from session or Bearer token
-    const userId = req.session?.user?.id || req.tokenMeta?.ownerId;
-    const token = userId ? getOAuthToken(service, String(userId)) : null;
+    // Only show tokens for authenticated users
+    const userId = req.session?.user?.id ? String(req.session.user.id) : (req.tokenMeta?.ownerId ? String(req.tokenMeta.ownerId) : null);
+    const token = userId ? getOAuthToken(service, userId) : null;
     
     return {
       name: service,
@@ -3765,13 +3712,11 @@ app.post("/api/v1/oauth/disconnect/:service", authenticate, async (req, res) => 
     updateOAuthStatus(service, "disconnected");
     
     // Log disconnection
-    const requesterId = req.session?.user?.id || req.tokenMeta?.tokenId || 'unknown';
-    const scope = req.tokenMeta?.scope || 'session';
     createAuditLog({
-      requesterId,
+      requesterId: req.tokenMeta.tokenId,
       action: "oauth_disconnect",
       resource: `/oauth/disconnect/${service}`,
-      scope,
+      scope: req.tokenMeta.scope,
       ip: req.ip,
       details: { service }
     });
@@ -3780,13 +3725,11 @@ app.post("/api/v1/oauth/disconnect/:service", authenticate, async (req, res) => 
   } catch (error) {
     console.error(`OAuth disconnect error for ${service}:`, error.message);
     
-    const requesterId = req.session?.user?.id || req.tokenMeta?.tokenId || 'unknown';
-    const scope = req.tokenMeta?.scope || 'session';
     createAuditLog({
-      requesterId,
+      requesterId: req.tokenMeta.tokenId,
       action: "oauth_disconnect_error",
       resource: `/oauth/disconnect/${service}`,
-      scope,
+      scope: req.tokenMeta.scope,
       ip: req.ip,
       details: { service, error: error.message }
     });
