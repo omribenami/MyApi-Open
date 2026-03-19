@@ -7,6 +7,7 @@ const {
   getPersonas,
   getSkills,
   getMyMarketplaceListings,
+  getMarketplaceListings,
   getKBDocuments,
   getActivityLog,
 } = require('../database');
@@ -64,7 +65,8 @@ function handleDashboardMetrics(req, res) {
     const activeTokens = (getAccessTokens(userId) || []).filter((t) => !t.revokedAt).length;
     const personas = (getPersonas(userId) || []).length;
     const skills = (getSkills(userId) || []).length;
-    const marketplace = (getMyMarketplaceListings(userId) || []).filter((x) => x.active !== 0).length;
+    // Use public marketplace total so dashboard matches what users see in Marketplace browse.
+    const marketplace = (getMarketplaceListings({}) || []).length;
     const knowledge = (getKBDocuments(userId) || []).length;
 
     const activity = getActivityLog(userId, { limit: 5 }) || [];
