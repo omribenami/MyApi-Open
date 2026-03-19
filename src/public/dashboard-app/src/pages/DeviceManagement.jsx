@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../utils/apiClient';
-import './DeviceManagement.css';
 
 const DeviceManagement = () => {
   const [activeTab, setActiveTab] = useState('approved');
@@ -143,73 +142,104 @@ const DeviceManagement = () => {
   };
 
   return (
-    <div className="device-management">
-      <div className="device-management-header">
-        <h1>Device Management</h1>
-        <p>Manage which devices can access your MyApi tokens</p>
+    <div className="space-y-6">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-bold text-white">Device Management</h1>
+          <p className="text-slate-400 mt-2">Manage which devices can access your MyApi tokens</p>
+        </div>
       </div>
 
-      {error && <div className="alert alert-error">{error}</div>}
+      {error && (
+        <div className="rounded-lg border border-red-700 bg-red-900/30 text-red-200 p-3 text-sm flex items-center justify-between gap-4">
+          <span>{error}</span>
+          <button type="button" onClick={() => {} } className="text-red-300 hover:text-red-100">✕</button>
+        </div>
+      )}
       {approvalMessage && (
-        <div className={`alert alert-${approvalMessage.type}`}>
-          {approvalMessage.text}
+        <div className={`rounded-lg border p-3 text-sm flex items-center justify-between gap-4 ${
+          approvalMessage.type === 'success'
+            ? 'border-emerald-700 bg-emerald-900/30 text-emerald-200'
+            : 'border-red-700 bg-red-900/30 text-red-200'
+        }`}>
+          <span>{approvalMessage.text}</span>
+          <button type="button" onClick={() => setApprovalMessage('')} className="hover:opacity-80">✕</button>
         </div>
       )}
 
-      <div className="tabs">
+      <div className="flex gap-2 border-b border-slate-700">
         <button
-          className={`tab ${activeTab === 'approved' ? 'active' : ''}`}
+          className={`px-4 py-2 border-b-2 transition-colors ${
+            activeTab === 'approved'
+              ? 'border-blue-600 text-blue-400'
+              : 'border-transparent text-slate-400 hover:text-slate-300'
+          }`}
           onClick={() => setActiveTab('approved')}
         >
           Approved Devices ({approvedDevices.length})
         </button>
         <button
-          className={`tab ${activeTab === 'pending' ? 'active' : ''}`}
+          className={`px-4 py-2 border-b-2 transition-colors ${
+            activeTab === 'pending'
+              ? 'border-blue-600 text-blue-400'
+              : 'border-transparent text-slate-400 hover:text-slate-300'
+          }`}
           onClick={() => setActiveTab('pending')}
         >
           Pending Approvals ({pendingApprovals.length})
         </button>
         <button
-          className={`tab ${activeTab === 'activity' ? 'active' : ''}`}
+          className={`px-4 py-2 border-b-2 transition-colors ${
+            activeTab === 'activity'
+              ? 'border-blue-600 text-blue-400'
+              : 'border-transparent text-slate-400 hover:text-slate-300'
+          }`}
           onClick={() => setActiveTab('activity')}
         >
           Activity Log
         </button>
       </div>
 
-      <div className="tab-content">
+      <div>
         {loading ? (
-          <div className="loading">Loading...</div>
+          <div className="p-6 text-slate-400">Loading...</div>
         ) : activeTab === 'approved' ? (
-          <div className="approved-devices">
+          <div>
             {approvedDevices.length === 0 ? (
-              <p className="empty-state">No approved devices yet</p>
+              <p className="p-6 text-slate-400">No approved devices yet</p>
             ) : (
-              <div className="device-list">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {approvedDevices.map((device) => (
-                  <div key={device.id} className="device-card">
-                    <div className="device-card-header">
+                  <div key={device.id} className="bg-slate-900 border border-slate-700/50 rounded-lg overflow-hidden hover:border-slate-600 transition-colors">
+                    <div className="p-4 border-b border-slate-700">
                       {renameMode === device.id ? (
-                        <div className="rename-input">
+                        <div className="flex gap-2">
                           <input
                             type="text"
                             value={newDeviceName}
                             onChange={(e) => setNewDeviceName(e.target.value)}
                             placeholder="Enter new device name"
                             autoFocus
+                            className="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-slate-100"
                           />
-                          <button onClick={() => handleRenameDevice(device.id)}>
+                          <button 
+                            onClick={() => handleRenameDevice(device.id)}
+                            className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm"
+                          >
                             Save
                           </button>
-                          <button onClick={() => { setRenameMode(null); setNewDeviceName(''); }}>
+                          <button 
+                            onClick={() => { setRenameMode(null); setNewDeviceName(''); }}
+                            className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-slate-100 rounded text-sm"
+                          >
                             Cancel
                           </button>
                         </div>
                       ) : (
-                        <>
-                          <h3>{device.name}</h3>
+                        <div className="flex justify-between items-center">
+                          <h3 className="text-lg font-semibold text-slate-100">{device.name}</h3>
                           <button
-                            className="rename-btn"
+                            className="text-blue-400 hover:text-blue-300 text-sm font-medium"
                             onClick={() => {
                               setRenameMode(device.id);
                               setNewDeviceName(device.name);
@@ -217,36 +247,36 @@ const DeviceManagement = () => {
                           >
                             Rename
                           </button>
-                        </>
+                        </div>
                       )}
                     </div>
-                    <div className="device-card-details">
-                      <div className="detail">
-                        <span className="label">Operating System:</span>
-                        <span className="value">{device.info?.os || 'Unknown'}</span>
+                    <div className="p-4 space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-400">OS:</span>
+                        <span className="text-slate-100 font-mono">{device.info?.os || 'Unknown'}</span>
                       </div>
-                      <div className="detail">
-                        <span className="label">Browser:</span>
-                        <span className="value">{device.info?.browser || 'Unknown'}</span>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-400">Browser:</span>
+                        <span className="text-slate-100 font-mono">{device.info?.browser || 'Unknown'}</span>
                       </div>
-                      <div className="detail">
-                        <span className="label">IP Address:</span>
-                        <span className="value">{device.ip}</span>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-400">IP Address:</span>
+                        <span className="text-slate-100 font-mono">{device.ip}</span>
                       </div>
-                      <div className="detail">
-                        <span className="label">Approved:</span>
-                        <span className="value">{formatDate(device.approvedAt)}</span>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-400">Approved:</span>
+                        <span className="text-slate-100">{formatDate(device.approvedAt)}</span>
                       </div>
-                      <div className="detail">
-                        <span className="label">Last Used:</span>
-                        <span className="value">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-400">Last Used:</span>
+                        <span className="text-slate-100">
                           {device.lastUsedAt ? formatRelativeTime(device.lastUsedAt) : 'Never'}
                         </span>
                       </div>
                     </div>
-                    <div className="device-card-actions">
+                    <div className="p-4 border-t border-slate-700">
                       <button
-                        className="btn btn-danger"
+                        className="w-full px-3 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded text-sm font-medium"
                         onClick={() => handleRevokeDevice(device.id)}
                       >
                         Revoke Access

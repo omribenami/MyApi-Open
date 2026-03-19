@@ -889,10 +889,13 @@ function authenticate(req, res, next) {
   // For Bearer tokens (agents/APIs), enforce device approval.
   // This adds a layer of security: even if a master token is leaked, the attacker
   // still needs to approve the device fingerprint before accessing protected APIs.
-  // Exceptions: auth setup routes, device management, and OAuth flows don't require approval.
+  // Exceptions: auth setup routes, device management, OAuth flows, user management (already protected by requirePowerUser),
+  // and read-only activity don't require approval.
   const skipDeviceApproval = req.path.startsWith('/api/v1/auth/') || 
                              req.path.startsWith('/api/v1/devices') ||
-                             req.path.startsWith('/api/v1/oauth/');
+                             req.path.startsWith('/api/v1/oauth/') ||
+                             req.path.startsWith('/api/v1/users') ||
+                             (req.path.startsWith('/api/v1/activity') && req.method === 'GET');
   
   if (skipDeviceApproval) {
     return next();
