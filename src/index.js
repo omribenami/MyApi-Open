@@ -3140,6 +3140,100 @@ app.get("/api/v1/auth/me", (req, res) => {
   res.status(401).json({ error: "Invalid session" });
 });
 
+// GET /api/v1/auth/oauth-signup/pending — returns pending OAuth signup state
+app.get('/api/v1/auth/oauth-signup/pending', (req, res) => {
+  const pending = req.session?.oauth_signup || null;
+  if (!pending) return res.status(404).json({ error: 'No pending OAuth signup' });
+  return res.json({
+    ok: true,
+    data: {
+      service: pending.service,
+      email: pending.email || '',
+      name: pending.name || '',
+      avatarUrl: pending.avatarUrl || null,
+      createdAt: pending.createdAt || null,
+    }
+  });
+});
+
+// POST /api/v1/auth/oauth-signup/complete — creates user from pending OAuth signup and logs in
+app.post('/api/v1/auth/oauth-signup/complete', (req, res) => {
+  const pending = req.session?.oauth_signup;
+  if (!pending) return res.status(400).json({ error: 'No pending OAuth signup session' });
+
+  const requestedUsername = String(req.body?.username || '').trim();
+  const usernameBase = (requestedUsername || String(pending.email || pending.name || 'user').split('@')[0])
+    .replace(/[^a-zA-Z0-9_.-]/g, '')
+    .slice(0, 30) || `user_${Date.now()}`;
+
+  let username = usernameBase;
+  let existing = getUserByUsername(username);
+  if (existing) username = `${usernameBase}_${Date.now().toString().slice(-6)}`;
+
+  const email = String(req.body?.email || pending.email || '').trim() || null;
+  if (email) {
+    const emailMatch = getUsers().find((u) => String(u.email || '').toLowerCase() === email.toLowerCase());
+    if (emailMatch) {
+      return res.status(409).json({ error: 'An account with this email already exists. Please sign in instead.' });
+    }
+  }
+
+  const displayName = String(req.body?.displayName || pending.name || username).trim() || username;
+  const generatedPassword = `Oauth#${crypto.randomBytes(16).toString('hex')}A1!`;
+
+  try {
+    const user = createUser(username, displayName, email, req.body?.timezone || 'UTC', generatedPassword);
+    updateUserOAuthProfile(user.id, {
+      displayName,
+      email,
+      avatarUrl: pending.avatarUrl || null,
+    });
+
+    const freshUser = getUserById(user.id) || user;
+    req.session.user = {
+      id: freshUser.id,
+      username: freshUser.username,
+      display_name: freshUser.displayName || freshUser.username,
+      displayName: freshUser.displayName || freshUser.username,
+      email: freshUser.email || null,
+      avatar_url: freshUser.avatarUrl || null,
+      avatarUrl: freshUser.avatarUrl || null,
+      two_factor_enabled: Boolean(freshUser.twoFactorEnabled),
+      roles: freshUser.roles || 'user',
+    };
+
+    const rawMasterToken = 'myapi_' + crypto.randomBytes(32).toString('hex');
+    const hash = bcrypt.hashSync(rawMasterToken, 10);
+    const tokenId = createAccessToken(hash, freshUser.id, 'full', 'Master Token (OAuth Signup Session)', null, null);
+    req.session.masterTokenRaw = rawMasterToken;
+    req.session.masterTokenId = tokenId;
+    req.session.isFirstLogin = true;
+    delete req.session.oauth_signup;
+
+    res.cookie('myapi_master_token', rawMasterToken, {
+      httpOnly: false,
+      path: '/',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      sameSite: 'lax'
+    });
+
+    res.cookie('myapi_user', JSON.stringify(req.session.user), {
+      httpOnly: false,
+      path: '/',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      sameSite: 'lax'
+    });
+
+    createAuditLog({ requesterId: freshUser.id, action: 'oauth_signup_complete', resource: `/users/${freshUser.id}`, scope: 'session', ip: req.ip, details: { service: pending.service } });
+
+    return req.session.save(() => {
+      res.json({ ok: true, data: { user: req.session.user, bootstrap: { masterToken: rawMasterToken, tokenId } } });
+    });
+  } catch (error) {
+    return res.status(500).json({ error: `Failed to complete OAuth signup: ${error.message}` });
+  }
+});
+
 // GET /api/v1/auth/debug — Public diagnostic endpoint
 // No auth required; helps diagnose session/token issues
 app.get("/api/v1/auth/debug", (req, res) => {
@@ -4111,17 +4205,18 @@ app.get([
       let appUser = getUsers().find((u) => (u.email || '').toLowerCase() === email.toLowerCase()) || existing;
       let isNewUser = false;
       
-      // NEW USER: Store OAuth data in session and redirect to signup wizard
+      // NEW USER: Store OAuth data in session and route to explicit signup flow (no silent login/create)
       if (!appUser) {
         req.session.oauth_signup = {
           service,
           email,
           name,
           avatarUrl,
-          profileData: p
+          profileData: p,
+          createdAt: new Date().toISOString(),
         };
-        
-        const redirectUrl = `/dashboard/?signup=true&oauth_service=${service}`;
+
+        const redirectUrl = `/dashboard/?oauth_service=${service}&oauth_status=signup_required&signup=true`;
         return req.session.save(() => {
           res.redirect(redirectUrl);
         });

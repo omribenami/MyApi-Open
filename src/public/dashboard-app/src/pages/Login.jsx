@@ -56,6 +56,7 @@ function Login() {
   const [soulMdData, setSoulMdData] = useState({
     traits: '', values: '', communication: '', workStyle: ''
   });
+  const [signupCompleting, setSignupCompleting] = useState(false);
   const { setMasterToken, setUser, isAuthenticated } = useAuthStore();
 
   // Check for signup query param (new user OAuth flow)
@@ -84,15 +85,26 @@ function Login() {
                 setMasterToken(sessionUser.bootstrap.masterToken);
               }
               setUser(sessionUser);
-              // If coming from signup flow, proceed to USER.md step
-              if (isSignup) {
-                setSignupStep(2);
-              } else {
-                window.history.replaceState({}, document.title, '/dashboard/');
-                window.location.href = '/dashboard/';
-              }
+              window.history.replaceState({}, document.title, '/dashboard/');
+              window.location.href = '/dashboard/';
             }
           });
+      } else if (callback.status === 'signup_required') {
+        setViewMode('login');
+        setIsSignup(true);
+        setSignupStep(2);
+        fetch('/api/v1/auth/oauth-signup/pending', { credentials: 'include' })
+          .then((res) => (res.ok ? res.json() : null))
+          .then((payload) => {
+            const data = payload?.data || {};
+            setUserMdData((prev) => ({
+              ...prev,
+              name: data.name || prev.name,
+              email: data.email || prev.email,
+            }));
+          })
+          .catch(() => {});
+        window.history.replaceState({}, document.title, '/dashboard/');
       } else if (callback.status === 'pending_2fa') {
         setTwoFactorRequired(true);
         setViewMode('login');
@@ -195,6 +207,33 @@ function Login() {
       setError('Connection failed. Is the server running?');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const completeOAuthSignup = async () => {
+    if (signupCompleting) return;
+    setError('');
+    setSignupCompleting(true);
+    try {
+      const response = await fetch('/api/v1/auth/oauth-signup/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          displayName: userMdData.name,
+          email: userMdData.email,
+          timezone: userMdData.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.error || 'Failed to complete signup');
+
+      if (result?.data?.bootstrap?.masterToken) setMasterToken(result.data.bootstrap.masterToken);
+      if (result?.data?.user) setUser(result.data.user);
+      window.location.href = '/dashboard/';
+    } catch (err) {
+      setError(err.message || 'Failed to complete signup');
+      setSignupCompleting(false);
     }
   };
 
@@ -347,10 +386,11 @@ function Login() {
                               Next
                             </button>
                             <button
-                              onClick={() => setSignupStep(4)}
-                              className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-300 transition-colors hover:bg-slate-800"
+                              onClick={completeOAuthSignup}
+                              disabled={signupCompleting}
+                              className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-300 transition-colors hover:bg-slate-800 disabled:opacity-60"
                             >
-                              Skip
+                              {signupCompleting ? 'Creating…' : 'Skip'}
                             </button>
                           </div>
                         </div>
@@ -394,16 +434,18 @@ function Login() {
                               Back
                             </button>
                             <button
-                              onClick={() => setSignupStep(4)}
-                              className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500"
+                              onClick={completeOAuthSignup}
+                              disabled={signupCompleting}
+                              className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-60"
                             >
-                              Complete
+                              {signupCompleting ? 'Creating…' : 'Complete'}
                             </button>
                             <button
-                              onClick={() => setSignupStep(4)}
-                              className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-300 transition-colors hover:bg-slate-800"
+                              onClick={completeOAuthSignup}
+                              disabled={signupCompleting}
+                              className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-300 transition-colors hover:bg-slate-800 disabled:opacity-60"
                             >
-                              Skip
+                              {signupCompleting ? 'Creating…' : 'Skip'}
                             </button>
                           </div>
                         </div>

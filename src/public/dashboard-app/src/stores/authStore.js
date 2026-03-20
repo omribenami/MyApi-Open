@@ -100,7 +100,9 @@ export const useAuthStore = create((set, get) => ({
               credentials: 'include',
             });
             if (validateRes.ok) {
-              set({ masterToken, sessionToken, isAuthenticated: true, isInitialized: true, error: null });
+              const validatePayload = await validateRes.json().catch(() => ({}));
+              const user = normalizeUserPayload(validatePayload);
+              set({ user, masterToken, sessionToken, isAuthenticated: true, isInitialized: true, error: null });
               return;
             }
           } catch {}
