@@ -79,31 +79,44 @@ MyApi supports **outbound-only** email operations. Inbox read/search is intentio
 - `POST /api/v1/email/process` — process queued outbound emails
 - `GET /api/v1/email/jobs` — recent queue jobs/failures for dashboard observability
 
-### Data Export API (v2)
+### Data Export API (v2 JSON + v3 ZIP)
 
 - `GET /api/v1/export` (authenticated)
 - Query params:
   - `mode=portable|forensic` (default: `portable`)
-  - section toggles: `profile`, `tokens`, `personas`, `knowledge`, `settings` (`true` by default)
+  - `format=json|zip` (default: `json`)
+  - `includeFiles=true|false` (ZIP only, default: `false`)
+  - section toggles (JSON mode): `profile`, `tokens`, `personas`, `knowledge`, `settings` (`true` by default)
 
-Portable mode is customer-facing and safe-by-default:
-- session-like token labels (e.g. OAuth/Dashboard Session) are excluded
-- token IDs are masked
-- token secrets are never exported
+**JSON mode (v2, backward compatible):**
+- Same behavior as existing export endpoint
+- Portable mode excludes session-like token labels and masks token IDs
+- Forensic mode includes full token IDs/internal refs
+- Token secrets are never exported
 
-Forensic mode is internal/support-focused and includes full token IDs/internal refs.
+**ZIP mode (v3 portable package):**
+- Returns `application/zip` with structure:
+  - `manifest.json`
+  - `profile/identity.json`, `profile/user.md`, `profile/soul.md`
+  - `personas/personas.json` (+ `personas/configs/*.json` when available)
+  - `connectors/services.json`, `connectors/oauth-metadata.json` (metadata only)
+  - `knowledge/index.json`, `knowledge/docs/*.md`
+  - `knowledge/files/*` only when `includeFiles=true`
+  - `settings/settings.json`
+  - `audit/summary.json`
+  - `checksums.sha256`
 
-Response includes a manifest with:
-- `schemaVersion: "2.0"`
-- `exportMode`
-- `generatedBy`
-- section `checksums`
-- `importSupported: false` and rationale (full import intentionally unsupported)
-
-Example:
+Example (JSON):
 ```bash
 curl -H "Authorization: Bearer <token>" \
   "https://www.myapiai.com/api/v1/export?mode=portable&tokens=true"
+```
+
+Example (ZIP):
+```bash
+curl -L -H "Authorization: Bearer <token>" \
+  "https://www.myapiai.com/api/v1/export?format=zip&mode=portable&includeFiles=false" \
+  -o myapi-export.zip
 ```
 
 ### Local Development

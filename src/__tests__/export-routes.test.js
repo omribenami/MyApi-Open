@@ -1,11 +1,17 @@
 const request = require('supertest');
 const express = require('express');
+const JSZip = require('jszip');
 
 jest.mock('../database', () => ({
   getUserById: jest.fn(),
   getAccessTokens: jest.fn(),
   getPersonas: jest.fn(),
   getKBDocuments: jest.fn(),
+  getKBDocumentById: jest.fn(),
+  getServices: jest.fn(),
+  getServicePreferences: jest.fn(),
+  getOAuthToken: jest.fn(),
+  getActivityLog: jest.fn(),
 }));
 
 const fs = require('fs');
@@ -22,7 +28,7 @@ function buildApp() {
   return app;
 }
 
-describe('Export route v2', () => {
+describe('Export route v2/v3', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
@@ -75,6 +81,11 @@ describe('Export route v2', () => {
 
     db.getPersonas.mockReturnValue([]);
     db.getKBDocuments.mockReturnValue([]);
+    db.getKBDocumentById.mockReturnValue(null);
+    db.getServices.mockReturnValue([]);
+    db.getServicePreferences.mockReturnValue([]);
+    db.getOAuthToken.mockReturnValue(null);
+    db.getActivityLog.mockReturnValue([]);
 
     jest.spyOn(fs, 'existsSync').mockReturnValue(false);
   });
@@ -130,5 +141,54 @@ describe('Export route v2', () => {
     expect(res.body.manifest.importRationale).toContain('unsupported');
     expect(res.body.manifest.checksums.profile).toHaveLength(64);
     expect(res.body.manifest.checksums.tokens).toHaveLength(64);
+  });
+
+  it('returns zip export with expected structure', async () => {
+    db.getPersonas.mockReturnValue([{ id: 'p1', name: 'Helper', description: 'desc', config: { tone: 'calm' } }]);
+    db.getKBDocuments.mockReturnValue([{ id: 'd1', title: 'Doc 1', content: '# Hello' }]);
+    db.getKBDocumentById.mockReturnValue({ id: 'd1', title: 'Doc 1', content: '# Hello' });
+    db.getServices.mockReturnValue([{ id: 'svc1', name: 'github', label: 'GitHub', category_name: 'dev', auth_type: 'oauth2', active: 1 }]);
+    db.getOAuthToken.mockReturnValue({ createdAt: '2026-03-01T00:00:00.000Z', expiresAt: null, scope: 'repo' });
+    db.getActivityLog.mockReturnValue([{ action_type: 'token_used', resource_type: 'token', result: 'success', created_at: '2026-03-20T00:00:00.000Z' }]);
+
+    const app = buildApp();
+    const res = await request(app)
+      .get('/api/v1/export?format=zip')
+      .buffer(true)
+      .parse((response, callback) => {
+        const chunks = [];
+        response.on('data', (chunk) => chunks.push(chunk));
+        response.on('end', () => callback(null, Buffer.concat(chunks)));
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('application/zip');
+    expect(res.headers['content-disposition']).toContain('.zip');
+
+    const zip = await JSZip.loadAsync(res.body);
+    const files = Object.keys(zip.files);
+    expect(files).toEqual(expect.arrayContaining([
+      'manifest.json',
+      'checksums.sha256',
+      'profile/identity.json',
+      'profile/user.md',
+      'profile/soul.md',
+      'personas/personas.json',
+      'personas/configs/p1.json',
+      'connectors/services.json',
+      'connectors/oauth-metadata.json',
+      'knowledge/index.json',
+      'knowledge/docs/d1.md',
+      'settings/settings.json',
+      'audit/summary.json',
+    ]));
+
+    const manifest = JSON.parse(await zip.file('manifest.json').async('string'));
+    expect(manifest.schemaVersion).toBe('3.0');
+    expect(manifest.generatedBy).toBe('myapi.export.v3.zip');
+
+    const oauth = JSON.parse(await zip.file('connectors/oauth-metadata.json').async('string'));
+    expect(oauth[0].connected).toBe(true);
+    expect(Object.keys(oauth[0]).join(',')).not.toMatch(/accessToken|refreshToken|secret|token/i);
   });
 });

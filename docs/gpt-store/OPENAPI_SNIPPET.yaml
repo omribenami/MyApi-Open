@@ -60,7 +60,7 @@ paths:
   /api/v1/export:
     get:
       operationId: exportData
-      summary: Export account data (v2 portable/forensic)
+      summary: Export account data (v2 JSON / v3 ZIP)
       parameters:
         - name: mode
           in: query
@@ -69,6 +69,19 @@ paths:
             type: string
             enum: [portable, forensic]
             default: portable
+        - name: format
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [json, zip]
+            default: json
+        - name: includeFiles
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
         - name: profile
           in: query
           required: false

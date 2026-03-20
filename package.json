@@ -12,6 +12,7 @@
   "dependencies": {
     "better-sqlite3": "^12.6.2",
     "better-sqlite3-session-store": "^0.1.0",
+    "jszip": "^3.10.1",
     "nodemailer": "^8.0.3"
   },
   "devDependencies": {
