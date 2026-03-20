@@ -306,6 +306,21 @@ function ServiceConnectors() {
                 onConfigure={handleConfigure}
               />
             ))}
+
+            {/* Coming Soon Card */}
+            <div className="rounded-xl border border-slate-700/50 bg-gradient-to-br from-slate-800/30 to-slate-900/40 backdrop-blur-sm p-6 hover:border-slate-600/50 transition-all duration-200 shadow-sm hover:shadow-md flex flex-col items-center justify-center min-h-[280px]">
+              <div className="text-center space-y-4">
+                <div className="text-5xl">🚀</div>
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-100">More Services Coming</h3>
+                  <p className="text-sm text-slate-400 mt-2">Stay tuned for exciting new integrations</p>
+                </div>
+                <div className="pt-4 border-t border-slate-700/30">
+                  <p className="text-xs text-slate-500">Have a service in mind?</p>
+                  <p className="text-xs text-blue-400 hover:text-blue-300 cursor-pointer mt-1">Request it →</p>
+                </div>
+              </div>
+            </div>
           </div>
 
           <section className="hidden xl:block rounded-2xl border border-slate-700 overflow-hidden bg-slate-800/40 backdrop-blur-sm shadow-lg">
