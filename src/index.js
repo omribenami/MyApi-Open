@@ -1044,11 +1044,83 @@ const notificationsRouter = require('./routes/notifications');
 const activityRoutes = require('./routes/activity');
 const emailRoutes = require('./routes/email');
 const workspacesRoutes = require('./routes/workspaces');
+const createManagementRoutes = require('./routes/management');
+
 app.use('/api/v1/notifications', authenticate, notificationsRouter);
 app.use('/api/v1/activity', authenticate, activityRoutes);
 app.use('/api/v1/email', authenticate, emailRoutes);
 app.use('/api/v1/workspaces', authenticate, workspacesRoutes);
 app.use('/api/v1/invitations', authenticate, workspacesRoutes);
+
+// Mount management routes (audit, tokens, etc)
+// Note: Management routes require authentication but have their own permission checks
+const auditLogService = {
+  getRecent: (limit = 1000, offset = 0) => {
+    try {
+      const stmt = db.prepare('SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT ? OFFSET ?');
+      return stmt.all(limit, offset) || [];
+    } catch (e) {
+      console.error('Error fetching audit logs:', e);
+      return [];
+    }
+  }
+};
+
+// Create a simple audit/agents endpoint directly (bypass requirePersonal for read-only audit)
+app.get('/api/v1/manage/audit/agents', authenticate, (req, res) => {
+  try {
+    const logs = auditLogService.getRecent(1000, 0);
+    const agentMap = {};
+    
+    logs.forEach(log => {
+      if (!log.request_id) return;
+      
+      const userAgent = log.user_agent || '';
+      let agentName = 'Unknown';
+      let agentType = 'browser';
+      
+      if (userAgent.includes('Jarvis')) {
+        agentName = 'Jarvis';
+        agentType = 'ai';
+      } else if (userAgent.includes('OpenClaw')) {
+        agentName = 'OpenClaw';
+        agentType = 'ai';
+      } else if (userAgent.includes('curl') || userAgent.includes('node')) {
+        agentName = userAgent.split('/')[0];
+        agentType = 'cli';
+      } else if (userAgent.includes('Python')) {
+        agentName = 'Python';
+        agentType = 'script';
+      }
+      
+      if (!agentMap[agentName]) {
+        agentMap[agentName] = {
+          agentName,
+          agentType,
+          accessCount: 0,
+          lastAccess: null,
+          tokensUsed: [],
+          endpointsAccessed: []
+        };
+      }
+      
+      agentMap[agentName].accessCount++;
+      agentMap[agentName].lastAccess = log.created_at;
+      
+      if (log.resource && !agentMap[agentName].endpointsAccessed.includes(log.resource)) {
+        agentMap[agentName].endpointsAccessed.push(log.resource);
+      }
+    });
+    
+    res.json({
+      ok: true,
+      agents: Object.values(agentMap)
+    });
+  } catch (error) {
+    console.error('Error fetching agent usage:', error);
+    res.status(500).json({ error: 'Failed to fetch agent usage' });
+  }
+});
 
 // Register export data routes
 const exportRoutes = require('./routes/export');
