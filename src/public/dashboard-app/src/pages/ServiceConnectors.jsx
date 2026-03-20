@@ -317,7 +317,7 @@ function ServiceConnectors() {
                 </div>
                 <div className="pt-4 border-t border-slate-700/30">
                   <p className="text-xs text-slate-500">Have a service in mind?</p>
-                  <p className="text-xs text-blue-400 hover:text-blue-300 cursor-pointer mt-1">Request it →</p>
+                  <a href="mailto:support@myapiai.com?subject=Service%20Request" className="text-xs text-blue-400 hover:text-blue-300 cursor-pointer mt-1 inline-block">Request it →</a>
                 </div>
               </div>
             </div>

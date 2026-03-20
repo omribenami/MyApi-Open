@@ -1388,7 +1388,6 @@ const SECTIONS = [
   { id: 'billing', label: 'Plans' },
   { id: 'security', label: 'Security' },
   { id: 'notifications', label: 'Notifications' },
-  { id: 'agents', label: 'Token Usage' },
   { id: 'privacy', label: 'Privacy' },
   { id: 'danger', label: 'Danger Zone' },
 ];
@@ -1452,7 +1451,6 @@ function Settings() {
       {activeSection === 'billing' && <BillingSection />}
       {activeSection === 'security' && <SecuritySection />}
       {activeSection === 'notifications' && <NotificationSettings />}
-      {activeSection === 'agents' && <AIAgentTrackingSection />}
       {activeSection === 'privacy' && <PrivacySection />}
       {activeSection === 'danger' && (
         <DangerZoneSection
