@@ -817,7 +817,7 @@ function SecuritySection() {
                     className="p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg"
                   >
                     <div className="flex items-start justify-between gap-3 mb-2">
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-white">
                           {approval.deviceInfo?.userAgent || approval.deviceInfo?.name || 'Unknown Device'}
                         </p>
@@ -863,15 +863,15 @@ function SecuritySection() {
                 {approvedDevices.map((device) => (
                   <div
                     key={device.id}
-                    className="flex items-center justify-between p-4 bg-slate-900 border border-slate-700 rounded-lg"
+                    className="flex items-start justify-between gap-3 p-4 bg-slate-900 border border-slate-700 rounded-lg overflow-hidden"
                   >
-                    <div className="flex items-start gap-3 flex-1">
+                    <div className="flex items-start gap-3 flex-1 min-w-0">
                       <span className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-700 bg-slate-800 text-[11px] text-slate-300 font-semibold">
                         {device.info?.userAgent?.includes('iPhone') || device.info?.userAgent?.includes('Android') ? 'MOB' : device.info?.type === 'ai' ? 'AI' : 'WEB'}
                       </span>
-                      <div className="flex-1">
+                      <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-white">{device.name}</p>
-                        <p className="text-xs text-slate-400 mt-0.5">IP: {device.ip}</p>
+                        <p className="text-xs text-slate-400 mt-0.5 break-all">IP: {device.ip}</p>
                         <p className="text-xs text-slate-500 mt-0.5">
                           Approved {new Date(device.approvedAt).toLocaleDateString()}
                           {device.lastUsedAt && ` • Last used ${new Date(device.lastUsedAt).toLocaleDateString()}`}
@@ -880,7 +880,7 @@ function SecuritySection() {
                     </div>
                     <button
                       onClick={() => handleRevokeDevice(device.id)}
-                      className="text-xs text-red-400 hover:text-red-300 px-3 py-1.5 border border-red-800 hover:border-red-600 rounded-lg transition-colors flex-shrink-0"
+                      className="text-xs text-red-400 hover:text-red-300 px-3 py-1.5 border border-red-800 hover:border-red-600 rounded-lg transition-colors flex-shrink-0 self-start"
                     >
                       Revoke
                     </button>

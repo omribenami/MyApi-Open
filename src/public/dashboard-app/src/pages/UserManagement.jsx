@@ -43,7 +43,6 @@ function UserManagement() {
   const [savingUserId, setSavingUserId] = useState(null);
   const [plans, setPlans] = useState([]);
   const [deletingUserId, setDeletingUserId] = useState(null);
-  const [cleaning, setCleaning] = useState(false);
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -128,30 +127,7 @@ function UserManagement() {
     }
   };
 
-  const cleanupPhase12Users = async () => {
-    if (!window.confirm('Delete all users with username starting with phase12a_?')) return;
-    setCleaning(true);
-    setActionError('');
-    try {
-      const options = {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ prefix: 'phase12a_' }),
-      };
-      if (masterToken) {
-        options.headers.Authorization = `Bearer ${masterToken}`;
-      }
-      await apiRequest('/api/v1/users/cleanup-test-users', options);
-      await fetchUsers();
-    } catch (err) {
-      setActionError(formatError(err, 'Failed to cleanup test users'));
-    } finally {
-      setCleaning(false);
-    }
-  };
+
 
   return (
     <div className="space-y-6">
@@ -160,14 +136,6 @@ function UserManagement() {
           <h1 className="text-3xl font-bold text-white">User Management</h1>
           <p className="text-slate-400 mt-2">Assign plans (Free/Pro/Enterprise) to users.</p>
         </div>
-        <button
-          type="button"
-          onClick={cleanupPhase12Users}
-          disabled={cleaning}
-          className="px-3 py-2 rounded border border-amber-600 text-amber-300 hover:bg-amber-900/20 text-xs"
-        >
-          {cleaning ? 'Cleaning…' : 'Cleanup phase12a_* users'}
-        </button>
       </div>
 
       {actionError && (

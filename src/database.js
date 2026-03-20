@@ -1669,12 +1669,27 @@ function storeOAuthToken(serviceName, userId, accessToken, refreshToken, expires
 
 
 function countConnectedOAuthServices(userId) {
-  const row = db.prepare(`
-    SELECT COUNT(DISTINCT service_name) AS cnt
+  if (!userId) return 0;
+
+  // Count only services with a currently readable/decryptable token.
+  // This avoids inflated counts from stale/corrupted rows.
+  const rows = db.prepare(`
+    SELECT DISTINCT service_name
     FROM oauth_tokens
     WHERE user_id = ?
-  `).get(String(userId));
-  return Number(row?.cnt || 0);
+  `).all(String(userId));
+
+  let count = 0;
+  for (const row of rows) {
+    try {
+      const token = getOAuthToken(row.service_name, String(userId));
+      if (token && !token.revoked_at) count += 1;
+    } catch {
+      // Ignore unreadable token rows
+    }
+  }
+
+  return count;
 }
 
 function getOAuthToken(serviceName, userId) {
