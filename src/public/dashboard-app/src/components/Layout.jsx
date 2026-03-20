@@ -92,12 +92,12 @@ function Layout({ children, onLogout }) {
       items: [
         { path: '/tokens', label: 'Token Vault' },
         { path: '/devices', label: 'Device Management' },
-        { path: '/identity', label: 'Identity' },
       ]
     },
     {
       label: 'AI & Data',
       items: [
+        { path: '/identity', label: 'Identity' },
         { path: '/personas', label: 'Personas' },
         { path: '/skills', label: 'Skills' },
         { path: '/knowledge', label: 'Knowledge' },
