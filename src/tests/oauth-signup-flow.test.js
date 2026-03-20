@@ -87,6 +87,8 @@ describe('OAuth-first signup/login flow', () => {
     const completeRes = await agent
       .post('/api/v1/auth/oauth-signup/complete')
       .send({
+        oauthSignupConfirm: true,
+        oauthSignupNonce: pending.body?.data?.nonce,
         displayName: 'Brand New',
         username: 'brandnew',
         email: 'brandnew@example.com',
@@ -111,9 +113,14 @@ describe('OAuth-first signup/login flow', () => {
     expect(cbRes.status).toBe(302);
     expect(cbRes.headers.location).toContain('oauth_status=signup_required');
 
+    const pending = await agent.get('/api/v1/auth/oauth-signup/pending');
+    expect(pending.status).toBe(200);
+
     const completeRes = await agent
       .post('/api/v1/auth/oauth-signup/complete')
       .send({
+        oauthSignupConfirm: true,
+        oauthSignupNonce: pending.body?.data?.nonce,
         displayName: 'Skip Flow',
         username: 'skipflow',
         email: 'skipflow@example.com',

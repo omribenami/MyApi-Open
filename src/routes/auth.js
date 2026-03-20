@@ -9,6 +9,56 @@ const crypto = require('crypto');
 
 const router = express.Router();
 
+function buildCookieDomainCandidates(req) {
+  const candidates = new Set();
+  const configuredDomain = String(process.env.SESSION_COOKIE_DOMAIN || '').trim();
+  const hostname = String(req?.hostname || '').trim();
+
+  const add = (value) => {
+    const v = String(value || '').trim();
+    if (!v) return;
+    candidates.add(v);
+    if (!v.startsWith('.')) candidates.add(`.${v}`);
+  };
+
+  if (configuredDomain) add(configuredDomain);
+  const isIp = /^\d+\.\d+\.\d+\.\d+$/.test(hostname);
+  if (hostname && hostname !== 'localhost' && !isIp) {
+    add(hostname);
+    const parts = hostname.split('.').filter(Boolean);
+    if (parts.length >= 2) add(parts.slice(-2).join('.'));
+  }
+
+  return [undefined, ...Array.from(candidates)];
+}
+
+function clearAuthCookies(req, res) {
+  const cookieNames = ['connect.sid', 'myapi.sid', 'myapi_master_token', 'myapi_user', 'session', 'auth', 'token'];
+  const sameSiteVariants = [undefined, 'lax', 'none', 'strict'];
+  const secureVariants = [true, false];
+  const domains = buildCookieDomainCandidates(req);
+
+  for (const name of cookieNames) {
+    for (const domain of domains) {
+      for (const sameSite of sameSiteVariants) {
+        for (const secure of secureVariants) {
+          const opts = { path: '/', secure };
+          if (domain) opts.domain = domain;
+          if (sameSite) opts.sameSite = sameSite;
+          res.clearCookie(name, opts);
+        }
+      }
+    }
+  }
+}
+
+function regenerateSession(req) {
+  return new Promise((resolve, reject) => {
+    if (!req.session || typeof req.session.regenerate !== 'function') return resolve();
+    req.session.regenerate((err) => (err ? reject(err) : resolve()));
+  });
+}
+
 /**
  * POST /api/v1/auth/token-login
  * Login with master token (for cross-device access)
@@ -35,7 +85,7 @@ router.post('/token-login', (req, res) => {
  * POST /api/v1/auth/login
  * Login with email and password, returns master token
  */
-router.post('/login', (req, res) => {
+router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) {
@@ -60,6 +110,7 @@ router.post('/login', (req, res) => {
     }
 
     const rawToken = 'myapi_' + crypto.randomBytes(32).toString('hex');
+    await regenerateSession(req);
     req.session.user = {
       id: user.id,
       email: user.email,
@@ -114,53 +165,41 @@ router.post('/register', (_req, res) => {
 router.post('/logout', (req, res) => {
   try {
     const userId = req.session?.user?.id;
-    const masterToken = req.session?.masterToken;
-    
-    // 1. Clear any in-memory token stores
+
     if (global.sessions) {
-      Object.keys(global.sessions).forEach(token => {
-        if (global.sessions[token]?.userId === userId) {
-          delete global.sessions[token];
-        }
+      Object.keys(global.sessions).forEach((token) => {
+        if (global.sessions[token]?.userId === userId) delete global.sessions[token];
       });
     }
-    
-    // 2. Destroy the Express session
-    if (req.session) {
-      req.session.destroy((err) => {
-        if (err) {
-          console.error('Session destruction error:', err);
-          return res.status(500).json({ success: false, error: 'Failed to logout' });
-        }
-        
-        // 3. Explicitly clear all auth-related cookies
-        res.clearCookie('connect.sid');
-        res.clearCookie('myapi.sid');
-        res.clearCookie('session');
-        res.clearCookie('auth');
-        res.clearCookie('token');
-        
-        // 4. Set cache control headers to prevent browser caching
-        res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-        res.set('Pragma', 'no-cache');
-        res.set('Expires', '0');
-        
-        res.json({ success: true, message: 'Successfully logged out' });
-      });
-    } else {
-      // No session, but still clear cookies
-      res.clearCookie('connect.sid');
-      res.clearCookie('myapi.sid');
-      res.clearCookie('session');
-      res.clearCookie('auth');
-      res.clearCookie('token');
-      
-      res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-      res.set('Pragma', 'no-cache');
-      res.set('Expires', '0');
-      
-      res.json({ success: true, message: 'No active session' });
+
+    clearAuthCookies(req, res);
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+
+    if (!req.session) {
+      return res.json({ success: true, message: 'No active session' });
     }
+
+    const sid = req.sessionID;
+    delete req.session.user;
+    delete req.session.masterToken;
+    delete req.session.masterTokenRaw;
+    delete req.session.masterTokenId;
+    delete req.session.pending_2fa_user;
+
+    req.session.destroy((err) => {
+      if (typeof req.sessionStore?.destroy === 'function' && sid) {
+        try { req.sessionStore.destroy(sid, () => {}); } catch (_) {}
+      }
+
+      if (err) {
+        console.error('Session destruction error:', err);
+        return res.status(500).json({ success: false, error: 'Failed to logout' });
+      }
+
+      return res.json({ success: true, message: 'Successfully logged out' });
+    });
   } catch (error) {
     console.error('Logout error:', error);
     res.status(500).json({ success: false, error: 'Logout failed', details: error.message });
