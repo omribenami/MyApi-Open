@@ -22,6 +22,7 @@ const NotificationDispatcher = require('./lib/notificationDispatcher');
 const {
   db,
   initDatabase,
+  runMigrations,
   createVaultToken,
   getVaultTokens,
   deleteVaultToken,
@@ -257,6 +258,9 @@ function renderLegalPage({ title, markdownContent }) {
 
 // Initialize database
 initDatabase();
+
+// Run database migrations
+runMigrations();
 
 // --- OAuth Configuration ---
 // Load OAuth config with environment variable support

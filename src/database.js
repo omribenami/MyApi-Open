@@ -2,6 +2,7 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const crypto = require('crypto');
 const bcrypt = require('bcrypt');
+const MigrationRunner = require('./lib/migrationRunner');
 
 // Use environment variable if set, otherwise default to db.sqlite in src directory
 const dbPath = process.env.DB_PATH 
@@ -4790,6 +4791,386 @@ function seedDefaultPricingPlans() {
   }
 }
 
+/**
+ * Run pending database migrations
+ * Called during application startup
+ */
+function runMigrations() {
+  try {
+    const migrationRunner = new MigrationRunner(db);
+    
+    // Initialize migration tracking table
+    migrationRunner.initMigrationTable();
+    
+    // Run all pending migrations
+    const result = migrationRunner.runPendingMigrations();
+    
+    console.log('[Migrations]', result.message);
+    if (result.failed && result.failed.length > 0) {
+      console.warn('[Migrations] Failed migrations:', result.failed);
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('[Migrations] Error running migrations:', error.message);
+    throw error;
+  }
+}
+
+// ============================================================================
+// SSO & RBAC Database Functions
+// ============================================================================
+
+/**
+ * Create a new role in a workspace
+ */
+function createRole(workspaceId, name, description, createdByUserId) {
+  const id = 'role_' + crypto.randomBytes(12).toString('hex');
+  const now = new Date().toISOString();
+  
+  try {
+    const stmt = db.prepare(`
+      INSERT INTO roles (id, workspace_id, name, description, created_at, updated_at, created_by_user_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+    
+    stmt.run(id, workspaceId, name, description, now, now, createdByUserId);
+    return { id, workspaceId, name, description, created_at: now, updated_at: now };
+  } catch (error) {
+    console.error('[SSO/RBAC] Error creating role:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Get all roles for a workspace
+ */
+function getRolesByWorkspace(workspaceId) {
+  try {
+    const stmt = db.prepare(`
+      SELECT * FROM roles WHERE workspace_id = ? ORDER BY name
+    `);
+    return stmt.all(workspaceId);
+  } catch (error) {
+    console.error('[SSO/RBAC] Error getting workspace roles:', error.message);
+    return [];
+  }
+}
+
+/**
+ * Get a role by ID
+ */
+function getRoleById(roleId) {
+  try {
+    const stmt = db.prepare(`
+      SELECT * FROM roles WHERE id = ?
+    `);
+    return stmt.get(roleId);
+  } catch (error) {
+    console.error('[SSO/RBAC] Error getting role:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Update a role
+ */
+function updateRole(roleId, updates) {
+  try {
+    const now = new Date().toISOString();
+    const allowedFields = ['name', 'description'];
+    const fields = [];
+    const values = [];
+    
+    for (const field of allowedFields) {
+      if (field in updates) {
+        fields.push(`${field} = ?`);
+        values.push(updates[field]);
+      }
+    }
+    
+    if (fields.length === 0) return getRoleById(roleId);
+    
+    fields.push('updated_at = ?');
+    values.push(now);
+    values.push(roleId);
+    
+    const stmt = db.prepare(`
+      UPDATE roles SET ${fields.join(', ')} WHERE id = ?
+    `);
+    
+    stmt.run(...values);
+    return getRoleById(roleId);
+  } catch (error) {
+    console.error('[SSO/RBAC] Error updating role:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Delete a role
+ */
+function deleteRole(roleId) {
+  try {
+    const stmt = db.prepare(`
+      DELETE FROM roles WHERE id = ?
+    `);
+    stmt.run(roleId);
+    return true;
+  } catch (error) {
+    console.error('[SSO/RBAC] Error deleting role:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Create a permission
+ */
+function createPermission(resource, action, description) {
+  const id = 'perm_' + crypto.randomBytes(12).toString('hex');
+  const now = new Date().toISOString();
+  
+  try {
+    const stmt = db.prepare(`
+      INSERT INTO permissions (id, resource, action, description, created_at)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+    
+    stmt.run(id, resource, action, description, now);
+    return { id, resource, action, description, created_at: now };
+  } catch (error) {
+    console.error('[SSO/RBAC] Error creating permission:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Get all permissions
+ */
+function getAllPermissions() {
+  try {
+    const stmt = db.prepare(`
+      SELECT * FROM permissions ORDER BY resource, action
+    `);
+    return stmt.all();
+  } catch (error) {
+    console.error('[SSO/RBAC] Error getting permissions:', error.message);
+    return [];
+  }
+}
+
+/**
+ * Get permissions for a role
+ */
+function getRolePermissions(roleId) {
+  try {
+    const stmt = db.prepare(`
+      SELECT p.* FROM permissions p
+      INNER JOIN role_permissions rp ON p.id = rp.permission_id
+      WHERE rp.role_id = ?
+      ORDER BY p.resource, p.action
+    `);
+    return stmt.all(roleId);
+  } catch (error) {
+    console.error('[SSO/RBAC] Error getting role permissions:', error.message);
+    return [];
+  }
+}
+
+/**
+ * Assign permission to role
+ */
+function assignPermissionToRole(roleId, permissionId) {
+  const id = 'rp_' + crypto.randomBytes(12).toString('hex');
+  const now = new Date().toISOString();
+  
+  try {
+    const stmt = db.prepare(`
+      INSERT INTO role_permissions (id, role_id, permission_id, created_at)
+      VALUES (?, ?, ?, ?)
+    `);
+    
+    stmt.run(id, roleId, permissionId, now);
+    return { id, roleId, permissionId, created_at: now };
+  } catch (error) {
+    console.error('[SSO/RBAC] Error assigning permission to role:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Remove permission from role
+ */
+function removePermissionFromRole(roleId, permissionId) {
+  try {
+    const stmt = db.prepare(`
+      DELETE FROM role_permissions WHERE role_id = ? AND permission_id = ?
+    `);
+    stmt.run(roleId, permissionId);
+    return true;
+  } catch (error) {
+    console.error('[SSO/RBAC] Error removing permission from role:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Assign role to user in workspace
+ */
+function assignRoleToUser(userId, roleId, workspaceId, assignedByUserId) {
+  const id = 'ur_' + crypto.randomBytes(12).toString('hex');
+  const now = new Date().toISOString();
+  
+  try {
+    const stmt = db.prepare(`
+      INSERT INTO user_roles (id, user_id, role_id, workspace_id, created_at, assigned_by_user_id)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    
+    stmt.run(id, userId, roleId, workspaceId, now, assignedByUserId);
+    return { id, userId, roleId, workspaceId, created_at: now };
+  } catch (error) {
+    console.error('[SSO/RBAC] Error assigning role to user:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Get roles for a user in a workspace
+ */
+function getUserWorkspaceRoles(userId, workspaceId) {
+  try {
+    const stmt = db.prepare(`
+      SELECT r.* FROM roles r
+      INNER JOIN user_roles ur ON r.id = ur.role_id
+      WHERE ur.user_id = ? AND ur.workspace_id = ?
+      ORDER BY r.name
+    `);
+    return stmt.all(userId, workspaceId);
+  } catch (error) {
+    console.error('[SSO/RBAC] Error getting user workspace roles:', error.message);
+    return [];
+  }
+}
+
+/**
+ * Remove role from user
+ */
+function removeRoleFromUser(userId, roleId, workspaceId) {
+  try {
+    const stmt = db.prepare(`
+      DELETE FROM user_roles 
+      WHERE user_id = ? AND role_id = ? AND workspace_id = ?
+    `);
+    stmt.run(userId, roleId, workspaceId);
+    return true;
+  } catch (error) {
+    console.error('[SSO/RBAC] Error removing role from user:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Create SSO configuration
+ */
+function createSSOConfiguration(workspaceId, provider, config, createdByUserId) {
+  const id = 'sso_' + crypto.randomBytes(12).toString('hex');
+  const now = new Date().toISOString();
+  
+  try {
+    const stmt = db.prepare(`
+      INSERT INTO sso_configurations (id, workspace_id, provider, config, active, created_at, updated_at, created_by_user_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    
+    stmt.run(id, workspaceId, provider, JSON.stringify(config), 0, now, now, createdByUserId);
+    return { id, workspaceId, provider, config, active: false, created_at: now };
+  } catch (error) {
+    console.error('[SSO/RBAC] Error creating SSO configuration:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Get SSO configurations for a workspace
+ */
+function getSSOConfigurationsByWorkspace(workspaceId) {
+  try {
+    const stmt = db.prepare(`
+      SELECT id, workspace_id, provider, active, created_at, updated_at 
+      FROM sso_configurations 
+      WHERE workspace_id = ?
+    `);
+    return stmt.all(workspaceId);
+  } catch (error) {
+    console.error('[SSO/RBAC] Error getting SSO configurations:', error.message);
+    return [];
+  }
+}
+
+/**
+ * Get SSO configuration by provider
+ */
+function getSSOConfigurationByProvider(workspaceId, provider) {
+  try {
+    const stmt = db.prepare(`
+      SELECT * FROM sso_configurations 
+      WHERE workspace_id = ? AND provider = ?
+    `);
+    const config = stmt.get(workspaceId, provider);
+    if (config && config.config) {
+      config.config = JSON.parse(config.config);
+    }
+    return config;
+  } catch (error) {
+    console.error('[SSO/RBAC] Error getting SSO configuration:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Update SSO configuration
+ */
+function updateSSOConfiguration(id, updates) {
+  try {
+    const now = new Date().toISOString();
+    const fields = [];
+    const values = [];
+    
+    if ('config' in updates) {
+      fields.push('config = ?');
+      values.push(JSON.stringify(updates.config));
+    }
+    
+    if ('active' in updates) {
+      fields.push('active = ?');
+      values.push(updates.active ? 1 : 0);
+    }
+    
+    if (fields.length === 0) return null;
+    
+    fields.push('updated_at = ?');
+    values.push(now);
+    values.push(id);
+    
+    const stmt = db.prepare(`
+      UPDATE sso_configurations SET ${fields.join(', ')} WHERE id = ?
+    `);
+    
+    stmt.run(...values);
+    
+    const getStmt = db.prepare('SELECT * FROM sso_configurations WHERE id = ?');
+    const result = getStmt.get(id);
+    if (result && result.config) {
+      result.config = JSON.parse(result.config);
+    }
+    return result;
+  } catch (error) {
+    console.error('[SSO/RBAC] Error updating SSO configuration:', error.message);
+    throw error;
+  }
+}
+
 module.exports = {
   db,
   initDatabase,
@@ -4992,4 +5373,27 @@ module.exports = {
   getUsageDaily,
   // Pricing Plans
   seedDefaultPricingPlans,
+  // Phase 4: SSO & RBAC
+  runMigrations,
+  // Roles
+  createRole,
+  getRolesByWorkspace,
+  getRoleById,
+  updateRole,
+  deleteRole,
+  // Permissions
+  createPermission,
+  getAllPermissions,
+  getRolePermissions,
+  assignPermissionToRole,
+  removePermissionFromRole,
+  // User Roles
+  assignRoleToUser,
+  getUserWorkspaceRoles,
+  removeRoleFromUser,
+  // SSO Configuration
+  createSSOConfiguration,
+  getSSOConfigurationsByWorkspace,
+  getSSOConfigurationByProvider,
+  updateSSOConfiguration,
 };
