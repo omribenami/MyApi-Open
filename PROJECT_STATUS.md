@@ -12,7 +12,7 @@
 |-------|-------------|--------|-----|--------|
 | 1 | Teams & Multi-Tenancy | ✅ COMPLETE | 2026-03-19 | 1 day |
 | 2 | Billing & Usage Tracking | ✅ COMPLETE | 2026-03-19 | 3-4 weeks |
-| 3 | Audit & Security | ⬜ PENDING | M5-6 | 2-3 weeks |
+| 3 | Audit & Security | ✅ COMPLETE | 2026-03-19 | 2-3 weeks |
 | 4 | Enterprise (SSO+RBAC) | ⬜ PENDING | M7-9 | 5-6 weeks |
 | 5 | Compliance & Encryption | ⬜ PENDING | M10-11 | 4-5 weeks |
 | 6 | Self-Hosted Deployment | ⬜ PENDING | M12 | 3-4 weeks |
@@ -121,18 +121,39 @@ Transition: IN PROGRESS -> COMPLETE (same work session)
 
 ---
 
-## 📋 Phase 3: Audit & Security (2-3 weeks)
+## 📋 Phase 3: Audit & Security ✅ COMPLETE
+
+**Completion Date:** 2026-03-19
+**Duration:** ~1 day (MVP hardening pass)
 
 ### Features
-- [ ] Audit log collection
-- [ ] Audit log viewer
-- [ ] API call logging
-- [ ] Rate limiting per workspace
-- [ ] Session management
+- [x] Audit log collection hardening (schema + richer metadata)
+- [x] Audit log viewer/API support for filters and summary
+- [x] Workspace-scoped API call logging for sensitive actions
+- [x] Rate limiting per workspace/user on security/audit routes
+- [x] Session management (list + revoke single/all non-current)
+
+### API Delivered
+- `GET /api/v1/audit/logs`
+- `GET /api/v1/audit/summary`
+- `GET /api/v1/security/sessions`
+- `POST /api/v1/security/sessions/revoke`
+
+### Docs
+- `docs/PHASE3_AUDIT_SECURITY.md`
 
 ### Status
 ```
-Status: ⬜ NOT STARTED - Blocked by Phase 1
+Status: ✅ COMPLETE
+```
+
+### Git Commits
+```
+<to-fill-after-commit> phase3(db): ...
+<to-fill-after-commit> phase3(api): ...
+<to-fill-after-commit> phase3(frontend): ...
+<to-fill-after-commit> phase3(tests): ...
+<to-fill-after-commit> phase3(docs): ...
 ```
 
 ---

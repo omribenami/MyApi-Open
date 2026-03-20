@@ -317,6 +317,9 @@ function SecuritySection() {
   const [pendingApprovals, setPendingApprovals] = useState([]);
   const [deviceLoading, setDeviceLoading] = useState(false);
   const [deviceLoadError, setDeviceLoadError] = useState('');
+  const [deviceError, setDeviceError] = useState('');
+  const [activeSessions, setActiveSessions] = useState([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
   const [twoFactorLoading, setTwoFactorLoading] = useState(false);
   const [twoFactorCode, setTwoFactorCode] = useState('');
@@ -410,6 +413,41 @@ function SecuritySection() {
       if (pollInterval) clearInterval(pollInterval);
     };
   }, [masterToken]);
+
+  const loadSessions = useCallback(async () => {
+    setSessionsLoading(true);
+    try {
+      const authHeaders = masterToken ? { Authorization: `Bearer ${masterToken}` } : {};
+      const res = await fetch('/api/v1/security/sessions', { headers: authHeaders, credentials: 'include' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to load sessions');
+      setActiveSessions(Array.isArray(data?.data) ? data.data : []);
+    } catch (err) {
+      setDeviceError(err.message || 'Failed to load sessions');
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, [masterToken]);
+
+  useEffect(() => { loadSessions(); }, [loadSessions]);
+
+  const revokeSession = async (sessionId, all = false) => {
+    try {
+      const authHeaders = {
+        'Content-Type': 'application/json',
+        ...(masterToken ? { Authorization: `Bearer ${masterToken}` } : {}),
+      };
+      const res = await fetch('/api/v1/security/sessions/revoke', {
+        method: 'POST', headers: authHeaders, credentials: 'include',
+        body: JSON.stringify(all ? { all: true } : { sessionId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to revoke session');
+      await loadSessions();
+    } catch (err) {
+      setDeviceError(err.message || 'Failed to revoke session');
+    }
+  };
 
   const handleChangePassword = async (e) => {
     e.preventDefault();
@@ -721,10 +759,45 @@ function SecuritySection() {
           )}
         </div>
 
+        {/* Active Sessions */}
+        <div className="border-t border-slate-700 pt-6">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-base font-medium text-white">Active Sessions</h3>
+            <button
+              onClick={() => revokeSession(null, true)}
+              className="px-3 py-1.5 text-xs bg-rose-700 hover:bg-rose-600 text-white rounded-lg"
+            >
+              Revoke Other Sessions
+            </button>
+          </div>
+          {sessionsLoading ? (
+            <p className="text-slate-500 text-sm italic">Loading sessions...</p>
+          ) : activeSessions.length === 0 ? (
+            <p className="text-slate-500 text-sm italic">No active sessions found.</p>
+          ) : (
+            <div className="space-y-2">
+              {activeSessions.map((s) => (
+                <div key={s.id} className="p-3 bg-slate-900 border border-slate-700 rounded-lg flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm text-white">{s.userAgent || 'Browser session'} {s.isCurrent ? <span className="text-emerald-400">(Current)</span> : null}</p>
+                    <p className="text-xs text-slate-400">Expires: {s.expiresAt ? new Date(s.expiresAt).toLocaleString() : 'N/A'}</p>
+                  </div>
+                  {!s.isCurrent && (
+                    <button onClick={() => revokeSession(s.id)} className="text-xs text-red-400 hover:text-red-300">Revoke</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Device & AI Approvals */}
         <div className="border-t border-slate-700 pt-6">
           {deviceLoadError && (
             <ErrorBanner message={deviceLoadError} onClose={() => setDeviceLoadError('')} />
+          )}
+          {deviceError && (
+            <ErrorBanner message={deviceError} onClose={() => setDeviceError('')} />
           )}
           
           {/* Pending Approvals Section */}

@@ -1096,12 +1096,44 @@ app.get('/api/v1/billing/plans', (req, res) => {
 
 // Import multi-tenancy middleware
 const { extractWorkspaceContext, enforceMultiTenancy, switchWorkspaceHandler } = require('./middleware/multitenancy');
+const { createAuditSecurityRouter } = require('./routes/auditSecurity');
 
 // Extract workspace context for all authenticated requests
 app.use('/api/v1', authenticate, extractWorkspaceContext, enforceMultiTenancy);
 
+// Workspace-scoped API logging for sensitive actions
+app.use('/api/v1', (req, res, next) => {
+  const p = req.path || '';
+  const sensitive = p.startsWith('/tokens') || p.startsWith('/security/') || p.startsWith('/audit/') || p.startsWith('/auth/') || p.startsWith('/workspaces') || p.startsWith('/workspace-switch');
+  if (!sensitive || !req.tokenMeta || req.method === 'OPTIONS') return next();
+
+  const startedAt = Date.now();
+  res.on('finish', () => {
+    try {
+      createAuditLog({
+        requesterId: req.tokenMeta?.tokenId || null,
+        workspaceId: req.workspaceId || null,
+        actorId: req.user?.id || req.tokenMeta?.ownerId || null,
+        actorType: req.authType === 'session' ? 'user' : 'token',
+        action: `${req.method}_${p.replace(/^\//, '').replace(/\//g, '_')}`,
+        resource: p,
+        endpoint: p,
+        httpMethod: req.method,
+        statusCode: res.statusCode,
+        scope: req.tokenMeta?.scope || null,
+        ip: req.ip,
+        details: { durationMs: Date.now() - startedAt, workspaceId: req.workspaceId || null }
+      });
+    } catch (_) {}
+  });
+  return next();
+});
+
 // Workspace switching endpoint
 app.post('/api/v1/workspace-switch/:workspaceId', authenticate, switchWorkspaceHandler);
+
+// Phase 3: audit/security API
+app.use('/api/v1', authenticate, createAuditSecurityRouter({ sessionDb, sessionStore }));
 
 function getRequestOwnerId(req) {
   return String(req?.tokenMeta?.ownerId || req?.session?.user?.id || 'owner');

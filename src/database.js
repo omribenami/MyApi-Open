@@ -60,8 +60,14 @@ function initDatabase() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       timestamp TEXT NOT NULL,
       requester_id TEXT,
+      workspace_id TEXT,
+      actor_id TEXT,
+      actor_type TEXT,
       action TEXT NOT NULL,
       resource TEXT NOT NULL,
+      endpoint TEXT,
+      http_method TEXT,
+      status_code INTEGER,
       scope TEXT,
       ip TEXT,
       details TEXT
@@ -600,6 +606,13 @@ function initDatabase() {
   try { db.exec("ALTER TABLE audit_log ADD COLUMN api_endpoint TEXT"); } catch (e) {}
   try { db.exec("ALTER TABLE audit_log ADD COLUMN status_code INTEGER"); } catch (e) {}
   try { db.exec("ALTER TABLE audit_log ADD COLUMN response_time_ms INTEGER"); } catch (e) {}
+  try { db.exec("ALTER TABLE audit_log ADD COLUMN workspace_id TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE audit_log ADD COLUMN actor_id TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE audit_log ADD COLUMN actor_type TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE audit_log ADD COLUMN endpoint TEXT"); } catch (e) {}
+  try { db.exec("ALTER TABLE audit_log ADD COLUMN http_method TEXT"); } catch (e) {}
+  db.exec('CREATE INDEX IF NOT EXISTS idx_audit_log_workspace_ts ON audit_log(workspace_id, timestamp DESC)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_audit_log_action_ts ON audit_log(action, timestamp DESC)');
 
   // Multi-tenant ownership columns (security isolation)
   const ownerMigrations = [
@@ -1177,15 +1190,24 @@ function getConnectors() {
 // Audit Log
 function createAuditLog(entry) {
   const stmt = db.prepare(`
-    INSERT INTO audit_log (timestamp, requester_id, action, resource, scope, ip, details)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO audit_log (
+      timestamp, requester_id, workspace_id, actor_id, actor_type,
+      action, resource, endpoint, http_method, status_code, scope, ip, details
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   stmt.run(
     entry.timestamp || new Date().toISOString(),
     entry.requesterId || null,
+    entry.workspaceId || null,
+    entry.actorId || null,
+    entry.actorType || null,
     entry.action,
     entry.resource,
+    entry.endpoint || null,
+    entry.httpMethod || null,
+    Number.isFinite(entry.statusCode) ? entry.statusCode : null,
     entry.scope || null,
     entry.ip || null,
     entry.details ? JSON.stringify(entry.details) : null
@@ -1206,8 +1228,14 @@ function getAuditLogs(limit = 50, offset = 0) {
     id: row.id,
     timestamp: row.timestamp,
     requesterId: row.requester_id,
+    workspaceId: row.workspace_id || null,
+    actorId: row.actor_id || null,
+    actorType: row.actor_type || null,
     action: row.action,
     resource: row.resource,
+    endpoint: row.endpoint || row.api_endpoint || null,
+    method: row.http_method || row.api_method || null,
+    statusCode: row.status_code || null,
     scope: row.scope,
     ip: row.ip,
     details: row.details ? JSON.parse(row.details) : null

@@ -64,19 +64,18 @@ function ActivityLog() {
       const params = new URLSearchParams({
         limit: String(50),
         offset: String(isNewSearch ? 0 : offset),
-        ...(actionType && { actionType }),
-        ...(resourceType && { resourceType }),
-        ...(result && { result }),
+        ...(actionType && { action: actionType }),
+        ...(resourceType && { resource: resourceType }),
       });
 
       const afterDate = getDateFilter();
       if (afterDate) {
-        params.set('afterDate', afterDate);
+        params.set('dateFrom', afterDate);
       }
 
-      const response = await apiClient.get(`/activity?${params.toString()}`);
+      const response = await apiClient.get(`/audit/logs?${params.toString()}`);
       const payload = response?.data || {};
-      const newActivityRaw = payload.activity || payload.data?.activity || payload.data || [];
+      const newActivityRaw = payload.data || [];
       const newActivity = Array.isArray(newActivityRaw) ? newActivityRaw : [];
 
       if (isNewSearch) {
@@ -180,10 +179,10 @@ function ActivityLog() {
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
     return (
-      (item.resource_name || '').toLowerCase().includes(query) ||
-      (item.action_type || '').toLowerCase().includes(query) ||
-      (item.actor_name || '').toLowerCase().includes(query) ||
-      (item.resource_id || '').toLowerCase().includes(query)
+      (item.resource || '').toLowerCase().includes(query) ||
+      (item.action || '').toLowerCase().includes(query) ||
+      (item.actor || '').toLowerCase().includes(query) ||
+      (item.endpoint || '').toLowerCase().includes(query)
     );
   });
 
@@ -330,24 +329,24 @@ function ActivityLog() {
               <div key={`${item.id}-${index}`} className="bg-slate-900/50 border border-slate-700/50 rounded-lg p-4 hover:border-slate-600/50 transition-all">
                 <div className="flex items-start gap-4">
                   <div className="text-2xl flex-shrink-0">
-                    {getActionIcon(item.action_type)}
+                    {getActionIcon(item.action)}
                   </div>
                   
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3 mb-2">
                       <h3 className="text-sm font-semibold text-slate-100">
-                        {item.action_type}
+                        {item.action}
                       </h3>
-                      <span className={`text-xs font-bold ${getResultColor(item.result)}`}>
-                        {item.result?.toUpperCase() || 'UNKNOWN'}
+                      <span className={`text-xs font-bold ${getResultColor((item.statusCode || 0) < 400 ? 'success' : 'failed')}`}>
+                        {item.statusCode || 'N/A'}
                       </span>
                     </div>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-slate-400">
-                      <p><span className="text-slate-500">Resource:</span> {item.resource_type} - {item.resource_name || item.resource_id}</p>
-                      <p><span className="text-slate-500">Actor:</span> {item.actor_type} {item.actor_name ? `(${item.actor_name})` : ''}</p>
-                      <p><span className="text-slate-500">Time:</span> {formatDate(item.created_at)}</p>
-                      {item.ip_address && <p><span className="text-slate-500">IP:</span> {item.ip_address}</p>}
+                      <p><span className="text-slate-500">Resource:</span> {item.resource}</p>
+                      <p><span className="text-slate-500">Actor:</span> {item.actorType} {item.actor ? `(${item.actor})` : ''}</p>
+                      <p><span className="text-slate-500">Time:</span> {formatDate(item.timestamp)}</p>
+                      {item.ip && <p><span className="text-slate-500">IP:</span> {item.ip}</p>}
                     </div>
                     
                     {item.details && (
