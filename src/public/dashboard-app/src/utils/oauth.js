@@ -18,6 +18,7 @@ export function startOAuthFlow(service, options = {}) {
     // Build query params for the authorize endpoint
     const params = new URLSearchParams();
     if (options.mode) params.append('mode', options.mode);
+    if (options.forcePrompt != null) params.append('forcePrompt', String(options.forcePrompt));
     if (options.returnTo) params.append('returnTo', options.returnTo);
 
     const endpoint = `/api/v1/oauth/authorize/${service}?${params.toString()}`;

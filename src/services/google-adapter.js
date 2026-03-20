@@ -20,7 +20,7 @@ class GoogleAdapter {
     );
   }
 
-  getAuthorizationUrl(state) {
+  getAuthorizationUrl(state, runtimeAuthParams = {}) {
     if (!this.isConfigured()) {
       throw new Error('Google OAuth is not configured (missing GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REDIRECT_URI)');
     }
@@ -31,7 +31,8 @@ class GoogleAdapter {
       response_type: 'code',
       scope: 'https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly',
       state: state,
-      access_type: 'offline'
+      access_type: 'offline',
+      ...(runtimeAuthParams || {}),
     };
     return `${GOOGLE_AUTH_URL}?${querystring.stringify(params)}`;
   }

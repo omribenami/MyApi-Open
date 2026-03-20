@@ -3,6 +3,7 @@ import { useAuthStore } from '../stores/authStore';
 import { handleOAuthCallback } from '../utils/oauth';
 import { AVAILABLE_SERVICES } from '../utils/oauth';
 import BrandLogo from '../components/BrandLogo';
+import { clearAuthArtifacts } from '../utils/authRuntime';
 
 const OAuthIcons = {
   google: (
@@ -157,8 +158,10 @@ function Login() {
 
   const handleOAuthClick = async (serviceId) => {
     setError('');
+    clearAuthArtifacts();
     const mode = (serviceId === 'google' || serviceId === 'facebook' || serviceId === 'github') ? 'login' : 'connect';
-    const params = new URLSearchParams({ mode, returnTo: '/dashboard/', redirect: '1' });
+    const forcePrompt = mode === 'login' ? '1' : '0';
+    const params = new URLSearchParams({ mode, forcePrompt, returnTo: '/dashboard/', redirect: '1' });
     window.location.href = `/api/v1/oauth/authorize/${serviceId}?${params.toString()}`;
   };
 

@@ -4,6 +4,7 @@ import { useAuthStore } from '../stores/authStore';
 import { handleOAuthCallback } from '../utils/oauth';
 import { AVAILABLE_SERVICES } from '../utils/oauth';
 import BrandLogo from '../components/BrandLogo';
+import { clearAuthArtifacts } from '../utils/authRuntime';
 
 const OAuthIcons = {
   google: (
@@ -83,7 +84,8 @@ function LogIn() {
 
   const handleOAuthClick = async (serviceId) => {
     setError('');
-    const params = new URLSearchParams({ mode: 'login', returnTo: '/dashboard/', redirect: '1' });
+    clearAuthArtifacts();
+    const params = new URLSearchParams({ mode: 'login', forcePrompt: '1', returnTo: '/dashboard/', redirect: '1' });
     window.location.href = `/api/v1/oauth/authorize/${serviceId}?${params.toString()}`;
   };
 

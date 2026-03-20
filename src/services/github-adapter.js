@@ -11,12 +11,13 @@ class GitHubAdapter {
     this.redirectUri = config.redirectUri || process.env.GITHUB_REDIRECT_URI || 'http://localhost:4500/api/v1/oauth/callback/github';
   }
 
-  getAuthorizationUrl(state) {
+  getAuthorizationUrl(state, runtimeAuthParams = {}) {
     const params = {
       client_id: this.clientId,
       redirect_uri: this.redirectUri,
       scope: 'user repo gist',
-      state: state
+      state: state,
+      ...(runtimeAuthParams || {}),
     };
     return `${GITHUB_AUTH_URL}?${querystring.stringify(params)}`;
   }

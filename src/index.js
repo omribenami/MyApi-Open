@@ -488,6 +488,57 @@ app.use(session({
   cookie: { secure: secureCookie, httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000, sameSite: 'lax', path: '/' }
 }));
 
+function buildCookieDomainCandidates(req) {
+  const candidates = new Set();
+  const configuredDomain = String(process.env.SESSION_COOKIE_DOMAIN || '').trim();
+  const hostname = String(req?.hostname || '').trim();
+
+  const add = (value) => {
+    const v = String(value || '').trim();
+    if (!v) return;
+    candidates.add(v);
+    if (!v.startsWith('.')) candidates.add(`.${v}`);
+  };
+
+  if (configuredDomain) add(configuredDomain);
+
+  const isIp = /^\d+\.\d+\.\d+\.\d+$/.test(hostname);
+  if (hostname && hostname !== 'localhost' && !isIp) {
+    add(hostname);
+    const parts = hostname.split('.').filter(Boolean);
+    if (parts.length >= 2) add(parts.slice(-2).join('.'));
+  }
+
+  return [undefined, ...Array.from(candidates)];
+}
+
+function clearAuthCookies(req, res) {
+  const cookieNames = ['myapi.sid', 'connect.sid', 'myapi_master_token', 'myapi_user'];
+  const sameSiteVariants = [undefined, 'lax', 'none', 'strict'];
+  const secureVariants = [true, false];
+  const domains = buildCookieDomainCandidates(req);
+
+  for (const name of cookieNames) {
+    for (const domain of domains) {
+      for (const sameSite of sameSiteVariants) {
+        for (const secure of secureVariants) {
+          const opts = { path: '/', secure };
+          if (domain) opts.domain = domain;
+          if (sameSite) opts.sameSite = sameSite;
+          res.clearCookie(name, opts);
+        }
+      }
+    }
+  }
+}
+
+function regenerateSession(req) {
+  return new Promise((resolve, reject) => {
+    if (!req.session || typeof req.session.regenerate !== 'function') return resolve();
+    req.session.regenerate((err) => (err ? reject(err) : resolve()));
+  });
+}
+
 // Public legal pages (no auth required)
 app.get('/privacy', (req, res) => {
   const markdown = loadLegalDoc(
@@ -3289,8 +3340,7 @@ app.delete('/api/v1/account', authenticate, (req, res) => {
     if (req.session) {
       req.session.destroy(() => {});
     }
-    res.clearCookie('myapi_master_token', { path: '/' });
-    res.clearCookie('myapi_user', { path: '/' });
+    clearAuthCookies(req, res);
 
     createAuditLog({
       requesterId: req.tokenMeta?.tokenId || `self_${userId}`,
@@ -3309,7 +3359,7 @@ app.delete('/api/v1/account', authenticate, (req, res) => {
 });
 
 // POST /api/v1/auth/oauth-signup/complete — creates user from pending OAuth signup and logs in
-app.post('/api/v1/auth/oauth-signup/complete', (req, res) => {
+app.post('/api/v1/auth/oauth-signup/complete', async (req, res) => {
   const pending = req.session?.oauth_signup;
   if (!pending) return res.status(400).json({ error: 'No pending OAuth signup session' });
 
@@ -3382,6 +3432,8 @@ app.post('/api/v1/auth/oauth-signup/complete', (req, res) => {
   const rawMasterToken = 'myapi_' + crypto.randomBytes(32).toString('hex');
   const hash = bcrypt.hashSync(rawMasterToken, 10);
   const tokenId = createAccessToken(hash, createdUser.id, 'full', 'Master Token (OAuth Signup Session)', null, null);
+
+  await regenerateSession(req);
 
   req.session.user = {
     id: createdUser.id,
@@ -3659,18 +3711,24 @@ app.post("/api/v1/auth/logout", (req, res) => {
     if (global.sessions) delete global.sessions[token];
   }
 
-  // Always clear client cookies, even if session destroy fails.
-  const clearCookieOpts = { path: '/', sameSite: 'lax' };
-  res.clearCookie('myapi.sid', clearCookieOpts);
-  res.clearCookie('myapi_user', { path: '/' });
+  // Always clear all auth cookies, regardless of session store outcome.
+  clearAuthCookies(req, res);
 
   if (!req.session) {
     return res.json({ ok: true });
   }
 
+  const sid = req.sessionID;
   delete req.session.pending_2fa_user;
+  delete req.session.user;
+  delete req.session.masterTokenRaw;
+  delete req.session.masterTokenId;
 
   req.session.destroy((err) => {
+    if (typeof req.sessionStore?.destroy === 'function' && sid) {
+      try { req.sessionStore.destroy(sid, () => {}); } catch (_) {}
+    }
+
     if (err) {
       console.error('[logout] session destroy failed:', err.message);
       return res.status(500).json({ ok: false, error: 'Failed to logout cleanly' });
@@ -4208,6 +4266,10 @@ app.get('/api/v1/oauth/authorize/twitter/x', (req, res) => {
 app.get("/api/v1/oauth/authorize/:service", (req, res) => {
   const { service } = req.params;
   const mode = (req.query.mode || 'connect').toString();
+  const explicitForcePrompt = req.query.forcePrompt != null
+    ? ['1', 'true', 'yes'].includes(String(req.query.forcePrompt).toLowerCase())
+    : null;
+  const forcePrompt = explicitForcePrompt == null ? mode === 'login' : explicitForcePrompt;
   
   // DEBUG: Log all requests
   console.log(`[OAuth] authorize/${service} requested`);
@@ -4263,6 +4325,7 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
   req.session.oauthStateMeta = req.session.oauthStateMeta || {};
   req.session.oauthStateMeta[state] = {
     mode,
+    forcePrompt,
     ownerId: req.session?.user?.id ? String(req.session.user.id) : null,
     returnTo: String(req.query.returnTo || '/dashboard/'),
     createdAt: Date.now(),
@@ -4273,6 +4336,20 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
   try {
     const adapter = oauthAdapters[service];
     const runtimeAuthParams = {};
+
+    if (forcePrompt && mode === 'login') {
+      if (service === 'google') {
+        runtimeAuthParams.prompt = 'select_account';
+        runtimeAuthParams.max_age = '0';
+      } else if (service === 'facebook') {
+        runtimeAuthParams.auth_type = 'reauthenticate';
+      } else if (service === 'github') {
+        // GitHub OAuth does not support a true re-auth/account-picker prompt.
+        // Keep deterministic behavior marker for observability/tests.
+        runtimeAuthParams.allow_signup = 'true';
+      }
+    }
+
     if (service === 'twitter') {
       const { codeChallenge } = buildPkcePairFromState(state);
       runtimeAuthParams.code_challenge = codeChallenge;
@@ -4293,7 +4370,7 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
     action: "oauth_authorize_start",
     resource: `/oauth/authorize/${service}`,
     ip: req.ip,
-    details: { service, mode, state: state.substring(0, 10) + '...' }
+    details: { service, mode, forcePrompt, state: state.substring(0, 10) + '...' }
   });
 
   // Determine response format (JSON or redirect)
@@ -4478,6 +4555,7 @@ app.get([
 
       // EXISTING USER: Log them in
       appUser = updateUserOAuthProfile(appUser.id, { displayName: name, email, avatarUrl }) || appUser;
+      await regenerateSession(req);
 
       if (appUser.twoFactorEnabled) {
         req.session.pending_2fa_user = {
@@ -4529,40 +4607,14 @@ app.get([
     }
 
     // Store token for authenticated owner (connect flow and non-primary login flow)
-    let oauthOwnerId = req.session?.user?.id ? String(req.session.user.id) : (stateMeta?.ownerId ? String(stateMeta.ownerId) : null);
-    
-    // CRITICAL FIX: If not logged in during CONNECT flow, check if OAuth user is an existing account
-    // and auto-login them so we can store the token
+    const oauthOwnerId = req.session?.user?.id ? String(req.session.user.id) : (stateMeta?.ownerId ? String(stateMeta.ownerId) : null);
+
+    // Never auto-login users in connect mode.
+    // If user is unauthenticated, abort to prevent unexpected account restoration.
     if (!oauthOwnerId && stateMeta?.mode === 'connect' && !tokenStoredForUser) {
-      console.log(`[OAuth] Connect mode with no session - checking for existing account`);
-      
-      // Try to find existing user by email from profile
-      const profileResp = await oauthAdapters[service].verifyToken(tokenData.accessToken).catch(() => ({ valid: false, data: {} }));
-      const p = profileResp?.data || {};
-      const providerEmail = String(p.email || '').trim().toLowerCase() || null;
-      
-      if (providerEmail) {
-        const existingUser = getUsers().find((u) => String(u.email || '').toLowerCase() === providerEmail);
-        if (existingUser) {
-          console.log(`[OAuth] Found existing user by email: ${existingUser.id} - auto-logging in for token storage`);
-          oauthOwnerId = String(existingUser.id);
-          
-          // Auto-login this user for the session
-          req.session.user = {
-            id: existingUser.id,
-            username: existingUser.username,
-            display_name: existingUser.displayName || existingUser.username,
-            displayName: existingUser.displayName || existingUser.username,
-            email: existingUser.email || null,
-            avatar_url: existingUser.avatarUrl || null,
-            avatarUrl: existingUser.avatarUrl || null,
-            two_factor_enabled: Boolean(existingUser.twoFactorEnabled),
-            roles: existingUser.roles || 'user',
-          };
-        }
-      }
+      return res.redirect(`/dashboard/?oauth_service=${service}&oauth_status=error&error=${encodeURIComponent('login_required_for_connect')}`);
     }
-    
+
     if (oauthOwnerId && !tokenStoredForUser) {
       console.log(`[OAuth] Storing ${service} token for owner: ${oauthOwnerId} (mode=${stateMeta.mode || 'connect'})`);
       const storeResult = storeOAuthToken(service, oauthOwnerId, tokenData.accessToken, tokenData.refreshToken || null, expiresAt, tokenData.scope);
