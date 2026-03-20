@@ -1,20 +1,42 @@
 const express = require('express');
 const fs = require('fs');
-const path = require('path');
+const crypto = require('crypto');
 const {
   getUserById,
   getAccessTokens,
   getPersonas,
   getKBDocuments,
-  getActivityLog,
 } = require('../database');
 
 const router = express.Router();
+
+const EXPORT_SCHEMA_VERSION = '2.0';
+const EXPORT_GENERATED_BY = 'myapi.export.v2';
+const PORTABLE_MODE = 'portable';
+const FORENSIC_MODE = 'forensic';
+const EPHEMERAL_TOKEN_PATTERNS = [/oauth\s*session/i, /dashboard\s*session/i];
+
+function isEphemeralTokenLabel(label = '') {
+  const value = String(label || '');
+  return EPHEMERAL_TOKEN_PATTERNS.some((pattern) => pattern.test(value));
+}
+
+function maskTokenId(tokenId = '') {
+  const value = String(tokenId || '');
+  if (!value) return null;
+  if (value.length <= 8) return '***';
+  return `${value.slice(0, 6)}***${value.slice(-4)}`;
+}
+
+function checksumFor(value) {
+  return crypto.createHash('sha256').update(JSON.stringify(value || {})).digest('hex');
+}
 
 /**
  * GET /api/v1/export
  * Exports user data in JSON format based on selected categories
  * Query params:
+ *  - mode: portable|forensic (default: portable)
  *  - profile: boolean (include USER.md and identity)
  *  - tokens: boolean (include token metadata)
  *  - personas: boolean (include personas and SOUL.md)
@@ -43,6 +65,10 @@ router.get('/', async (req, res) => {
       req.query.workspace ||
       null;
 
+    const exportMode = String(req.query.mode || PORTABLE_MODE).toLowerCase() === FORENSIC_MODE
+      ? FORENSIC_MODE
+      : PORTABLE_MODE;
+
     // Backward-compatibility: older single-user records may still be stored under owner="owner".
     const withLegacyOwnerFallback = (loader) => {
       const primary = loader(ownerId);
@@ -69,10 +95,18 @@ router.get('/', async (req, res) => {
 
     const exportData = {
       exportedAt: new Date().toISOString(),
-      exportVersion: '1.1',
+      exportVersion: EXPORT_SCHEMA_VERSION,
       userId: ownerId,
       workspaceId: workspaceId ? String(workspaceId) : null,
       sections: {},
+      manifest: {
+        exportMode,
+        schemaVersion: EXPORT_SCHEMA_VERSION,
+        generatedBy: EXPORT_GENERATED_BY,
+        importSupported: false,
+        importRationale: 'Full import is intentionally unsupported to prevent unsafe overwrite of account state and security-sensitive references.',
+        checksums: {},
+      },
     };
 
     // === PROFILE SECTION ===
@@ -80,19 +114,19 @@ router.get('/', async (req, res) => {
       try {
         const user = getUserById(ownerId);
         const userMdPath = process.env.USER_MD_PATH || '/home/jarvis/.openclaw/workspace/USER.md';
-        
+
         const profileData = {};
-        
+
         // Add basic user info
         if (user) {
           profileData.identity = {
             id: user.id,
             username: user.username,
             email: user.email,
-            displayName: user.display_name,
-            avatar: user.avatar_url,
-            createdAt: user.created_at,
-            lastLogin: user.last_login,
+            displayName: user.displayName,
+            avatar: user.avatarUrl,
+            createdAt: user.createdAt,
+            lastLogin: user.lastLogin,
           };
         }
 
@@ -117,20 +151,43 @@ router.get('/', async (req, res) => {
     if (sections.tokens) {
       try {
         const tokens = withLegacyOwnerFallback(getAccessTokens) || [];
-        const tokenExports = tokens.map(token => ({
-          tokenId: token.tokenId,
-          label: token.label,
-          scope: token.scope,
-          createdAt: token.createdAt,
-          expiresAt: token.expiresAt,
-          active: token.active,
-          allowedPersonas: token.allowedPersonas,
-          // Explicitly NOT including the hash/secret for security
-        }));
+        const totalTokens = tokens.length;
+        const activeTokens = tokens.filter((token) => token.active).length;
+
+        const filtered = exportMode === PORTABLE_MODE
+          ? tokens.filter((token) => !isEphemeralTokenLabel(token.label))
+          : tokens;
+
+        const ephemeralFiltered = totalTokens - filtered.length;
+        const tokenExports = filtered.map((token) => {
+          const base = {
+            tokenId: exportMode === FORENSIC_MODE ? token.tokenId : maskTokenId(token.tokenId),
+            label: token.label,
+            scope: token.scope,
+            createdAt: token.createdAt,
+            expiresAt: token.expiresAt,
+            active: token.active,
+            allowedPersonas: token.allowedPersonas,
+            // Explicitly NOT including the hash/secret for security
+          };
+
+          if (exportMode === FORENSIC_MODE) {
+            base.ownerId = token.ownerId;
+            base.revokedAt = token.revokedAt || null;
+          }
+
+          return base;
+        });
 
         exportData.sections.tokens = {
           count: tokenExports.length,
           tokens: tokenExports,
+          summary: {
+            totalTokens,
+            activeTokens,
+            ephemeralFiltered,
+            exportedTokens: tokenExports.length,
+          },
           note: 'Token secrets are never exported for security reasons',
         };
       } catch (error) {
@@ -144,13 +201,13 @@ router.get('/', async (req, res) => {
     if (sections.personas) {
       try {
         const personas = withLegacyOwnerFallback(getPersonas) || [];
-        const personaExports = personas.map(persona => ({
+        const personaExports = personas.map((persona) => ({
           id: persona.id,
           name: persona.name,
           description: persona.description,
-          config: persona.config,
-          createdAt: persona.created_at,
-          updatedAt: persona.updated_at,
+          config: persona.config || persona.template_data || null,
+          createdAt: persona.created_at || persona.createdAt,
+          updatedAt: persona.updated_at || persona.updatedAt,
         }));
 
         const soulMdPath = process.env.SOUL_MD_PATH || '/home/jarvis/.openclaw/workspace/SOUL.md';
@@ -158,7 +215,7 @@ router.get('/', async (req, res) => {
         if (fs.existsSync(soulMdPath)) {
           try {
             soulMdContent = fs.readFileSync(soulMdPath, 'utf8');
-          } catch (err) {
+          } catch (_err) {
             // Silently fail if we can't read SOUL.md
           }
         }
@@ -166,7 +223,7 @@ router.get('/', async (req, res) => {
         exportData.sections.personas = {
           count: personaExports.length,
           personas: personaExports,
-          soulMdContent: soulMdContent,
+          soulMdContent,
         };
       } catch (error) {
         exportData.sections.personas = {
@@ -179,13 +236,13 @@ router.get('/', async (req, res) => {
     if (sections.knowledge) {
       try {
         const documents = withLegacyOwnerFallback(getKBDocuments) || [];
-        const docExports = documents.map(doc => ({
+        const docExports = documents.map((doc) => ({
           id: doc.id,
           title: doc.title,
           content: doc.content,
           tags: doc.tags,
-          createdAt: doc.created_at,
-          updatedAt: doc.updated_at,
+          createdAt: doc.created_at || doc.createdAt,
+          updatedAt: doc.updated_at || doc.updatedAt,
         }));
 
         exportData.sections.knowledge = {
@@ -205,7 +262,7 @@ router.get('/', async (req, res) => {
         // Get user settings from the users table
         const user = getUserById(ownerId);
         const settings = {};
-        
+
         if (user) {
           settings.privacyPreferences = {
             profilePublic: user.profile_public || false,
@@ -229,11 +286,15 @@ router.get('/', async (req, res) => {
       }
     }
 
+    exportData.manifest.checksums = Object.fromEntries(
+      Object.entries(exportData.sections).map(([sectionName, sectionValue]) => [sectionName, checksumFor(sectionValue)])
+    );
+
     // Set appropriate headers for JSON response
     res.setHeader('Content-Type', 'application/json');
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename="myapi-export-${Date.now()}.json"`
+      `attachment; filename="myapi-export-${exportMode}-${Date.now()}.json"`
     );
 
     return res.json(exportData);

@@ -57,6 +57,46 @@ paths:
       responses:
         '200':
           description: OK
+  /api/v1/export:
+    get:
+      operationId: exportData
+      summary: Export account data (v2 portable/forensic)
+      parameters:
+        - name: mode
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [portable, forensic]
+            default: portable
+        - name: profile
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: tokens
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: personas
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: knowledge
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: settings
+          in: query
+          required: false
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: JSON export package
 components:
   securitySchemes:
     bearerAuth:

@@ -79,6 +79,33 @@ MyApi supports **outbound-only** email operations. Inbox read/search is intentio
 - `POST /api/v1/email/process` — process queued outbound emails
 - `GET /api/v1/email/jobs` — recent queue jobs/failures for dashboard observability
 
+### Data Export API (v2)
+
+- `GET /api/v1/export` (authenticated)
+- Query params:
+  - `mode=portable|forensic` (default: `portable`)
+  - section toggles: `profile`, `tokens`, `personas`, `knowledge`, `settings` (`true` by default)
+
+Portable mode is customer-facing and safe-by-default:
+- session-like token labels (e.g. OAuth/Dashboard Session) are excluded
+- token IDs are masked
+- token secrets are never exported
+
+Forensic mode is internal/support-focused and includes full token IDs/internal refs.
+
+Response includes a manifest with:
+- `schemaVersion: "2.0"`
+- `exportMode`
+- `generatedBy`
+- section `checksums`
+- `importSupported: false` and rationale (full import intentionally unsupported)
+
+Example:
+```bash
+curl -H "Authorization: Bearer <token>" \
+  "https://www.myapiai.com/api/v1/export?mode=portable&tokens=true"
+```
+
 ### Local Development
 
 1. **Clone the repository:**
