@@ -76,7 +76,29 @@ function Login() {
   useEffect(() => {
     const callback = handleOAuthCallback();
     if (callback) {
-      if (callback.status === 'connected') {
+      if (callback.status === 'confirm_login') {
+        // Auto-confirm the OAuth login and fetch user data
+        fetch('/api/v1/auth/me', { credentials: 'include' })
+          .then(async (res) => {
+            if (!res.ok) return null;
+            return res.json();
+          })
+          .then((sessionUser) => {
+            if (sessionUser) {
+              if (sessionUser?.bootstrap?.masterToken) {
+                setMasterToken(sessionUser.bootstrap.masterToken);
+              }
+              // Extract user object from response (not the entire response)
+              setUser(sessionUser.user || sessionUser);
+              window.history.replaceState({}, document.title, '/dashboard/');
+              window.location.href = '/dashboard/';
+            }
+          })
+          .catch(() => {
+            setError('Failed to complete login. Please try again.');
+            window.history.replaceState({}, document.title, '/dashboard/');
+          });
+      } else if (callback.status === 'connected') {
         fetch('/api/v1/auth/me', { credentials: 'include' })
           .then(async (res) => {
             if (!res.ok) return null;

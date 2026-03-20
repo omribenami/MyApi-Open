@@ -39,8 +39,8 @@ function LogIn() {
     // Handle OAuth callback
     const callback = handleOAuthCallback();
     if (callback) {
-      if (callback.status === 'connected') {
-        // OAuth successful, fetch user and redirect to dashboard
+      if (callback.status === 'confirm_login' || callback.status === 'connected') {
+        // OAuth successful (or confirmation required), fetch user and redirect to dashboard
         fetch('/api/v1/auth/me', { credentials: 'include' })
           .then(async (res) => {
             if (!res.ok) return null;
