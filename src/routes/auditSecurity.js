@@ -37,92 +37,102 @@ function createAuditSecurityRouter({ sessionDb, sessionStore }) {
   });
 
   router.get('/audit/logs', (req, res) => {
-    if (req.tokenMeta?.scope !== 'full') {
-      return res.status(403).json({ error: 'Only master/session users can view audit logs' });
-    }
+    try {
+      if (req.tokenMeta?.scope !== 'full') {
+        return res.status(403).json({ error: 'Only master/session users can view audit logs' });
+      }
 
-    const limit = Math.min(Number(req.query.limit) || 50, 200);
-    const offset = Math.max(Number(req.query.offset) || 0, 0);
-    const actor = String(req.query.actor || '').trim();
-    const action = String(req.query.action || '').trim();
-    const resource = String(req.query.resource || '').trim();
-    const dateFrom = String(req.query.dateFrom || req.query.from || '').trim();
-    const dateTo = String(req.query.dateTo || req.query.to || '').trim();
-    const workspaceId = req.workspaceId || req.query.workspace || null;
+      const limit = Math.min(Number(req.query.limit) || 50, 200);
+      const offset = Math.max(Number(req.query.offset) || 0, 0);
+      const actor = String(req.query.actor || '').trim();
+      const action = String(req.query.action || '').trim();
+      const resource = String(req.query.resource || '').trim();
+      const dateFrom = String(req.query.dateFrom || req.query.from || '').trim();
+      const dateTo = String(req.query.dateTo || req.query.to || '').trim();
+      const workspaceId = req.workspaceId || req.query.workspace || null;
 
-    const clauses = [];
-    const params = [];
-    if (workspaceId) {
-      clauses.push('(workspace_id = ? OR workspace_id IS NULL)');
-      params.push(workspaceId);
-    }
-    if (actor) {
-      clauses.push('(actor_id = ? OR requester_id = ? OR json_extract(details, "$.actor") = ?)');
-      params.push(actor, actor, actor);
-    }
-    if (action) {
-      clauses.push('action LIKE ?');
-      params.push(`%${action}%`);
-    }
-    if (resource) {
-      clauses.push('resource LIKE ?');
-      params.push(`%${resource}%`);
-    }
-    if (dateFrom) {
-      clauses.push('timestamp >= ?');
-      params.push(dateFrom);
-    }
-    if (dateTo) {
-      clauses.push('timestamp <= ?');
-      params.push(dateTo);
-    }
+      const clauses = [];
+      const params = [];
+      if (workspaceId) {
+        clauses.push('(workspace_id = ? OR workspace_id IS NULL)');
+        params.push(workspaceId);
+      }
+      if (actor) {
+        clauses.push('(actor_id = ? OR requester_id = ? OR json_extract(details, "$.actor") = ?)');
+        params.push(actor, actor, actor);
+      }
+      if (action) {
+        clauses.push('action LIKE ?');
+        params.push(`%${action}%`);
+      }
+      if (resource) {
+        clauses.push('resource LIKE ?');
+        params.push(`%${resource}%`);
+      }
+      if (dateFrom) {
+        clauses.push('timestamp >= ?');
+        params.push(dateFrom);
+      }
+      if (dateTo) {
+        clauses.push('timestamp <= ?');
+        params.push(dateTo);
+      }
 
-    const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
-    const countStmt = db.prepare(`SELECT COUNT(*) as count FROM audit_log ${where}`);
-    const total = countStmt.get(...params).count;
+      const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+      const countStmt = db.prepare(`SELECT COUNT(*) as count FROM audit_log ${where}`);
+      const total = countStmt.get(...params).count;
 
-    const rowsStmt = db.prepare(`
-      SELECT id, timestamp, workspace_id, requester_id, actor_id, actor_type, action, resource,
-             endpoint, http_method, status_code, scope, ip, details
-      FROM audit_log
-      ${where}
-      ORDER BY timestamp DESC
-      LIMIT ? OFFSET ?
-    `);
+      const rowsStmt = db.prepare(`
+        SELECT id, timestamp, workspace_id, requester_id, actor_id, actor_type, action, resource,
+               endpoint, http_method, status_code, scope, ip, details
+        FROM audit_log
+        ${where}
+        ORDER BY timestamp DESC
+        LIMIT ? OFFSET ?
+      `);
 
-    const rows = rowsStmt.all(...params, limit, offset).map((row) => ({
-      id: row.id,
-      timestamp: row.timestamp,
-      workspaceId: row.workspace_id,
-      actor: row.actor_id || row.requester_id,
-      actorType: row.actor_type || 'user',
-      action: row.action,
-      resource: row.resource,
-      endpoint: row.endpoint,
-      method: row.http_method,
-      statusCode: row.status_code,
-      scope: row.scope,
-      ip: row.ip,
-      details: row.details ? JSON.parse(row.details) : null,
-    }));
+      const rows = rowsStmt.all(...params, limit, offset).map((row) => ({
+        id: row.id,
+        timestamp: row.timestamp,
+        workspaceId: row.workspace_id,
+        actor: row.actor_id || row.requester_id,
+        actorType: row.actor_type || 'user',
+        action: row.action,
+        resource: row.resource,
+        endpoint: row.endpoint,
+        method: row.http_method,
+        statusCode: row.status_code,
+        scope: row.scope,
+        ip: row.ip,
+        details: row.details ? JSON.parse(row.details) : null,
+      }));
 
-    res.json({ data: rows, meta: { total, limit, offset } });
+      res.json({ data: rows, meta: { total, limit, offset } });
+    } catch (err) {
+      console.error('Error in audit/logs:', err.message);
+      res.status(500).json({ error: 'Internal server error' });
+    }
   });
 
   router.get('/audit/summary', (req, res) => {
-    if (req.tokenMeta?.scope !== 'full') {
-      return res.status(403).json({ error: 'Only master/session users can view audit summary' });
+    try {
+      if (req.tokenMeta?.scope !== 'full') {
+        return res.status(403).json({ error: 'Only master/session users can view audit summary' });
+      }
+      const workspaceId = req.workspaceId || req.query.workspace || null;
+      const where = workspaceId ? 'WHERE (workspace_id = ? OR workspace_id IS NULL)' : '';
+      const arg = workspaceId ? [workspaceId] : [];
+
+      const total = db.prepare(`SELECT COUNT(*) as count FROM audit_log ${where}`).get(...arg).count;
+      const last24h = db.prepare(`SELECT COUNT(*) as count FROM audit_log ${where ? where + ' AND' : 'WHERE'} timestamp >= ?`).get(...arg, new Date(Date.now() - 86400000).toISOString()).count;
+      const byAction = db.prepare(`SELECT action, COUNT(*) as count FROM audit_log ${where} GROUP BY action ORDER BY count DESC LIMIT 10`).all(...arg);
+      const byResource = db.prepare(`SELECT resource, COUNT(*) as count FROM audit_log ${where} GROUP BY resource ORDER BY count DESC LIMIT 10`).all(...arg);
+
+      res.json({ data: { total, last24h, byAction, byResource } });
+    } catch (err) {
+      console.error('Error in audit/summary:', err.message);
+      res.status(500).json({ error: 'Internal server error' });
     }
-    const workspaceId = req.workspaceId || req.query.workspace || null;
-    const where = workspaceId ? 'WHERE (workspace_id = ? OR workspace_id IS NULL)' : '';
-    const arg = workspaceId ? [workspaceId] : [];
-
-    const total = db.prepare(`SELECT COUNT(*) as count FROM audit_log ${where}`).get(...arg).count;
-    const last24h = db.prepare(`SELECT COUNT(*) as count FROM audit_log ${where ? where + ' AND' : 'WHERE'} timestamp >= ?`).get(...arg, new Date(Date.now() - 86400000).toISOString()).count;
-    const byAction = db.prepare(`SELECT action, COUNT(*) as count FROM audit_log ${where} GROUP BY action ORDER BY count DESC LIMIT 10`).all(...arg);
-    const byResource = db.prepare(`SELECT resource, COUNT(*) as count FROM audit_log ${where} GROUP BY resource ORDER BY count DESC LIMIT 10`).all(...arg);
-
-    res.json({ data: { total, last24h, byAction, byResource } });
   });
 
   router.get('/security/sessions', (req, res) => {
