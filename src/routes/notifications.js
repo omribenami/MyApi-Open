@@ -14,7 +14,7 @@ const {
 const router = express.Router();
 
   // GET /api/v1/notifications - List user notifications with filtering
-  router.get('/notifications', (req, res) => {
+  router.get('/', (req, res) => {
     try {
       const workspaceId = req.workspaceId || 'default';
       const userId = req.user?.id || req.tokenMeta?.userId || req.tokenMeta?.ownerId;
@@ -67,7 +67,7 @@ const router = express.Router();
   });
 
   // GET /api/v1/notifications/unread-count - Get unread count
-  router.get('/notifications/unread-count', (req, res) => {
+  const unreadCountHandler = (req, res) => {
     try {
       const workspaceId = req.workspaceId || 'default';
       const userId = req.user?.id || req.tokenMeta?.userId || req.tokenMeta?.ownerId;
@@ -86,10 +86,14 @@ const router = express.Router();
       console.error('Error fetching unread count:', err);
       res.status(500).json({ error: 'Failed to fetch unread count', details: err.message });
     }
-  });
+  };
+
+  router.get('/unread-count', unreadCountHandler);
+  // Backward compatibility for older frontend store
+  router.get('/unread', unreadCountHandler);
 
   // POST /api/v1/notifications/:id/read - Mark notification as read
-  router.post('/notifications/:id/read', (req, res) => {
+  router.post('/:id/read', (req, res) => {
     try {
       const workspaceId = req.workspaceId || 'default';
       const userId = req.user?.id || req.tokenMeta?.userId || req.tokenMeta?.ownerId;
@@ -116,7 +120,7 @@ const router = express.Router();
   });
 
   // POST /api/v1/notifications/read-all - Mark all as read
-  router.post('/notifications/read-all', (req, res) => {
+  router.post('/read-all', (req, res) => {
     try {
       const workspaceId = req.workspaceId || 'default';
       const userId = req.user?.id || req.tokenMeta?.userId || req.tokenMeta?.ownerId;
@@ -146,7 +150,7 @@ const router = express.Router();
   });
 
   // DELETE /api/v1/notifications/:id - Delete notification
-  router.delete('/notifications/:id', (req, res) => {
+  router.delete('/:id', (req, res) => {
     try {
       const workspaceId = req.workspaceId || 'default';
       const userId = req.user?.id || req.tokenMeta?.userId || req.tokenMeta?.ownerId;
@@ -204,7 +208,7 @@ const router = express.Router();
 
   // Backward-compatible settings endpoint used by dashboard UI
   // GET /api/v1/notifications/settings
-  router.get('/notifications/settings', (req, res) => {
+  router.get('/settings', (req, res) => {
     try {
       const workspaceId = req.workspaceId || 'default';
       const userId = req.user?.id || req.tokenMeta?.userId || req.tokenMeta?.ownerId;
@@ -228,7 +232,7 @@ const router = express.Router();
 
   // Backward-compatible settings update endpoint used by dashboard UI
   // PUT /api/v1/notifications/settings
-  router.put('/notifications/settings', (req, res) => {
+  router.put('/settings', (req, res) => {
     try {
       const workspaceId = req.workspaceId || 'default';
       const userId = req.user?.id || req.tokenMeta?.userId || req.tokenMeta?.ownerId;
