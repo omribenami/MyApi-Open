@@ -3272,7 +3272,7 @@ function seedServices() {
     { name: 'square', label: 'Square', category: 'payment', icon: 'https://cdn.simpleicons.org/square/3693F3', auth: 'oauth2', endpoint: 'https://api.square.com/v2', docs: 'https://developer.squareup.com' },
     
     // Communication - with official logos
-    { name: 'email', label: 'Email/SMTP', category: 'communication', icon: 'https://cdn.simpleicons.org/gmail/EA4335', auth: 'oauth2', endpoint: 'smtp.gmail.com', docs: 'https://support.google.com/mail' },
+    { name: 'email', label: 'Email/SMTP', category: 'communication', icon: 'https://cdn.simpleicons.org/gmail/EA4335', auth: 'smtp', endpoint: 'smtp://configured-via-env', docs: 'https://nodemailer.com/smtp' },
     { name: 'telegram', label: 'Telegram', category: 'communication', icon: 'https://cdn.simpleicons.org/telegram/0088cc', auth: 'token', endpoint: 'https://api.telegram.org/bot', docs: 'https://core.telegram.org/bots/api' },
     { name: 'signal', label: 'Signal', category: 'communication', icon: 'https://cdn.simpleicons.org/signal/3A76F0', auth: 'webhook', endpoint: 'https://signal.org', docs: 'https://signal.org/docs' },
     { name: 'matrix', label: 'Matrix', category: 'communication', icon: 'https://cdn.simpleicons.org/matrix/000000', auth: 'token', endpoint: 'https://matrix.org/_matrix', docs: 'https://spec.matrix.org/latest' },
@@ -3302,6 +3302,15 @@ function seedServices() {
     if (!cat) continue;
     insertStmt.run(srv.name, srv.label, cat.id, srv.icon, srv.auth, srv.endpoint, srv.docs, now);
   }
+
+  // Keep outbound Email connector metadata aligned (non-OAuth configuration model).
+  db.prepare(`
+    UPDATE services
+    SET auth_type = 'smtp',
+        api_endpoint = 'smtp://configured-via-env',
+        documentation_url = 'https://nodemailer.com/smtp'
+    WHERE name = 'email'
+  `).run();
 }
 
 function getServiceCategories() {
@@ -3958,6 +3967,56 @@ function markEmailAsFailed(emailId, reason) {
     SET status = 'failed', failed_reason = ?
     WHERE id = ?
   `).run(reason, emailId).changes > 0;
+}
+
+function getEmailQueueStats() {
+  const rows = db.prepare(`
+    SELECT status, COUNT(*) as count
+    FROM email_queue
+    GROUP BY status
+  `).all();
+
+  const stats = { pending: 0, sent: 0, failed: 0, total: 0 };
+  for (const row of rows) {
+    const status = String(row.status || '').toLowerCase();
+    const count = Number(row.count || 0);
+    if (Object.prototype.hasOwnProperty.call(stats, status)) {
+      stats[status] = count;
+    }
+    stats.total += count;
+  }
+
+  const lastFailure = db.prepare(`
+    SELECT id, email_address as emailAddress, subject, failed_reason as failedReason, created_at as createdAt
+    FROM email_queue
+    WHERE status = 'failed'
+    ORDER BY created_at DESC
+    LIMIT 1
+  `).get();
+
+  return { ...stats, lastFailure: lastFailure || null };
+}
+
+function getRecentEmailJobs(limit = 20, status = null) {
+  const safeLimit = Math.max(1, Math.min(100, Number(limit) || 20));
+  if (status && ['pending', 'sent', 'failed'].includes(String(status).toLowerCase())) {
+    return db.prepare(`
+      SELECT id, user_id as userId, email_address as emailAddress, subject, status, sent_at as sentAt,
+             failed_reason as failedReason, created_at as createdAt
+      FROM email_queue
+      WHERE status = ?
+      ORDER BY created_at DESC
+      LIMIT ?
+    `).all(String(status).toLowerCase(), safeLimit);
+  }
+
+  return db.prepare(`
+    SELECT id, user_id as userId, email_address as emailAddress, subject, status, sent_at as sentAt,
+           failed_reason as failedReason, created_at as createdAt
+    FROM email_queue
+    ORDER BY created_at DESC
+    LIMIT ?
+  `).all(safeLimit);
 }
 
 // ========== PHASE 1: WORKSPACES & TEAMS ==========
@@ -4656,6 +4715,8 @@ module.exports = {
   getPendingEmails,
   markEmailAsSent,
   markEmailAsFailed,
+  getEmailQueueStats,
+  getRecentEmailJobs,
   // Phase 1: Workspaces & Teams
   createWorkspace,
   getWorkspaces,

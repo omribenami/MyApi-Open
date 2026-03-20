@@ -1,6 +1,5 @@
 const express = require('express');
 const {
-  createServicePreference,
   getServicePreference,
   getServicePreferences,
   updateServicePreference,
@@ -8,58 +7,78 @@ const {
   createAuditLog,
   getOAuthToken,
 } = require('../database');
+const emailService = require('../services/emailService');
+
+const SERVICE_CATALOG = [
+  { id: 'github', name: 'GitHub', description: 'Version control and collaboration', icon: 'github', category: 'Developer Tools', auth_type: 'oauth2', api_endpoint: 'https://api.github.com' },
+  { id: 'google', name: 'Google', description: 'Email, Calendar, Drive, Sheets, Docs', icon: 'google', category: 'Productivity', auth_type: 'oauth2', api_endpoint: 'https://www.googleapis.com' },
+  { id: 'slack', name: 'Slack', description: 'Team messaging and collaboration', icon: 'slack', category: 'Communication', auth_type: 'oauth2', api_endpoint: 'https://slack.com/api' },
+  { id: 'discord', name: 'Discord', description: 'Voice, video, and text communication', icon: 'discord', category: 'Communication', auth_type: 'oauth2', api_endpoint: 'https://discord.com/api/v10' },
+  { id: 'tiktok', name: 'TikTok', description: 'Short-form video platform', icon: 'tiktok', category: 'Social Media', auth_type: 'oauth2', api_endpoint: 'https://open.tiktokapis.com' },
+  { id: 'linkedin', name: 'LinkedIn', description: 'Professional networking', icon: 'linkedin', category: 'Social Media', auth_type: 'oauth2', api_endpoint: 'https://api.linkedin.com/v2' },
+  { id: 'facebook', name: 'Facebook', description: 'Social media platform', icon: 'facebook', category: 'Social Media', auth_type: 'oauth2', api_endpoint: 'https://graph.facebook.com' },
+  { id: 'instagram', name: 'Instagram', description: 'Photo and video sharing', icon: 'instagram', category: 'Social Media', auth_type: 'oauth2', api_endpoint: 'https://graph.instagram.com' },
+  { id: 'twitter', name: 'Twitter/X', description: 'Social media platform', icon: 'twitter', category: 'Social Media', auth_type: 'oauth2', api_endpoint: 'https://api.twitter.com/2' },
+  { id: 'notion', name: 'Notion', description: 'Workspace and documentation', icon: 'notion', category: 'Productivity', auth_type: 'oauth2', api_endpoint: 'https://api.notion.com/v1' },
+  { id: 'email', name: 'Email', description: 'Outbound transactional email delivery', icon: 'email', category: 'Communication', auth_type: 'smtp', api_endpoint: null, outbound_only: true },
+];
 
 function createServicesRoutes() {
   const router = express.Router();
 
+  function resolveUserId(req) {
+    return String(req.user?.id || req.tokenMeta?.ownerId || req.tokenMeta?.userId || 'owner');
+  }
+
+  function getConnectionMetadata(serviceId, userId) {
+    if (serviceId === 'email') {
+      const cfg = emailService.getConfigStatus();
+      return {
+        connected: cfg.configured,
+        status: cfg.configured ? 'connected' : 'error',
+        created_at: null,
+        expires_at: null,
+        configMissing: cfg.missing || [],
+      };
+    }
+
+    try {
+      const token = getOAuthToken(serviceId, userId);
+      if (token && !token.revokedAt) {
+        return {
+          connected: true,
+          created_at: token.createdAt || null,
+          expires_at: token.expiresAt || null,
+        };
+      }
+    } catch {
+      // keep resilient
+    }
+
+    return { connected: false, created_at: null, expires_at: null };
+  }
+
   // GET /api/v1/services - List all services with their connection status
   router.get('/', (req, res) => {
     try {
-      const userId = String(req.user?.id || req.tokenMeta?.ownerId || req.tokenMeta?.userId || 'owner');
+      const userId = resolveUserId(req);
 
-      // Define all available services
-      const allServices = [
-        { id: 'github', name: 'GitHub', description: 'Version control and collaboration', icon: 'github', category: 'Developer Tools' },
-        { id: 'google', name: 'Google', description: 'Email, Calendar, Drive, Sheets, Docs', icon: 'google', category: 'Productivity' },
-        { id: 'slack', name: 'Slack', description: 'Team messaging and collaboration', icon: 'slack', category: 'Communication' },
-        { id: 'discord', name: 'Discord', description: 'Voice, video, and text communication', icon: 'discord', category: 'Communication' },
-        { id: 'tiktok', name: 'TikTok', description: 'Short-form video platform', icon: 'tiktok', category: 'Social Media' },
-        { id: 'linkedin', name: 'LinkedIn', description: 'Professional networking', icon: 'linkedin', category: 'Social Media' },
-        { id: 'facebook', name: 'Facebook', description: 'Social media platform', icon: 'facebook', category: 'Social Media' },
-        { id: 'instagram', name: 'Instagram', description: 'Photo and video sharing', icon: 'instagram', category: 'Social Media' },
-        { id: 'twitter', name: 'Twitter/X', description: 'Social media platform', icon: 'twitter', category: 'Social Media' },
-        { id: 'notion', name: 'Notion', description: 'Workspace and documentation', icon: 'notion', category: 'Productivity' }
-      ];
+      const servicesWithStatus = SERVICE_CATALOG.map((svc) => {
+        const conn = getConnectionMetadata(svc.id, userId);
+        return {
+          ...svc,
+          status: conn.status || (conn.connected ? 'connected' : 'available'),
+          connectedAt: conn.created_at,
+          expiresAt: conn.expires_at,
+          configMissing: conn.configMissing || [],
+        };
+      });
 
-      // Get connected services for this user safely via exported DB helpers.
-      const connectedMap = {};
-      for (const svc of allServices) {
-        try {
-          const token = getOAuthToken(svc.id, userId);
-          if (token && !token.revokedAt) {
-            connectedMap[svc.id] = {
-              created_at: token.createdAt || null,
-              expires_at: token.expiresAt || null,
-            };
-          }
-        } catch {
-          // Keep endpoint resilient: one bad service lookup should not break the list.
-        }
-      }
-      
-      // Enrich services with connection status
-      const servicesWithStatus = allServices.map(svc => ({
-        ...svc,
-        status: connectedMap[svc.id] ? 'connected' : 'available',
-        connectedAt: connectedMap[svc.id]?.created_at || null,
-        expiresAt: connectedMap[svc.id]?.expires_at || null,
-      }));
-      
       res.json({
         success: true,
         data: servicesWithStatus,
         total: servicesWithStatus.length,
-        connected: Object.keys(connectedMap).length,
+        connected: servicesWithStatus.filter((s) => s.status === 'connected').length,
       });
     } catch (error) {
       console.error('[Services] Error fetching services:', error);
@@ -67,27 +86,63 @@ function createServicesRoutes() {
     }
   });
 
+  // GET /api/v1/services/categories
+  router.get('/categories', (req, res) => {
+    try {
+      const map = new Map();
+      for (const svc of SERVICE_CATALOG) {
+        const key = svc.category.toLowerCase().replace(/\s+/g, '-');
+        if (!map.has(key)) {
+          map.set(key, { name: key, label: svc.category });
+        }
+      }
+      res.json({ success: true, data: Array.from(map.values()) });
+    } catch (error) {
+      console.error('[Services] Error fetching categories:', error);
+      res.status(500).json({ error: 'Failed to fetch categories' });
+    }
+  });
+
+  // GET /api/v1/services/:serviceName - Service detail
+  router.get('/:serviceName', (req, res, next) => {
+    const blocked = new Set(['available', 'preferences', 'categories']);
+    if (blocked.has(String(req.params.serviceName || '').toLowerCase())) {
+      return next();
+    }
+
+    try {
+      const userId = resolveUserId(req);
+      const serviceName = String(req.params.serviceName || '').toLowerCase();
+      const service = SERVICE_CATALOG.find((s) => s.id === serviceName || s.name.toLowerCase() === serviceName);
+
+      if (!service) {
+        return res.status(404).json({ error: 'Service not found' });
+      }
+
+      const conn = getConnectionMetadata(service.id, userId);
+      return res.json({
+        success: true,
+        data: {
+          ...service,
+          status: conn.status || (conn.connected ? 'connected' : 'available'),
+          connectedAt: conn.created_at,
+          expiresAt: conn.expires_at,
+          configMissing: conn.configMissing || [],
+        },
+      });
+    } catch (error) {
+      console.error('[Services] Error fetching service detail:', error);
+      return res.status(500).json({ error: 'Failed to fetch service detail' });
+    }
+  });
+
   // GET /api/v1/services/available - List available services
   router.get('/available', (req, res) => {
     try {
-      // Return list of available services
-      const availableServices = [
-        { id: 'github', name: 'GitHub', description: 'Version control and collaboration' },
-        { id: 'google', name: 'Google', description: 'Email, Calendar, Drive, Sheets, Docs' },
-        { id: 'slack', name: 'Slack', description: 'Team messaging and collaboration' },
-        { id: 'discord', name: 'Discord', description: 'Voice, video, and text communication' },
-        { id: 'tiktok', name: 'TikTok', description: 'Short-form video platform' },
-        { id: 'linkedin', name: 'LinkedIn', description: 'Professional networking' },
-        { id: 'facebook', name: 'Facebook', description: 'Social media platform' },
-        { id: 'instagram', name: 'Instagram', description: 'Photo and video sharing' },
-        { id: 'twitter', name: 'Twitter/X', description: 'Social media platform' },
-        { id: 'notion', name: 'Notion', description: 'Workspace and documentation' }
-      ];
-      
       res.json({
         success: true,
-        services: availableServices,
-        total: availableServices.length
+        services: SERVICE_CATALOG.map(({ id, name, description }) => ({ id, name, description })),
+        total: SERVICE_CATALOG.length,
       });
     } catch (error) {
       console.error('[Services] Error fetching available services:', error);
@@ -95,45 +150,36 @@ function createServicesRoutes() {
     }
   });
 
-  // GET /api/v1/services/preferences - Get all service preferences for the user
   router.get('/preferences', (req, res) => {
     try {
       const userId = req.user?.id || req.tokenMeta?.userId || 'owner';
       const preferences = getServicePreferences(userId);
-      
-      res.json({
-        success: true,
-        data: preferences
-      });
+
+      res.json({ success: true, data: preferences });
     } catch (error) {
       console.error('[ServicePreferences] Error fetching preferences:', error);
       res.status(500).json({ error: 'Failed to fetch service preferences' });
     }
   });
 
-  // GET /api/v1/services/preferences/:serviceName - Get preferences for a specific service
   router.get('/preferences/:serviceName', (req, res) => {
     try {
       const userId = req.user?.id || req.tokenMeta?.userId || 'owner';
       const { serviceName } = req.params;
 
       const preference = getServicePreference(userId, serviceName);
-      
+
       if (!preference) {
         return res.status(404).json({ error: 'Service preferences not found' });
       }
 
-      res.json({
-        success: true,
-        data: preference
-      });
+      res.json({ success: true, data: preference });
     } catch (error) {
       console.error('[ServicePreferences] Error fetching preference:', error);
       res.status(500).json({ error: 'Failed to fetch service preference' });
     }
   });
 
-  // POST /api/v1/services/preferences/:serviceName - Create or update service preferences
   router.post('/preferences/:serviceName', (req, res) => {
     try {
       const userId = req.user?.id || req.tokenMeta?.ownerId || 'owner';
@@ -145,26 +191,22 @@ function createServicesRoutes() {
       }
 
       const result = updateServicePreference(userId, serviceName, preferences);
-      
+
       createAuditLog({
         requesterId: req.tokenMeta?.tokenId || 'system',
         action: 'update_service_preferences',
         resource: `/services/preferences/${serviceName}`,
         scope: req.tokenMeta?.scope || 'full',
-        ip: req.ip
+        ip: req.ip,
       });
 
-      res.status(201).json({
-        success: true,
-        data: result
-      });
+      res.status(201).json({ success: true, data: result });
     } catch (error) {
       console.error('[ServicePreferences] Error updating preference:', error);
       res.status(500).json({ error: 'Failed to update service preference' });
     }
   });
 
-  // PUT /api/v1/services/preferences/:serviceName - Update service preferences
   router.put('/preferences/:serviceName', (req, res) => {
     try {
       const userId = req.user?.id || req.tokenMeta?.ownerId || 'owner';
@@ -176,33 +218,29 @@ function createServicesRoutes() {
       }
 
       const result = updateServicePreference(userId, serviceName, preferences);
-      
+
       createAuditLog({
         requesterId: req.tokenMeta?.tokenId || 'system',
         action: 'update_service_preferences',
         resource: `/services/preferences/${serviceName}`,
         scope: req.tokenMeta?.scope || 'full',
-        ip: req.ip
+        ip: req.ip,
       });
 
-      res.json({
-        success: true,
-        data: result
-      });
+      res.json({ success: true, data: result });
     } catch (error) {
       console.error('[ServicePreferences] Error updating preference:', error);
       res.status(500).json({ error: 'Failed to update service preference' });
     }
   });
 
-  // DELETE /api/v1/services/preferences/:serviceName - Delete service preferences
   router.delete('/preferences/:serviceName', (req, res) => {
     try {
       const userId = req.user?.id || req.tokenMeta?.userId || 'owner';
       const { serviceName } = req.params;
 
       const deleted = deleteServicePreference(userId, serviceName);
-      
+
       if (!deleted) {
         return res.status(404).json({ error: 'Service preferences not found' });
       }
@@ -212,13 +250,10 @@ function createServicesRoutes() {
         action: 'delete_service_preferences',
         resource: `/services/preferences/${serviceName}`,
         scope: req.tokenMeta?.scope || 'full',
-        ip: req.ip
+        ip: req.ip,
       });
 
-      res.json({
-        success: true,
-        message: 'Service preferences deleted'
-      });
+      res.json({ success: true, message: 'Service preferences deleted' });
     } catch (error) {
       console.error('[ServicePreferences] Error deleting preference:', error);
       res.status(500).json({ error: 'Failed to delete service preference' });
