@@ -14,6 +14,7 @@
 | 2 | Billing & Usage Tracking | ✅ COMPLETE | 2026-03-19 | 3-4 weeks |
 | 3 | Audit & Security | ✅ COMPLETE | 2026-03-19 | 2-3 weeks |
 | 3.5 | **Notifications System** | ✅ COMPLETE | 2026-03-20 | 2-3 weeks |
+| 3.6 | **Privacy Gateway & Data Minimization** | ⬜ PLANNED | 2026-Q2 | 2-3 weeks |
 | 4 | Enterprise (SSO+RBAC) | ⬜ PENDING | M7-9 | 5-6 weeks |
 | 5 | Compliance & Encryption | ⬜ PENDING | M10-11 | 4-5 weeks |
 | 6 | Self-Hosted Deployment | ⬜ PENDING | M12 | 3-4 weeks |
@@ -159,7 +160,7 @@ f9baed0 feat(audit): add phase 3 security and audit logging foundation
 
 ---
 
-## 📋 Phase 3.5: Notifications System ⏳ IN PROGRESS
+## 📋 Phase 3.5: Notifications System ✅ COMPLETE
 
 **Start Date:** 2026-03-20  
 **Target Completion:** 2026-04-03  
@@ -282,6 +283,25 @@ CREATE TABLE notification_queue (
 Status: ✅ COMPLETE
 Completion Date: 2026-03-20
 Next: Spawn Phase 4 (Enterprise SSO+RBAC)
+```
+
+---
+
+## 📋 Phase 3.6: Privacy Gateway & Data Minimization (2-3 weeks)
+
+### Features
+- [ ] Privacy gateway core (`src/lib/privacy/PrivacyGateway.js`)
+- [ ] Source-specific policies (gmail/calendar/drive/github)
+- [ ] Shadow mode + feature flag rollout
+- [ ] Redaction observability (`policyVersion`, `redactions[]`)
+- [ ] Backward-compatible response envelope strategy
+- [ ] Settings UI privacy roadmap/status section
+- [ ] Privacy policy page update
+
+### Status
+```
+Status: ⬜ PLANNED
+Target: 2026-Q2
 ```
 
 ---

@@ -163,6 +163,19 @@ We implement technical and organizational safeguards designed to protect persona
 
 No method of transmission or storage is 100% secure. You are responsible for safeguarding your account credentials and API tokens.
 
+### Privacy Gateway & Data Minimization Roadmap
+
+MyApi is adding a privacy gateway layer to improve least-privilege data exposure for guest and scoped token access.
+
+Planned controls include:
+- policy-based filtering by source (e.g., Gmail, Calendar, Drive, GitHub);
+- guest-safe redaction and minimization rules;
+- shadow-mode rollout before enforcement;
+- audit metadata for filtering decisions (`policyVersion`, `redactions[]`);
+- backward-compatible response handling during migration.
+
+Current privacy controls are available in **Settings → Privacy** (cookie mode, profile visibility, API access logging, and data-sharing preferences).
+
 ---
 
 ## 12. Children
