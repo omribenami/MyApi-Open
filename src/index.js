@@ -995,6 +995,12 @@ function authenticate(req, res, next) {
     return next();
   }
   
+  // TEMPORARY BYPASS FOR TESTING (Mar 20) - Remove after device approval DB is fixed
+  if (process.env.SKIP_DEVICE_APPROVAL === 'true') {
+    console.warn('[Device Approval] GLOBAL BYPASS - allowing all API access for testing');
+    return next();
+  }
+  
   // Apply device approval for agents on protected routes
   return deviceApprovalMiddleware(req, res, next);
 }
@@ -4423,7 +4429,40 @@ app.get([
     }
 
     // Store token for authenticated owner (connect flow and non-primary login flow)
-    const oauthOwnerId = req.session?.user?.id ? String(req.session.user.id) : (stateMeta?.ownerId ? String(stateMeta.ownerId) : null);
+    let oauthOwnerId = req.session?.user?.id ? String(req.session.user.id) : (stateMeta?.ownerId ? String(stateMeta.ownerId) : null);
+    
+    // CRITICAL FIX: If not logged in during CONNECT flow, check if OAuth user is an existing account
+    // and auto-login them so we can store the token
+    if (!oauthOwnerId && stateMeta?.mode === 'connect' && !tokenStoredForUser) {
+      console.log(`[OAuth] Connect mode with no session - checking for existing account`);
+      
+      // Try to find existing user by email from profile
+      const profileResp = await oauthAdapters[service].verifyToken(tokenData.accessToken).catch(() => ({ valid: false, data: {} }));
+      const p = profileResp?.data || {};
+      const providerEmail = String(p.email || '').trim().toLowerCase() || null;
+      
+      if (providerEmail) {
+        const existingUser = getUsers().find((u) => String(u.email || '').toLowerCase() === providerEmail);
+        if (existingUser) {
+          console.log(`[OAuth] Found existing user by email: ${existingUser.id} - auto-logging in for token storage`);
+          oauthOwnerId = String(existingUser.id);
+          
+          // Auto-login this user for the session
+          req.session.user = {
+            id: existingUser.id,
+            username: existingUser.username,
+            display_name: existingUser.displayName || existingUser.username,
+            displayName: existingUser.displayName || existingUser.username,
+            email: existingUser.email || null,
+            avatar_url: existingUser.avatarUrl || null,
+            avatarUrl: existingUser.avatarUrl || null,
+            two_factor_enabled: Boolean(existingUser.twoFactorEnabled),
+            roles: existingUser.roles || 'user',
+          };
+        }
+      }
+    }
+    
     if (oauthOwnerId && !tokenStoredForUser) {
       console.log(`[OAuth] Storing ${service} token for owner: ${oauthOwnerId} (mode=${stateMeta.mode || 'connect'})`);
       const storeResult = storeOAuthToken(service, oauthOwnerId, tokenData.accessToken, tokenData.refreshToken || null, expiresAt, tokenData.scope);
