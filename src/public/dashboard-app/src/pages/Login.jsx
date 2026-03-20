@@ -87,7 +87,8 @@ function Login() {
               if (sessionUser?.bootstrap?.masterToken) {
                 setMasterToken(sessionUser.bootstrap.masterToken);
               }
-              setUser(sessionUser);
+              // Extract user object from response (not the entire response)
+              setUser(sessionUser.user || sessionUser);
               window.history.replaceState({}, document.title, '/dashboard/');
               window.location.href = '/dashboard/';
             }
