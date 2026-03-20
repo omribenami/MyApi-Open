@@ -48,8 +48,6 @@ function Login() {
   const [plansLoading, setPlansLoading] = useState(true);
   const [twoFactorRequired, setTwoFactorRequired] = useState(false);
   const [twoFactorCode, setTwoFactorCode] = useState('');
-  const [signupStep, setSignupStep] = useState(1); // 1=email, 2=password, 3=username, 4=complete
-  const [signupData, setSignupData] = useState({ email: '', password: '', username: '', displayName: '' });
   const { setMasterToken, setUser, isAuthenticated } = useAuthStore();
 
   useEffect(() => {
@@ -176,60 +174,6 @@ function Login() {
     }
   };
 
-  const handleSignupNext = () => {
-    setError('');
-    if (signupStep === 1) {
-      if (!signupData.email || !signupData.email.includes('@')) {
-        setError('Please enter a valid email');
-        return;
-      }
-      setSignupStep(2);
-    } else if (signupStep === 2) {
-      if (signupData.password.length < 8) {
-        setError('Password must be at least 8 characters');
-        return;
-      }
-      setSignupStep(3);
-    } else if (signupStep === 3) {
-      if (!signupData.username.trim()) {
-        setError('Username is required');
-        return;
-      }
-      setSignupStep(4);
-    }
-  };
-
-  const handleSignupSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-    try {
-      const response = await fetch('/api/v1/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          email: signupData.email,
-          password: signupData.password,
-          username: signupData.username,
-          displayName: signupData.displayName || signupData.username,
-        }),
-      });
-      const result = await response.json();
-      if (!response.ok) {
-        setError(result.error || 'Signup failed');
-        return;
-      }
-      if (result.masterToken) setMasterToken(result.masterToken);
-      if (result.user) setUser(result.user);
-      window.location.href = '/dashboard/';
-    } catch {
-      setError('Network error. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const oauthServices = [AVAILABLE_SERVICES[0], AVAILABLE_SERVICES[1], AVAILABLE_SERVICES[2]].filter(Boolean);
 
   return (
@@ -266,18 +210,12 @@ function Login() {
 
           <section className="lg:col-span-7">
             <div className="rounded-3xl border border-slate-700/80 bg-slate-900/85 p-5 shadow-2xl shadow-black/40 sm:p-7 lg:p-8">
-              <div className="mb-6 inline-flex w-full max-w-2xl rounded-xl border border-slate-700 bg-slate-900/80 p-1">
+              <div className="mb-6 inline-flex w-full max-w-xs rounded-xl border border-slate-700 bg-slate-900/80 p-1">
                 <button
                   onClick={() => setViewMode('pricing')}
                   className={`flex-1 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors ${viewMode === 'pricing' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}
                 >
                   Pricing
-                </button>
-                <button
-                  onClick={() => { setViewMode('signup'); setSignupStep(1); setSignupData({ email: '', password: '', username: '', displayName: '' }); setError(''); }}
-                  className={`flex-1 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors ${viewMode === 'signup' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}
-                >
-                  Sign Up
                 </button>
                 <button
                   onClick={() => setViewMode('login')}
@@ -338,133 +276,10 @@ function Login() {
                     Need an account?{' '}
                     <button
                       type="button"
-                      onClick={() => { setViewMode('signup'); setSignupStep(1); setSignupData({ email: '', password: '', username: '', displayName: '' }); setError(''); }}
+                      onClick={() => setViewMode('pricing')}
                       className="font-semibold text-blue-300 underline-offset-2 transition-colors hover:text-blue-200 hover:underline"
                     >
                       Sign up
-                    </button>
-                  </div>
-                </div>
-              ) : viewMode === 'signup' ? (
-                <div className="max-w-xl">
-                  <h2 className="text-2xl font-semibold">Create your account</h2>
-                  <p className="mb-6 mt-2 text-sm text-slate-400 sm:text-base">Step {signupStep} of 4</p>
-
-                  <form onSubmit={signupStep === 4 ? handleSignupSubmit : (e) => { e.preventDefault(); handleSignupNext(); }} className="space-y-4">
-                    {signupStep === 1 && (
-                      <div>
-                        <label htmlFor="email" className="mb-2 block text-sm font-medium text-slate-300">Email Address</label>
-                        <input
-                          id="email"
-                          type="email"
-                          required
-                          value={signupData.email}
-                          onChange={(e) => setSignupData({ ...signupData, email: e.target.value })}
-                          autoFocus
-                          className="min-h-[48px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
-                          placeholder="you@example.com"
-                        />
-                      </div>
-                    )}
-
-                    {signupStep === 2 && (
-                      <div>
-                        <label htmlFor="password" className="mb-2 block text-sm font-medium text-slate-300">Password</label>
-                        <input
-                          id="password"
-                          type="password"
-                          required
-                          value={signupData.password}
-                          onChange={(e) => setSignupData({ ...signupData, password: e.target.value })}
-                          autoFocus
-                          className="min-h-[48px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
-                          placeholder="Min. 8 characters"
-                        />
-                        <p className="mt-2 text-xs text-slate-400">Must be at least 8 characters</p>
-                      </div>
-                    )}
-
-                    {signupStep === 3 && (
-                      <div className="space-y-4">
-                        <div>
-                          <label htmlFor="username" className="mb-2 block text-sm font-medium text-slate-300">Username</label>
-                          <input
-                            id="username"
-                            type="text"
-                            required
-                            value={signupData.username}
-                            onChange={(e) => setSignupData({ ...signupData, username: e.target.value })}
-                            autoFocus
-                            className="min-h-[48px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
-                            placeholder="your_username"
-                          />
-                        </div>
-                        <div>
-                          <label htmlFor="displayName" className="mb-2 block text-sm font-medium text-slate-300">Display Name (Optional)</label>
-                          <input
-                            id="displayName"
-                            type="text"
-                            value={signupData.displayName}
-                            onChange={(e) => setSignupData({ ...signupData, displayName: e.target.value })}
-                            className="min-h-[48px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
-                            placeholder="Your Full Name"
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    {signupStep === 4 && (
-                      <div className="rounded-xl border border-slate-700/80 bg-slate-900/60 p-4 space-y-3">
-                        <div>
-                          <p className="text-xs text-slate-400 mb-1">Email</p>
-                          <p className="text-sm font-medium text-slate-200">{signupData.email}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-slate-400 mb-1">Username</p>
-                          <p className="text-sm font-medium text-slate-200">@{signupData.username}</p>
-                        </div>
-                        {signupData.displayName && (
-                          <div>
-                            <p className="text-xs text-slate-400 mb-1">Display Name</p>
-                            <p className="text-sm font-medium text-slate-200">{signupData.displayName}</p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {error && (
-                      <div className="rounded-xl border border-red-500/35 bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</div>
-                    )}
-
-                    <div className="flex gap-3 pt-2">
-                      {signupStep > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => setSignupStep(signupStep - 1)}
-                          disabled={loading}
-                          className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          Back
-                        </button>
-                      )}
-                      <button
-                        type="submit"
-                        disabled={loading}
-                        className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {loading ? 'Creating...' : signupStep === 4 ? 'Create Account' : 'Next'}
-                      </button>
-                    </div>
-                  </form>
-
-                  <div className="mt-6 text-center text-sm text-slate-400">
-                    Already have an account?{' '}
-                    <button
-                      type="button"
-                      onClick={() => setViewMode('login')}
-                      className="font-semibold text-blue-300 underline-offset-2 transition-colors hover:text-blue-200 hover:underline"
-                    >
-                      Log in
                     </button>
                   </div>
                 </div>
@@ -498,16 +313,7 @@ function Login() {
                           </ul>
 
                           <button
-                            onClick={() => {
-                              if (plan.id === 'free') {
-                                setViewMode('signup');
-                                setSignupStep(1);
-                                setSignupData({ email: '', password: '', username: '', displayName: '' });
-                                setError('');
-                              } else {
-                                handleCheckout(plan.id);
-                              }
-                            }}
+                            onClick={() => (plan.id === 'free' ? setViewMode('login') : handleCheckout(plan.id))}
                             disabled={loading}
                             className={`mt-5 min-h-[44px] w-full rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${plan.id === 'free' ? 'border border-slate-600 text-slate-200 hover:bg-slate-800' : 'bg-blue-600 text-white hover:bg-blue-500'} disabled:cursor-not-allowed disabled:opacity-50`}
                           >
