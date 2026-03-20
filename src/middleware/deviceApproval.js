@@ -74,11 +74,8 @@ function deviceApprovalMiddleware(req, res, next) {
     return next();
   }
 
-  // TEMPORARY BYPASS FOR TESTING (Mar 20) - Remove this after device approval DB is fixed
-  if (process.env.SKIP_DEVICE_APPROVAL === 'true') {
-    console.warn('[Device Approval] BYPASSED FOR TESTING');
-    return next();
-  }
+  // BUG-8: Removed SKIP_DEVICE_APPROVAL bypass - device approval is now mandatory for all API access
+  // Note: Device approval should be properly configured in production environment
 
   try {
     // Generate fingerprint from request
