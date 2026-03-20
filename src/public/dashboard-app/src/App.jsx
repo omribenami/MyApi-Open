@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from './stores/authStore';
+import { handleOAuthCallback } from './utils/oauth';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import DashboardHome from './pages/DashboardHome';
@@ -57,6 +58,31 @@ function App() {
   useEffect(() => {
     initialize();
   }, [initialize]);
+
+  // Handle OAuth callbacks at app level (runs before router decides which component to show)
+  useEffect(() => {
+    const callback = handleOAuthCallback();
+    if (callback && callback.status === 'confirm_login') {
+      // Auto-confirm OAuth login by fetching user data
+      const { setMasterToken, setUser } = useAuthStore.getState();
+      
+      fetch('/api/v1/auth/me', { credentials: 'include' })
+        .then(res => res.ok ? res.json() : null)
+        .then(sessionUser => {
+          if (sessionUser?.user) {
+            if (sessionUser.user?.bootstrap?.masterToken) {
+              setMasterToken(sessionUser.user.bootstrap.masterToken);
+            }
+            setUser(sessionUser.user);
+            // Clear OAuth params from URL
+            window.history.replaceState({}, document.title, '/dashboard/');
+          }
+        })
+        .catch(() => {
+          // Silently fail - user will see dashboard or login based on auth state
+        });
+    }
+  }, []);
 
   // Load workspaces once authenticated
   useEffect(() => {
