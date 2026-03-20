@@ -19,12 +19,22 @@ const normalizeUserPayload = (payload) => {
   const raw = payload?.user || payload?.data || payload || null;
   if (!raw || typeof raw !== 'object') return null;
 
-  return {
+  const normalized = {
     ...raw,
     displayName: raw.displayName || raw.display_name || raw.name || raw.username || '',
     avatarUrl: raw.avatarUrl || raw.avatar_url || '',
     email: raw.email || '',
   };
+  
+  console.log('🔍 [authStore] normalizeUserPayload:', {
+    inputPayload: payload,
+    rawExtracted: raw,
+    normalized,
+    displayName: normalized.displayName,
+    avatarUrl: normalized.avatarUrl
+  });
+  
+  return normalized;
 };
 
 export const useAuthStore = create((set, get) => ({
@@ -185,7 +195,17 @@ export const useAuthStore = create((set, get) => ({
 
   setUser: (user) => {
     setLogoutInProgress(false);
+    console.log('🔍 [authStore.setUser] Called with:', {
+      user,
+      displayName: user?.displayName || user?.display_name,
+      avatarUrl: user?.avatarUrl || user?.avatar_url
+    });
     const normalized = normalizeUserPayload(user);
+    console.log('🔍 [authStore.setUser] After normalization:', {
+      normalized,
+      displayName: normalized?.displayName,
+      avatarUrl: normalized?.avatarUrl
+    });
     set({ user: normalized, isAuthenticated: !!normalized });
   },
 

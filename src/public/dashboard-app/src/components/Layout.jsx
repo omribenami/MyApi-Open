@@ -123,11 +123,28 @@ function Layout({ children, onLogout }) {
 
   const avatarUrl = useMemo(() => {
     const fromStorage = localStorage.getItem('profileAvatarUrl');
-    return fromStorage || user?.avatarUrl || user?.avatar_url || '';
+    const result = fromStorage || user?.avatarUrl || user?.avatar_url || '';
+    console.log('🔍 [Layout.jsx] avatarUrl computed:', {
+      fromStorage,
+      userAvatarUrl: user?.avatarUrl,
+      user_avatar_url: user?.avatar_url,
+      result,
+      user
+    });
+    return result;
   }, [user]);
 
   const displayName = useMemo(() => {
-    return user?.displayName || user?.display_name || user?.name || user?.username || 'User';
+    const result = user?.displayName || user?.display_name || user?.name || user?.username || 'User';
+    console.log('🔍 [Layout.jsx] displayName computed:', {
+      userDisplayName: user?.displayName,
+      user_display_name: user?.display_name,
+      user_name: user?.name,
+      user_username: user?.username,
+      result,
+      fullUser: user
+    });
+    return result;
   }, [user]);
 
   const handleLogout = () => {

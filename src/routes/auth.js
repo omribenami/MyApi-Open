@@ -115,7 +115,7 @@ router.post('/login', async (req, res) => {
       id: user.id,
       email: user.email,
       username: user.username,
-      display_name: user.display_name,
+      displayName: user.displayName,
     };
     req.session.masterToken = rawToken;
     
@@ -129,7 +129,7 @@ router.post('/login', async (req, res) => {
           id: user.id,
           email: user.email,
           username: user.username,
-          displayName: user.display_name,
+          displayName: user.displayName,
         }
       });
     });
@@ -272,17 +272,26 @@ router.get('/me', (req, res) => {
     // Check if this is the user's first login based on session state
     const isFirstLogin = req.session?.isFirstLogin || false;
 
+    const userPayload = {
+      id: user.id,
+      email: user.email,
+      username: user.username,
+      displayName: user.displayName,
+      avatarUrl: user.avatarUrl,
+      timezone: user.timezone,
+      plan: user.plan,
+    };
+    
+    console.log('🔍 [API /auth/me] Responding with user payload:', {
+      email: userPayload.email,
+      displayName: userPayload.displayName,
+      avatarUrl: userPayload.avatarUrl,
+      fullPayload: userPayload
+    });
+
     res.json({
       success: true,
-      user: {
-        id: user.id,
-        email: user.email,
-        username: user.username,
-        displayName: user.display_name,
-        avatarUrl: user.avatar_url,
-        timezone: user.timezone,
-        plan: user.plan,
-      },
+      user: userPayload,
       isFirstLogin
     });
   } catch (error) {
