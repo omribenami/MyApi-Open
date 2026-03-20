@@ -3495,17 +3495,26 @@ function getPendingApprovalById(approvalId) {
 function approvePendingDevice(approvalId, deviceName) {
   const approval = getPendingApprovalById(approvalId);
   if (!approval) return null;
-  
-  // Create approved device
-  const deviceId = createApprovedDevice(
-    approval.token_id,
-    approval.user_id,
-    approval.device_fingerprint_hash,
-    deviceName || 'Approved Device',
-    JSON.parse(approval.device_info_json || '{}'),
-    approval.ip_address
-  );
-  
+
+  // If this fingerprint is already approved for the user, do not try to insert duplicate.
+  const existing = getApprovedDeviceByHash(approval.user_id, approval.device_fingerprint_hash);
+  let deviceId = existing?.id || null;
+
+  if (!deviceId) {
+    // Create approved device
+    deviceId = createApprovedDevice(
+      approval.token_id,
+      approval.user_id,
+      approval.device_fingerprint_hash,
+      deviceName || 'Approved Device',
+      JSON.parse(approval.device_info_json || '{}'),
+      approval.ip_address
+    );
+  } else {
+    // Touch last used on existing device when approving duplicate pending request
+    updateDeviceLastUsed(deviceId);
+  }
+
   // Mark approval as approved
   const now = new Date().toISOString();
   db.prepare(`
@@ -3513,7 +3522,7 @@ function approvePendingDevice(approvalId, deviceName) {
     SET status = 'approved', approved_at = ? 
     WHERE id = ?
   `).run(now, approvalId);
-  
+
   return deviceId;
 }
 
