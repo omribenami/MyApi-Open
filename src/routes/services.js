@@ -34,7 +34,7 @@ function createServicesRoutes() {
   }
 
   function resolveUserId(req) {
-    return String(req.user?.id || req.tokenMeta?.ownerId || req.tokenMeta?.userId || 'owner');
+    return String(req.session?.user?.id || req.user?.id || req.tokenMeta?.ownerId || req.tokenMeta?.userId || 'owner');
   }
 
   function getConnectionMetadata(serviceId, userId) {
@@ -161,7 +161,7 @@ function createServicesRoutes() {
 
   router.get('/preferences', (req, res) => {
     try {
-      const userId = req.user?.id || req.tokenMeta?.userId || 'owner';
+      const userId = req.session?.user?.id || req.user?.id || req.tokenMeta?.userId || 'owner';
       const preferences = getServicePreferences(userId);
 
       res.json({ success: true, data: preferences });
@@ -173,7 +173,7 @@ function createServicesRoutes() {
 
   router.get('/preferences/:serviceName', (req, res) => {
     try {
-      const userId = req.user?.id || req.tokenMeta?.userId || 'owner';
+      const userId = req.session?.user?.id || req.user?.id || req.tokenMeta?.userId || 'owner';
       const { serviceName } = req.params;
 
       const preference = getServicePreference(userId, serviceName);
@@ -191,7 +191,7 @@ function createServicesRoutes() {
 
   router.post('/preferences/:serviceName', requireAuth, (req, res) => {
     try {
-      const userId = req.user?.id || req.tokenMeta?.ownerId || 'owner';
+      const userId = req.session?.user?.id || req.user?.id || req.tokenMeta?.ownerId || 'owner';
       const { serviceName } = req.params;
       const { preferences } = req.body;
 
@@ -245,7 +245,7 @@ function createServicesRoutes() {
 
   router.delete('/preferences/:serviceName', requireAuth, (req, res) => {
     try {
-      const userId = req.user?.id || req.tokenMeta?.userId || 'owner';
+      const userId = req.session?.user?.id || req.user?.id || req.tokenMeta?.userId || 'owner';
       const { serviceName } = req.params;
 
       const deleted = deleteServicePreference(userId, serviceName);
