@@ -3653,17 +3653,31 @@ app.post('/api/v1/auth/2fa/challenge', (req, res) => {
 });
 
 app.post("/api/v1/auth/logout", (req, res) => {
-  if (req.session) {
-    delete req.session.pending_2fa_user;
-    req.session.destroy(() => {});
-  }
-
   const authHeader = req.headers.authorization;
   if (authHeader) {
     const token = authHeader.replace("Bearer ", "");
     if (global.sessions) delete global.sessions[token];
   }
-  res.json({ ok: true });
+
+  // Always clear client cookies, even if session destroy fails.
+  const clearCookieOpts = { path: '/', sameSite: 'lax' };
+  res.clearCookie('myapi.sid', clearCookieOpts);
+  res.clearCookie('myapi_user', { path: '/' });
+
+  if (!req.session) {
+    return res.json({ ok: true });
+  }
+
+  delete req.session.pending_2fa_user;
+
+  req.session.destroy((err) => {
+    if (err) {
+      console.error('[logout] session destroy failed:', err.message);
+      return res.status(500).json({ ok: false, error: 'Failed to logout cleanly' });
+    }
+
+    return res.json({ ok: true });
+  });
 });
 
 // ============================
