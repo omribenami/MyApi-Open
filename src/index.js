@@ -759,7 +759,30 @@ app.get('/api/v1/users/me', authenticate, (req, res) => {
       if (m) identity[m[1].trim()] = (m[2] || '').trim();
     }
   }
-  const user = req.user || { id: 'owner', username: 'owner' };
+  
+  // Fetch full user data from database to include avatarUrl
+  const userId = req.user?.id;
+  let user = req.user || { id: 'owner', username: 'owner' };
+  
+  if (userId) {
+    try {
+      const fullUser = getUserById(userId);
+      if (fullUser) {
+        user = {
+          id: fullUser.id,
+          email: fullUser.email,
+          username: fullUser.username,
+          displayName: fullUser.displayName,
+          avatarUrl: fullUser.avatarUrl,
+          timezone: fullUser.timezone,
+        };
+      }
+    } catch (err) {
+      console.warn('[GET /users/me] Failed to fetch full user from DB:', err.message);
+      // Fall back to req.user
+    }
+  }
+  
   res.json({ user, identity });
 });
 
