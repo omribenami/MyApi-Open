@@ -10,7 +10,9 @@ EMAIL_FROM=noreply@myapiai.com
 EMAIL_FROM_NAME=MyApi
 ```
 
-> `EMAIL_FROM` is mandatory. It is intentionally **not hardcoded** in code.
+> `EMAIL_FROM` is mandatory and sourced from environment configuration only (not hardcoded in code).
+>
+> Required deployment value: `EMAIL_FROM=noreply@myapiai.com` (you may override per environment if needed).
 
 ### SMTP mode
 

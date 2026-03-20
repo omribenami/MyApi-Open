@@ -59,7 +59,7 @@ RATE_LIMIT_MAX_REQUESTS=120
 
 # Outbound Email (SMTP or SendGrid)
 EMAIL_PROVIDER=smtp            # smtp | sendgrid
-EMAIL_FROM=noreply@yourdomain.com
+EMAIL_FROM=noreply@myapiai.com   # required deployment sender (configurable per env)
 SMTP_HOST=smtp.your-provider.com
 SMTP_PORT=587
 SMTP_SECURE=false              # true for 465

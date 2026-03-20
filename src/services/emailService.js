@@ -67,6 +67,7 @@ class EmailService {
       provider,
       fromAddress,
       fromName,
+      requiredDeploymentFrom: 'noreply@myapiai.com',
       configured: missing.length === 0,
       missing,
       authType: provider === 'sendgrid' ? 'api_key' : 'smtp',
@@ -83,7 +84,7 @@ class EmailService {
       }
 
       if (!this.fromAddress) {
-        throw new Error('EMAIL_FROM is not configured');
+        throw new Error('EMAIL_FROM is not configured (required deployment value: noreply@myapiai.com)');
       }
 
       const mailOptions = {
@@ -119,7 +120,7 @@ class EmailService {
     this.fromAddress = process.env.EMAIL_FROM;
     this.fromName = process.env.EMAIL_FROM_NAME || 'MyApi';
     if (!this.fromAddress) {
-      throw new Error('EMAIL_FROM is not configured');
+      throw new Error('EMAIL_FROM is not configured (required deployment value: noreply@myapiai.com)');
     }
 
     const now = new Date().toISOString();
