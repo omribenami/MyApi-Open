@@ -172,6 +172,116 @@ const router = express.Router();
     }
   });
 
+  const LEGACY_NOTIFICATION_TYPES = [
+    'device_approval_requested',
+    'device_approved',
+    'device_revoked',
+    'skill_liked',
+    'skill_used',
+    'persona_invoked',
+    'guest_token_used',
+    'token_revoked',
+    'service_connected'
+  ];
+
+  function toLegacySettings(settings) {
+    const inAppEnabled = settings.inApp?.enabled === 1;
+    const emailEnabled = settings.email?.enabled === 1;
+    const emailFreq = settings.email?.frequency || 'immediate';
+    const emailDigestType = emailFreq === 'none' ? 'disabled' : emailFreq;
+
+    const flat = {
+      email_digest_type: emailDigestType
+    };
+
+    for (const type of LEGACY_NOTIFICATION_TYPES) {
+      flat[`${type}_web`] = inAppEnabled ? 1 : 0;
+      flat[`${type}_email`] = emailEnabled ? 1 : 0;
+    }
+
+    return flat;
+  }
+
+  // Backward-compatible settings endpoint used by dashboard UI
+  // GET /api/v1/notifications/settings
+  router.get('/notifications/settings', (req, res) => {
+    try {
+      const workspaceId = req.workspaceId || 'default';
+      const userId = req.user?.id || req.tokenMeta?.userId || req.tokenMeta?.ownerId;
+
+      if (!userId) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      const settings = getOrCreateNotificationSettings(workspaceId, userId);
+      res.json({
+        ok: true,
+        data: {
+          settings: toLegacySettings(settings)
+        }
+      });
+    } catch (err) {
+      console.error('Error fetching notification settings:', err);
+      res.status(500).json({ error: 'Failed to fetch settings', details: err.message });
+    }
+  });
+
+  // Backward-compatible settings update endpoint used by dashboard UI
+  // PUT /api/v1/notifications/settings
+  router.put('/notifications/settings', (req, res) => {
+    try {
+      const workspaceId = req.workspaceId || 'default';
+      const userId = req.user?.id || req.tokenMeta?.userId || req.tokenMeta?.ownerId;
+      const payload = req.body || {};
+
+      if (!userId) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+
+      // Map legacy digest value to frequency
+      if (payload.email_digest_type !== undefined) {
+        const digest = String(payload.email_digest_type || 'immediate').toLowerCase();
+        const frequency = digest === 'disabled' ? 'none' : digest;
+        updateNotificationPreferences(workspaceId, userId, 'email', {
+          enabled: digest !== 'disabled',
+          frequency: ['immediate', 'daily', 'weekly', 'none'].includes(frequency) ? frequency : 'immediate'
+        });
+      }
+
+      // Map legacy *_web and *_email toggles to channel-level enabled flags
+      const webKeys = Object.keys(payload).filter((k) => k.endsWith('_web'));
+      if (webKeys.length > 0) {
+        const inAppEnabled = webKeys.some((k) => Number(payload[k]) !== 0);
+        const current = getOrCreateNotificationSettings(workspaceId, userId);
+        updateNotificationPreferences(workspaceId, userId, 'in-app', {
+          enabled: inAppEnabled,
+          frequency: current.inApp?.frequency || 'immediate'
+        });
+      }
+
+      const emailKeys = Object.keys(payload).filter((k) => k.endsWith('_email'));
+      if (emailKeys.length > 0) {
+        const emailEnabled = emailKeys.some((k) => Number(payload[k]) !== 0);
+        const current = getOrCreateNotificationSettings(workspaceId, userId);
+        updateNotificationPreferences(workspaceId, userId, 'email', {
+          enabled: emailEnabled,
+          frequency: current.email?.frequency || 'immediate'
+        });
+      }
+
+      const settings = getOrCreateNotificationSettings(workspaceId, userId);
+      res.json({
+        ok: true,
+        data: {
+          settings: toLegacySettings(settings)
+        }
+      });
+    } catch (err) {
+      console.error('Error updating notification settings:', err);
+      res.status(500).json({ error: 'Failed to update settings', details: err.message });
+    }
+  });
+
   // GET /api/v1/notifications/preferences - Get notification preferences
   router.get('/notifications/preferences', (req, res) => {
     try {
