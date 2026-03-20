@@ -19,6 +19,10 @@ db.pragma('journal_mode = WAL');
 
 // Initialize database schema
 function initDatabase() {
+  // Phase 3.5 Pre-Migration: Drop old notification tables before schema initialization
+  try { db.exec('DROP TABLE IF EXISTS notification_settings'); } catch (e) {}
+  try { db.exec('DROP TABLE IF EXISTS notifications'); } catch (e) {}
+  
   db.exec(`
     CREATE TABLE IF NOT EXISTS vault_tokens (
       id TEXT PRIMARY KEY,
@@ -410,50 +414,7 @@ function initDatabase() {
       UNIQUE(user_id, service_name)
     );
 
-    CREATE TABLE IF NOT EXISTS notifications (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL,
-      type TEXT NOT NULL,
-      title TEXT NOT NULL,
-      message TEXT NOT NULL,
-      read_at TEXT,
-      created_at TEXT NOT NULL,
-      expires_at TEXT,
-      related_entity_type TEXT,
-      related_entity_id TEXT,
-      data TEXT,
-      action_url TEXT,
-      FOREIGN KEY (user_id) REFERENCES users(id)
-    );
-
-    CREATE TABLE IF NOT EXISTS notification_settings (
-      id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL UNIQUE,
-      device_approval_requested_web INTEGER DEFAULT 1,
-      device_approval_requested_email INTEGER DEFAULT 1,
-      skill_liked_web INTEGER DEFAULT 1,
-      skill_liked_email INTEGER DEFAULT 1,
-      skill_used_web INTEGER DEFAULT 1,
-      skill_used_email INTEGER DEFAULT 1,
-      persona_invoked_web INTEGER DEFAULT 1,
-      persona_invoked_email INTEGER DEFAULT 1,
-      guest_token_used_web INTEGER DEFAULT 1,
-      guest_token_used_email INTEGER DEFAULT 1,
-      token_revoked_web INTEGER DEFAULT 1,
-      token_revoked_email INTEGER DEFAULT 1,
-      device_approved_web INTEGER DEFAULT 1,
-      device_approved_email INTEGER DEFAULT 0,
-      service_connected_web INTEGER DEFAULT 1,
-      service_connected_email INTEGER DEFAULT 0,
-      device_revoked_web INTEGER DEFAULT 1,
-      device_revoked_email INTEGER DEFAULT 1,
-      email_digest_type TEXT DEFAULT 'immediate',
-      email_digest_time TEXT DEFAULT '09:00',
-      email_digest_day TEXT DEFAULT 'monday',
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL,
-      FOREIGN KEY (user_id) REFERENCES users(id)
-    );
+    -- Old notification tables removed in favor of Phase 3.5 schema below
 
     CREATE TABLE IF NOT EXISTS activity_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -837,6 +798,49 @@ function initDatabase() {
       created_at TEXT NOT NULL,
       UNIQUE(stripe_invoice_id)
     );
+
+    CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      message TEXT,
+      data TEXT,
+      is_read INTEGER DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER,
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id),
+      FOREIGN KEY(user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS notification_preferences (
+      id TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      channel TEXT NOT NULL,
+      enabled INTEGER DEFAULT 1,
+      frequency TEXT DEFAULT 'immediate',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      UNIQUE(workspace_id, user_id, channel),
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id),
+      FOREIGN KEY(user_id) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS notification_queue (
+      id TEXT PRIMARY KEY,
+      notification_id TEXT NOT NULL,
+      channel TEXT NOT NULL,
+      status TEXT DEFAULT 'pending',
+      error_message TEXT,
+      retry_count INTEGER DEFAULT 0,
+      max_retries INTEGER DEFAULT 3,
+      sent_at INTEGER,
+      next_retry_at INTEGER,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY(notification_id) REFERENCES notifications(id)
+    );
   `);
 
   db.exec('CREATE INDEX IF NOT EXISTS idx_billing_customers_workspace ON billing_customers(workspace_id)');
@@ -844,6 +848,10 @@ function initDatabase() {
   db.exec('CREATE INDEX IF NOT EXISTS idx_usage_daily_workspace_date ON usage_daily(workspace_id, date)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_usage_daily_date ON usage_daily(date)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_invoices_workspace_created ON invoices(workspace_id, created_at)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_notifications_workspace_user ON notifications(workspace_id, user_id, created_at DESC)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_notifications_workspace_user_read ON notifications(workspace_id, user_id, is_read)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_notification_preferences_workspace_user ON notification_preferences(workspace_id, user_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_notification_queue_status_retry ON notification_queue(status, next_retry_at)');
 
   // Phase: Enhanced Marketplace Filtering - Add provider and official fields
   const marketplaceEnhancementMigrations = [
@@ -3666,127 +3674,188 @@ function deleteServicePreference(userId, serviceName) {
 }
 
 // Notification functions
-function createNotification(userId, type, title, message, options = {}) {
+// Phase 3.5: Notifications System - Workspace-scoped notifications
+function createNotification(workspaceId, userId, type, title, message, data = null) {
   const id = 'notif_' + crypto.randomBytes(16).toString('hex');
-  const stmt = db.prepare(`
-    INSERT INTO notifications (id, user_id, type, title, message, related_entity_type, related_entity_id, data, action_url, created_at, expires_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
+  const now = Math.floor(Date.now() / 1000); // Unix timestamp
+  const expiresAt = now + (60 * 24 * 60 * 60); // 60 days
   
-  const expiresAt = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(); // 60 days
+  const stmt = db.prepare(`
+    INSERT INTO notifications (id, workspace_id, user_id, type, title, message, data, is_read, created_at, expires_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+  `);
   
   stmt.run(
     id,
+    workspaceId,
     userId,
     type,
     title,
     message,
-    options.relatedEntityType || null,
-    options.relatedEntityId || null,
-    options.data ? JSON.stringify(options.data) : null,
-    options.actionUrl || null,
-    new Date().toISOString(),
+    data ? JSON.stringify(data) : null,
+    now,
     expiresAt
   );
   
   return id;
 }
 
-function getNotifications(userId, limit = 50, offset = 0) {
-  const stmt = db.prepare(`
-    SELECT * FROM notifications
-    WHERE user_id = ? AND expires_at > datetime('now')
-    ORDER BY created_at DESC
-    LIMIT ? OFFSET ?
-  `);
+function getNotifications(workspaceId, userId, filters = {}) {
+  let query = `
+    SELECT id, workspace_id, user_id, type, title, message, data, is_read, created_at, expires_at
+    FROM notifications
+    WHERE workspace_id = ? AND user_id = ?
+  `;
+  const params = [workspaceId, userId];
   
-  return stmt.all(userId, limit, offset);
+  // Filter by read status
+  if (filters.read !== undefined) {
+    query += ` AND is_read = ?`;
+    params.push(filters.read ? 1 : 0);
+  }
+  
+  // Filter by type
+  if (filters.type) {
+    query += ` AND type = ?`;
+    params.push(filters.type);
+  }
+  
+  // Date range filters
+  if (filters.dateFrom) {
+    query += ` AND created_at >= ?`;
+    params.push(filters.dateFrom);
+  }
+  if (filters.dateTo) {
+    query += ` AND created_at <= ?`;
+    params.push(filters.dateTo);
+  }
+  
+  // Order and pagination
+  query += ` ORDER BY created_at DESC`;
+  
+  if (filters.limit) {
+    query += ` LIMIT ?`;
+    params.push(filters.limit);
+  }
+  
+  if (filters.offset) {
+    query += ` OFFSET ?`;
+    params.push(filters.offset);
+  }
+  
+  return db.prepare(query).all(...params);
 }
 
-function markNotificationAsRead(notificationId) {
+function markNotificationAsRead(notificationId, workspaceId, userId) {
   const stmt = db.prepare(`
     UPDATE notifications
-    SET read_at = ?
-    WHERE id = ?
+    SET is_read = 1
+    WHERE id = ? AND workspace_id = ? AND user_id = ?
   `);
   
-  return stmt.run(new Date().toISOString(), notificationId).changes > 0;
+  return stmt.run(notificationId, workspaceId, userId).changes > 0;
 }
 
-function deleteNotification(notificationId) {
+function deleteNotification(notificationId, workspaceId, userId) {
   const stmt = db.prepare(`
     DELETE FROM notifications
-    WHERE id = ?
+    WHERE id = ? AND workspace_id = ? AND user_id = ?
   `);
   
-  return stmt.run(notificationId).changes > 0;
+  return stmt.run(notificationId, workspaceId, userId).changes > 0;
 }
 
-function getUnreadNotificationCount(userId) {
+function getUnreadNotificationCount(workspaceId, userId) {
   const result = db.prepare(`
     SELECT COUNT(*) as count FROM notifications
-    WHERE user_id = ? AND read_at IS NULL
-  `).get(userId);
+    WHERE workspace_id = ? AND user_id = ? AND is_read = 0
+  `).get(workspaceId, userId);
   
   return result?.count || 0;
 }
 
-function getOrCreateNotificationSettings(userId) {
-  let settings = db.prepare(`
-    SELECT * FROM notification_settings
-    WHERE user_id = ?
-  `).get(userId);
+function getOrCreateNotificationSettings(workspaceId, userId) {
+  // Get or create user's preferences for in-app and email channels
+  let inAppPrefs = db.prepare(`
+    SELECT * FROM notification_preferences
+    WHERE workspace_id = ? AND user_id = ? AND channel = 'in-app'
+  `).get(workspaceId, userId);
   
-  if (!settings) {
-    const id = 'notif_settings_' + crypto.randomBytes(16).toString('hex');
+  if (!inAppPrefs) {
+    const id = 'notif_pref_' + crypto.randomBytes(16).toString('hex');
+    const now = Math.floor(Date.now() / 1000);
     db.prepare(`
-      INSERT INTO notification_settings (id, user_id, created_at, updated_at)
-      VALUES (?, ?, ?, ?)
-    `).run(id, userId, new Date().toISOString(), new Date().toISOString());
-    
-    settings = db.prepare(`
-      SELECT * FROM notification_settings
-      WHERE user_id = ?
-    `).get(userId);
+      INSERT INTO notification_preferences (id, workspace_id, user_id, channel, enabled, frequency, created_at, updated_at)
+      VALUES (?, ?, ?, 'in-app', 1, 'immediate', ?, ?)
+    `).run(id, workspaceId, userId, now, now);
+    inAppPrefs = db.prepare(`
+      SELECT * FROM notification_preferences
+      WHERE workspace_id = ? AND user_id = ? AND channel = 'in-app'
+    `).get(workspaceId, userId);
   }
   
-  return settings;
+  let emailPrefs = db.prepare(`
+    SELECT * FROM notification_preferences
+    WHERE workspace_id = ? AND user_id = ? AND channel = 'email'
+  `).get(workspaceId, userId);
+  
+  if (!emailPrefs) {
+    const id = 'notif_pref_' + crypto.randomBytes(16).toString('hex');
+    const now = Math.floor(Date.now() / 1000);
+    db.prepare(`
+      INSERT INTO notification_preferences (id, workspace_id, user_id, channel, enabled, frequency, created_at, updated_at)
+      VALUES (?, ?, ?, 'email', 0, 'immediate', ?, ?)
+    `).run(id, workspaceId, userId, now, now);
+    emailPrefs = db.prepare(`
+      SELECT * FROM notification_preferences
+      WHERE workspace_id = ? AND user_id = ? AND channel = 'email'
+    `).get(workspaceId, userId);
+  }
+  
+  return { inApp: inAppPrefs, email: emailPrefs };
 }
 
-function updateNotificationSettings(userId, updates) {
-  const settings = getOrCreateNotificationSettings(userId);
+function updateNotificationPreferences(workspaceId, userId, channel, updates) {
+  const now = Math.floor(Date.now() / 1000);
+  const stmt = db.prepare(`
+    UPDATE notification_preferences
+    SET enabled = ?, frequency = ?, updated_at = ?
+    WHERE workspace_id = ? AND user_id = ? AND channel = ?
+  `);
   
-  const allowedFields = [
-    'device_approval_requested_web', 'device_approval_requested_email',
-    'skill_liked_web', 'skill_liked_email',
-    'skill_used_web', 'skill_used_email',
-    'persona_invoked_web', 'persona_invoked_email',
-    'guest_token_used_web', 'guest_token_used_email',
-    'token_revoked_web', 'token_revoked_email',
-    'device_approved_web', 'device_approved_email',
-    'service_connected_web', 'service_connected_email',
-    'device_revoked_web', 'device_revoked_email',
-    'email_digest_type', 'email_digest_time', 'email_digest_day'
-  ];
+  stmt.run(
+    updates.enabled !== undefined ? (updates.enabled ? 1 : 0) : 1,
+    updates.frequency || 'immediate',
+    now,
+    workspaceId,
+    userId,
+    channel
+  );
   
-  const validUpdates = Object.keys(updates)
-    .filter(key => allowedFields.includes(key))
-    .reduce((obj, key) => { obj[key] = updates[key]; return obj; }, {});
+  return db.prepare(`
+    SELECT * FROM notification_preferences
+    WHERE workspace_id = ? AND user_id = ? AND channel = ?
+  `).get(workspaceId, userId, channel);
+}
+
+function queueNotificationForDelivery(notificationId, channels = ['in-app']) {
+  const deliveryChannels = Array.isArray(channels) ? channels : [channels];
+  const queued = [];
   
-  if (Object.keys(validUpdates).length === 0) {
-    return settings;
+  for (const channel of deliveryChannels) {
+    const id = 'queue_' + crypto.randomBytes(16).toString('hex');
+    const now = Math.floor(Date.now() / 1000);
+    
+    const stmt = db.prepare(`
+      INSERT INTO notification_queue (id, notification_id, channel, status, created_at)
+      VALUES (?, ?, ?, 'pending', ?)
+    `);
+    
+    stmt.run(id, notificationId, channel, now);
+    queued.push(id);
   }
   
-  const setClause = Object.keys(validUpdates).map(key => `${key} = ?`).join(', ');
-  const values = Object.values(validUpdates);
-  
-  db.prepare(`
-    UPDATE notification_settings
-    SET ${setClause}, updated_at = ?
-    WHERE user_id = ?
-  `).run(...values, new Date().toISOString(), userId);
-  
-  return getOrCreateNotificationSettings(userId);
+  return queued;
 }
 
 function createActivityLog(userId, actionType, resourceType, options = {}) {
@@ -4581,7 +4650,8 @@ module.exports = {
   deleteNotification,
   getUnreadNotificationCount,
   getOrCreateNotificationSettings,
-  updateNotificationSettings,
+  updateNotificationPreferences,
+  queueNotificationForDelivery,
   createActivityLog,
   getActivityLog,
   queueEmail,
