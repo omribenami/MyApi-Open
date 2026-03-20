@@ -168,77 +168,79 @@ function Layout({ children, onLogout }) {
               ))}
             </div>
 
-            {/* Notification Bell */}
-            <div className="relative">
-              <button
-                onClick={() => setNotificationDropdownOpen(!notificationDropdownOpen)}
-                className="relative flex items-center justify-center w-10 h-10 rounded-lg border border-slate-700 bg-slate-900 hover:border-slate-600 transition-colors"
-                title="Notifications"
-              >
-                <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                </svg>
-                {useNotificationStore(state => state.unreadCount) > 0 && (
-                  <span className="absolute top-0 right-0 h-5 w-5 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center transform translate-x-1 -translate-y-1">
-                    {useNotificationStore(state => state.unreadCount) > 9 ? '9+' : useNotificationStore(state => state.unreadCount)}
+            <div className="flex items-center gap-3">
+              {/* Notification Bell */}
+              <div className="relative">
+                <button
+                  onClick={() => setNotificationDropdownOpen(!notificationDropdownOpen)}
+                  className="relative flex items-center justify-center w-10 h-10 rounded-lg border border-slate-700 bg-slate-900 hover:border-slate-600 transition-colors"
+                  title="Notifications"
+                >
+                  <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                  </svg>
+                  {useNotificationStore(state => state.unreadCount) > 0 && (
+                    <span className="absolute top-0 right-0 h-5 w-5 rounded-full bg-red-500 text-white text-xs font-bold flex items-center justify-center transform translate-x-1 -translate-y-1">
+                      {useNotificationStore(state => state.unreadCount) > 9 ? '9+' : useNotificationStore(state => state.unreadCount)}
+                    </span>
+                  )}
+                </button>
+                <NotificationDropdown
+                  open={notificationDropdownOpen}
+                  onClose={() => setNotificationDropdownOpen(false)}
+                />
+              </div>
+
+              {/* User Profile Menu */}
+              <div className="relative flex items-center">
+                <button
+                  onClick={() => setAvatarMenuOpen((v) => !v)}
+                  className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900 p-1 pr-3 hover:border-slate-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900"
+                >
+                  {avatarUrl ? (
+                    <img src={avatarUrl} alt="avatar" className="h-8 w-8 rounded-full object-cover border border-slate-700" />
+                  ) : (
+                    <div className="h-8 w-8 rounded-full bg-slate-700 text-slate-200 flex items-center justify-center text-sm font-bold border border-slate-600">
+                      {(displayName).slice(0, 1).toUpperCase()}
+                    </div>
+                  )}
+                  <span className="hidden sm:inline text-sm font-medium text-slate-200 max-w-[120px] truncate">
+                    {displayName}
                   </span>
-                )}
-              </button>
-              <NotificationDropdown
-                open={notificationDropdownOpen}
-                onClose={() => setNotificationDropdownOpen(false)}
-              />
-            </div>
+                  <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
 
-            {/* User Profile Menu */}
-            <div className="relative flex items-center">
-              <button
-                onClick={() => setAvatarMenuOpen((v) => !v)}
-                className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900 p-1 pr-3 hover:border-slate-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900"
-              >
-                {avatarUrl ? (
-                  <img src={avatarUrl} alt="avatar" className="h-8 w-8 rounded-full object-cover border border-slate-700" />
-                ) : (
-                  <div className="h-8 w-8 rounded-full bg-slate-700 text-slate-200 flex items-center justify-center text-sm font-bold border border-slate-600">
-                    {(displayName).slice(0, 1).toUpperCase()}
+                {avatarMenuOpen && (
+                  <div className="absolute right-0 top-12 w-56 rounded-xl border border-slate-700 bg-slate-900 shadow-2xl py-2 z-50">
+                    <div className="px-4 py-3 border-b border-slate-800 mb-2">
+                      <p className="text-sm font-medium text-white truncate">{displayName}</p>
+                      <p className="text-xs text-slate-400 truncate">{user?.email || user?.username}</p>
+                    </div>
+                    
+                    {userMenuItems.map((item) => (
+                      <Link 
+                        key={item.path} 
+                        to={item.path} 
+                        onClick={() => setAvatarMenuOpen(false)} 
+                        className={`block px-4 py-2 text-sm transition-all ${isActive(item.path) ? 'text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.8)] bg-slate-800/50' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}
+                      >
+                        {item.label}
+                      </Link>
+                    ))}
+                    
+                    <div className="border-t border-slate-800 mt-2 pt-2">
+                      <button 
+                        onClick={handleLogout} 
+                        className="w-full text-left px-4 py-2 text-sm text-rose-400 hover:bg-slate-800 hover:text-rose-300 transition-colors"
+                      >
+                        Log out
+                      </button>
+                    </div>
                   </div>
                 )}
-                <span className="hidden sm:inline text-sm font-medium text-slate-200 max-w-[120px] truncate">
-                  {displayName}
-                </span>
-                <svg className="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-
-              {avatarMenuOpen && (
-                <div className="absolute right-0 top-12 w-56 rounded-xl border border-slate-700 bg-slate-900 shadow-2xl py-2 z-50">
-                  <div className="px-4 py-3 border-b border-slate-800 mb-2">
-                    <p className="text-sm font-medium text-white truncate">{displayName}</p>
-                    <p className="text-xs text-slate-400 truncate">{user?.email || user?.username}</p>
-                  </div>
-                  
-                  {userMenuItems.map((item) => (
-                    <Link 
-                      key={item.path} 
-                      to={item.path} 
-                      onClick={() => setAvatarMenuOpen(false)} 
-                      className={`block px-4 py-2 text-sm transition-all ${isActive(item.path) ? 'text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.8)] bg-slate-800/50' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}
-                    >
-                      {item.label}
-                    </Link>
-                  ))}
-                  
-                  <div className="border-t border-slate-800 mt-2 pt-2">
-                    <button 
-                      onClick={handleLogout} 
-                      className="w-full text-left px-4 py-2 text-sm text-rose-400 hover:bg-slate-800 hover:text-rose-300 transition-colors"
-                    >
-                      Log out
-                    </button>
-                  </div>
-                </div>
-              )}
+              </div>
             </div>
           </div>
         </div>
