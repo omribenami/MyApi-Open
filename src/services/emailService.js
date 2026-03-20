@@ -50,6 +50,7 @@ class EmailService {
   getConfigStatus() {
     const provider = (process.env.EMAIL_PROVIDER || 'smtp').toLowerCase();
     const fromAddress = process.env.EMAIL_FROM || null;
+    const fromName = process.env.EMAIL_FROM_NAME || 'MyApi';
     const missing = [];
 
     if (!fromAddress) missing.push('EMAIL_FROM');
@@ -65,6 +66,7 @@ class EmailService {
     return {
       provider,
       fromAddress,
+      fromName,
       configured: missing.length === 0,
       missing,
       authType: provider === 'sendgrid' ? 'api_key' : 'smtp',
