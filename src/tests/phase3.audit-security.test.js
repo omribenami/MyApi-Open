@@ -4,6 +4,7 @@ const { createAuditLog } = require('../database');
 
 describe('Phase 3 Audit/Security', () => {
   const user = `phase3_${Date.now()}`;
+  const email = `${user}@example.com`;
   const password = 'Phase3!Pass123';
   let agent;
 
@@ -13,11 +14,11 @@ describe('Phase 3 Audit/Security', () => {
       username: user,
       password,
       display_name: 'Phase3 User',
-      email: `${user}@example.com`,
+      email,
       timezone: 'UTC',
     });
 
-    const login = await agent.post('/api/v1/auth/login').send({ username: user, password });
+    const login = await agent.post('/api/v1/auth/login').send({ email, password });
     expect(login.status).toBe(200);
 
     createAuditLog({
@@ -50,7 +51,7 @@ describe('Phase 3 Audit/Security', () => {
   it('lists sessions and revokes non-current sessions', async () => {
     // Create another session for same user
     const agent2 = request.agent(app);
-    const login2 = await agent2.post('/api/v1/auth/login').send({ username: user, password });
+    const login2 = await agent2.post('/api/v1/auth/login').send({ email, password });
     expect(login2.status).toBe(200);
 
     const sessions = await agent.get('/api/v1/security/sessions');
