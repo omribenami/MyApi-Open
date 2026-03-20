@@ -25,10 +25,9 @@ function ExportDataModal({ isOpen, onClose }) {
       );
 
       const currentWorkspace = localStorage.getItem('currentWorkspace');
-      const response = await fetch(`/api/v1/export?${selectedSections.toString()}`, {
+      const response = await fetch(`/api/v1/export?${selectedSections.toString()}&format=zip&includeFiles=true`, {
         method: 'GET',
         headers: {
-          'Accept': 'application/json',
           ...(currentWorkspace ? { 'X-Workspace-ID': currentWorkspace } : {}),
         },
         credentials: 'include',
@@ -50,7 +49,7 @@ function ExportDataModal({ isOpen, onClose }) {
       a.href = url;
       const contentDisposition = response.headers.get('content-disposition') || '';
       const fileNameMatch = contentDisposition.match(/filename="?([^\"]+)"?/i);
-      a.download = fileNameMatch?.[1] || `myapi-export-${Date.now()}.json`;
+      a.download = fileNameMatch?.[1] || `myapi-export-${Date.now()}.zip`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -130,7 +129,7 @@ function ExportDataModal({ isOpen, onClose }) {
             {/* Info note */}
             <div className="bg-blue-900 bg-opacity-20 border border-blue-800 rounded-lg p-3 mb-6">
               <p className="text-xs text-blue-300">
-                Your export will be a JSON file. Token secrets are never included in exports for security.
+                Your export will be a ZIP archive. Token secrets are never included in exports for security.
               </p>
             </div>
 
