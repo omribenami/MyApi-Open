@@ -4223,8 +4223,12 @@ app.get([
 ], async (req, res) => {
   const { service } = req.params;
   const { code, state, error: providerError, error_description: providerErrorDescription } = req.query;
+  console.error(`[OAuth CALLBACK] ${service} hit with code=${Boolean(code)} state=${Boolean(state)} error=${providerError || 'none'}`);
+  console.error(`[OAuth] Full query:`, req.query);
+  console.error(`[OAuth] Session user:`, req.session?.user?.id || 'none');
 
   if (!OAUTH_SERVICES.includes(service)) {
+    console.error(`[OAuth] Service not in list: ${service}`);
     return res.status(400).json({ error: "Invalid OAuth service" });
   }
   if (!state || !validateStateToken(service, state)) {
@@ -4503,26 +4507,48 @@ app.get([
 app.get("/api/v1/oauth/status", (req, res) => {
   const statuses = getOAuthStatus();
   
-  // Get user ID for token lookup
-  const userId = req.session?.user?.id ? String(req.session.user.id) : (req.tokenMeta?.ownerId ? String(req.tokenMeta.ownerId) : null);
+  // Get user ID for token lookup — try multiple sources
+  let userId = null;
+  
+  // Priority 1: Session user
+  if (req.session?.user?.id) {
+    userId = String(req.session.user.id);
+  }
+  // Priority 2: Bearer token owner
+  else if (req.tokenMeta?.ownerId) {
+    userId = String(req.tokenMeta.ownerId);
+  }
+  // Priority 3: Try to extract from session cookie if available
+  else if (req.session?.passport?.user) {
+    userId = String(req.session.passport.user);
+  }
+  
+  console.log(`[OAuth Status] Checking for userId=${userId || 'NONE'}`);
   
   const services = OAUTH_SERVICES.map(service => {
     const status = statuses.find(s => s.serviceName === service);
     
     // Check if user has an active token for this service (with error handling)
     let token = null;
+    let connectionStatus = "disconnected";
+    
     if (userId) {
       try {
         token = getOAuthToken(service, userId);
+        if (service === 'twitter' || service === 'discord') {
+          console.log(`[OAuth Status DEBUG] ${service}: userId=${userId}, token=${token ? 'FOUND' : 'NOT_FOUND'}`);
+        }
+        connectionStatus = token && !token.revoked_at ? "connected" : (status?.status || "disconnected");
       } catch (err) {
         // Log decryption errors but don't crash
         console.warn(`[OAuth Status] Failed to decrypt token for ${service}:`, err.message);
         token = null;
+        connectionStatus = status?.status || "disconnected";
       }
+    } else {
+      console.log(`[OAuth Status DEBUG] No userId found for ${service}`);
+      connectionStatus = status?.status || "disconnected";
     }
-    
-    // Status is "connected" if user has a non-revoked token, otherwise based on global status
-    const connectionStatus = token && !token.revoked_at ? "connected" : (status?.status || "disconnected");
     
     return {
       name: service,
@@ -4530,7 +4556,9 @@ app.get("/api/v1/oauth/status", (req, res) => {
       lastSync: status?.lastSyncedAt || null,
       lastApiCall: token?.lastApiCall || null,  // Phase 5.4: Last API call timestamp
       scope: token?.scope || null,
-      enabled: isOAuthServiceEnabled(service)
+      enabled: isOAuthServiceEnabled(service),
+      auth_type: 'oauth2',  // All services use OAuth 2.0
+      auth_type_label: 'OAuth 2.0'
     };
   });
   
