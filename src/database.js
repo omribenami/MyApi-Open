@@ -773,6 +773,65 @@ function initDatabase() {
   db.exec('CREATE INDEX IF NOT EXISTS idx_pricing_plans_active ON pricing_plans(active)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_pricing_plans_order ON pricing_plans(display_order)');
 
+  // Phase 2: Billing & Usage Tracking tables
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS billing_customers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id TEXT NOT NULL,
+      stripe_customer_id TEXT NOT NULL,
+      email TEXT,
+      created_at TEXT NOT NULL,
+      UNIQUE(workspace_id),
+      UNIQUE(stripe_customer_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS billing_subscriptions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id TEXT NOT NULL,
+      stripe_subscription_id TEXT NOT NULL,
+      plan_id TEXT NOT NULL,
+      status TEXT NOT NULL,
+      period_start TEXT,
+      period_end TEXT,
+      cancel_at_period_end INTEGER DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(workspace_id),
+      UNIQUE(stripe_subscription_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS usage_daily (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      api_calls INTEGER NOT NULL DEFAULT 0,
+      installs INTEGER NOT NULL DEFAULT 0,
+      ratings INTEGER NOT NULL DEFAULT 0,
+      active_services INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(workspace_id, date)
+    );
+
+    CREATE TABLE IF NOT EXISTS invoices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id TEXT NOT NULL,
+      stripe_invoice_id TEXT NOT NULL,
+      amount_cents INTEGER NOT NULL DEFAULT 0,
+      currency TEXT NOT NULL DEFAULT 'usd',
+      status TEXT NOT NULL,
+      invoice_url TEXT,
+      created_at TEXT NOT NULL,
+      UNIQUE(stripe_invoice_id)
+    );
+  `);
+
+  db.exec('CREATE INDEX IF NOT EXISTS idx_billing_customers_workspace ON billing_customers(workspace_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_billing_subscriptions_workspace ON billing_subscriptions(workspace_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_usage_daily_workspace_date ON usage_daily(workspace_id, date)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_usage_daily_date ON usage_daily(date)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_invoices_workspace_created ON invoices(workspace_id, created_at)');
+
   // Phase: Enhanced Marketplace Filtering - Add provider and official fields
   const marketplaceEnhancementMigrations = [
     "ALTER TABLE marketplace_listings ADD COLUMN provider TEXT DEFAULT 'User'",
@@ -4086,6 +4145,121 @@ function cleanupExpiredInvitations() {
   return stmt.run(new Date().toISOString()).changes;
 }
 
+function getBillingCustomerByWorkspace(workspaceId) {
+  return db.prepare('SELECT * FROM billing_customers WHERE workspace_id = ?').get(workspaceId) || null;
+}
+
+function upsertBillingCustomer(workspaceId, stripeCustomerId, email = null) {
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO billing_customers (workspace_id, stripe_customer_id, email, created_at)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(workspace_id) DO UPDATE SET
+      stripe_customer_id = excluded.stripe_customer_id,
+      email = COALESCE(excluded.email, billing_customers.email)
+  `).run(workspaceId, stripeCustomerId, email, now);
+  return getBillingCustomerByWorkspace(workspaceId);
+}
+
+function getBillingSubscriptionByWorkspace(workspaceId) {
+  return db.prepare('SELECT * FROM billing_subscriptions WHERE workspace_id = ?').get(workspaceId) || null;
+}
+
+function upsertBillingSubscription(workspaceId, payload = {}) {
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO billing_subscriptions (
+      workspace_id, stripe_subscription_id, plan_id, status,
+      period_start, period_end, cancel_at_period_end, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(workspace_id) DO UPDATE SET
+      stripe_subscription_id = excluded.stripe_subscription_id,
+      plan_id = excluded.plan_id,
+      status = excluded.status,
+      period_start = excluded.period_start,
+      period_end = excluded.period_end,
+      cancel_at_period_end = excluded.cancel_at_period_end,
+      updated_at = excluded.updated_at
+  `).run(
+    workspaceId,
+    payload.stripe_subscription_id,
+    payload.plan_id || 'free',
+    payload.status || 'inactive',
+    payload.period_start || null,
+    payload.period_end || null,
+    payload.cancel_at_period_end ? 1 : 0,
+    now,
+    now
+  );
+  return getBillingSubscriptionByWorkspace(workspaceId);
+}
+
+function listInvoicesByWorkspace(workspaceId, limit = 50) {
+  return db.prepare(`
+    SELECT * FROM invoices
+    WHERE workspace_id = ?
+    ORDER BY created_at DESC
+    LIMIT ?
+  `).all(workspaceId, Math.max(1, Number(limit) || 50));
+}
+
+function upsertInvoice(workspaceId, payload = {}) {
+  const now = payload.created_at || new Date().toISOString();
+  db.prepare(`
+    INSERT INTO invoices (workspace_id, stripe_invoice_id, amount_cents, currency, status, invoice_url, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(stripe_invoice_id) DO UPDATE SET
+      amount_cents = excluded.amount_cents,
+      currency = excluded.currency,
+      status = excluded.status,
+      invoice_url = excluded.invoice_url
+  `).run(
+    workspaceId,
+    payload.stripe_invoice_id,
+    Number(payload.amount_cents || 0),
+    String(payload.currency || 'usd').toLowerCase(),
+    payload.status || 'open',
+    payload.invoice_url || null,
+    now
+  );
+}
+
+function incrementUsageDaily(workspaceId, date, delta = {}) {
+  const now = new Date().toISOString();
+  const safeDate = String(date || now.slice(0, 10));
+  db.prepare(`
+    INSERT INTO usage_daily (workspace_id, date, api_calls, installs, ratings, active_services, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(workspace_id, date) DO UPDATE SET
+      api_calls = usage_daily.api_calls + excluded.api_calls,
+      installs = usage_daily.installs + excluded.installs,
+      ratings = usage_daily.ratings + excluded.ratings,
+      active_services = CASE
+        WHEN excluded.active_services > 0 THEN excluded.active_services
+        ELSE usage_daily.active_services
+      END,
+      updated_at = excluded.updated_at
+  `).run(
+    workspaceId,
+    safeDate,
+    Number(delta.api_calls || 0),
+    Number(delta.installs || 0),
+    Number(delta.ratings || 0),
+    Number(delta.active_services || 0),
+    now,
+    now
+  );
+}
+
+function getUsageDaily(workspaceId, fromDate, toDate) {
+  return db.prepare(`
+    SELECT workspace_id, date, api_calls, installs, ratings, active_services
+    FROM usage_daily
+    WHERE workspace_id = ? AND date >= ? AND date <= ?
+    ORDER BY date ASC
+  `).all(workspaceId, fromDate, toDate);
+}
+
 function seedDefaultPricingPlans() {
   try {
     // Check if plans already exist
@@ -4387,6 +4561,15 @@ module.exports = {
   declineWorkspaceInvitation,
   getUserWorkspaceInvitations,
   cleanupExpiredInvitations,
+  // Phase 2: Billing & Usage
+  getBillingCustomerByWorkspace,
+  upsertBillingCustomer,
+  getBillingSubscriptionByWorkspace,
+  upsertBillingSubscription,
+  listInvoicesByWorkspace,
+  upsertInvoice,
+  incrementUsageDaily,
+  getUsageDaily,
   // Pricing Plans
   seedDefaultPricingPlans,
 };

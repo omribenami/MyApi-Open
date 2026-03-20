@@ -1142,24 +1142,38 @@ function DangerZoneSection({ onRequestExport, onRequestDelete }) {
 }
 
 function BillingSection() {
-  const tokenData = (() => {
-    try { return JSON.parse(localStorage.getItem('tokenData') || '{}'); } catch { return {}; }
-  })();
-  const currentPlanId = (tokenData?.plan || tokenData?.subscription?.plan || 'free').toLowerCase();
   const [plans, setPlans] = useState([]);
+  const [current, setCurrent] = useState({ plan: 'free', billingConfigured: false });
+  const [usage, setUsage] = useState({ limits: {} });
+  const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const loadBilling = async () => {
+    try {
+      const [plansRes, currentRes, usageRes, invoicesRes] = await Promise.all([
+        fetch('/api/v1/billing/plans'),
+        fetch('/api/v1/billing/current', { credentials: 'include' }),
+        fetch('/api/v1/billing/usage?range=30d', { credentials: 'include' }),
+        fetch('/api/v1/billing/invoices', { credentials: 'include' }),
+      ]);
+
+      const plansData = await plansRes.json().catch(() => ({}));
+      const currentData = await currentRes.json().catch(() => ({}));
+      const usageData = await usageRes.json().catch(() => ({}));
+      const invoiceData = await invoicesRes.json().catch(() => ({}));
+
+      setPlans(Array.isArray(plansData?.data) ? plansData.data : []);
+      setCurrent(currentData?.data || { plan: 'free', billingConfigured: false });
+      setUsage(usageData?.data || { limits: {} });
+      setInvoices(Array.isArray(invoiceData?.data) ? invoiceData.data : []);
+    } catch {
+      setError('Unable to load billing data');
+    }
+  };
+
   useEffect(() => {
-    const loadPlans = async () => {
-      try {
-        const res = await fetch('/api/v1/billing/plans');
-        if (!res.ok) return;
-        const data = await res.json();
-        setPlans(Array.isArray(data?.data) ? data.data : []);
-      } catch {}
-    };
-    loadPlans();
+    loadBilling();
   }, []);
 
   const handleCheckout = async (planId) => {
@@ -1169,11 +1183,17 @@ function BillingSection() {
       const response = await fetch('/api/v1/billing/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ plan: planId }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Failed to start checkout');
-      if (data.url) window.location.href = data.url;
+      if (data.url) {
+        window.location.href = data.url;
+        return;
+      }
+      await loadBilling();
+      if (data.message) setError(data.message);
     } catch (e) {
       setError(e.message || 'Checkout failed');
     } finally {
@@ -1181,34 +1201,86 @@ function BillingSection() {
     }
   };
 
+  const usageItems = [
+    { key: 'monthlyApiCalls', label: 'API Calls' },
+    { key: 'activeServices', label: 'Connected Services' },
+    { key: 'installs', label: 'Marketplace Installs' },
+    { key: 'ratings', label: 'Ratings/Reviews' },
+  ];
+
   return (
-    <SectionCard title="Plans & Billing" description="Switch plans from your account">
+    <SectionCard title="Plans & Billing" description="Workspace plan, usage and invoices">
       {error && <ErrorBanner message={error} onClose={() => setError('')} />}
+
+      {!current.billingConfigured && (
+        <div className="mb-4 p-3 rounded-lg border border-amber-600/40 bg-amber-900/20 text-amber-200 text-sm">
+          Billing is not configured yet. You can still explore plans and usage with mock-safe behavior.
+        </div>
+      )}
+
+      <div className="mb-4 p-4 rounded-lg border border-slate-700 bg-slate-900">
+        <p className="text-xs uppercase tracking-wide text-slate-400">Current Plan</p>
+        <p className="text-xl text-white font-semibold mt-1">{String(current.plan || 'free').toUpperCase()}</p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
+        {usageItems.map((item) => {
+          const metric = usage?.limits?.[item.key] || {};
+          const used = metric.used || 0;
+          const limit = metric.unlimited ? 'Unlimited' : (metric.limit ?? 0);
+          const ratioPct = Math.round((metric.ratio || 0) * 100);
+          return (
+            <div key={item.key} className="p-3 rounded-lg border border-slate-700 bg-slate-900">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-300">{item.label}</span>
+                <span className="text-slate-400">{used} / {limit}</span>
+              </div>
+              <div className="mt-2 h-2 rounded bg-slate-800 overflow-hidden">
+                <div className="h-full bg-blue-500" style={{ width: `${Math.min(100, ratioPct)}%` }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {plans.map((plan) => (
-          <div key={plan.id} className={`bg-slate-900 border rounded-lg p-4 ${currentPlanId === String(plan.id).toLowerCase() ? 'border-blue-500 ring-1 ring-blue-500/40' : 'border-slate-700'}`}>
+          <div key={plan.id} className={`bg-slate-900 border rounded-lg p-4 ${String(current.plan).toLowerCase() === String(plan.id).toLowerCase() ? 'border-blue-500 ring-1 ring-blue-500/40' : 'border-slate-700'}`}>
             <div className="flex items-center justify-between gap-2">
               <h3 className="text-white font-semibold">{plan.name}</h3>
-              {currentPlanId === String(plan.id).toLowerCase() && (
-                <span className="text-[10px] uppercase tracking-wide font-semibold px-2 py-1 rounded bg-blue-600 text-white">
-                  Current Plan
-                </span>
+              {String(current.plan).toLowerCase() === String(plan.id).toLowerCase() && (
+                <span className="text-[10px] uppercase tracking-wide font-semibold px-2 py-1 rounded bg-blue-600 text-white">Current</span>
               )}
             </div>
             <p className="text-slate-300 text-xl mt-1">${plan.priceMonthly}<span className="text-sm text-slate-400">/mo</span></p>
-            <p className="text-slate-400 text-xs mt-2">{plan.description}</p>
-            <ul className="mt-3 space-y-1 text-xs text-slate-300">
-              {(plan.features || []).map((f) => <li key={f}>• {f}</li>)}
-            </ul>
             <button
-              disabled={loading || currentPlanId === String(plan.id).toLowerCase()}
+              disabled={loading || String(current.plan).toLowerCase() === String(plan.id).toLowerCase()}
               onClick={() => handleCheckout(plan.id)}
               className="mt-4 w-full px-3 py-2 rounded bg-blue-600 hover:bg-blue-500 text-white text-sm disabled:opacity-50"
             >
-              {currentPlanId === String(plan.id).toLowerCase() ? 'Current Plan' : (plan.id === 'free' ? 'Switch to Free' : 'Choose Plan')}
+              {String(current.plan).toLowerCase() === String(plan.id).toLowerCase() ? 'Current Plan' : 'Choose Plan'}
             </button>
           </div>
         ))}
+      </div>
+
+      <div className="mt-6">
+        <h3 className="text-white font-semibold mb-2">Invoices</h3>
+        {invoices.length === 0 ? (
+          <p className="text-sm text-slate-400">No invoices yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {invoices.map((inv) => (
+              <div key={inv.stripeInvoiceId} className="p-3 rounded border border-slate-700 bg-slate-900 text-sm flex items-center justify-between">
+                <div>
+                  <p className="text-slate-200">{inv.status} · {(inv.amountCents / 100).toFixed(2)} {String(inv.currency || 'usd').toUpperCase()}</p>
+                  <p className="text-slate-400 text-xs">{new Date(inv.createdAt).toLocaleDateString()}</p>
+                </div>
+                {inv.invoiceUrl && <a className="text-blue-400 hover:text-blue-300" href={inv.invoiceUrl} target="_blank" rel="noreferrer">Open</a>}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </SectionCard>
   );

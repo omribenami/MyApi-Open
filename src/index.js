@@ -136,6 +136,15 @@ const {
   addServiceMethod,
   // Service Preferences (Phase 3)
   getServicePreference,
+  // Phase 2: Billing & Usage
+  getBillingCustomerByWorkspace,
+  upsertBillingCustomer,
+  getBillingSubscriptionByWorkspace,
+  upsertBillingSubscription,
+  listInvoicesByWorkspace,
+  upsertInvoice,
+  incrementUsageDaily,
+  getUsageDaily,
 } = require("./database");
 
 // OAuth service adapters
@@ -151,6 +160,12 @@ const {
   executeServiceMethod,
   OAUTH_PROVIDER_DETAILS,
 } = require('./services/integration-layer');
+const {
+  PLAN_LIMITS: BILLING_PLAN_LIMITS,
+  resolveWorkspaceCurrentPlan,
+  computeUsageVsLimits,
+  getRangeDays,
+} = require('./lib/billing');
 
 const app = express();
 app.set('trust proxy', true);
@@ -1089,6 +1104,41 @@ app.post('/api/v1/workspace-switch/:workspaceId', authenticate, switchWorkspaceH
 
 function getRequestOwnerId(req) {
   return String(req?.tokenMeta?.ownerId || req?.session?.user?.id || 'owner');
+}
+
+function getRequestWorkspaceId(req) {
+  if (req?.workspaceId) return req.workspaceId;
+  if (req?.session?.currentWorkspace) return req.session.currentWorkspace;
+  const explicit = req?.body?.workspace_id || req?.query?.workspace;
+  if (explicit) return String(explicit);
+
+  const userId = req?.user?.id || req?.session?.user?.id;
+  if (userId) {
+    const workspaces = getWorkspaces(String(userId));
+    if (workspaces?.length) return workspaces[0].id;
+  }
+  return null;
+}
+
+function isStripeConfigured() {
+  return Boolean(process.env.STRIPE_SECRET_KEY);
+}
+
+function getStripeClient() {
+  if (!isStripeConfigured()) return null;
+  try {
+    const Stripe = require('stripe');
+    return new Stripe(process.env.STRIPE_SECRET_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function trackWorkspaceUsage(req, delta = {}) {
+  const workspaceId = getRequestWorkspaceId(req);
+  if (!workspaceId) return;
+  const today = new Date().toISOString().slice(0, 10);
+  incrementUsageDaily(workspaceId, today, delta);
 }
 
 function getOwnerEmailFromUserDoc() {
@@ -2490,18 +2540,23 @@ const PLAN_LIMITS = {
 
 function resolveRequesterPlan(req) {
   try {
+    const workspaceId = getRequestWorkspaceId(req);
+    if (workspaceId) {
+      const sub = getBillingSubscriptionByWorkspace(workspaceId);
+      return resolveWorkspaceCurrentPlan(sub).id;
+    }
+
     if (req?.user?.id) {
       const user = getUserById(req.user.id);
-      if (user?.plan) return String(user.plan).toLowerCase();
+      if (user?.plan && BILLING_PLAN_LIMITS[String(user.plan).toLowerCase()]) return String(user.plan).toLowerCase();
     }
 
     const ownerId = req?.tokenMeta?.ownerId;
     if (ownerId) {
       const owner = getUserById(ownerId);
-      if (owner?.plan) return String(owner.plan).toLowerCase();
+      if (owner?.plan && BILLING_PLAN_LIMITS[String(owner.plan).toLowerCase()]) return String(owner.plan).toLowerCase();
     }
 
-    if (req?.tokenMeta?.scope === 'full') return 'enterprise';
     return 'free';
   } catch {
     return 'free';
@@ -2541,42 +2596,205 @@ function getKnowledgeBaseBytesUsed(req) {
   return rows.reduce((sum, row) => sum + Buffer.byteLength(String(row.content || ''), 'utf8'), 0);
 }
 
-// --- BILLING / STRIPE CHECKOUT ---
-app.post('/api/v1/billing/checkout', (req, res) => {
+// --- BILLING / STRIPE CHECKOUT + USAGE ---
+app.post('/api/v1/billing/checkout', authenticate, async (req, res) => {
   try {
     const { plan } = req.body || {};
     const selectedPlan = String(plan || '').toLowerCase().trim();
     const definition = BILLING_PLANS[selectedPlan];
-
     if (!definition) {
       return res.status(400).json({ error: `Invalid plan. Allowed: ${Object.keys(BILLING_PLANS).join(', ')}` });
     }
 
-    if (selectedPlan === 'free') {
-      return res.json({
-        url: '/dashboard/',
-        plan: 'free',
-        provider: 'none',
+    const workspaceId = getRequestWorkspaceId(req);
+    if (!workspaceId) return res.status(400).json({ error: 'Workspace context is required' });
+
+    if (!isStripeConfigured()) {
+      upsertBillingSubscription(workspaceId, {
+        stripe_subscription_id: `mock_sub_${Date.now()}`,
+        plan_id: selectedPlan,
+        status: selectedPlan === 'free' ? 'active' : 'pending',
+      });
+      return res.status(200).json({
+        provider: 'mock',
+        plan: selectedPlan,
+        message: 'Billing is not configured (missing STRIPE_SECRET_KEY).',
       });
     }
 
-    const paymentLink = process.env[definition.stripePaymentLinkEnv] || (selectedPlan === 'pro' ? process.env.STRIPE_PAYMENT_LINK || '' : '');
-    if (!paymentLink) {
-      return res.status(503).json({
-        error: `Stripe payment link for ${selectedPlan} is not configured`,
-        hint: `Set ${definition.stripePaymentLinkEnv} in .env`,
-      });
+    const stripe = getStripeClient();
+    if (!stripe) {
+      return res.status(503).json({ error: 'Billing configured but Stripe SDK unavailable' });
     }
+
+    const ownerEmail = String(req?.user?.email || req?.session?.user?.email || '').trim() || null;
+    let customer = getBillingCustomerByWorkspace(workspaceId);
+    if (!customer) {
+      const created = await stripe.customers.create({ email: ownerEmail || undefined, metadata: { workspace_id: workspaceId } });
+      customer = upsertBillingCustomer(workspaceId, created.id, ownerEmail);
+    }
+
+    // MVP-safe: if checkout price mapping is not configured, keep current payment-link behavior
+    const paymentLink = process.env[definition.stripePaymentLinkEnv] || (selectedPlan === 'pro' ? process.env.STRIPE_PAYMENT_LINK || '' : '');
+    upsertBillingSubscription(workspaceId, {
+      stripe_subscription_id: `pending_${Date.now()}`,
+      plan_id: selectedPlan,
+      status: selectedPlan === 'free' ? 'active' : 'pending',
+    });
 
     return res.json({
-      url: paymentLink,
+      url: paymentLink || null,
       plan: selectedPlan,
       provider: 'stripe',
+      customerId: customer?.stripe_customer_id || null,
+      message: paymentLink ? undefined : 'No Stripe payment link configured for this plan',
     });
   } catch (error) {
     console.error('Stripe checkout init error:', error);
     return res.status(500).json({ error: 'Failed to initialize checkout' });
   }
+});
+
+app.get('/api/v1/billing/current', authenticate, (req, res) => {
+  const workspaceId = getRequestWorkspaceId(req);
+  if (!workspaceId) return res.status(400).json({ error: 'Workspace context is required' });
+
+  const subscription = getBillingSubscriptionByWorkspace(workspaceId);
+  const plan = resolveWorkspaceCurrentPlan(subscription);
+
+  res.json({
+    data: {
+      workspaceId,
+      plan: plan.id,
+      status: subscription?.status || 'active',
+      subscription: subscription ? {
+        stripeSubscriptionId: subscription.stripe_subscription_id,
+        periodStart: subscription.period_start,
+        periodEnd: subscription.period_end,
+        cancelAtPeriodEnd: Boolean(subscription.cancel_at_period_end),
+      } : null,
+      billingConfigured: isStripeConfigured(),
+    },
+  });
+});
+
+app.get('/api/v1/billing/invoices', authenticate, (req, res) => {
+  const workspaceId = getRequestWorkspaceId(req);
+  if (!workspaceId) return res.status(400).json({ error: 'Workspace context is required' });
+  const invoices = listInvoicesByWorkspace(workspaceId, Number(req.query.limit || 50));
+  res.json({
+    data: invoices.map((inv) => ({
+      stripeInvoiceId: inv.stripe_invoice_id,
+      amountCents: inv.amount_cents,
+      currency: inv.currency,
+      status: inv.status,
+      invoiceUrl: inv.invoice_url,
+      createdAt: inv.created_at,
+    })),
+  });
+});
+
+app.get('/api/v1/billing/usage', authenticate, (req, res) => {
+  const workspaceId = getRequestWorkspaceId(req);
+  if (!workspaceId) return res.status(400).json({ error: 'Workspace context is required' });
+
+  const days = getRangeDays(req.query.range);
+  const now = new Date();
+  const from = new Date(now);
+  from.setDate(now.getDate() - (days - 1));
+  const fromDate = from.toISOString().slice(0, 10);
+  const toDate = now.toISOString().slice(0, 10);
+
+  const rows = getUsageDaily(workspaceId, fromDate, toDate);
+  const totals = rows.reduce((acc, row) => ({
+    monthlyApiCalls: acc.monthlyApiCalls + Number(row.api_calls || 0),
+    installs: acc.installs + Number(row.installs || 0),
+    ratings: acc.ratings + Number(row.ratings || 0),
+    activeServices: Math.max(acc.activeServices, Number(row.active_services || 0)),
+  }), { monthlyApiCalls: 0, installs: 0, ratings: 0, activeServices: 0 });
+
+  const subscription = getBillingSubscriptionByWorkspace(workspaceId);
+  const usageVsLimits = computeUsageVsLimits(resolveWorkspaceCurrentPlan(subscription), totals);
+
+  res.json({
+    data: {
+      workspaceId,
+      range: `${days}d`,
+      totals,
+      daily: rows,
+      limits: usageVsLimits.metrics,
+    },
+  });
+});
+
+app.post('/api/v1/billing/portal', authenticate, async (req, res) => {
+  const workspaceId = getRequestWorkspaceId(req);
+  if (!workspaceId) return res.status(400).json({ error: 'Workspace context is required' });
+
+  if (!isStripeConfigured()) {
+    return res.status(503).json({ error: 'Billing is not configured', billingConfigured: false });
+  }
+
+  try {
+    const customer = getBillingCustomerByWorkspace(workspaceId);
+    if (!customer?.stripe_customer_id) {
+      return res.status(404).json({ error: 'No billing customer found for workspace' });
+    }
+    const stripe = getStripeClient();
+    const session = await stripe.billingPortal.sessions.create({
+      customer: customer.stripe_customer_id,
+      return_url: `${req.protocol}://${req.get('host')}/dashboard/settings`,
+    });
+    res.json({ data: { url: session.url } });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create billing portal session' });
+  }
+});
+
+app.post('/api/v1/billing/webhook', async (req, res) => {
+  const configuredSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
+  const event = req.body || {};
+
+  if (configuredSecret) {
+    const signature = req.headers['stripe-signature'];
+    if (!signature) return res.status(400).json({ error: 'Missing Stripe signature' });
+    // NOTE: verification requires raw request body middleware; keep strict failure instead of silent acceptance.
+    if (typeof req.body !== 'string' && !Buffer.isBuffer(req.body)) {
+      return res.status(400).json({ error: 'Webhook verification requires raw body middleware configuration' });
+    }
+  }
+
+  const type = event?.type;
+  const obj = event?.data?.object || {};
+  const metadataWorkspaceId = obj?.metadata?.workspace_id || null;
+
+  if (type === 'customer.subscription.created' || type === 'customer.subscription.updated') {
+    if (metadataWorkspaceId) {
+      upsertBillingSubscription(metadataWorkspaceId, {
+        stripe_subscription_id: obj.id,
+        plan_id: (obj.items?.data?.[0]?.price?.nickname || obj.items?.data?.[0]?.price?.lookup_key || 'free').toLowerCase(),
+        status: obj.status || 'active',
+        period_start: obj.current_period_start ? new Date(obj.current_period_start * 1000).toISOString() : null,
+        period_end: obj.current_period_end ? new Date(obj.current_period_end * 1000).toISOString() : null,
+        cancel_at_period_end: !!obj.cancel_at_period_end,
+      });
+    }
+  }
+
+  if (type === 'invoice.paid' || type === 'invoice.payment_failed' || type === 'invoice.finalized') {
+    if (metadataWorkspaceId) {
+      upsertInvoice(metadataWorkspaceId, {
+        stripe_invoice_id: obj.id,
+        amount_cents: obj.amount_paid || obj.amount_due || 0,
+        currency: obj.currency || 'usd',
+        status: obj.status || 'open',
+        invoice_url: obj.hosted_invoice_url || null,
+        created_at: obj.created ? new Date(obj.created * 1000).toISOString() : new Date().toISOString(),
+      });
+    }
+  }
+
+  return res.json({ received: true });
 });
 
 // --- CONNECTORS ---
@@ -3915,6 +4133,15 @@ app.get([
       console.log(`[OAuth] Token stored successfully:`, { tokenId: storeResult.id, service, userId: req.session.user.id, scope: storeResult.scope });
     }
 
+    if (req.session.user) {
+      const ws = getWorkspaces(req.session.user.id);
+      if (ws?.length) {
+        incrementUsageDaily(ws[0].id, new Date().toISOString().slice(0, 10), {
+          active_services: countConnectedOAuthServices(req.session.user.id),
+        });
+      }
+    }
+
     // Emit notification for service connection
     if (req.session.user) {
       NotificationService.emitNotification(req.session.user.id, 'service_connected',
@@ -4051,7 +4278,14 @@ app.post("/api/v1/oauth/disconnect/:service", authenticate, async (req, res) => 
     
     // Update OAuth status
     updateOAuthStatus(service, "disconnected");
-    
+
+    const ws = getWorkspaces(userId);
+    if (ws?.length) {
+      incrementUsageDaily(ws[0].id, new Date().toISOString().slice(0, 10), {
+        active_services: countConnectedOAuthServices(userId),
+      });
+    }
+
     // Log disconnection
     createAuditLog({
       requesterId: req.tokenMeta.tokenId,
@@ -4594,7 +4828,12 @@ app.post('/api/v1/services/:serviceName/proxy', authenticate, async (req, res) =
     
     // Increment rate limit counter
     incrementRateLimit(userId, serviceName, limitPerHour);
-    
+
+    trackWorkspaceUsage(req, {
+      api_calls: 1,
+      active_services: countConnectedOAuthServices(userId),
+    });
+
     // Update last_api_call timestamp
     const now = new Date().toISOString();
     db.prepare(`
@@ -5667,7 +5906,8 @@ app.post('/api/v1/marketplace/:id/rate', authenticate, (req, res) => {
 
     const userId = req.tokenMeta.ownerId;
     const result = rateMarketplaceListing(listingId, userId, rating, review);
-    
+    trackWorkspaceUsage(req, { ratings: 1 });
+
     // Emit notification to listing owner
     if (listing && listing.ownerId && listing.ownerId !== userId) {
       const listingName = listing.title || 'Your listing';
@@ -5900,7 +6140,9 @@ app.post('/api/v1/marketplace/:id/install', authenticate, (req, res) => {
     const alreadyInstalled = !!(provisioned && provisioned.alreadyInstalled);
     if (!alreadyInstalled) {
       incrementInstallCount(listingId);
+      trackWorkspaceUsage(req, { installs: 1 });
     }
+    trackWorkspaceUsage(req, { active_services: countConnectedOAuthServices(req.tokenMeta.ownerId) });
     const updated = getMarketplaceListing(listingId);
 
     createAuditLog({
@@ -6107,10 +6349,14 @@ app.use((err, req, res, next) => {
 });
 
 // --- Start ---
-bootstrap();
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server ready on http://0.0.0.0:${PORT}`);
-  if (WebSocketServer) {
-    console.log(`WebSocket ready on ws://0.0.0.0:${PORT}`);
-  }
-});
+if (process.env.NODE_ENV !== 'test') {
+  bootstrap();
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server ready on http://0.0.0.0:${PORT}`);
+    if (WebSocketServer) {
+      console.log(`WebSocket ready on ws://0.0.0.0:${PORT}`);
+    }
+  });
+}
+
+module.exports = { app, server, bootstrap };
