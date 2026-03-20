@@ -4871,6 +4871,57 @@ app.get("/api/v1/oauth/status", (req, res) => {
   res.json({ services });
 });
 
+// POST /api/v1/oauth/confirm — Confirm pending OAuth login
+app.post("/api/v1/oauth/confirm", (req, res) => {
+  try {
+    const { token } = req.body || {};
+    
+    if (!token || typeof token !== 'string') {
+      return res.status(400).json({ error: 'Invalid or missing confirmation token' });
+    }
+
+    // Check if token matches what's in the session
+    if (!req.session?.oauth_confirm_token || req.session.oauth_confirm_token !== token) {
+      return res.status(403).json({ error: 'Invalid confirmation token' });
+    }
+
+    // Check if we have pending login credentials
+    if (!req.session?.oauth_login_pending) {
+      return res.status(400).json({ error: 'No pending login found' });
+    }
+
+    const pending = req.session.oauth_login_pending;
+
+    // Move pending login to actual session user
+    req.session.user = {
+      id: pending.userId,
+      email: pending.email,
+      username: pending.username,
+      displayName: pending.displayName,
+      avatarUrl: pending.avatarUrl,
+      twoFactorEnabled: pending.hasTwoFa,
+    };
+
+    // Clear pending login and token
+    delete req.session.oauth_login_pending;
+    delete req.session.oauth_confirm_token;
+
+    // Save session and respond
+    req.session.save((err) => {
+      if (err) {
+        console.error('[OAuth Confirm] Session save failed:', err);
+        return res.status(500).json({ error: 'Failed to save session' });
+      }
+
+      console.log(`[OAuth Confirm] Login confirmed for user: ${pending.userId}`);
+      res.json({ ok: true, user: req.session.user });
+    });
+  } catch (err) {
+    console.error('[OAuth Confirm] Error:', err);
+    res.status(500).json({ error: 'Failed to confirm login' });
+  }
+});
+
 // POST /api/v1/oauth/disconnect/:service — Revoke OAuth connection
 app.post("/api/v1/oauth/disconnect/:service", authenticate, async (req, res) => {
   const { service } = req.params;

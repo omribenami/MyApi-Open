@@ -61,15 +61,29 @@ function App() {
 
   // Handle OAuth callbacks at app level (runs before router decides which component to show)
   useEffect(() => {
-    const callback = handleOAuthCallback();
-    if (callback && callback.status === 'confirm_login') {
-      // Auto-confirm OAuth login by fetching user data
-      const { setMasterToken, setUser } = useAuthStore.getState();
-      
-      fetch('/api/v1/auth/me', { credentials: 'include' })
+    const urlParams = new URLSearchParams(window.location.search);
+    const oauthStatus = urlParams.get('oauth_status');
+    const confirmToken = urlParams.get('token');
+
+    if (oauthStatus === 'confirm_login' && confirmToken) {
+      // Step 1: Confirm the OAuth login with the backend
+      fetch('/api/v1/oauth/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ token: confirmToken })
+      })
         .then(res => res.ok ? res.json() : null)
+        .then(result => {
+          if (result?.ok) {
+            // Step 2: Confirmation succeeded, now fetch user data
+            return fetch('/api/v1/auth/me', { credentials: 'include' })
+              .then(res => res.ok ? res.json() : null);
+          }
+        })
         .then(sessionUser => {
           if (sessionUser?.user) {
+            const { setMasterToken, setUser } = useAuthStore.getState();
             if (sessionUser.user?.bootstrap?.masterToken) {
               setMasterToken(sessionUser.user.bootstrap.masterToken);
             }
