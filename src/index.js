@@ -3148,9 +3148,11 @@ app.get('/api/v1/auth/oauth-signup/pending', (req, res) => {
     ok: true,
     data: {
       service: pending.service,
+      providerUserId: pending.providerUserId || null,
       email: pending.email || '',
       name: pending.name || '',
       avatarUrl: pending.avatarUrl || null,
+      recommendedUsername: pending.recommendedUsername || '',
       createdAt: pending.createdAt || null,
     }
   });
@@ -3161,16 +3163,23 @@ app.post('/api/v1/auth/oauth-signup/complete', (req, res) => {
   const pending = req.session?.oauth_signup;
   if (!pending) return res.status(400).json({ error: 'No pending OAuth signup session' });
 
-  const requestedUsername = String(req.body?.username || '').trim();
-  const usernameBase = (requestedUsername || String(pending.email || pending.name || 'user').split('@')[0])
+  const body = req.body || {};
+  const requestedUsername = String(body.username || '').trim();
+  const baseFromPending = String(
+    pending.recommendedUsername
+    || (pending.email ? String(pending.email).split('@')[0] : '')
+    || pending.name
+    || `user_${Date.now()}`
+  );
+
+  const usernameBase = (requestedUsername || baseFromPending)
     .replace(/[^a-zA-Z0-9_.-]/g, '')
     .slice(0, 30) || `user_${Date.now()}`;
 
-  let username = usernameBase;
-  let existing = getUserByUsername(username);
-  if (existing) username = `${usernameBase}_${Date.now().toString().slice(-6)}`;
+  const timezone = String(body.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC').trim() || 'UTC';
+  const emailRaw = String(body.email || pending.email || '').trim();
+  const email = emailRaw.length > 0 ? emailRaw : null;
 
-  const email = String(req.body?.email || pending.email || '').trim() || null;
   if (email) {
     const emailMatch = getUsers().find((u) => String(u.email || '').toLowerCase() === email.toLowerCase());
     if (emailMatch) {
@@ -3178,60 +3187,100 @@ app.post('/api/v1/auth/oauth-signup/complete', (req, res) => {
     }
   }
 
-  const displayName = String(req.body?.displayName || pending.name || username).trim() || username;
   const generatedPassword = `Oauth#${crypto.randomBytes(16).toString('hex')}A1!`;
+  let createdUser = null;
 
-  try {
-    const user = createUser(username, displayName, email, req.body?.timezone || 'UTC', generatedPassword);
-    updateUserOAuthProfile(user.id, {
-      displayName,
-      email,
-      avatarUrl: pending.avatarUrl || null,
-    });
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const suffix = attempt === 0 ? '' : `_${crypto.randomBytes(2).toString('hex')}`;
+    const usernameCandidate = `${usernameBase}${suffix}`.slice(0, 30);
+    const displayName = String(body.displayName || pending.name || usernameCandidate).trim() || usernameCandidate;
 
-    const freshUser = getUserById(user.id) || user;
-    req.session.user = {
-      id: freshUser.id,
-      username: freshUser.username,
-      display_name: freshUser.displayName || freshUser.username,
-      displayName: freshUser.displayName || freshUser.username,
-      email: freshUser.email || null,
-      avatar_url: freshUser.avatarUrl || null,
-      avatarUrl: freshUser.avatarUrl || null,
-      two_factor_enabled: Boolean(freshUser.twoFactorEnabled),
-      roles: freshUser.roles || 'user',
-    };
-
-    const rawMasterToken = 'myapi_' + crypto.randomBytes(32).toString('hex');
-    const hash = bcrypt.hashSync(rawMasterToken, 10);
-    const tokenId = createAccessToken(hash, freshUser.id, 'full', 'Master Token (OAuth Signup Session)', null, null);
-    req.session.masterTokenRaw = rawMasterToken;
-    req.session.masterTokenId = tokenId;
-    req.session.isFirstLogin = true;
-    delete req.session.oauth_signup;
-
-    res.cookie('myapi_master_token', rawMasterToken, {
-      httpOnly: false,
-      path: '/',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      sameSite: 'lax'
-    });
-
-    res.cookie('myapi_user', JSON.stringify(req.session.user), {
-      httpOnly: false,
-      path: '/',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      sameSite: 'lax'
-    });
-
-    createAuditLog({ requesterId: freshUser.id, action: 'oauth_signup_complete', resource: `/users/${freshUser.id}`, scope: 'session', ip: req.ip, details: { service: pending.service } });
-
-    return req.session.save(() => {
-      res.json({ ok: true, data: { user: req.session.user, bootstrap: { masterToken: rawMasterToken, tokenId } } });
-    });
-  } catch (error) {
-    return res.status(500).json({ error: `Failed to complete OAuth signup: ${error.message}` });
+    try {
+      createdUser = createUser(usernameCandidate, displayName, email, timezone, generatedPassword);
+      createdUser = updateUserOAuthProfile(createdUser.id, {
+        displayName,
+        email,
+        avatarUrl: pending.avatarUrl || null,
+      }) || createdUser;
+      break;
+    } catch (error) {
+      const msg = String(error?.message || '');
+      const isUnique = /unique|constraint/i.test(msg);
+      if (!isUnique || attempt === 4) {
+        return res.status(500).json({ error: `Failed to complete OAuth signup: ${msg || 'unknown error'}` });
+      }
+    }
   }
+
+  if (!createdUser) {
+    return res.status(500).json({ error: 'Failed to complete OAuth signup' });
+  }
+
+  const rawMasterToken = 'myapi_' + crypto.randomBytes(32).toString('hex');
+  const hash = bcrypt.hashSync(rawMasterToken, 10);
+  const tokenId = createAccessToken(hash, createdUser.id, 'full', 'Master Token (OAuth Signup Session)', null, null);
+
+  req.session.user = {
+    id: createdUser.id,
+    username: createdUser.username,
+    display_name: createdUser.displayName || createdUser.username,
+    displayName: createdUser.displayName || createdUser.username,
+    email: createdUser.email || null,
+    avatar_url: createdUser.avatarUrl || null,
+    avatarUrl: createdUser.avatarUrl || null,
+    two_factor_enabled: Boolean(createdUser.twoFactorEnabled),
+    roles: createdUser.roles || 'user',
+  };
+
+  req.session.masterTokenRaw = rawMasterToken;
+  req.session.masterTokenId = tokenId;
+  req.session.isFirstLogin = true;
+
+  if (pending.oauthToken) {
+    const t = pending.oauthToken;
+    storeOAuthToken(
+      pending.service,
+      createdUser.id,
+      t.accessToken,
+      t.refreshToken || null,
+      t.expiresAt || null,
+      t.scope || null,
+    );
+  }
+
+  delete req.session.oauth_signup;
+
+  res.cookie('myapi_master_token', rawMasterToken, {
+    httpOnly: false,
+    path: '/',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    sameSite: 'lax'
+  });
+
+  res.cookie('myapi_user', JSON.stringify(req.session.user), {
+    httpOnly: false,
+    path: '/',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    sameSite: 'lax'
+  });
+
+  createAuditLog({
+    requesterId: createdUser.id,
+    action: 'oauth_signup_complete',
+    resource: `/users/${createdUser.id}`,
+    scope: 'session',
+    ip: req.ip,
+    details: {
+      service: pending.service,
+      providerUserId: pending.providerUserId || null,
+      userMd: body.userMd || null,
+      soulMd: body.soulMd || null,
+    }
+  });
+
+  return req.session.save(() => {
+    res.json({ ok: true, data: { user: req.session.user, bootstrap: { masterToken: rawMasterToken, tokenId } } });
+  });
 });
 
 // GET /api/v1/auth/debug — Public diagnostic endpoint
@@ -4190,29 +4239,46 @@ app.get([
         }
       }
 
-      const email = p.email || idTokenPayload.email || `${service}_${Date.now()}@local.myapi`;
-      const name = p.name || idTokenPayload.name || p.given_name || idTokenPayload.given_name || email.split('@')[0] || `${service}_user`;
+      const email = String(p.email || idTokenPayload.email || '').trim().toLowerCase() || null;
+      const providerUserId = String(
+        p.id
+        || p.sub
+        || p.user_id
+        || p.login
+        || idTokenPayload.sub
+        || ''
+      ).trim() || null;
+      const name = p.name || idTokenPayload.name || p.given_name || idTokenPayload.given_name || p.login || `${service}_user`;
       const avatarUrl = p.picture?.data?.url || p.picture || idTokenPayload.picture || null;
 
-      const usernameBase = email.split('@')[0].replace(/[^a-zA-Z0-9_.-]/g, '').slice(0, 30) || `${service}_${Date.now()}`;
-      let username = usernameBase;
-      let existing = getUserByUsername(username);
-      if (existing && existing.email !== email) {
-        username = `${usernameBase}_${Date.now().toString().slice(-6)}`;
-        existing = getUserByUsername(username);
-      }
+      const usernameSeed = String(email || p.login || providerUserId || `${service}_${Date.now()}`);
+      const usernameBase = usernameSeed
+        .split('@')[0]
+        .replace(/[^a-zA-Z0-9_.-]/g, '')
+        .slice(0, 30) || `${service}_${Date.now()}`;
 
-      let appUser = getUsers().find((u) => (u.email || '').toLowerCase() === email.toLowerCase()) || existing;
-      let isNewUser = false;
+      const existingByUsername = getUserByUsername(usernameBase);
+      const appUserByEmail = email
+        ? getUsers().find((u) => String(u.email || '').toLowerCase() === email)
+        : null;
+      let appUser = appUserByEmail || existingByUsername || null;
       
       // NEW USER: Store OAuth data in session and route to explicit signup flow (no silent login/create)
       if (!appUser) {
         req.session.oauth_signup = {
           service,
+          providerUserId,
           email,
           name,
           avatarUrl,
+          recommendedUsername: usernameBase,
           profileData: p,
+          oauthToken: {
+            accessToken: tokenData.accessToken,
+            refreshToken: tokenData.refreshToken || null,
+            expiresAt,
+            scope: tokenData.scope || null,
+          },
           createdAt: new Date().toISOString(),
         };
 
@@ -4220,10 +4286,10 @@ app.get([
         return req.session.save(() => {
           res.redirect(redirectUrl);
         });
-      } else {
-        // EXISTING USER: Log them in
-        appUser = updateUserOAuthProfile(appUser.id, { displayName: name, email, avatarUrl }) || appUser;
       }
+
+      // EXISTING USER: Log them in
+      appUser = updateUserOAuthProfile(appUser.id, { displayName: name, email, avatarUrl }) || appUser;
 
       if (appUser.twoFactorEnabled) {
         req.session.pending_2fa_user = {
@@ -4256,8 +4322,8 @@ app.get([
         roles: appUser.roles || 'user',
       };
 
-      // Mark if this is the user's first login
-      req.session.isFirstLogin = isNewUser;
+      // Existing OAuth user login path
+      req.session.isFirstLogin = false;
 
       // Ensure each OAuth-logged-in user receives a full master token for dashboard/API actions.
       // Always create a fresh master token for this session (can't retrieve hashed ones from DB)

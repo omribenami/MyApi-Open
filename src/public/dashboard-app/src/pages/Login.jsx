@@ -45,17 +45,16 @@ function Login() {
   const [loading, setLoading] = useState(false);
   const [viewMode, setViewMode] = useState('pricing'); // 'pricing' or 'login'
   const [isSignup, setIsSignup] = useState(false); // true = signup within login tab
-  const [signupStep, setSignupStep] = useState(1); // 1=oauth, 2=user.md, 3=soul.md, 4=complete
+  const [signupStep, setSignupStep] = useState(1); // 1=oauth, 2=profile, 3=user.md, 4=soul.md
   const [billingPlans, setBillingPlans] = useState([]);
   const [plansLoading, setPlansLoading] = useState(true);
   const [twoFactorRequired, setTwoFactorRequired] = useState(false);
   const [twoFactorCode, setTwoFactorCode] = useState('');
-  const [userMdData, setUserMdData] = useState({
-    name: '', email: '', location: '', timezone: '', bio: ''
+  const [profileData, setProfileData] = useState({
+    displayName: '', email: '', username: '', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
   });
-  const [soulMdData, setSoulMdData] = useState({
-    traits: '', values: '', communication: '', workStyle: ''
-  });
+  const [userMdText, setUserMdText] = useState('');
+  const [soulMdText, setSoulMdText] = useState('');
   const [signupCompleting, setSignupCompleting] = useState(false);
   const { setMasterToken, setUser, isAuthenticated } = useAuthStore();
 
@@ -97,10 +96,11 @@ function Login() {
           .then((res) => (res.ok ? res.json() : null))
           .then((payload) => {
             const data = payload?.data || {};
-            setUserMdData((prev) => ({
+            setProfileData((prev) => ({
               ...prev,
-              name: data.name || prev.name,
+              displayName: data.name || prev.displayName,
               email: data.email || prev.email,
+              username: data.recommendedUsername || prev.username,
             }));
           })
           .catch(() => {});
@@ -220,9 +220,12 @@ function Login() {
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
-          displayName: userMdData.name,
-          email: userMdData.email,
-          timezone: userMdData.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+          displayName: profileData.displayName,
+          email: profileData.email,
+          username: profileData.username,
+          timezone: profileData.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+          userMd: userMdText,
+          soulMd: soulMdText,
         }),
       });
       const result = await response.json().catch(() => ({}));
@@ -298,7 +301,7 @@ function Login() {
                     // SIGNUP VIEW
                     <>
                       <h2 className="text-2xl font-semibold">Create your account</h2>
-                      <p className="mb-6 mt-2 text-sm text-slate-400 sm:text-base">Step {signupStep} of 3</p>
+                      <p className="mb-6 mt-2 text-sm text-slate-400 sm:text-base">Step {signupStep} of 4</p>
 
                       {signupStep === 1 && (
                         // OAuth selection

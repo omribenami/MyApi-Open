@@ -95,64 +95,12 @@ router.post('/login', (req, res) => {
  * Body: { email, password, username, displayName }
  * Response: { success: true, userId, masterToken, user: {...} }
  */
-router.post('/register', (req, res) => {
-  try {
-    const { email, password, username, displayName } = req.body;
-    
-    if (!email || !password || !username) {
-      return res.status(400).json({ error: 'Email, password, and username required' });
-    }
-
-    if (password.length < 8) {
-      return res.status(400).json({ error: 'Password must be at least 8 characters' });
-    }
-
-    const { createUser } = require('../database');
-    
-    try {
-      // Create new user and get the actual user ID from the database
-      const newUser = createUser(username, displayName || username, email, 'UTC', password, 'free', null);
-      
-      // Generate master token
-      const rawToken = 'myapi_' + crypto.randomBytes(32).toString('hex');
-      
-      // Create session for auto-login after registration (use the actual user ID from database)
-      req.session.user = {
-        id: newUser.id,
-        email: newUser.email,
-        username: newUser.username,
-        display_name: newUser.displayName,
-      };
-      req.session.masterToken = rawToken;
-      
-      req.session.save((err) => {
-        if (err) {
-          console.error('Session save error:', err);
-          return res.status(500).json({ error: 'Session error' });
-        }
-        
-        res.json({
-          success: true,
-          userId: newUser.id,
-          masterToken: rawToken,
-          user: {
-            id: newUser.id,
-            email: newUser.email,
-            username: newUser.username,
-            displayName: newUser.displayName,
-          }
-        });
-      });
-    } catch (error) {
-      if (error.message?.includes('UNIQUE')) {
-        return res.status(409).json({ error: 'Email or username already exists' });
-      }
-      throw error;
-    }
-  } catch (error) {
-    console.error('Registration error:', error);
-    res.status(500).json({ error: 'Registration failed' });
-  }
+router.post('/register', (_req, res) => {
+  return res.status(410).json({
+    error: 'Direct signup is disabled',
+    message: 'Use OAuth signup from the dashboard login page.',
+    code: 'OAUTH_SIGNUP_REQUIRED',
+  });
 });
 
 /**
