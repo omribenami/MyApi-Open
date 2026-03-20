@@ -58,6 +58,17 @@ function Login() {
   });
   const { setMasterToken, setUser, isAuthenticated } = useAuthStore();
 
+  // Check for signup query param (new user OAuth flow)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('signup') === 'true') {
+      setViewMode('login');
+      setIsSignup(true);
+      setSignupStep(1);
+      window.history.replaceState({}, document.title, '/dashboard/');
+    }
+  }, []);
+
   useEffect(() => {
     const callback = handleOAuthCallback();
     if (callback) {

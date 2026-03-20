@@ -75,10 +75,10 @@ function UserManagement() {
       }
     };
 
-    if (masterToken) {
-      fetchUsers();
-      loadPlans();
-    }
+    // Always fetch on mount and when masterToken changes
+    // Use session cookies as fallback if no masterToken
+    fetchUsers();
+    loadPlans();
   }, [masterToken]);
 
   const updatePlan = async (userId, plan) => {

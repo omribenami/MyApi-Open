@@ -4110,18 +4110,23 @@ app.get([
 
       let appUser = getUsers().find((u) => (u.email || '').toLowerCase() === email.toLowerCase()) || existing;
       let isNewUser = false;
+      
+      // NEW USER: Store OAuth data in session and redirect to signup wizard
       if (!appUser) {
-        appUser = createUser(
-          username,
-          name,
+        req.session.oauth_signup = {
+          service,
           email,
-          'UTC',
-          crypto.randomBytes(24).toString('hex'),
-          'free',
-          avatarUrl
-        );
-        isNewUser = true;
+          name,
+          avatarUrl,
+          profileData: p
+        };
+        
+        const redirectUrl = `/dashboard/?signup=true&oauth_service=${service}`;
+        return req.session.save(() => {
+          res.redirect(redirectUrl);
+        });
       } else {
+        // EXISTING USER: Log them in
         appUser = updateUserOAuthProfile(appUser.id, { displayName: name, email, avatarUrl }) || appUser;
       }
 
