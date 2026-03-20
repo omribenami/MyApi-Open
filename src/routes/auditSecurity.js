@@ -130,7 +130,7 @@ function createAuditSecurityRouter({ sessionDb, sessionStore }) {
     if (!userId) return res.status(401).json({ error: 'Authentication required' });
 
     const sidCurrent = req.sessionID || null;
-    const rows = sessionDb.prepare('SELECT sid, sess, expired FROM sessions ORDER BY expired DESC').all();
+    const rows = sessionDb.prepare('SELECT sid, sess, expire FROM sessions ORDER BY expire DESC').all();
     const sessions = rows
       .map((r) => {
         let sess;
@@ -141,7 +141,7 @@ function createAuditSecurityRouter({ sessionDb, sessionStore }) {
           id: r.sid,
           userId: sessUserId,
           isCurrent: sidCurrent === r.sid,
-          expiresAt: r.expired ? new Date(r.expired).toISOString() : null,
+          expiresAt: r.expire ? new Date(r.expire).toISOString() : null,
           createdAt: sess?.cookie?.originalMaxAge ? new Date(Date.now() - (7 * 24 * 60 * 60 * 1000 - sess.cookie.originalMaxAge)).toISOString() : null,
           ip: sess?.ip || null,
           userAgent: sess?.userAgent || null,
