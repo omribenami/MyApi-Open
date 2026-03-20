@@ -339,7 +339,7 @@ const oauthAdapters = {
     serviceName: 'linkedin',
     authUrl: 'https://www.linkedin.com/oauth/v2/authorization',
     tokenUrl: 'https://www.linkedin.com/oauth/v2/accessToken',
-    scope: 'r_liteprofile r_emailaddress',
+    scope: 'openid profile email',
     redirectUri: process.env.LINKEDIN_REDIRECT_URI || oauthConfig.linkedin?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/linkedin`,
     clientId: process.env.LINKEDIN_CLIENT_ID || oauthConfig.linkedin?.clientId,
     clientSecret: process.env.LINKEDIN_CLIENT_SECRET || oauthConfig.linkedin?.clientSecret,
