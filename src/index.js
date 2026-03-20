@@ -1017,11 +1017,11 @@ function getOAuthUserId(req) {
 }
 
 // Register notification system routes (after authenticate is defined)
-const notificationsRoutes = require('./routes/notifications');
+const notificationsRouter = require('./routes/notifications');
 const activityRoutes = require('./routes/activity');
 const emailRoutes = require('./routes/email');
 const workspacesRoutes = require('./routes/workspaces');
-app.use('/api/v1/notifications', authenticate, notificationsRoutes);
+app.use('/api/v1/notifications', authenticate, notificationsRouter);
 app.use('/api/v1/activity', authenticate, activityRoutes);
 app.use('/api/v1/email', authenticate, emailRoutes);
 app.use('/api/v1/workspaces', authenticate, workspacesRoutes);
@@ -1097,7 +1097,6 @@ app.get('/api/v1/billing/plans', (req, res) => {
 // Import multi-tenancy middleware
 const { extractWorkspaceContext, enforceMultiTenancy, switchWorkspaceHandler } = require('./middleware/multitenancy');
 const { createAuditSecurityRouter } = require('./routes/auditSecurity');
-const { createNotificationsRouter, dispatchNotification } = require('./routes/notifications');
 
 // Extract workspace context for all authenticated requests
 app.use('/api/v1', authenticate, extractWorkspaceContext, enforceMultiTenancy);
@@ -1135,9 +1134,6 @@ app.post('/api/v1/workspace-switch/:workspaceId', authenticate, switchWorkspaceH
 
 // Phase 3: audit/security API
 app.use('/api/v1', authenticate, createAuditSecurityRouter({ sessionDb, sessionStore }));
-
-// Phase 3.5: notifications API
-app.use('/api/v1', authenticate, createNotificationsRouter());
 
 function getRequestOwnerId(req) {
   return String(req?.tokenMeta?.ownerId || req?.session?.user?.id || 'owner');

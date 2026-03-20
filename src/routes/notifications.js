@@ -11,8 +11,7 @@ const {
   queueNotificationForDelivery
 } = require('../database');
 
-function createNotificationsRouter() {
-  const router = express.Router();
+const router = express.Router();
 
   // GET /api/v1/notifications - List user notifications with filtering
   router.get('/notifications', (req, res) => {
@@ -244,11 +243,8 @@ function createNotificationsRouter() {
     }
   });
 
-  return router;
-}
-
 // Notification dispatcher for internal use (called when events trigger)
-function dispatchNotification(workspaceId, userId, type, title, message, data = null, channels = ['in-app', 'email']) {
+router.dispatchNotification = function(workspaceId, userId, type, title, message, data = null, channels = ['in-app', 'email']) {
   try {
     const notificationId = createNotification(workspaceId, userId, type, title, message, data);
     
@@ -267,9 +263,6 @@ function dispatchNotification(workspaceId, userId, type, title, message, data = 
       error: err.message
     };
   }
-}
-
-module.exports = {
-  createNotificationsRouter,
-  dispatchNotification
 };
+
+module.exports = router;
