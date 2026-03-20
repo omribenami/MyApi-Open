@@ -127,7 +127,7 @@ function Layout({ children, onLogout }) {
   }, [user]);
 
   const displayName = useMemo(() => {
-    return user?.display_name || user?.displayName || user?.name || user?.username || 'User';
+    return user?.displayName || user?.display_name || user?.name || user?.username || 'User';
   }, [user]);
 
   const handleLogout = () => {

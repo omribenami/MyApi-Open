@@ -162,6 +162,7 @@ function ProfileSection() {
         Email: profileDraft.email,
         Timezone: profileDraft.timezone,
         AvatarUrl: profileDraft.avatarUrl,
+        avatarUrl: profileDraft.avatarUrl, // ensure both cases are sent to backend
       };
       const authHeaders = masterToken ? { Authorization: `Bearer ${masterToken}` } : {};
       const res = await fetch('/api/v1/users/me', {
