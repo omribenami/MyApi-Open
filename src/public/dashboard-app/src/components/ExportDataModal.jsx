@@ -20,16 +20,16 @@ function ExportDataModal({ isOpen, onClose }) {
   const handleExport = async () => {
     setIsExporting(true);
     try {
-      // Build query params for selected sections
-      const selectedSections = Object.keys(selected)
-        .filter((k) => selected[k])
-        .map((k) => `${k}=true`)
-        .join('&');
+      const selectedSections = new URLSearchParams(
+        Object.entries(selected).map(([key, value]) => [key, value ? 'true' : 'false'])
+      );
 
-      const response = await fetch(`/api/v1/export?${selectedSections}`, {
+      const currentWorkspace = localStorage.getItem('currentWorkspace');
+      const response = await fetch(`/api/v1/export?${selectedSections.toString()}`, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
+          ...(currentWorkspace ? { 'X-Workspace-ID': currentWorkspace } : {}),
         },
         credentials: 'include',
       });
@@ -39,17 +39,18 @@ function ExportDataModal({ isOpen, onClose }) {
         throw new Error(error.message || 'Failed to generate export');
       }
 
-      // Get the JSON data
-      const exportData = await response.json();
+      const blob = await response.blob();
+      if (!blob || blob.size === 0) {
+        throw new Error('Export returned an empty file');
+      }
 
-      // Create a blob from the JSON data
-      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-      
       // Create download link and trigger download
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `myapi-export-${Date.now()}.json`;
+      const contentDisposition = response.headers.get('content-disposition') || '';
+      const fileNameMatch = contentDisposition.match(/filename="?([^\"]+)"?/i);
+      a.download = fileNameMatch?.[1] || `myapi-export-${Date.now()}.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

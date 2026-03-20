@@ -23,11 +23,34 @@ const router = express.Router();
  */
 router.get('/', async (req, res) => {
   try {
-    const userId = req.userId || req.user?.id || req.tokenMeta?.ownerId;
-    
+    // Support all auth shapes used across the app (session + bearer + route-level userId).
+    const userId =
+      req.userId ||
+      req.user?.id ||
+      req.tokenMeta?.ownerId ||
+      req.tokenMeta?.userId ||
+      req.session?.user?.id;
+
     if (!userId) {
       return res.status(401).json({ error: 'Unauthorized: No user ID found' });
     }
+
+    const ownerId = String(userId);
+    const workspaceId =
+      req.workspaceId ||
+      req.session?.currentWorkspace ||
+      req.headers['x-workspace-id'] ||
+      req.query.workspace ||
+      null;
+
+    // Backward-compatibility: older single-user records may still be stored under owner="owner".
+    const withLegacyOwnerFallback = (loader) => {
+      const primary = loader(ownerId);
+      if (ownerId !== 'owner' && (!primary || primary.length === 0)) {
+        return loader('owner');
+      }
+      return primary;
+    };
 
     // Parse requested sections from query params
     const sections = {
@@ -46,15 +69,16 @@ router.get('/', async (req, res) => {
 
     const exportData = {
       exportedAt: new Date().toISOString(),
-      exportVersion: '1.0',
-      userId,
+      exportVersion: '1.1',
+      userId: ownerId,
+      workspaceId: workspaceId ? String(workspaceId) : null,
       sections: {},
     };
 
     // === PROFILE SECTION ===
     if (sections.profile) {
       try {
-        const user = getUserById(userId);
+        const user = getUserById(ownerId);
         const userMdPath = process.env.USER_MD_PATH || '/home/jarvis/.openclaw/workspace/USER.md';
         
         const profileData = {};
@@ -92,7 +116,7 @@ router.get('/', async (req, res) => {
     // === TOKENS SECTION ===
     if (sections.tokens) {
       try {
-        const tokens = getAccessTokens(userId) || [];
+        const tokens = withLegacyOwnerFallback(getAccessTokens) || [];
         const tokenExports = tokens.map(token => ({
           tokenId: token.tokenId,
           label: token.label,
@@ -119,7 +143,7 @@ router.get('/', async (req, res) => {
     // === PERSONAS SECTION ===
     if (sections.personas) {
       try {
-        const personas = getPersonas(userId) || [];
+        const personas = withLegacyOwnerFallback(getPersonas) || [];
         const personaExports = personas.map(persona => ({
           id: persona.id,
           name: persona.name,
@@ -154,7 +178,7 @@ router.get('/', async (req, res) => {
     // === KNOWLEDGE BASE SECTION ===
     if (sections.knowledge) {
       try {
-        const documents = getKBDocuments(userId) || [];
+        const documents = withLegacyOwnerFallback(getKBDocuments) || [];
         const docExports = documents.map(doc => ({
           id: doc.id,
           title: doc.title,
@@ -179,7 +203,7 @@ router.get('/', async (req, res) => {
     if (sections.settings) {
       try {
         // Get user settings from the users table
-        const user = getUserById(userId);
+        const user = getUserById(ownerId);
         const settings = {};
         
         if (user) {
