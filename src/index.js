@@ -985,6 +985,7 @@ function authenticate(req, res, next) {
                              routePath.startsWith('/api/v1/devices') ||
                              routePath.startsWith('/api/v1/oauth/') ||
                              routePath.startsWith('/api/v1/users') ||
+                             routePath.startsWith('/api/v1/billing') ||
                              (routePath.startsWith('/api/v1/activity') && req.method === 'GET');
   
   if (skipDeviceApproval) {
@@ -1109,7 +1110,7 @@ function getRequestOwnerId(req) {
 function getRequestWorkspaceId(req) {
   if (req?.workspaceId) return req.workspaceId;
   if (req?.session?.currentWorkspace) return req.session.currentWorkspace;
-  const explicit = req?.body?.workspace_id || req?.query?.workspace;
+  const explicit = req?.body?.workspace_id || req?.query?.workspace || req?.headers?.['x-workspace-id'];
   if (explicit) return String(explicit);
 
   const userId = req?.user?.id || req?.session?.user?.id;
