@@ -19,6 +19,9 @@ src/data/*.db
 src/data/*.db-shm
 src/data/*.db-wal
 src/.db_integrity
+:memory:
+:memory:-shm
+:memory:-wal
 
 # Build/cache
 .cache/
