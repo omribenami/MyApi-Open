@@ -1030,6 +1030,10 @@ app.use('/api/v1/email', authenticate, emailRoutes);
 app.use('/api/v1/workspaces', authenticate, workspacesRoutes);
 app.use('/api/v1/invitations', authenticate, workspacesRoutes);
 
+// Register export data routes
+const exportRoutes = require('./routes/export');
+app.use('/api/v1/export', authenticate, exportRoutes);
+
 // --- PUBLIC: BILLING PLANS ENDPOINT (no auth required) ---
 app.get('/api/v1/billing/plans', (req, res) => {
   try {
