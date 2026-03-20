@@ -8,6 +8,7 @@ const {
   getUnreadNotificationCount,
   getOrCreateNotificationSettings,
   updateNotificationPreferences,
+  getOrEnsureUserWorkspace,
   queueNotificationForDelivery
 } = require('../database');
 
@@ -294,7 +295,7 @@ const router = express.Router();
   });
 
   // GET /api/v1/notifications/preferences - Get notification preferences
-  router.get('/notifications/preferences', (req, res) => {
+  router.get('/preferences', (req, res) => {
     try {
       const workspaceId = req.workspaceId || 'default';
       const userId = req.user?.id || req.tokenMeta?.userId || req.tokenMeta?.ownerId;
@@ -325,7 +326,7 @@ const router = express.Router();
   });
 
   // POST /api/v1/notifications/preferences - Update notification preferences
-  router.post('/notifications/preferences', (req, res) => {
+  router.post('/preferences', (req, res) => {
     try {
       const workspaceId = req.workspaceId || 'default';
       const userId = req.user?.id || req.tokenMeta?.userId || req.tokenMeta?.ownerId;

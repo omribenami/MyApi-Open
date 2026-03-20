@@ -4314,15 +4314,19 @@ function ensureDefaultWorkspaceExists() {
 // Get or ensure a workspace for a user (creates one if needed)
 function getOrEnsureUserWorkspace(userId) {
   // Check if user has any workspace
-  const existing = db.prepare(`
-    SELECT DISTINCT w.id FROM workspaces w
-    LEFT JOIN workspace_members wm ON w.id = wm.workspace_id
-    WHERE w.owner_id = ? OR wm.user_id = ?
-    LIMIT 1
-  `).get(userId, userId);
-  
-  if (existing) {
-    return existing.id;
+  try {
+    const existing = db.prepare(`
+      SELECT DISTINCT w.id FROM workspaces w
+      LEFT JOIN workspace_members wm ON w.id = wm.workspace_id
+      WHERE w.owner_id = ? OR wm.user_id = ?
+      LIMIT 1
+    `).get(userId, userId);
+    
+    if (existing) {
+      return existing.id;
+    }
+  } catch (err) {
+    console.error('[DB] Error checking for existing workspace:', err.message);
   }
   
   // Create a default workspace for the user
