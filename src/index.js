@@ -71,6 +71,8 @@ const {
   getOAuthStatus,
   createStateToken,
   validateStateToken,
+  cleanupExpiredStateTokens, // BUG-11
+  cleanupOldRateLimits, // BUG-10
   createConversation,
   getConversations,
   getConversation,
@@ -920,6 +922,9 @@ const planFeatureRateLimit = rateLimit(60000, process.env.NODE_ENV === 'test' ? 
 // Security: strict rate limit for auth-sensitive endpoints (5 attempts per minute)
 const authRateLimit = rateLimit(60000, process.env.NODE_ENV === 'test' ? 1000 : 5, 'auth-sensitive');
 
+// BUG-15: Stricter rate limit for 2FA/TOTP attempts (3 attempts per minute to prevent brute force)
+const twoFactorRateLimit = rateLimit(60000, process.env.NODE_ENV === 'test' ? 1000 : 3, '2fa-attempts');
+
 // Security: DB integrity check on startup - detect direct tampering
 function checkDbIntegrity() {
   try {
@@ -1048,7 +1053,17 @@ function authenticate(req, res, next) {
   const tokens = getAccessTokens();
   let matched = null;
   for (const tokenMeta of tokens) {
+    // Check that token is not revoked, not expired, and hash matches
     if (!tokenMeta.revokedAt && bcrypt.compareSync(rawToken, tokenMeta.hash)) {
+      // Check expiration: if expiresAt is set and is in the past, reject the token
+      if (tokenMeta.expiresAt) {
+        const expiryTime = new Date(tokenMeta.expiresAt);
+        const now = new Date();
+        if (expiryTime <= now) {
+          console.warn('[AUTH] Token has expired', { tokenId: tokenMeta.tokenId, expiresAt: tokenMeta.expiresAt });
+          continue; // Skip this expired token
+        }
+      }
       matched = tokenMeta;
       break;
     }
@@ -1078,11 +1093,7 @@ function authenticate(req, res, next) {
     return next();
   }
   
-  // TEMPORARY BYPASS FOR TESTING (Mar 20) - Remove after device approval DB is fixed
-  if (process.env.SKIP_DEVICE_APPROVAL === 'true') {
-    console.warn('[Device Approval] GLOBAL BYPASS - allowing all API access for testing');
-    return next();
-  }
+  // BUG-8: Removed SKIP_DEVICE_APPROVAL bypass - device approval is now mandatory for all API access
   
   // Apply device approval for agents on protected routes
   return deviceApprovalMiddleware(req, res, next);
@@ -2190,13 +2201,17 @@ app.post('/api/v1/vault/discover-api', authenticate, async (req, res) => {
 app.get("/api/v1/vault/tokens", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can view vault tokens" });
   createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "list_vault_tokens", resource: "/vault/tokens", scope: req.tokenMeta.scope, ip: req.ip });
-  const tokens = getVaultTokens();
+  // BUG-14: Enforce workspace scoping by passing ownerId
+  const ownerId = getRequestOwnerId(req);
+  const tokens = getVaultTokens(ownerId);
   res.json({ data: tokens, tokens });
 });
 
 app.get("/api/v1/vault/tokens/:id/reveal", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can decrypt vault tokens" });
-  const vaultToken = decryptVaultToken(req.params.id);
+  // BUG-14: Enforce workspace scoping by passing ownerId
+  const ownerId = getRequestOwnerId(req);
+  const vaultToken = decryptVaultToken(req.params.id, ownerId);
   if (!vaultToken) return res.status(404).json({ error: "Token not found" });
   createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "reveal_vault_token", resource: `/vault/tokens/${req.params.id}`, scope: req.tokenMeta.scope, ip: req.ip });
   res.json({ data: vaultToken });
@@ -2204,7 +2219,9 @@ app.get("/api/v1/vault/tokens/:id/reveal", authenticate, (req, res) => {
 
 app.delete("/api/v1/vault/tokens/:id", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can delete vault tokens" });
-  const deleted = deleteVaultToken(req.params.id);
+  // BUG-14: Enforce workspace scoping by passing ownerId
+  const ownerId = getRequestOwnerId(req);
+  const deleted = deleteVaultToken(req.params.id, ownerId);
   if (!deleted) return res.status(404).json({ error: "Token not found" });
   createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "delete_vault_token", resource: `/vault/tokens/${req.params.id}`, scope: req.tokenMeta.scope, ip: req.ip });
   res.json({ data: { deleted: true } });
@@ -3198,13 +3215,24 @@ app.post("/api/v1/auth/register", (req, res) => {
   }
 });
 
-app.post("/api/v1/auth/login", (req, res) => {
+// BUG-15: Add rate limiting to login endpoint to prevent brute force attacks
+app.post("/api/v1/auth/login", authRateLimit, (req, res) => {
   const { username, password, totpCode } = req.body;
   if (!username || !password) return res.status(400).json({ error: "username and password are required" });
   const user = getUserByUsername(username);
   if (!user) return res.status(401).json({ error: "Invalid credentials" });
   const valid = bcrypt.compareSync(password, user.password_hash);
-  if (!valid) return res.status(401).json({ error: "Invalid credentials" });
+  if (!valid) {
+    createAuditLog({
+      requesterId: 'unknown',
+      action: 'failed_login',
+      resource: `/auth/login`,
+      scope: 'session',
+      ip: req.ip,
+      details: { username, reason: 'invalid_credentials' }
+    });
+    return res.status(401).json({ error: "Invalid credentials" });
+  }
 
   if (user.twoFactorEnabled) {
     if (!totpCode) {
@@ -3217,6 +3245,15 @@ app.post("/api/v1/auth/login", (req, res) => {
       window: 2,
     });
     if (!verified) {
+      // Log failed 2FA attempt
+      createAuditLog({
+        requesterId: user.id,
+        action: '2fa_failed_attempt',
+        resource: '/auth/login',
+        scope: 'session',
+        ip: req.ip,
+        details: { reason: 'invalid_code' }
+      });
       return res.status(401).json({ error: "Invalid 2FA code", requires2FA: true });
     }
   }
@@ -3692,12 +3729,24 @@ app.get('/api/v1/auth/2fa/status', authenticate, (req, res) => {
   return res.json({ data: { enabled: Boolean(state.twoFactorEnabled) } });
 });
 
-app.post('/api/v1/auth/2fa/challenge', (req, res) => {
+// BUG-15: Add rate limiting to 2FA challenge to prevent brute force attacks
+app.post('/api/v1/auth/2fa/challenge', twoFactorRateLimit, (req, res) => {
   try {
     const { code } = req.body || {};
     const pendingUser = req?.session?.pending_2fa_user;
     if (!pendingUser?.id) return res.status(401).json({ error: 'No pending 2FA challenge' });
     if (!code) return res.status(400).json({ error: '2FA code is required' });
+
+    // BUG-15: Check 2FA challenge expiration (typically codes are valid for 30 seconds)
+    const challengeCreatedAt = req?.session?.pending_2fa_user?.createdAt;
+    if (challengeCreatedAt) {
+      const now = Date.now();
+      const ageMs = now - new Date(challengeCreatedAt).getTime();
+      const maxAgeMs = 10 * 60 * 1000; // 10 minute window before challenge expires
+      if (ageMs > maxAgeMs) {
+        return res.status(401).json({ error: '2FA challenge expired. Please login again.' });
+      }
+    }
 
     const state = getUserTotpSecret(pendingUser.id);
     if (!state?.totpSecret || !state?.twoFactorEnabled) {
@@ -3710,7 +3759,18 @@ app.post('/api/v1/auth/2fa/challenge', (req, res) => {
       token: String(code).replace(/\s+/g, ''),
       window: 2,
     });
-    if (!verified) return res.status(401).json({ error: 'Invalid 2FA code' });
+    if (!verified) {
+      // Log failed 2FA attempt for security auditing
+      createAuditLog({
+        requesterId: String(pendingUser.id),
+        action: '2fa_failed_attempt',
+        resource: '/auth/2fa/challenge',
+        scope: 'session',
+        ip: req.ip,
+        details: { reason: 'invalid_code' }
+      });
+      return res.status(401).json({ error: 'Invalid 2FA code' });
+    }
 
     req.session.user = pendingUser;
     delete req.session.pending_2fa_user;
@@ -3754,14 +3814,33 @@ app.post("/api/v1/auth/logout", (req, res) => {
   }
 
   const sid = req.sessionID;
+  
+  // BUG-12: Ensure ALL session data is cleared before responding
+  // Clear all session properties that might contain sensitive data
   delete req.session.pending_2fa_user;
   delete req.session.user;
   delete req.session.masterTokenRaw;
   delete req.session.masterTokenId;
+  delete req.session.oauth_login_pending;
+  delete req.session.oauth_confirm_token;
+  delete req.session.oauth_signup;
+  delete req.session.oauthStateMeta;
+  delete req.session.isFirstLogin;
+  delete req.session.currentWorkspace;
 
+  // Destroy session and wait for completion before responding
   req.session.destroy((err) => {
+    // Also attempt to destroy from store if available
     if (typeof req.sessionStore?.destroy === 'function' && sid) {
-      try { req.sessionStore.destroy(sid, () => {}); } catch (_) {}
+      try { 
+        req.sessionStore.destroy(sid, (storeErr) => {
+          if (storeErr) {
+            console.warn('[logout] session store destroy returned error:', storeErr.message);
+          }
+        }); 
+      } catch (e) {
+        console.warn('[logout] session store destroy threw error:', e.message);
+      }
     }
 
     if (err) {
@@ -3769,7 +3848,8 @@ app.post("/api/v1/auth/logout", (req, res) => {
       return res.status(500).json({ ok: false, error: 'Failed to logout cleanly' });
     }
 
-    return res.json({ ok: true });
+    // Send response only after session is fully destroyed
+    res.json({ ok: true, message: 'Logged out successfully' });
   });
 });
 
@@ -4588,57 +4668,41 @@ app.get([
         });
       }
 
-      // EXISTING USER: Log them in
+      // BUG-6: EXISTING USER: Store credentials in session and require explicit user confirmation
+      // Do NOT auto-login without user consent, even for existing accounts
       appUser = updateUserOAuthProfile(appUser.id, { displayName: name, email, avatarUrl }) || appUser;
-      await regenerateSession(req);
-
-      if (appUser.twoFactorEnabled) {
-        req.session.pending_2fa_user = {
-          id: appUser.id,
-          username: appUser.username,
-          display_name: appUser.displayName || appUser.username,
-          displayName: appUser.displayName || appUser.username,
-          email: appUser.email || email,
-          avatar_url: appUser.avatarUrl || avatarUrl || null,
-          avatarUrl: appUser.avatarUrl || avatarUrl || null,
-          two_factor_enabled: true,
-          roles: appUser.roles || 'user',
-        };
-        const next = encodeURIComponent(safeReturnTo);
-        const redirectUrl = `/dashboard/?oauth_service=${service}&oauth_status=pending_2fa&next=${next}`;
-        return req.session.save(() => {
-          res.redirect(redirectUrl);
-        });
-      }
-
-      req.session.user = {
-        id: appUser.id,
+      
+      // Store OAuth credentials in session pending user confirmation
+      req.session.oauth_login_pending = {
+        service,
+        userId: appUser.id,
         username: appUser.username,
-        display_name: appUser.displayName || appUser.username,
-        displayName: appUser.displayName || appUser.username,
         email: appUser.email || email,
-        avatar_url: appUser.avatarUrl || avatarUrl || null,
+        displayName: appUser.displayName || name,
         avatarUrl: appUser.avatarUrl || avatarUrl || null,
-        two_factor_enabled: Boolean(appUser.twoFactorEnabled),
-        roles: appUser.roles || 'user',
+        providerUserId,
+        hasTwoFa: appUser.twoFactorEnabled,
+        tokenData: {
+          accessToken: tokenData.accessToken,
+          refreshToken: tokenData.refreshToken || null,
+          expiresAt,
+          scope: tokenData.scope || null,
+        },
+        confirmedAt: null, // Will be set when user confirms
+        createdAt: new Date().toISOString(),
       };
 
-      // Existing OAuth user login path
-      req.session.isFirstLogin = false;
-
-      // Ensure each OAuth-logged-in user receives a full master token for dashboard/API actions.
-      // Always create a fresh master token for this session (can't retrieve hashed ones from DB)
-      const rawMasterToken = 'myapi_' + crypto.randomBytes(32).toString("hex");
-      const hash = bcrypt.hashSync(rawMasterToken, 10);
-      const tokenId = createAccessToken(hash, appUser.id, 'full', 'Master Token (OAuth Session)', null, null);
-      req.session.masterTokenRaw = rawMasterToken;
-      req.session.masterTokenId = tokenId;
-
-      // NOW store the OAuth token under the correct user ID
-      console.log(`[OAuth] Storing ${service} token for user: ${appUser.id}`);
-      const storeResult = storeOAuthToken(service, appUser.id, tokenData.accessToken, tokenData.refreshToken || null, expiresAt, tokenData.scope);
-      tokenStoredForUser = true;
-      console.log(`[OAuth] Token stored successfully:`, { tokenId: storeResult.id, service, userId: appUser.id, scope: storeResult.scope });
+      console.log(`[OAuth] Stored pending login credentials in session for user: ${appUser.id}`);
+      
+      // Redirect to confirmation page instead of auto-logging in
+      const confirmToken = crypto.randomBytes(16).toString('hex');
+      req.session.oauth_confirm_token = confirmToken;
+      
+      return req.session.save(() => {
+        const nextUrl = encodeURIComponent(safeReturnTo);
+        const confirmUrl = `/dashboard/?oauth_service=${service}&oauth_status=confirm_login&next=${nextUrl}&token=${confirmToken}`;
+        res.redirect(confirmUrl);
+      });
     }
 
     // Store token for authenticated owner (connect flow and non-primary login flow)
@@ -7011,6 +7075,13 @@ if (process.env.NODE_ENV !== 'test') {
     if (WebSocketServer) {
       console.log(`WebSocket ready on ws://0.0.0.0:${PORT}`);
     }
+    
+    // BUG-11: Cleanup expired OAuth state tokens every hour
+    // BUG-10: Also cleanup old rate limit records
+    setInterval(() => {
+      cleanupExpiredStateTokens();
+      cleanupOldRateLimits(24); // Keep 24 hours of history
+    }, 60 * 60 * 1000); // 1 hour
   });
 }
 
