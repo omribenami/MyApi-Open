@@ -1296,6 +1296,21 @@ function getUserByUsername(username) {
   return { ...u, twoFactorEnabled: Boolean(u.twoFactorEnabled) };
 }
 
+function getUserByEmail(email) {
+  const cols = getUsersTableColumns();
+  const hasPlan = cols.has('plan');
+  const hasStripeStatus = cols.has('stripe_subscription_status');
+  const hasStripeCustomerId = cols.has('stripe_customer_id');
+  const hasStripeSubscriptionId = cols.has('stripe_subscription_id');
+  const hasTotpSecret = cols.has('totp_secret');
+  const hasTwoFactorEnabled = cols.has('two_factor_enabled');
+
+  const stmt = db.prepare(`SELECT id, username, display_name as displayName, email, avatar_url as avatarUrl, timezone, password_hash, ${hasTotpSecret ? "COALESCE(totp_secret, '')" : "''"} as totpSecret, ${hasTwoFactorEnabled ? 'COALESCE(two_factor_enabled, 0)' : '0'} as twoFactorEnabled, created_at as createdAt, status, ${hasPlan ? "COALESCE(plan, 'free')" : "'free'"} as plan, ${hasStripeStatus ? 'stripe_subscription_status' : 'NULL'} as stripeSubscriptionStatus, ${hasStripeCustomerId ? 'stripe_customer_id' : 'NULL'} as stripeCustomerId, ${hasStripeSubscriptionId ? 'stripe_subscription_id' : 'NULL'} as stripeSubscriptionId FROM users WHERE LOWER(email) = LOWER(?)`);
+  const u = stmt.get(email);
+  if (!u) return null;
+  return { ...u, twoFactorEnabled: Boolean(u.twoFactorEnabled) };
+}
+
 function getUserById(id) {
   const cols = getUsersTableColumns();
   const hasPlan = cols.has('plan');
@@ -4432,6 +4447,7 @@ module.exports = {
   createUser,
   getUsers,
   getUserByUsername,
+  getUserByEmail,
   getUserById,
   updateUserPlan,
   updateUserOAuthProfile,

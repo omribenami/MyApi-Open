@@ -42,13 +42,12 @@ router.post('/login', (req, res) => {
       return res.status(400).json({ error: 'Email and password required' });
     }
     
-    const { getUsers } = require('../database');
+    const { getUserByEmail } = require('../database');
     let user = null;
     try {
-      const users = getUsers() || [];
-      user = users.find(u => u.email && u.email.toLowerCase() === email.toLowerCase());
+      user = getUserByEmail(email);
     } catch (e) {
-      console.error('Error fetching users:', e);
+      console.error('Error fetching user:', e);
     }
     
     if (!user) {

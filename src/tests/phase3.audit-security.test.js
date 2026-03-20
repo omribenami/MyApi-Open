@@ -10,13 +10,13 @@ describe('Phase 3 Audit/Security', () => {
 
   beforeAll(async () => {
     agent = request.agent(app);
-    await agent.post('/api/v1/auth/register').send({
+    const register = await agent.post('/api/v1/auth/register').send({
       username: user,
       password,
-      display_name: 'Phase3 User',
+      displayName: 'Phase3 User',
       email,
-      timezone: 'UTC',
     });
+    expect(register.status).toBe(200);
 
     const login = await agent.post('/api/v1/auth/login').send({ email, password });
     expect(login.status).toBe(200);
