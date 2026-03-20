@@ -55,13 +55,16 @@ function Login() {
   });
   const [userMdText, setUserMdText] = useState('');
   const [soulMdText, setSoulMdText] = useState('');
+  const [oauthSignupNonce, setOauthSignupNonce] = useState('');
   const [signupCompleting, setSignupCompleting] = useState(false);
   const { setMasterToken, setUser, isAuthenticated } = useAuthStore();
 
-  // Check for signup query param (new user OAuth flow)
+  // Check for direct signup deep-link. If OAuth callback params are present,
+  // let handleOAuthCallback() process them first.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('signup') === 'true') {
+    const hasOAuthCallback = params.get('oauth_service') || params.get('oauth_status') || params.get('error');
+    if (!hasOAuthCallback && params.get('signup') === 'true') {
       setViewMode('login');
       setIsSignup(true);
       setSignupStep(1);
@@ -102,6 +105,7 @@ function Login() {
               email: data.email || prev.email,
               username: data.recommendedUsername || prev.username,
             }));
+            setOauthSignupNonce(data.nonce || '');
           })
           .catch(() => {});
         window.history.replaceState({}, document.title, '/dashboard/');
@@ -213,6 +217,10 @@ function Login() {
   const completeOAuthSignup = async () => {
     if (signupCompleting) return;
     setError('');
+    if (!oauthSignupNonce) {
+      setError('Signup session expired. Please start signup again from OAuth.');
+      return;
+    }
     setSignupCompleting(true);
     try {
       const response = await fetch('/api/v1/auth/oauth-signup/complete', {
@@ -220,6 +228,8 @@ function Login() {
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
+          oauthSignupConfirm: true,
+          oauthSignupNonce,
           displayName: profileData.displayName,
           email: profileData.email,
           username: profileData.username,

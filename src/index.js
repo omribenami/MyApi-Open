@@ -3155,6 +3155,7 @@ app.get('/api/v1/auth/oauth-signup/pending', (req, res) => {
       name: pending.name || '',
       avatarUrl: pending.avatarUrl || null,
       recommendedUsername: pending.recommendedUsername || '',
+      nonce: pending.nonce || null,
       createdAt: pending.createdAt || null,
     }
   });
@@ -3166,6 +3167,19 @@ app.post('/api/v1/auth/oauth-signup/complete', (req, res) => {
   if (!pending) return res.status(400).json({ error: 'No pending OAuth signup session' });
 
   const body = req.body || {};
+  const confirm = body?.oauthSignupConfirm === true;
+  const nonce = String(body?.oauthSignupNonce || '').trim();
+
+  if (pending.source !== 'oauth_login_callback') {
+    return res.status(400).json({ error: 'Invalid signup source. OAuth signup required.' });
+  }
+  if (!confirm) {
+    return res.status(400).json({ error: 'OAuth signup confirmation required' });
+  }
+  if (!nonce || nonce !== String(pending.nonce || '')) {
+    return res.status(400).json({ error: 'Invalid or expired OAuth signup nonce' });
+  }
+
   const requestedUsername = String(body.username || '').trim();
   const baseFromPending = String(
     pending.recommendedUsername
@@ -4281,6 +4295,8 @@ app.get([
             expiresAt,
             scope: tokenData.scope || null,
           },
+          source: 'oauth_login_callback',
+          nonce: crypto.randomBytes(16).toString('hex'),
           createdAt: new Date().toISOString(),
         };
 
