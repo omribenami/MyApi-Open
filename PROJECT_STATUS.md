@@ -13,6 +13,7 @@
 | 1 | Teams & Multi-Tenancy | ✅ COMPLETE | 2026-03-19 | 1 day |
 | 2 | Billing & Usage Tracking | ✅ COMPLETE | 2026-03-19 | 3-4 weeks |
 | 3 | Audit & Security | ✅ COMPLETE | 2026-03-19 | 2-3 weeks |
+| 3.5 | **Notifications System** | ⏳ IN PROGRESS | 2026-03-20 | 2-3 weeks |
 | 4 | Enterprise (SSO+RBAC) | ⬜ PENDING | M7-9 | 5-6 weeks |
 | 5 | Compliance & Encryption | ⬜ PENDING | M10-11 | 4-5 weeks |
 | 6 | Self-Hosted Deployment | ⬜ PENDING | M12 | 3-4 weeks |
@@ -149,11 +150,118 @@ Status: ✅ COMPLETE
 
 ### Git Commits
 ```
-<to-fill-after-commit> phase3(db): ...
-<to-fill-after-commit> phase3(api): ...
-<to-fill-after-commit> phase3(frontend): ...
-<to-fill-after-commit> phase3(tests): ...
-<to-fill-after-commit> phase3(docs): ...
+81bff4f fix(audit): refine security event tracking and tests
+e16de1e feat(audit-routes): enhance security event tracking routes
+e886920 fix(auth): improve audit logging for authentication events
+de5406a test(audit): finalize phase 3 audit security test suite
+f9baed0 feat(audit): add phase 3 security and audit logging foundation
+```
+
+---
+
+## 📋 Phase 3.5: Notifications System ⏳ IN PROGRESS
+
+**Start Date:** 2026-03-20  
+**Target Completion:** 2026-04-03  
+**Duration:** 2-3 weeks  
+**Critical:** ⚠️ YES - Zero notifications currently delivered (in-app & email)
+
+### Problem Statement
+- Users receive **zero notifications** (both in-app and email)
+- No notification preferences system  
+- No notification delivery channels configured
+- No notification queue/dispatcher backend
+- Missing from Tier 2 (SaaS) MVP - required for user retention
+
+### Features to Implement
+
+#### Database Schema
+```sql
+CREATE TABLE notifications (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  message TEXT,
+  data JSON,
+  is_read BOOLEAN DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER,
+  FOREIGN KEY(workspace_id) REFERENCES workspaces(id),
+  FOREIGN KEY(user_id) REFERENCES users(id),
+  INDEX(workspace_id, user_id, created_at DESC)
+);
+
+CREATE TABLE notification_preferences (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  channel TEXT NOT NULL,
+  enabled BOOLEAN DEFAULT 1,
+  frequency TEXT DEFAULT 'immediate',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  FOREIGN KEY(workspace_id) REFERENCES workspaces(id),
+  FOREIGN KEY(user_id) REFERENCES users(id),
+  UNIQUE(workspace_id, user_id, channel)
+);
+
+CREATE TABLE notification_queue (
+  id TEXT PRIMARY KEY,
+  notification_id TEXT NOT NULL,
+  channel TEXT NOT NULL,
+  status TEXT DEFAULT 'pending',
+  sent_at INTEGER,
+  created_at INTEGER NOT NULL,
+  FOREIGN KEY(notification_id) REFERENCES notifications(id)
+);
+```
+
+#### Notification Types
+- OAuth service connected/disconnected
+- Skill installed/removed  
+- Team member invited/accepted/declined
+- Workspace created
+- API quota warning (80%+)
+- Subscription renewal/upgrade
+- Billing failures
+- Login from new device
+- Security alerts
+
+#### Notification Channels
+- In-app (dashboard dropdown + badge)
+- Email (SendGrid or Mailgun)
+- WhatsApp (via message tool for critical alerts)
+- Optional: Slack integration
+
+#### API Endpoints
+- `GET /api/v1/notifications` (list with filters)
+- `POST /api/v1/notifications/:id/read`
+- `POST /api/v1/notifications/read-all`
+- `DELETE /api/v1/notifications/:id`
+- `GET /api/v1/notifications/preferences`
+- `POST /api/v1/notifications/preferences`
+- `GET /api/v1/notifications/unread-count`
+
+#### Frontend Components
+- Notification bell icon with unread count
+- Notification dropdown (paginated, filters, actions)
+- Settings → Notifications tab (channel + type preferences)
+- Optional: Toast notifications for immediate alerts
+
+### Testing Requirements
+- Unit tests for notification dispatcher
+- Integration tests for end-to-end flow
+- Email template rendering tests
+- Preference filtering logic tests
+- Queue retry mechanism tests
+
+### Status
+```
+Status: ⏳ IN PROGRESS
+Blocker: All Phase 4+ features until Phase 3.5 complete
+Next: Spawn Phase 3.5 agent for implementation
 ```
 
 ---
@@ -259,24 +367,32 @@ Examples:
 
 ## 📊 Progress Summary
 
-**Total Phases:** 7  
-**Completed:** 2 (Phases 1-2)
-**In Progress:** 0  
-**Pending:** 5  
+**Total Phases:** 7.5  
+**Completed:** 3 (Phases 1-3)
+**In Progress:** 1 (Phase 3.5 - Notifications)
+**Pending:** 4 (Phases 4-7)
 
-**Overall Progress:** 29% (2 of 7 phases)
+**Overall Progress:** 40% (3+ of 7 phases)
 
 ---
 
-## 🚀 Next Steps
+## 🚀 Next Steps (Sequential - No Skipping)
 
 1. ✅ Phase 1 Complete (Teams & Multi-Tenancy)
 2. ✅ Phase 2 Complete (Billing & Usage Tracking)
-3. ⏳ Phase 3: Audit & Security
-4. ⏳ Phase 4: Enterprise (SSO+RBAC)
-5. ⏳ Phase 5: Compliance & Encryption
-6. ⏳ Phase 6: Self-Hosted Deployment
-7. ⏳ Phase 7: Certifications (SOC2, HIPAA, GDPR, ISO 27001)
+3. ✅ Phase 3 Complete (Audit & Security)
+4. ⏳ Phase 3.5: Notifications System (IN PROGRESS - **CRITICAL**, must complete before Phase 4)
+   - Spawn agent for full implementation
+   - Database schema + API endpoints
+   - Email integration (SendGrid or Mailgun)
+   - Frontend notification center + settings
+   - In-app + email delivery channels
+5. ⏳ Phase 4: Enterprise (SSO+RBAC) - **BLOCKED until Phase 3.5 complete**
+6. ⏳ Phase 5: Compliance & Encryption
+7. ⏳ Phase 6: Self-Hosted Deployment
+8. ⏳ Phase 7: Certifications (SOC2, HIPAA, GDPR, ISO 27001)
+
+**Rule:** NO PHASE SKIPPING. Each phase must be 100% complete before next phase starts.
 
 **Launch Target:** December 2026 (Month 9)
 
