@@ -17,6 +17,7 @@ const EventEmitter = require('events');
 // Global event emitter for device alerts and real-time notifications
 const alertEmitter = new EventEmitter();
 const NotificationService = require('./services/notificationService');
+const NotificationDispatcher = require('./lib/notificationDispatcher');
 
 const {
   db,
@@ -3225,6 +3226,13 @@ app.post('/api/v1/auth/2fa/verify', authenticate, (req, res) => {
     if (!enabled) return res.status(500).json({ error: 'Failed to enable 2FA for this user' });
     if (req.session?.user) req.session.user.two_factor_enabled = true;
 
+    // Send notification (Phase 3.5)
+    const ws = getWorkspaces(userId);
+    if (ws?.length) {
+      NotificationDispatcher.on2FAEnabled(ws[0].id, userId)
+        .catch(err => console.error('Notification dispatch error:', err));
+    }
+
     createAuditLog({
       requesterId: String(userId),
       action: '2fa_enabled',
@@ -3261,6 +3269,13 @@ app.post('/api/v1/auth/2fa/disable', authenticate, (req, res) => {
 
     disableUserTwoFactor(userId);
     if (req.session?.user) req.session.user.two_factor_enabled = false;
+
+    // Send notification (Phase 3.5)
+    const ws = getWorkspaces(userId);
+    if (ws?.length) {
+      NotificationDispatcher.on2FADisabled(ws[0].id, userId)
+        .catch(err => console.error('Notification dispatch error:', err));
+    }
 
     createAuditLog({
       requesterId: String(userId),
@@ -4175,8 +4190,14 @@ app.get([
       }
     }
 
-    // Emit notification for service connection
+    // Emit notification for service connection (Phase 3.5)
     if (req.session.user) {
+      const ws = getWorkspaces(req.session.user.id);
+      const workspaceId = ws?.[0]?.id || 'default';
+      NotificationDispatcher.onServiceConnected(workspaceId, req.session.user.id, service)
+        .catch(err => console.error('Notification dispatch error:', err));
+      
+      // Legacy notification (keep for compatibility)
       NotificationService.emitNotification(req.session.user.id, 'service_connected',
         `${service.charAt(0).toUpperCase() + service.slice(1)} Connected`,
         `Your ${service} account has been successfully connected to MyApi`,
@@ -4317,6 +4338,10 @@ app.post("/api/v1/oauth/disconnect/:service", authenticate, async (req, res) => 
       incrementUsageDaily(ws[0].id, new Date().toISOString().slice(0, 10), {
         active_services: countConnectedOAuthServices(userId),
       });
+      
+      // Send notification (Phase 3.5)
+      NotificationDispatcher.onServiceDisconnected(ws[0].id, userId, service)
+        .catch(err => console.error('Notification dispatch error:', err));
     }
 
     // Log disconnection
