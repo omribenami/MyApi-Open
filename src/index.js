@@ -1025,6 +1025,20 @@ function getOAuthUserId(req) {
   return 'oauth_user';
 }
 
+function countConnectedOAuthServices(userId) {
+  if (!userId) return 0;
+  let count = 0;
+  for (const service of OAUTH_SERVICES) {
+    try {
+      const token = getOAuthToken(service, String(userId));
+      if (token && !token.revoked_at) count += 1;
+    } catch {
+      // Ignore per-service read/decrypt failures for counting
+    }
+  }
+  return count;
+}
+
 // Register notification system routes (after authenticate is defined)
 const notificationsRouter = require('./routes/notifications');
 const activityRoutes = require('./routes/activity');
@@ -4581,16 +4595,17 @@ app.get("/api/v1/oauth/status", (req, res) => {
         if (service === 'twitter' || service === 'discord') {
           console.log(`[OAuth Status DEBUG] ${service}: userId=${userId}, token=${token ? 'FOUND' : 'NOT_FOUND'}`);
         }
-        connectionStatus = token && !token.revoked_at ? "connected" : (status?.status || "disconnected");
+        // Source of truth: actual token existence, not oauth_status table (which can be stale)
+        connectionStatus = token && !token.revoked_at ? "connected" : "disconnected";
       } catch (err) {
         // Log decryption errors but don't crash
         console.warn(`[OAuth Status] Failed to decrypt token for ${service}:`, err.message);
         token = null;
-        connectionStatus = status?.status || "disconnected";
+        connectionStatus = "disconnected";
       }
     } else {
       console.log(`[OAuth Status DEBUG] No userId found for ${service}`);
-      connectionStatus = status?.status || "disconnected";
+      connectionStatus = "disconnected";
     }
     
     return {
