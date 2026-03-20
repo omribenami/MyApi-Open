@@ -115,18 +115,6 @@ function deviceApprovalMiddleware(req, res, next) {
     // Check rate limit ONLY for new approval requests (not for the 403 response itself)
     const canCreateApproval = checkApprovalRateLimit(tokenId);
     
-    // TEMPORARY BYPASS FOR TESTING (Mar 20) - Remove after device approval DB is fixed
-    if (process.env.SKIP_DEVICE_APPROVAL === 'true') {
-      console.warn('[Device Approval] BYPASSED FOR TESTING - approving device automatically');
-      req.device = {
-        id: 'test-device',
-        name: 'Test Device (Bypass)',
-        fingerprint: fingerprintHash,
-        approvedAt: new Date().toISOString(),
-      };
-      return next();
-    }
-
     if (!existingPending && !canCreateApproval) {
       // RATE LIMITED - but we still return 403 to maintain security posture
       // (The rate limit applies only to creating NEW pending approvals)
