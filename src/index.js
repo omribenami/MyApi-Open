@@ -4153,6 +4153,7 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
   req.session.oauthStateMeta = req.session.oauthStateMeta || {};
   req.session.oauthStateMeta[state] = {
     mode,
+    ownerId: req.session?.user?.id ? String(req.session.user.id) : null,
     returnTo: String(req.query.returnTo || '/dashboard/'),
     createdAt: Date.now(),
   };
@@ -4413,12 +4414,13 @@ app.get([
       console.log(`[OAuth] Token stored successfully:`, { tokenId: storeResult.id, service, userId: appUser.id, scope: storeResult.scope });
     }
 
-    // Store token for authenticated session user (connect flow and any non-primary login flow)
-    if (req.session.user && !tokenStoredForUser) {
-      console.log(`[OAuth] Storing ${service} token for session user: ${req.session.user.id} (mode=${stateMeta.mode || 'connect'})`);
-      const storeResult = storeOAuthToken(service, req.session.user.id, tokenData.accessToken, tokenData.refreshToken || null, expiresAt, tokenData.scope);
+    // Store token for authenticated owner (connect flow and non-primary login flow)
+    const oauthOwnerId = req.session?.user?.id ? String(req.session.user.id) : (stateMeta?.ownerId ? String(stateMeta.ownerId) : null);
+    if (oauthOwnerId && !tokenStoredForUser) {
+      console.log(`[OAuth] Storing ${service} token for owner: ${oauthOwnerId} (mode=${stateMeta.mode || 'connect'})`);
+      const storeResult = storeOAuthToken(service, oauthOwnerId, tokenData.accessToken, tokenData.refreshToken || null, expiresAt, tokenData.scope);
       tokenStoredForUser = true;
-      console.log(`[OAuth] Token stored successfully:`, { tokenId: storeResult.id, service, userId: req.session.user.id, scope: storeResult.scope });
+      console.log(`[OAuth] Token stored successfully:`, { tokenId: storeResult.id, service, userId: oauthOwnerId, scope: storeResult.scope });
     }
 
     if (req.session.user && typeof getWorkspaces === 'function') {
