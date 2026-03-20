@@ -3917,8 +3917,17 @@ function getUnreadNotificationCount(workspaceId, userId) {
 }
 
 function getOrCreateNotificationSettings(workspaceId, userId) {
-  // Get or ensure the user has a workspace
+  // Get or ensure the user has a valid workspace
   let actualWorkspaceId = workspaceId;
+  
+  // Verify the workspace actually exists; if not, get/create user's workspace
+  if (actualWorkspaceId) {
+    const wsExists = db.prepare('SELECT id FROM workspaces WHERE id = ?').get(actualWorkspaceId);
+    if (!wsExists) {
+      actualWorkspaceId = null;
+    }
+  }
+  
   if (!actualWorkspaceId) {
     actualWorkspaceId = getOrEnsureUserWorkspace(userId);
   }
