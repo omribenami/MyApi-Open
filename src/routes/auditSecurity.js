@@ -38,8 +38,9 @@ function createAuditSecurityRouter({ sessionDb, sessionStore }) {
 
   router.get('/audit/logs', (req, res) => {
     try {
-      if (req.tokenMeta?.scope !== 'full') {
-        return res.status(403).json({ error: 'Only master/session users can view audit logs' });
+      const scope = String(req.tokenMeta?.scope || '');
+      if (!(scope === 'full' || scope.includes('admin'))) {
+        return res.status(403).json({ error: 'Only master/session/admin users can view audit logs' });
       }
 
       const limit = Math.min(Number(req.query.limit) || 50, 200);
@@ -116,8 +117,9 @@ function createAuditSecurityRouter({ sessionDb, sessionStore }) {
 
   router.get('/audit/summary', (req, res) => {
     try {
-      if (req.tokenMeta?.scope !== 'full') {
-        return res.status(403).json({ error: 'Only master/session users can view audit summary' });
+      const scope = String(req.tokenMeta?.scope || '');
+      if (!(scope === 'full' || scope.includes('admin'))) {
+        return res.status(403).json({ error: 'Only master/session/admin users can view audit summary' });
       }
       const workspaceId = req.workspaceId || req.query.workspace || null;
       const where = workspaceId ? 'WHERE (workspace_id = ? OR workspace_id IS NULL)' : '';
