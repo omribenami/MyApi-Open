@@ -43,11 +43,19 @@ const features = [
 function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [viewMode, setViewMode] = useState('pricing');
+  const [viewMode, setViewMode] = useState('pricing'); // 'pricing' or 'login'
+  const [isSignup, setIsSignup] = useState(false); // true = signup within login tab
+  const [signupStep, setSignupStep] = useState(1); // 1=oauth, 2=user.md, 3=soul.md, 4=complete
   const [billingPlans, setBillingPlans] = useState([]);
   const [plansLoading, setPlansLoading] = useState(true);
   const [twoFactorRequired, setTwoFactorRequired] = useState(false);
   const [twoFactorCode, setTwoFactorCode] = useState('');
+  const [userMdData, setUserMdData] = useState({
+    name: '', email: '', location: '', timezone: '', bio: ''
+  });
+  const [soulMdData, setSoulMdData] = useState({
+    traits: '', values: '', communication: '', workStyle: ''
+  });
   const { setMasterToken, setUser, isAuthenticated } = useAuthStore();
 
   useEffect(() => {
@@ -65,9 +73,14 @@ function Login() {
                 setMasterToken(sessionUser.bootstrap.masterToken);
               }
               setUser(sessionUser);
+              // If coming from signup flow, proceed to USER.md step
+              if (isSignup) {
+                setSignupStep(2);
+              } else {
+                window.history.replaceState({}, document.title, '/dashboard/');
+                window.location.href = '/dashboard/';
+              }
             }
-            window.history.replaceState({}, document.title, '/dashboard/');
-            window.location.href = '/dashboard/';
           });
       } else if (callback.status === 'pending_2fa') {
         setTwoFactorRequired(true);
@@ -212,13 +225,13 @@ function Login() {
             <div className="rounded-3xl border border-slate-700/80 bg-slate-900/85 p-5 shadow-2xl shadow-black/40 sm:p-7 lg:p-8">
               <div className="mb-6 inline-flex w-full max-w-xs rounded-xl border border-slate-700 bg-slate-900/80 p-1">
                 <button
-                  onClick={() => setViewMode('pricing')}
+                  onClick={() => { setViewMode('pricing'); setIsSignup(false); }}
                   className={`flex-1 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors ${viewMode === 'pricing' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}
                 >
                   Pricing
                 </button>
                 <button
-                  onClick={() => setViewMode('login')}
+                  onClick={() => { setViewMode('login'); setIsSignup(false); setSignupStep(1); }}
                   className={`flex-1 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors ${viewMode === 'login' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}
                 >
                   Login
@@ -231,57 +244,226 @@ function Login() {
 
               {viewMode === 'login' ? (
                 <div className="max-w-xl">
-                  <h2 className="text-2xl font-semibold">Welcome back</h2>
-                  <p className="mb-6 mt-2 text-sm text-slate-400 sm:text-base">Sign in securely with OAuth.</p>
+                  {isSignup ? (
+                    // SIGNUP VIEW
+                    <>
+                      <h2 className="text-2xl font-semibold">Create your account</h2>
+                      <p className="mb-6 mt-2 text-sm text-slate-400 sm:text-base">Step {signupStep} of 3</p>
 
-                  {twoFactorRequired ? (
-                    <form onSubmit={handleTwoFactorChallenge} className="space-y-4">
-                      <div>
-                        <label htmlFor="twoFactorCode" className="mb-2 block text-sm font-medium text-slate-300">Authenticator Code</label>
-                        <input
-                          id="twoFactorCode"
-                          type="text"
-                          autoComplete="one-time-code"
-                          required
-                          value={twoFactorCode}
-                          onChange={(e) => setTwoFactorCode(e.target.value)}
-                          className="min-h-[48px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
-                          placeholder="Enter 6-digit code"
-                        />
-                      </div>
-                      <button
-                        type="submit"
-                        disabled={loading || !twoFactorCode.trim()}
-                        className="min-h-[48px] w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {loading ? 'Verifying...' : 'Verify 2FA & Sign In'}
-                      </button>
-                    </form>
+                      {signupStep === 1 && (
+                        // OAuth selection
+                        <div className="space-y-3">
+                          <p className="text-sm text-slate-300 mb-4">Choose one of these to get started:</p>
+                          {[
+                            { id: 'google', name: 'Google' },
+                            { id: 'facebook', name: 'Facebook' },
+                            { id: 'github', name: 'GitHub' },
+                          ].map((service) => (
+                            <button
+                              key={service.id}
+                              onClick={() => handleOAuthClick(service.id)}
+                              className="flex min-h-[48px] w-full items-center justify-center gap-3 rounded-xl border border-slate-700 bg-slate-800/70 px-4 py-3 text-sm font-medium text-white transition-colors hover:border-slate-500 hover:bg-slate-800"
+                            >
+                              <span>{OAuthIcons[service.id] || null}</span>
+                              <span>Sign up with {service.name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {signupStep === 2 && (
+                        // USER.md setup
+                        <div className="space-y-4">
+                          <div className="rounded-xl border border-slate-700/80 bg-slate-900/60 p-4 mb-4">
+                            <p className="text-xs font-semibold text-slate-300 mb-2">What is USER.md?</p>
+                            <p className="text-xs text-slate-400 leading-relaxed">A personal identity document about you - your background, preferences, and context. This helps your AI understand who you are.</p>
+                            <p className="text-xs text-slate-500 mt-2 italic">Example: "I'm Omri, a full-stack developer in Austin. I prefer async communication and work best mornings."</p>
+                          </div>
+
+                          <div className="space-y-3">
+                            <div>
+                              <label className="mb-2 block text-sm font-medium text-slate-300">Your Name (Optional)</label>
+                              <input
+                                type="text"
+                                value={userMdData.name}
+                                onChange={(e) => setUserMdData({ ...userMdData, name: e.target.value })}
+                                className="min-h-[48px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
+                                placeholder="e.g., YOUR_NAME"
+                              />
+                            </div>
+                            <div>
+                              <label className="mb-2 block text-sm font-medium text-slate-300">Email (Optional)</label>
+                              <input
+                                type="email"
+                                value={userMdData.email}
+                                onChange={(e) => setUserMdData({ ...userMdData, email: e.target.value })}
+                                className="min-h-[48px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
+                                placeholder="your@email.com"
+                              />
+                            </div>
+                            <div>
+                              <label className="mb-2 block text-sm font-medium text-slate-300">Location (Optional)</label>
+                              <input
+                                type="text"
+                                value={userMdData.location}
+                                onChange={(e) => setUserMdData({ ...userMdData, location: e.target.value })}
+                                className="min-h-[48px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
+                                placeholder="e.g., Austin, Texas"
+                              />
+                            </div>
+                            <div>
+                              <label className="mb-2 block text-sm font-medium text-slate-300">Bio (Optional)</label>
+                              <textarea
+                                value={userMdData.bio}
+                                onChange={(e) => setUserMdData({ ...userMdData, bio: e.target.value })}
+                                className="min-h-[100px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
+                                placeholder="Tell us about yourself..."
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex gap-3 pt-2">
+                            <button
+                              onClick={() => setIsSignup(false)}
+                              className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-800"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={() => setSignupStep(3)}
+                              className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500"
+                            >
+                              Next
+                            </button>
+                            <button
+                              onClick={() => setSignupStep(4)}
+                              className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-300 transition-colors hover:bg-slate-800"
+                            >
+                              Skip
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {signupStep === 3 && (
+                        // SOUL.md setup
+                        <div className="space-y-4">
+                          <div className="rounded-xl border border-slate-700/80 bg-slate-900/60 p-4 mb-4">
+                            <p className="text-xs font-semibold text-slate-300 mb-2">What is SOUL.md?</p>
+                            <p className="text-xs text-slate-400 leading-relaxed">Your personality and values document - how you think, what you care about, and how you want to be treated.</p>
+                            <p className="text-xs text-slate-500 mt-2 italic">Example: "I value clarity and direct feedback. I'm driven by learning. I prefer asynchronous, written communication."</p>
+                          </div>
+
+                          <div className="space-y-3">
+                            <div>
+                              <label className="mb-2 block text-sm font-medium text-slate-300">Your Traits (Optional)</label>
+                              <textarea
+                                value={soulMdData.traits}
+                                onChange={(e) => setSoulMdData({ ...soulMdData, traits: e.target.value })}
+                                className="min-h-[80px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
+                                placeholder="e.g., Analytical, creative, detail-oriented..."
+                              />
+                            </div>
+                            <div>
+                              <label className="mb-2 block text-sm font-medium text-slate-300">Your Values (Optional)</label>
+                              <textarea
+                                value={soulMdData.values}
+                                onChange={(e) => setSoulMdData({ ...soulMdData, values: e.target.value })}
+                                className="min-h-[80px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
+                                placeholder="e.g., Integrity, learning, autonomy..."
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex gap-3 pt-2">
+                            <button
+                              onClick={() => setSignupStep(2)}
+                              className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-800"
+                            >
+                              Back
+                            </button>
+                            <button
+                              onClick={() => setSignupStep(4)}
+                              className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500"
+                            >
+                              Complete
+                            </button>
+                            <button
+                              onClick={() => setSignupStep(4)}
+                              className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-300 transition-colors hover:bg-slate-800"
+                            >
+                              Skip
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {signupStep === 4 && (
+                        // Complete
+                        <div className="space-y-4">
+                          <div className="rounded-xl border border-emerald-500/35 bg-emerald-500/10 p-4 text-center">
+                            <p className="text-sm font-semibold text-emerald-300 mb-2">Welcome to MyApi!</p>
+                            <p className="text-xs text-slate-300">Your account has been created. Redirecting to dashboard...</p>
+                          </div>
+                        </div>
+                      )}
+                    </>
                   ) : (
-                    <div className="space-y-3">
-                      {oauthServices.map((service) => (
-                        <button
-                          key={service.id}
-                          onClick={() => handleOAuthClick(service.id)}
-                          className="flex min-h-[48px] w-full items-center justify-center gap-3 rounded-xl border border-slate-700 bg-slate-800/70 px-4 py-3 text-sm font-medium text-white transition-colors hover:border-slate-500 hover:bg-slate-800"
-                        >
-                          <span>{OAuthIcons[service.id] || null}</span>
-                          <span>Continue with {service.name}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                    // LOGIN VIEW
+                    <>
+                      <h2 className="text-2xl font-semibold">Welcome back</h2>
+                      <p className="mb-6 mt-2 text-sm text-slate-400 sm:text-base">Sign in securely with OAuth.</p>
 
-                  <div className="mt-6 text-center text-sm text-slate-400">
-                    Need an account?{' '}
-                    <button
-                      type="button"
-                      onClick={() => setViewMode('pricing')}
-                      className="font-semibold text-blue-300 underline-offset-2 transition-colors hover:text-blue-200 hover:underline"
-                    >
-                      Sign up
-                    </button>
-                  </div>
+                      {twoFactorRequired ? (
+                        <form onSubmit={handleTwoFactorChallenge} className="space-y-4">
+                          <div>
+                            <label htmlFor="twoFactorCode" className="mb-2 block text-sm font-medium text-slate-300">Authenticator Code</label>
+                            <input
+                              id="twoFactorCode"
+                              type="text"
+                              autoComplete="one-time-code"
+                              required
+                              value={twoFactorCode}
+                              onChange={(e) => setTwoFactorCode(e.target.value)}
+                              className="min-h-[48px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
+                              placeholder="Enter 6-digit code"
+                            />
+                          </div>
+                          <button
+                            type="submit"
+                            disabled={loading || !twoFactorCode.trim()}
+                            className="min-h-[48px] w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            {loading ? 'Verifying...' : 'Verify 2FA & Sign In'}
+                          </button>
+                        </form>
+                      ) : (
+                        <div className="space-y-3">
+                          {oauthServices.map((service) => (
+                            <button
+                              key={service.id}
+                              onClick={() => handleOAuthClick(service.id)}
+                              className="flex min-h-[48px] w-full items-center justify-center gap-3 rounded-xl border border-slate-700 bg-slate-800/70 px-4 py-3 text-sm font-medium text-white transition-colors hover:border-slate-500 hover:bg-slate-800"
+                            >
+                              <span>{OAuthIcons[service.id] || null}</span>
+                              <span>Continue with {service.name}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="mt-6 text-center text-sm text-slate-400">
+                        Need an account?{' '}
+                        <button
+                          type="button"
+                          onClick={() => { setIsSignup(true); setSignupStep(1); }}
+                          className="font-semibold text-blue-300 underline-offset-2 transition-colors hover:text-blue-200 hover:underline"
+                        >
+                          Sign up
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
           ) : (
                 <div>
@@ -313,7 +495,15 @@ function Login() {
                           </ul>
 
                           <button
-                            onClick={() => (plan.id === 'free' ? setViewMode('login') : handleCheckout(plan.id))}
+                            onClick={() => {
+                              if (plan.id === 'free') {
+                                setViewMode('login');
+                                setIsSignup(true);
+                                setSignupStep(1);
+                              } else {
+                                handleCheckout(plan.id);
+                              }
+                            }}
                             disabled={loading}
                             className={`mt-5 min-h-[44px] w-full rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${plan.id === 'free' ? 'border border-slate-600 text-slate-200 hover:bg-slate-800' : 'bg-blue-600 text-white hover:bg-blue-500'} disabled:cursor-not-allowed disabled:opacity-50`}
                           >
