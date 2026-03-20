@@ -28,7 +28,7 @@ function createSkillsRoutes(
   const router = express.Router();
 
   // Helper to extract owner from token
-  const getOwnerId = (req) => req.tokenData?.id || req.session?.userId || 'owner';
+  const getOwnerId = (req) => req.tokenData?.id || req.session?.user?.id || req.session?.userId || 'owner';
 
   // Validation error handler
   const handleValidationErrors = (req, res, next) => {

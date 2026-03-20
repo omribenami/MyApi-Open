@@ -73,7 +73,11 @@ function ServiceConnectors() {
       // Map services and use the OAuth provider name to look up status
       setServices(allServices.map((svc) => {
         const oauthProviderName = getOAuthProvider(svc.name);
-        const oauthStatus = oauthMap[oauthProviderName];
+        const oauthStatus = oauthMap[oauthProviderName] || {
+          status: svc.status,
+          enabled: !svc.notConfigured,
+          auth_type: svc.auth_type,
+        };
         return normalizeService(svc, oauthStatus);
       }));
     } catch (err) {
