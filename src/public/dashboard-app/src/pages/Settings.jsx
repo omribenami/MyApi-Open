@@ -1191,11 +1191,126 @@ function PrivacySection() {
   );
 }
 
+function ImportDataModal({ isOpen, onClose }) {
+  const [file, setFile] = useState(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(null);
+
+  if (!isOpen) return null;
+
+  const handleFileChange = (e) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setFile(e.target.files[0]);
+    }
+  };
+
+  const handleImport = async () => {
+    if (!file) return;
+    setIsImporting(true);
+    setError('');
+    setSuccess(null);
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch('/api/v1/import', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to import data');
+      }
+
+      setSuccess(`Import completed! Restored: ${data.summary.imported.personas} personas, Settings: ${data.summary.imported.settings ? 'Yes' : 'No'}, Profile: ${data.summary.imported.profile ? 'Yes' : 'No'}`);
+      
+      // Auto close after 3s
+      setTimeout(() => {
+        onClose();
+        setSuccess(null);
+        setFile(null);
+      }, 3000);
+      
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+      <div className="bg-slate-800 border border-slate-700 rounded-lg max-w-lg w-full p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-xl font-bold text-white">Import Data</h2>
+            <p className="text-sm text-slate-400 mt-1">
+              Upload a MyApi v3 Export ZIP to restore profile, settings, and personas.
+            </p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-200 text-xl leading-none">
+            ✕
+          </button>
+        </div>
+
+        {error && (
+          <div className="mb-4 bg-red-900 bg-opacity-30 border border-red-700 rounded-lg p-3 text-sm text-red-200">
+            {error}
+          </div>
+        )}
+        {success && (
+          <div className="mb-4 bg-green-900 bg-opacity-30 border border-green-700 rounded-lg p-3 text-sm text-green-200">
+            {success}
+          </div>
+        )}
+
+        {!success && (
+          <>
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-slate-300 mb-2">Select ZIP File</label>
+              <input
+                type="file"
+                accept=".zip"
+                onChange={handleFileChange}
+                className="w-full text-slate-300 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer"
+              />
+            </div>
+            <div className="bg-blue-900 bg-opacity-20 border border-blue-800 rounded-lg p-3 mb-6">
+              <p className="text-xs text-blue-300">
+                Note: Auth tokens and connector secrets will NOT be restored for security reasons.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={onClose}
+                disabled={isImporting}
+                className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleImport}
+                disabled={!file || isImporting}
+                className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
+              >
+                {isImporting ? 'Importing...' : 'Start Import'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Danger Zone Section
 // ─────────────────────────────────────────────────────────────────────────────
 
-function DangerZoneSection({ onRequestExport, onRequestDelete }) {
+function DangerZoneSection({ onRequestExport, onRequestImport, onRequestDelete }) {
   return (
     <SectionCard title="Danger Zone" description="Irreversible account actions" danger>
       <div className="space-y-4">
@@ -1212,6 +1327,22 @@ function DangerZoneSection({ onRequestExport, onRequestDelete }) {
             className="flex-shrink-0 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium rounded-lg transition-colors text-sm border border-slate-600"
           >
             Export Data
+          </button>
+        </div>
+
+        {/* Import */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 bg-slate-900 border border-slate-700 rounded-lg">
+          <div>
+            <p className="text-sm font-semibold text-white">Import Data</p>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Restore your profile, settings, and personas from a ZIP export.
+            </p>
+          </div>
+          <button
+            onClick={onRequestImport}
+            className="flex-shrink-0 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium rounded-lg transition-colors text-sm border border-slate-600"
+          >
+            Import Data
           </button>
         </div>
 

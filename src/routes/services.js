@@ -27,6 +27,14 @@ const SERVICE_CATALOG = [
 function createServicesRoutes() {
   const router = express.Router();
 
+  // Auth middleware for write operations
+  function requireAuth(req, res, next) {
+    if (req.session?.user || req.tokenMeta) {
+      return next();
+    }
+    res.status(401).json({ error: 'Unauthorized' });
+  }
+
   function resolveUserId(req) {
     return String(req.user?.id || req.tokenMeta?.ownerId || req.tokenMeta?.userId || 'owner');
   }
@@ -194,7 +202,7 @@ function createServicesRoutes() {
     }
   });
 
-  router.post('/preferences/:serviceName', (req, res) => {
+  router.post('/preferences/:serviceName', requireAuth, (req, res) => {
     try {
       const userId = req.user?.id || req.tokenMeta?.ownerId || 'owner';
       const { serviceName } = req.params;
@@ -221,7 +229,7 @@ function createServicesRoutes() {
     }
   });
 
-  router.put('/preferences/:serviceName', (req, res) => {
+  router.put('/preferences/:serviceName', requireAuth, (req, res) => {
     try {
       const userId = req.user?.id || req.tokenMeta?.ownerId || 'owner';
       const { serviceName } = req.params;
@@ -248,7 +256,7 @@ function createServicesRoutes() {
     }
   });
 
-  router.delete('/preferences/:serviceName', (req, res) => {
+  router.delete('/preferences/:serviceName', requireAuth, (req, res) => {
     try {
       const userId = req.user?.id || req.tokenMeta?.userId || 'owner';
       const { serviceName } = req.params;

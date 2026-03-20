@@ -440,7 +440,11 @@ app.use((req, res, next) => {
                    req.path === '/ping' ||
                    req.path.startsWith('/dashboard/');
 
-  if (isExempt) {
+  // CRITICAL: Exempt Bearer token (API/agent) requests from global rate limiting
+  // Device approval middleware will handle rate limiting for API tokens
+  const hasBearer = req.headers.authorization?.startsWith('Bearer ') || req.query.token || req.query.api_key;
+  
+  if (isExempt || hasBearer) {
     return next();
   }
 
@@ -759,6 +763,13 @@ app.get('/api/v1/users/me', authenticate, (req, res) => {
 
 app.put('/api/v1/users/me', authenticate, (req, res) => {
   const fields = req.body || {};
+  const userId = req.user?.id;
+  
+  if (!userId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  // Update USER.md file
   const lines = (fs.existsSync(USER_MD_PATH) ? fs.readFileSync(USER_MD_PATH, 'utf8') : '# USER.md\n\n').split('\n');
 
   for (const [key, rawValue] of Object.entries(fields)) {
@@ -778,7 +789,27 @@ app.put('/api/v1/users/me', authenticate, (req, res) => {
   const nextMd = `${lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()}\n`;
   fs.writeFileSync(USER_MD_PATH, nextMd);
   vault.identityDocs['owner'] = parseUserMd(nextMd);
-  res.json({ ok: true });
+
+  // Sync to database (critical: frontend reads from DB, not USER.md)
+  const { updateUserOAuthProfile } = require('./database');
+  try {
+    updateUserOAuthProfile(userId, {
+      displayName: fields.Name || fields.displayName,
+      email: fields.Email || fields.email,
+      avatarUrl: fields.AvatarUrl || fields.avatarUrl
+    });
+  } catch (err) {
+    console.error('Failed to sync user profile to database:', err);
+    // Don't fail the request, USER.md is updated
+  }
+
+  // Return updated user so frontend has fresh data
+  const { getUserById } = require('./database');
+  const updatedUser = getUserById(userId);
+  res.json({ 
+    ok: true,
+    user: updatedUser 
+  });
 });
 
 // API Exposure policy
@@ -934,7 +965,8 @@ app.use('/api/v1', authRoutes);
 app.use('/api/v1/devices', authenticate, deviceRoutes);
 // Device approval is now applied globally in the authenticate middleware
 app.use('/api/v1/dashboard', authenticate, dashboardRoutes);
-app.use('/api/v1/services', authenticate, createServicesRoutes());
+// Services endpoints are public for discovery; auth required only for mutations
+app.use('/api/v1/services', createServicesRoutes());
 app.use('/api/v1/skills', authenticate, createSkillsRoutes(
   db,
   createSkill,
@@ -1175,7 +1207,10 @@ app.get('/api/v1/manage/audit/agents', authenticate, (req, res) => {
 
 // Register export data routes
 const exportRoutes = require('./routes/export');
+const importRoutes = require('./routes/import');
+
 app.use('/api/v1/export', authenticate, exportRoutes);
+app.use('/api/v1/import', authenticate, importRoutes);
 
 // --- PUBLIC: BILLING PLANS ENDPOINT (no auth required) ---
 app.get('/api/v1/billing/plans', (req, res) => {

@@ -39,7 +39,7 @@ router.post('/auth/register', (req, res) => {
   if (!global.sessions) global.sessions = {};
   global.sessions[sessionToken] = { userId: id, username, createdAt: Date.now() };
 
-  res.json({ data: { token: sessionToken, user: { id, username, displayName: display_name || username, email: email || '', timezone: timezone || 'UTC' }, needsOnboarding: true } });
+  res.status(201).json({ data: { token: sessionToken, user: { id, username, displayName: display_name || username, email: email || '', timezone: timezone || 'UTC' }, needsOnboarding: true } });
 });
 
 // Login
