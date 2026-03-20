@@ -2655,7 +2655,7 @@ app.post('/api/v1/billing/checkout', authenticate, async (req, res) => {
   }
 });
 
-app.get('/api/v1/billing/current', authenticate, (req, res) => {
+app.get('/api/v1/billing/current', (req, res) => {
   const workspaceId = getRequestWorkspaceId(req);
   if (!workspaceId) return res.status(400).json({ error: 'Workspace context is required' });
 
@@ -2678,7 +2678,7 @@ app.get('/api/v1/billing/current', authenticate, (req, res) => {
   });
 });
 
-app.get('/api/v1/billing/invoices', authenticate, (req, res) => {
+app.get('/api/v1/billing/invoices', (req, res) => {
   const workspaceId = getRequestWorkspaceId(req);
   if (!workspaceId) return res.status(400).json({ error: 'Workspace context is required' });
   const invoices = listInvoicesByWorkspace(workspaceId, Number(req.query.limit || 50));
@@ -2694,7 +2694,7 @@ app.get('/api/v1/billing/invoices', authenticate, (req, res) => {
   });
 });
 
-app.get('/api/v1/billing/usage', authenticate, (req, res) => {
+app.get('/api/v1/billing/usage', (req, res) => {
   const workspaceId = getRequestWorkspaceId(req);
   if (!workspaceId) return res.status(400).json({ error: 'Workspace context is required' });
 

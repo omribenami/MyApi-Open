@@ -5,16 +5,16 @@ const db = require('../database');
 const { resolveWorkspaceCurrentPlan } = require('../lib/billing');
 
 describe('Phase 2 Billing & Usage', () => {
-  const userId = `phase2_user_${Date.now()}`;
   const tokenRaw = `phase2_token_${Date.now()}`;
   let workspace;
+  let user;
 
   beforeAll(() => {
-    db.createUser(userId, `p2_${Date.now()}`, 'Phase2 User', 'phase2@example.com', 'UTC', 'password123');
-    workspace = db.createWorkspace('Phase2 Workspace', userId);
+    user = db.createUser(`p2_${Date.now()}`, 'Phase2 User', 'phase2@example.com', 'UTC', 'password123');
+    workspace = db.createWorkspace(`Phase2 Workspace ${Date.now()}`, user.id);
 
     const hash = bcrypt.hashSync(tokenRaw, 10);
-    db.createAccessToken(hash, userId, 'full', 'Phase2 Test Token');
+    db.createAccessToken(hash, user.id, 'full', 'Phase2 Test Token');
   });
 
   test('plan resolution falls back to free when subscription missing', () => {
