@@ -1097,6 +1097,7 @@ app.get('/api/v1/billing/plans', (req, res) => {
 // Import multi-tenancy middleware
 const { extractWorkspaceContext, enforceMultiTenancy, switchWorkspaceHandler } = require('./middleware/multitenancy');
 const { createAuditSecurityRouter } = require('./routes/auditSecurity');
+const { createNotificationsRouter, dispatchNotification } = require('./routes/notifications');
 
 // Extract workspace context for all authenticated requests
 app.use('/api/v1', authenticate, extractWorkspaceContext, enforceMultiTenancy);
@@ -1134,6 +1135,9 @@ app.post('/api/v1/workspace-switch/:workspaceId', authenticate, switchWorkspaceH
 
 // Phase 3: audit/security API
 app.use('/api/v1', authenticate, createAuditSecurityRouter({ sessionDb, sessionStore }));
+
+// Phase 3.5: notifications API
+app.use('/api/v1', authenticate, createNotificationsRouter());
 
 function getRequestOwnerId(req) {
   return String(req?.tokenMeta?.ownerId || req?.session?.user?.id || 'owner');
