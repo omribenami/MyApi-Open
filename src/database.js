@@ -3282,6 +3282,7 @@ function seedServices() {
     
     // Payment - with official logos
     { name: 'stripe', label: 'Stripe', category: 'payment', icon: 'https://cdn.simpleicons.org/stripe/008CDD', auth: 'key', endpoint: 'https://api.stripe.com/v1', docs: 'https://stripe.com/docs/api' },
+    { name: 'fal', label: 'fal', category: 'dev', icon: 'https://cdn.simpleicons.org/fal/7C3AED', auth: 'api_key', endpoint: 'https://fal.run', docs: 'https://fal.ai/models' },
     { name: 'paypal', label: 'PayPal', category: 'payment', icon: 'https://cdn.simpleicons.org/paypal/003087', auth: 'oauth2', endpoint: 'https://api-m.paypal.com', docs: 'https://developer.paypal.com' },
     { name: 'shopify', label: 'Shopify', category: 'payment', icon: 'https://cdn.simpleicons.org/shopify/96C63E', auth: 'oauth2', endpoint: 'https://your-store.myshopify.com/admin/api/2024-01', docs: 'https://shopify.dev/api/admin-rest' },
     { name: 'square', label: 'Square', category: 'payment', icon: 'https://cdn.simpleicons.org/square/3693F3', auth: 'oauth2', endpoint: 'https://api.square.com/v2', docs: 'https://developer.squareup.com' },
@@ -3326,6 +3327,53 @@ function seedServices() {
         documentation_url = 'https://nodemailer.com/smtp'
     WHERE name = 'email'
   `).run();
+
+  // Seed fal API methods (idempotent)
+  const falService = db.prepare(`SELECT id FROM services WHERE name = 'fal'`).get();
+  if (falService?.id) {
+    const insertMethod = db.prepare(`
+      INSERT OR IGNORE INTO service_api_methods
+        (service_id, method_name, http_method, endpoint, description, parameters, response_example, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const nowMethods = new Date().toISOString();
+    insertMethod.run(
+      falService.id,
+      'list_models',
+      'GET',
+      '/models',
+      'List available fal models.',
+      JSON.stringify([]),
+      JSON.stringify({ models: [{ id: 'fal-ai/fast-sdxl' }] }),
+      nowMethods,
+    );
+    insertMethod.run(
+      falService.id,
+      'generate_image',
+      'POST',
+      'https://queue.fal.run/fal-ai/fast-sdxl',
+      'Generate image from a text prompt using fal queue endpoint.',
+      JSON.stringify([{ name: 'prompt', type: 'string', required: true, description: 'Image generation prompt' }]),
+      JSON.stringify({ request_id: 'req_123', status_url: 'https://queue.fal.run/requests/req_123' }),
+      nowMethods,
+    );
+    insertMethod.run(
+      falService.id,
+      'generate_video',
+      'POST',
+      'unsupported://generate_video',
+      'Video generation is not available in MVP yet. See docs for phase-2 MCP path.',
+      JSON.stringify([{ name: 'prompt', type: 'string', required: true }]),
+      JSON.stringify({ error: 'generate_video is not supported in current MyApi fal MVP integration' }),
+      nowMethods,
+    );
+
+    // Keep definitions current even if rows were seeded in earlier versions.
+    db.prepare(`UPDATE service_api_methods SET endpoint = ? WHERE service_id = ? AND method_name = 'generate_image'`)
+      .run('https://queue.fal.run/fal-ai/fast-sdxl', falService.id);
+    db.prepare(`UPDATE service_api_methods SET endpoint = ? WHERE service_id = ? AND method_name = 'generate_video'`)
+      .run('unsupported://generate_video', falService.id);
+  }
 }
 
 function getServiceCategories() {

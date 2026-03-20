@@ -4963,6 +4963,30 @@ app.get('/api/v1/services/:serviceId/methods', (req, res) => {
   }
 });
 
+function resolveServiceApiKeyToken(serviceName, userId) {
+  const { getServicePreference } = require('./database');
+  const prefs = getServicePreference(userId, serviceName);
+  const preferenceKeys = [
+    `${serviceName}_api_key`,
+    'api_key',
+    'token',
+  ];
+
+  for (const key of preferenceKeys) {
+    const value = String(prefs?.preferences?.[key] || '').trim();
+    if (value) {
+      return { accessToken: value, source: `service_preferences.${key}` };
+    }
+  }
+
+  const envValue = String(process.env[`${String(serviceName).toUpperCase()}_API_KEY`] || '').trim();
+  if (envValue) {
+    return { accessToken: envValue, source: `${String(serviceName).toUpperCase()}_API_KEY` };
+  }
+
+  return null;
+}
+
 // Test service connection
 app.get('/api/v1/services/:serviceName/test', authenticate, async (req, res) => {
   try {
@@ -4974,16 +4998,63 @@ app.get('/api/v1/services/:serviceName/test', authenticate, async (req, res) => 
       return res.status(404).json({ error: 'Service not found' });
     }
     
-    // Simple health check - can be expanded for each service
-    const testResult = {
-      service: serviceName,
-      status: 'available',
-      apiEndpoint: service.api_endpoint,
-      authType: service.auth_type,
-      documentationUrl: service.documentation_url,
-      timestamp: new Date().toISOString(),
-      message: `✅ Service is available and ready to integrate. Use the documentation link to set up authentication.`
-    };
+    let testResult;
+
+    if (serviceName === 'fal') {
+      const userId = getOAuthUserId(req);
+      const token = resolveServiceApiKeyToken('fal', userId);
+      if (!token?.accessToken) {
+        return res.status(403).json({ error: "Service 'fal' is not connected. Add FAL API key in service preferences or FAL_API_KEY env." });
+      }
+
+      const https = require('https');
+      const probe = await new Promise((resolve, reject) => {
+        const reqProbe = https.request('https://fal.run/models', {
+          method: 'GET',
+          headers: {
+            Authorization: `Key ${token.accessToken}`,
+            Accept: 'application/json',
+            'User-Agent': 'MyApi-Gateway/1.0',
+          },
+        }, (resp) => {
+          let data = '';
+          resp.on('data', (chunk) => (data += chunk));
+          resp.on('end', () => {
+            let parsed;
+            try { parsed = JSON.parse(data); } catch { parsed = data; }
+            resolve({ statusCode: resp.statusCode, data: parsed });
+          });
+        });
+        reqProbe.on('error', reject);
+        reqProbe.end();
+      });
+
+      if (probe.statusCode >= 400) {
+        const message = typeof probe.data?.error === 'string' ? probe.data.error : 'Invalid fal API key or fal API unavailable';
+        return res.status(probe.statusCode).json({ error: message, code: 'FAL_CONNECTION_TEST_FAILED' });
+      }
+
+      testResult = {
+        service: serviceName,
+        status: 'connected',
+        apiEndpoint: service.api_endpoint,
+        authType: service.auth_type,
+        documentationUrl: service.documentation_url,
+        timestamp: new Date().toISOString(),
+        message: '✅ fal API key validated successfully.',
+      };
+    } else {
+      // Simple health check - can be expanded for each service
+      testResult = {
+        service: serviceName,
+        status: 'available',
+        apiEndpoint: service.api_endpoint,
+        authType: service.auth_type,
+        documentationUrl: service.documentation_url,
+        timestamp: new Date().toISOString(),
+        message: `✅ Service is available and ready to integrate. Use the documentation link to set up authentication.`
+      };
+    }
     
     createAuditLog({
       requesterId: req.tokenMeta.tokenId,
@@ -5022,8 +5093,15 @@ app.post('/api/v1/services/:serviceName/execute', authenticate, async (req, res)
     }
 
     const userId = getOAuthUserId(req);
-    let token = getOAuthToken(serviceName, userId);
     const authType = service.auth_type || service.authType;
+    let token = null;
+
+    if (authType === 'api_key') {
+      token = resolveServiceApiKeyToken(serviceName, userId);
+    } else {
+      token = getOAuthToken(serviceName, userId);
+    }
+
     if (!token && authType !== 'webhook' && authType !== 'none') {
       return res.status(403).json({ error: `Service '${serviceName}' not connected. Please connect it first.` });
     }
@@ -5133,16 +5211,21 @@ app.post('/api/v1/services/:serviceName/proxy', authenticate, async (req, res) =
       });
     }
 
-    const { getOAuthToken, isTokenExpired, refreshOAuthToken } = require('./database');
+    const { getOAuthToken, isTokenExpired, refreshOAuthToken, getServiceByName } = require('./database');
     const userId = getOAuthUserId(req);
-    let token = getOAuthToken(serviceName, userId);
+    const serviceRecord = getServiceByName(serviceName);
+    const authType = serviceRecord?.auth_type || 'oauth2';
+
+    let token = authType === 'api_key'
+      ? resolveServiceApiKeyToken(serviceName, userId)
+      : getOAuthToken(serviceName, userId);
 
     if (!token) {
-      return res.status(403).json({ error: `Service '${serviceName}' not connected. Please connect it first via /api/v1/oauth/authorize/${serviceName}` });
+      return res.status(403).json({ error: `Service '${serviceName}' not connected. Please connect it first.` });
     }
 
-    // Auto-refresh if expired
-    if (isTokenExpired(token)) {
+    // Auto-refresh if expired (OAuth only)
+    if (authType !== 'api_key' && isTokenExpired(token)) {
       const provider = OAUTH_PROVIDER_DETAILS[serviceName];
       if (provider && provider.tokenUrl && token.refreshToken) {
         const clientId = process.env[`${serviceName.toUpperCase()}_CLIENT_ID`];
@@ -5159,7 +5242,7 @@ app.post('/api/v1/services/:serviceName/proxy', authenticate, async (req, res) =
     }
 
     const provider = OAUTH_PROVIDER_DETAILS[serviceName];
-    const apiRoot = provider?.apiRoot;
+    const apiRoot = provider?.apiRoot || serviceRecord?.api_endpoint;
     if (!apiRoot) {
       return res.status(400).json({ error: `No API root configured for service '${serviceName}'` });
     }
@@ -5265,7 +5348,9 @@ app.post('/api/v1/services/:serviceName/proxy', authenticate, async (req, res) =
     };
 
     if (token.accessToken) {
-      headers['Authorization'] = serviceName === 'github' ? `token ${token.accessToken}` : `Bearer ${token.accessToken}`;
+      if (serviceName === 'github') headers['Authorization'] = `token ${token.accessToken}`;
+      else if (serviceName === 'fal') headers['Authorization'] = `Key ${token.accessToken}`;
+      else headers['Authorization'] = `Bearer ${token.accessToken}`;
     }
 
     let bodyStr = null;

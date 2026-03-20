@@ -21,6 +21,7 @@ const SERVICE_CATALOG = [
   { id: 'twitter', name: 'Twitter/X', description: 'Social media platform', icon: 'twitter', category: 'Social Media', auth_type: 'oauth2', api_endpoint: 'https://api.twitter.com/2' },
   { id: 'notion', name: 'Notion', description: 'Workspace and documentation', icon: 'notion', category: 'Productivity', auth_type: 'oauth2', api_endpoint: 'https://api.notion.com/v1' },
   { id: 'email', name: 'Email', description: 'Outbound transactional email delivery', icon: 'email', category: 'Communication', auth_type: 'smtp', api_endpoint: null, outbound_only: true },
+  { id: 'fal', name: 'fal', description: 'fal AI inference APIs (HTTP MVP, MCP phase-2)', icon: 'fal', category: 'Developer Tools', auth_type: 'api_key', api_endpoint: 'https://fal.run' },
 ];
 
 function createServicesRoutes() {
@@ -39,6 +40,19 @@ function createServicesRoutes() {
         created_at: null,
         expires_at: null,
         configMissing: cfg.missing || [],
+      };
+    }
+
+    if (serviceId === 'fal') {
+      const prefs = getServicePreference(userId, 'fal');
+      const perUserKey = String(prefs?.preferences?.fal_api_key || '').trim();
+      const envKey = String(process.env.FAL_API_KEY || '').trim();
+      const connected = Boolean(perUserKey || envKey);
+      return {
+        connected,
+        status: connected ? 'connected' : 'available',
+        created_at: prefs?.created_at || null,
+        expires_at: null,
       };
     }
 

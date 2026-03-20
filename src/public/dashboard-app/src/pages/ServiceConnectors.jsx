@@ -103,6 +103,12 @@ function ServiceConnectors() {
   const handleConnect = async (service) => {
     setConnectError(null);
 
+    if (service.auth_type === 'api_key') {
+      setServiceToConfig(service);
+      setIsConfigModalOpen(true);
+      return;
+    }
+
     if (service.notConfigured) {
       setConnectError(
         `${service.label} is not configured on the server yet. Add required env keys shown in details to enable this integration.`
@@ -163,8 +169,6 @@ function ServiceConnectors() {
 
   const filteredServices = useMemo(() => {
     return services.filter((s) => {
-      // Hide services that are not configured so users don't see broken/unavailable services
-      if (s.notConfigured) return false;
 
       const text = `${s.label} ${s.description || ''} ${s.category_label || s.category || ''}`.toLowerCase();
       const matchesSearch = !searchQuery || text.includes(searchQuery.toLowerCase());
@@ -178,9 +182,9 @@ function ServiceConnectors() {
   }, [services, searchQuery, selectedCategory, selectedStatus]);
 
   const summary = {
-    total: services.filter(s => !s.notConfigured).length,
-    connected: services.filter((s) => s.status === 'connected' && !s.notConfigured).length,
-    available: services.filter((s) => s.status !== 'connected' && !s.notConfigured).length,
+    total: services.length,
+    connected: services.filter((s) => s.status === 'connected').length,
+    available: services.filter((s) => s.status !== 'connected').length,
   };
 
   return (

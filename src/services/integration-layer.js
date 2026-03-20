@@ -86,6 +86,12 @@ const OAUTH_PROVIDER_DETAILS = {
     apiRoot: 'https://api.linkedin.com',
     docsUrl: 'https://learn.microsoft.com/linkedin/shared/authentication/authorization-code-flow',
   },
+  fal: {
+    authUrl: null,
+    tokenUrl: null,
+    apiRoot: 'https://fal.run',
+    docsUrl: 'https://fal.ai/models',
+  },
 };
 
 function safeJsonParse(value, fallback = null) {
@@ -269,6 +275,22 @@ async function executeServiceMethod({ serviceDef, method, params = {}, token = n
 
   const methodEndpoint = endpointOverride || method.endpoint;
 
+  // Explicit unsupported method stubs for MVP-safe service contracts.
+  if (typeof methodEndpoint === 'string' && methodEndpoint.startsWith('unsupported://')) {
+    return {
+      ok: false,
+      service: serviceDef.name,
+      method: method.methodName,
+      statusCode: 501,
+      data: null,
+      error: {
+        code: 'METHOD_UNSUPPORTED',
+        message: `${serviceDef.name}/${method.methodName} is not supported in this MyApi MVP integration`,
+      },
+      meta: { timestamp: new Date().toISOString() },
+    };
+  }
+
   // If no apiRoot or no endpoint on the method, return a helpful error
   if (!apiRoot && !methodEndpoint) {
     return {
@@ -329,6 +351,8 @@ async function executeServiceMethod({ serviceDef, method, params = {}, token = n
         // Different auth header patterns per provider
         if (serviceDef.name === 'github') {
           headers['Authorization'] = `token ${token.accessToken}`;
+        } else if (serviceDef.name === 'fal') {
+          headers['Authorization'] = `Key ${token.accessToken}`;
         } else {
           headers['Authorization'] = `Bearer ${token.accessToken}`;
         }

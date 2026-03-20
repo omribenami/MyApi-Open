@@ -89,6 +89,30 @@ function ServiceCard({ service, onConnect, onRevoke, onDetails, onConfigure, com
 
       <div className="border-t border-slate-700/50 bg-gradient-to-r from-slate-900/40 to-transparent px-6 py-4 flex gap-2">
         {service.status === 'connected' ? (
+          service.auth_type === 'api_key' ? (
+            <>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onConfigure && onConfigure(service);
+                }}
+                className="flex-1 px-4 py-2.5 rounded-lg text-sm font-semibold text-purple-300 bg-gradient-to-r from-purple-600/30 to-purple-600/10 border border-purple-500/50 hover:from-purple-600/50 hover:to-purple-600/30 hover:border-purple-500/70 transition-all duration-200"
+              >
+                ⚙️ Configure Key
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onConnect(service);
+                }}
+                className="flex-1 px-4 py-2.5 rounded-lg text-sm font-semibold text-blue-300 bg-gradient-to-r from-blue-600/30 to-blue-600/10 border border-blue-500/50 hover:from-blue-600/50 hover:to-blue-600/30 hover:border-blue-500/70 transition-all duration-200"
+              >
+                Update Key
+              </button>
+            </>
+          ) : (
           <>
             <button
               type="button"
@@ -121,6 +145,7 @@ function ServiceCard({ service, onConnect, onRevoke, onDetails, onConfigure, com
               Reconnect
             </button>
           </>
+          )
         ) : (
           <button
             type="button"

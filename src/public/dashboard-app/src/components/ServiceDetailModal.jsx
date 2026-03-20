@@ -232,6 +232,23 @@ function ServiceDetailModal({ service, onClose, onConnect, onRevoke }) {
               </button>
             </>
           ) : service.status === 'connected' ? (
+            service.auth_type === 'api_key' ? (
+              <>
+                <button
+                  onClick={handleTestConnection}
+                  disabled={testingConnection}
+                  className="flex-1 px-5 py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white font-semibold rounded-lg transition-all duration-200 disabled:opacity-50"
+                >
+                  {testingConnection ? '⏳ Testing...' : '✓ Test Connection'}
+                </button>
+                <button
+                  onClick={handleConnect}
+                  className="flex-1 px-5 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white font-semibold rounded-lg transition-all duration-200"
+                >
+                  🔐 Update API Key
+                </button>
+              </>
+            ) : (
             <>
               <button
                 onClick={handleTestConnection}
@@ -247,6 +264,7 @@ function ServiceDetailModal({ service, onClose, onConnect, onRevoke }) {
                 🔌 Disconnect
               </button>
             </>
+            )
           ) : (
             <button
               onClick={handleConnect}

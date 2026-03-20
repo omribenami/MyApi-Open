@@ -42,6 +42,7 @@ const BRAND_LOGOS = {
   trello: `${SIMPLE_ICONS_BASE}/trello/0052CC`,
   airtable: `${SIMPLE_ICONS_BASE}/airtable/18BFFF`,
   email: `${SIMPLE_ICONS_BASE}/gmail/EA4335`,
+  fal: `${SIMPLE_ICONS_BASE}/fal/7C3AED`,
 };
 
 const BRAND_LOGO_FALLBACKS = {
@@ -75,6 +76,7 @@ const SERVICE_ENV_REQUIREMENTS = {
   discord: ['DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'DISCORD_REDIRECT_URI'],
   whatsapp: ['WHATSAPP_BUSINESS_ACCOUNT_ID', 'WHATSAPP_API_TOKEN', 'WHATSAPP_WEBHOOK_TOKEN'],
   email: ['EMAIL_PROVIDER', 'EMAIL_FROM', 'SMTP_HOST', 'SMTP_PORT'],
+  fal: ['FAL_API_KEY (optional global fallback)'],
 };
 
 const AUTH_TYPE_STYLES = {

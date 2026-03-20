@@ -55,6 +55,7 @@ function ServiceConfigModal({ isOpen, service, onClose, onSave }) {
       discord: { default_server_id: '', default_channel_id: '' },
       linkedin: { default_profile_id: '' },
       reddit: { default_subreddit: '' },
+      fal: { fal_api_key: '', default_image_model: 'fal-ai/fast-sdxl' },
     };
     return defaults[serviceName] || {};
   };
@@ -129,6 +130,21 @@ function ServiceConfigModal({ isOpen, service, onClose, onSave }) {
           label: 'Default Subreddit',
           placeholder: 'r/MySubreddit',
           help: 'Subreddit name (with or without r/)',
+        },
+      ],
+      fal: [
+        {
+          key: 'fal_api_key',
+          label: 'fal API Key',
+          type: 'password',
+          placeholder: 'key_************************',
+          help: 'Stored in your encrypted service preferences. Server can also use global FAL_API_KEY.',
+        },
+        {
+          key: 'default_image_model',
+          label: 'Default Image Model',
+          placeholder: 'fal-ai/fast-sdxl',
+          help: 'Optional default model for image generation flows.',
         },
       ],
     };
@@ -229,7 +245,7 @@ function ServiceConfigModal({ isOpen, service, onClose, onSave }) {
                     </label>
                     <input
                       id={field.key}
-                      type="text"
+                      type={field.type || 'text'}
                       value={preferences[field.key] || ''}
                       onChange={(e) => handleInputChange(field.key, e.target.value)}
                       placeholder={field.placeholder}
