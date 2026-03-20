@@ -36,6 +36,18 @@ function Dashboard() {
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [twoFAEnabled, setTwoFAEnabled] = useState(null);
+
+  // Fetch 2FA status
+  const fetch2FAStatus = async () => {
+    try {
+      const response = await apiClient.get('/auth/2fa/status');
+      setTwoFAEnabled(response.data?.data?.enabled || response.data?.enabled || false);
+    } catch (err) {
+      console.error('Failed to fetch 2FA status:', err);
+      setTwoFAEnabled(false);
+    }
+  };
 
   // Fetch dashboard metrics from backend
   const fetchMetrics = async () => {
@@ -181,6 +193,7 @@ function Dashboard() {
     if (!isAuthenticated) return undefined;
 
     fetchMetrics();
+    fetch2FAStatus();
     setupWebSocket();
 
     const metricsInterval = setInterval(fetchMetrics, 30000);
@@ -211,6 +224,31 @@ function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {/* 2FA Warning Banner */}
+      {twoFAEnabled === false && (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 flex items-center gap-4">
+          <div className="flex-shrink-0">
+            <svg className="h-5 w-5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-medium text-amber-200">
+              🔒 Two-Factor Authentication (2FA) is strongly recommended
+            </p>
+            <p className="text-xs text-amber-300 mt-1">
+              Protect your account by enabling 2FA in Settings → Security. This adds an extra layer of protection against unauthorized access.
+            </p>
+          </div>
+          <Link
+            to="/settings?tab=security"
+            className="flex-shrink-0 px-3 py-1.5 text-xs font-semibold text-amber-700 bg-amber-400/20 hover:bg-amber-400/30 border border-amber-400/50 rounded transition-colors"
+          >
+            Enable 2FA
+          </Link>
+        </div>
+      )}
+
       {/* Header */}
       <div>
         <h1 className="text-3xl font-semibold tracking-tight text-slate-100">
