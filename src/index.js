@@ -4630,39 +4630,47 @@ app.post("/api/v1/oauth/disconnect/:service", authenticate, async (req, res) => 
   
   try {
     const userId = getOAuthUserId(req);
-    const token = getOAuthToken(service, userId);
+    
+    // Try to get token, but handle decryption errors gracefully
+    let token = null;
+    try {
+      token = getOAuthToken(service, userId);
+    } catch (decryptErr) {
+      console.warn(`[OAuth Disconnect] Token decryption failed for ${service} (old key?):`, decryptErr.message);
+      // Token is corrupted/unreadable, just delete it from DB
+      token = { accessToken: null };
+    }
     
     if (!token) {
       return res.status(404).json({ error: "No token found for this service" });
     }
     
-    // Revoke token on remote service
-    const adapter = oauthAdapters[service];
-    await adapter.revokeToken(token.accessToken);
+    // Try to revoke on remote service (only if we have a valid token)
+    if (token.accessToken) {
+      try {
+        const adapter = oauthAdapters[service];
+        await adapter.revokeToken(token.accessToken);
+      } catch (revokeErr) {
+        console.warn(`[OAuth Disconnect] Remote revocation failed for ${service}:`, revokeErr.message);
+        // Don't fail if remote revocation fails - continue with local deletion
+      }
+    }
     
-    // Delete token from database
+    // Delete token from database (always do this)
     revokeOAuthToken(service, userId);
     
     // Update OAuth status
     updateOAuthStatus(service, "disconnected");
 
-    const ws = getWorkspaces(userId);
-    if (ws?.length) {
-      incrementUsageDaily(ws[0].id, new Date().toISOString().slice(0, 10), {
-        active_services: countConnectedOAuthServices(userId),
-      });
-      
-      // Send notification (Phase 3.5)
-      NotificationDispatcher.onServiceDisconnected(ws[0].id, userId, service)
-        .catch(err => console.error('Notification dispatch error:', err));
-    }
-
-    // Log disconnection
+    // Log disconnection (with safety check for tokenMeta)
+    const requesterId = req.tokenMeta?.tokenId || req.session?.user?.id || 'unknown';
+    const scope = req.tokenMeta?.scope || 'session';
+    
     createAuditLog({
-      requesterId: req.tokenMeta.tokenId,
+      requesterId,
       action: "oauth_disconnect",
       resource: `/oauth/disconnect/${service}`,
-      scope: req.tokenMeta.scope,
+      scope,
       ip: req.ip,
       details: { service }
     });
@@ -4671,11 +4679,14 @@ app.post("/api/v1/oauth/disconnect/:service", authenticate, async (req, res) => 
   } catch (error) {
     console.error(`OAuth disconnect error for ${service}:`, error.message);
     
+    const requesterId = req.tokenMeta?.tokenId || req.session?.user?.id || 'unknown';
+    const scope = req.tokenMeta?.scope || 'session';
+    
     createAuditLog({
-      requesterId: req.tokenMeta.tokenId,
+      requesterId,
       action: "oauth_disconnect_error",
       resource: `/oauth/disconnect/${service}`,
-      scope: req.tokenMeta.scope,
+      scope,
       ip: req.ip,
       details: { service, error: error.message }
     });
