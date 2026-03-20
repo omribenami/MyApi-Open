@@ -4291,6 +4291,8 @@ app.get([
 
     updateOAuthStatus(service, "connected");
 
+    let tokenStoredForUser = false;
+
     if ((service === 'google' || service === 'facebook' || service === 'github') && stateMeta.mode === 'login') {
       const profileResp = await oauthAdapters[service].verifyToken(tokenData.accessToken).catch(() => ({ valid: false, data: {} }));
       const p = profileResp?.data || {};
@@ -4407,14 +4409,15 @@ app.get([
       // NOW store the OAuth token under the correct user ID
       console.log(`[OAuth] Storing ${service} token for user: ${appUser.id}`);
       const storeResult = storeOAuthToken(service, appUser.id, tokenData.accessToken, tokenData.refreshToken || null, expiresAt, tokenData.scope);
+      tokenStoredForUser = true;
       console.log(`[OAuth] Token stored successfully:`, { tokenId: storeResult.id, service, userId: appUser.id, scope: storeResult.scope });
     }
 
-    // For service-connect-only mode (not login), store token using current session user
-    if (req.session.user && stateMeta.mode !== 'login') {
-      // This handles the case where it's not login mode but user is already authenticated
-      console.log(`[OAuth] Storing ${service} token for existing session user: ${req.session.user.id}`);
+    // Store token for authenticated session user (connect flow and any non-primary login flow)
+    if (req.session.user && !tokenStoredForUser) {
+      console.log(`[OAuth] Storing ${service} token for session user: ${req.session.user.id} (mode=${stateMeta.mode || 'connect'})`);
       const storeResult = storeOAuthToken(service, req.session.user.id, tokenData.accessToken, tokenData.refreshToken || null, expiresAt, tokenData.scope);
+      tokenStoredForUser = true;
       console.log(`[OAuth] Token stored successfully:`, { tokenId: storeResult.id, service, userId: req.session.user.id, scope: storeResult.scope });
     }
 
