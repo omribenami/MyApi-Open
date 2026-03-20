@@ -16,6 +16,10 @@ function normalizeOwnerId(ownerId) {
 
 // Enable WAL mode for better concurrency
 db.pragma('journal_mode = WAL');
+// Configure pragmas to prevent "database is locked" errors under concurrent load
+db.pragma('busy_timeout = 10000'); // 10 second timeout for locked database
+db.pragma('synchronous = NORMAL'); // Balance safety and performance
+db.pragma('wal_autocheckpoint = 1000'); // Checkpoint every 1000 pages
 
 // Initialize database schema
 function initDatabase() {

@@ -281,13 +281,6 @@ router.get('/me', (req, res) => {
       timezone: user.timezone,
       plan: user.plan,
     };
-    
-    console.log('🔍 [API /auth/me] Responding with user payload:', {
-      email: userPayload.email,
-      displayName: userPayload.displayName,
-      avatarUrl: userPayload.avatarUrl,
-      fullPayload: userPayload
-    });
 
     res.json({
       success: true,

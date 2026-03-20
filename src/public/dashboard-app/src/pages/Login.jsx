@@ -84,23 +84,11 @@ function Login() {
           })
           .then((sessionUser) => {
             if (sessionUser) {
-              console.log('🔍 [Login.jsx] Received /api/v1/auth/me response:', {
-                fullResponse: sessionUser,
-                userObject: sessionUser.user,
-                displayName: sessionUser.user?.displayName,
-                avatarUrl: sessionUser.user?.avatarUrl
-              });
               if (sessionUser?.bootstrap?.masterToken) {
                 setMasterToken(sessionUser.bootstrap.masterToken);
               }
               // Extract user object from response (not the entire response)
-              const userToSet = sessionUser.user || sessionUser;
-              console.log('🔍 [Login.jsx] Calling setUser with:', {
-                userToSet,
-                displayName: userToSet?.displayName,
-                avatarUrl: userToSet?.avatarUrl
-              });
-              setUser(userToSet);
+              setUser(sessionUser.user || sessionUser);
               window.history.replaceState({}, document.title, '/dashboard/');
               window.location.href = '/dashboard/';
             }
