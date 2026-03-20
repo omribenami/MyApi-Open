@@ -143,15 +143,43 @@ router.post('/login', async (req, res) => {
  * POST /api/v1/auth/register
  * Create a new user account
  * 
- * Body: { email, password, username, displayName }
- * Response: { success: true, userId, masterToken, user: {...} }
+ * Body: { username, password, email, timezone, display_name }
+ * Response: { success: true, data: { token, user: {...}, needsOnboarding: true } }
  */
-router.post('/register', (_req, res) => {
-  return res.status(410).json({
-    error: 'Direct signup is disabled',
-    message: 'Use OAuth signup from the dashboard login page.',
-    code: 'OAUTH_SIGNUP_REQUIRED',
-  });
+router.post('/register', (req, res) => {
+  const { username, password, display_name, email, timezone } = req.body || {};
+  if (!username || !password) return res.status(400).json({ error: 'username and password required' });
+  if (password.length < 6) return res.status(400).json({ error: 'password must be at least 6 characters' });
+
+  try {
+    const { db } = require('../database');
+    
+    const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+    if (existing) return res.status(409).json({ error: 'Username already exists' });
+
+    const id = 'usr_' + crypto.randomBytes(16).toString('hex');
+    const hash = bcrypt.hashSync(password, 12);
+    const now = new Date().toISOString();
+
+    db.prepare(`INSERT INTO users (id, username, password_hash, display_name, email, timezone, created_at, status, roles)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'active', 'user')`).run(
+      id, username, hash, display_name || username, email || '', timezone || 'UTC', now
+    );
+
+    // Auto-login after registration
+    req.session.user = { id, username, display_name: display_name || username, roles: 'user', needsOnboarding: true };
+
+    // Generate session token
+    const sessionToken = crypto.randomBytes(32).toString('hex');
+    if (!global.sessions) global.sessions = {};
+    global.sessions[sessionToken] = { userId: id, username, createdAt: Date.now() };
+
+    // FIX BUG-3: Return 201 for successful creation
+    return res.status(201).json({ data: { token: sessionToken, user: { id, username, displayName: display_name || username, email: email || '', timezone: timezone || 'UTC' }, needsOnboarding: true } });
+  } catch (err) {
+    console.error('Registration error:', err);
+    return res.status(500).json({ error: 'Registration failed', details: err.message });
+  }
 });
 
 /**
