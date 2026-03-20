@@ -41,6 +41,7 @@ const BRAND_LOGOS = {
   jira: `${SIMPLE_ICONS_BASE}/jira/0052CC`,
   trello: `${SIMPLE_ICONS_BASE}/trello/0052CC`,
   airtable: `${SIMPLE_ICONS_BASE}/airtable/18BFFF`,
+  email: `${SIMPLE_ICONS_BASE}/gmail/EA4335`,
 };
 
 const BRAND_LOGO_FALLBACKS = {
@@ -73,6 +74,7 @@ const SERVICE_ENV_REQUIREMENTS = {
   slack: ['SLACK_CLIENT_ID', 'SLACK_CLIENT_SECRET', 'SLACK_REDIRECT_URI'],
   discord: ['DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'DISCORD_REDIRECT_URI'],
   whatsapp: ['WHATSAPP_BUSINESS_ACCOUNT_ID', 'WHATSAPP_API_TOKEN', 'WHATSAPP_WEBHOOK_TOKEN'],
+  email: ['EMAIL_PROVIDER', 'EMAIL_FROM', 'SMTP_HOST', 'SMTP_PORT'],
 };
 
 const AUTH_TYPE_STYLES = {
@@ -81,6 +83,8 @@ const AUTH_TYPE_STYLES = {
   token: 'bg-sky-500/15 text-sky-300 border border-sky-400/40',
   key: 'bg-cyan-500/15 text-cyan-300 border border-cyan-400/40',
   webhook: 'bg-purple-500/15 text-purple-300 border border-purple-400/40',
+  smtp: 'bg-amber-500/15 text-amber-300 border border-amber-400/40',
+  api_key: 'bg-cyan-500/15 text-cyan-300 border border-cyan-400/40',
 };
 
 function canonicalBrandName(serviceName) {
@@ -165,6 +169,8 @@ export function formatAuthTypeLabel(authType, serviceName = '') {
     bearer: 'Bearer Token',
     token: 'Access Token',
     webhook: 'Webhook',
+    smtp: 'SMTP',
+    sendgrid: 'SendGrid API Key',
   };
 
   return labels[normalized] || toDisplayLabel(normalized, 'Auth Unspecified');

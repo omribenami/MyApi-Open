@@ -41,23 +41,29 @@ const router = express.Router();
       };
 
       const notifications = getNotifications(workspaceId, userId, filters);
+      const normalized = notifications.map(n => ({
+        id: n.id,
+        type: n.type,
+        title: n.title,
+        message: n.message,
+        data: n.data ? JSON.parse(n.data) : null,
+        isRead: n.is_read === 1,
+        read_at: n.is_read === 1 ? (n.read_at || n.updated_at || n.created_at) : null,
+        createdAt: n.created_at,
+        created_at: n.created_at,
+        expiresAt: n.expires_at,
+      }));
+      const unreadCount = getUnreadNotificationCount(workspaceId, userId);
 
       res.json({
         ok: true,
-        data: notifications.map(n => ({
-          id: n.id,
-          type: n.type,
-          title: n.title,
-          message: n.message,
-          data: n.data ? JSON.parse(n.data) : null,
-          isRead: n.is_read === 1,
-          createdAt: n.created_at,
-          expiresAt: n.expires_at
-        })),
+        data: normalized,
+        notifications: normalized,
+        unreadCount,
         pagination: {
           limit,
           offset,
-          total: getUnreadNotificationCount(workspaceId, userId) // approximate
+          total: unreadCount // approximate
         }
       });
     } catch (err) {
@@ -80,7 +86,8 @@ const router = express.Router();
 
       res.json({
         ok: true,
-        data: { unreadCount: count }
+        data: { unreadCount: count },
+        unreadCount: count,
       });
     } catch (err) {
       console.error('Error fetching unread count:', err);

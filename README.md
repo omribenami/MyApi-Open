@@ -56,7 +56,28 @@ TOKEN_ENCRYPTION_KEY=<generate-random-32-byte-hex-string>
 # Optional: Rate Limiting
 RATE_LIMIT_WINDOW_MS=60000
 RATE_LIMIT_MAX_REQUESTS=120
+
+# Outbound Email (SMTP or SendGrid)
+EMAIL_PROVIDER=smtp            # smtp | sendgrid
+EMAIL_FROM=noreply@yourdomain.com
+SMTP_HOST=smtp.your-provider.com
+SMTP_PORT=587
+SMTP_SECURE=false              # true for 465
+SMTP_USER=<optional-username>
+SMTP_PASSWORD=<optional-password>
+# SendGrid (if EMAIL_PROVIDER=sendgrid)
+SENDGRID_API_KEY=<your-sendgrid-api-key>
 ```
+
+### Outbound Email API (No Inbox Access)
+
+MyApi supports **outbound-only** email operations. Inbox read/search is intentionally not implemented.
+
+- `GET /api/v1/email/test` — verify provider connection/config
+- `GET /api/v1/email/status` — config readiness + queue counters + last failure
+- `POST /api/v1/email/send-test` — send test email (`{ "to": "user@example.com" }`)
+- `POST /api/v1/email/process` — process queued outbound emails
+- `GET /api/v1/email/jobs` — recent queue jobs/failures for dashboard observability
 
 ### Local Development
 
@@ -233,6 +254,7 @@ Extensive design and technical documentation can be found in the `/docs` directo
 - [Design Summary](docs/DESIGN_SUMMARY.md)
 - [UI Architecture](docs/UI_ARCHITECTURE.md)
 - [Developer Quick Start](docs/DEVELOPER_QUICK_START.md)
+- [Outbound Email Operations](docs/EMAIL_OUTBOUND.md)
 
 ## Repository Policy
 

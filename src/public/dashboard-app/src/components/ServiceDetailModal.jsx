@@ -1,8 +1,34 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { formatAuthTypeLabel, getAuthTypeStyle, getStatusMeta } from '../utils/serviceCatalog';
 
 function ServiceDetailModal({ service, onClose, onConnect, onRevoke }) {
   const [testingConnection, setTestingConnection] = useState(false);
+  const [sendingTest, setSendingTest] = useState(false);
+  const [emailStatus, setEmailStatus] = useState(null);
+  const [testRecipient, setTestRecipient] = useState('');
+
+  const isEmailService = service?.name === 'email';
+
+  useEffect(() => {
+    if (!isEmailService) {
+      setEmailStatus(null);
+      return;
+    }
+
+    const loadEmailStatus = async () => {
+      try {
+        const response = await fetch('/api/v1/email/status', {
+          headers: { Authorization: `Bearer ${localStorage.getItem('sessionToken')}` },
+        });
+        const data = await response.json();
+        if (response.ok) setEmailStatus(data);
+      } catch (_) {
+        // Best-effort status load.
+      }
+    };
+
+    loadEmailStatus();
+  }, [isEmailService]);
 
   if (!service) return null;
 
@@ -25,20 +51,57 @@ function ServiceDetailModal({ service, onClose, onConnect, onRevoke }) {
   const handleTestConnection = async () => {
     setTestingConnection(true);
     try {
-      const response = await fetch(`/api/v1/services/${service.name}/test`, {
+      const endpoint = isEmailService ? '/api/v1/email/test' : `/api/v1/services/${service.name}/test`;
+      const response = await fetch(endpoint, {
         headers: { Authorization: `Bearer ${localStorage.getItem('sessionToken')}` },
       });
 
-      if (response.ok) {
-        alert('Connection looks healthy.');
+      const payload = await response.json();
+      if (response.ok && payload.success !== false) {
+        alert(isEmailService ? 'Outbound email connection is healthy.' : 'Connection looks healthy.');
+        if (isEmailService) {
+          const statusRes = await fetch('/api/v1/email/status', {
+            headers: { Authorization: `Bearer ${localStorage.getItem('sessionToken')}` },
+          });
+          if (statusRes.ok) setEmailStatus(await statusRes.json());
+        }
       } else {
-        const error = await response.json();
-        alert(`Connection test failed: ${error.error}`);
+        alert(`Connection test failed: ${payload.error || 'Unknown error'}`);
       }
     } catch (err) {
       alert(`Error testing connection: ${err.message}`);
     } finally {
       setTestingConnection(false);
+    }
+  };
+
+  const handleSendTestEmail = async () => {
+    const to = testRecipient.trim();
+    if (!to || !to.includes('@')) {
+      alert('Please enter a valid recipient email address.');
+      return;
+    }
+
+    setSendingTest(true);
+    try {
+      const response = await fetch('/api/v1/email/send-test', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('sessionToken')}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ to }),
+      });
+      const payload = await response.json();
+      if (response.ok && payload.success !== false) {
+        alert(`Test email sent to ${to}`);
+      } else {
+        alert(`Send failed: ${payload.error || 'Unknown error'}`);
+      }
+    } catch (err) {
+      alert(`Failed to send test email: ${err.message}`);
+    } finally {
+      setSendingTest(false);
     }
   };
 
@@ -112,6 +175,23 @@ function ServiceDetailModal({ service, onClose, onConnect, onRevoke }) {
           </div>
         </div>
 
+        {isEmailService && emailStatus && (
+          <div className="mb-8 p-4 rounded-xl bg-slate-900/40 border border-slate-700/60 space-y-3">
+            <p className="text-sm font-semibold text-slate-200">Outbound Email Status</p>
+            <p className="text-xs text-slate-400">
+              Provider: <span className="text-slate-200 font-mono">{emailStatus.provider?.provider || 'smtp'}</span> ·
+              Queue pending: <span className="text-slate-200"> {emailStatus.queue?.pending ?? 0}</span> ·
+              Failed: <span className="text-slate-200"> {emailStatus.queue?.failed ?? 0}</span>
+            </p>
+            {emailStatus.provider?.missing?.length > 0 && (
+              <p className="text-xs text-amber-300">Missing config: {emailStatus.provider.missing.join(', ')}</p>
+            )}
+            {emailStatus.queue?.lastFailure?.failedReason && (
+              <p className="text-xs text-red-300">Last failure: {emailStatus.queue.lastFailure.failedReason}</p>
+            )}
+          </div>
+        )}
+
         {service.documentation_url && (
           <div className="mb-8 p-4 rounded-xl bg-blue-900/20 border border-blue-700/40">
             <a
@@ -127,7 +207,31 @@ function ServiceDetailModal({ service, onClose, onConnect, onRevoke }) {
         )}
 
         <div className="flex flex-col sm:flex-row gap-3">
-          {service.status === 'connected' ? (
+          {isEmailService ? (
+            <>
+              <button
+                onClick={handleTestConnection}
+                disabled={testingConnection}
+                className="flex-1 px-5 py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white font-semibold rounded-lg transition-all duration-200 disabled:opacity-50"
+              >
+                {testingConnection ? '⏳ Testing...' : '✓ Test Connection'}
+              </button>
+              <input
+                type="email"
+                value={testRecipient}
+                onChange={(e) => setTestRecipient(e.target.value)}
+                placeholder="test@domain.com"
+                className="flex-1 px-4 py-3 bg-slate-900/80 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
+              />
+              <button
+                onClick={handleSendTestEmail}
+                disabled={sendingTest}
+                className="px-5 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white font-semibold rounded-lg transition-all duration-200 disabled:opacity-50"
+              >
+                {sendingTest ? 'Sending…' : 'Send Test Email'}
+              </button>
+            </>
+          ) : service.status === 'connected' ? (
             <>
               <button
                 onClick={handleTestConnection}
