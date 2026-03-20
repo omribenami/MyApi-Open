@@ -325,141 +325,86 @@ function Login() {
                       )}
 
                       {signupStep === 2 && (
-                        // USER.md setup
                         <div className="space-y-4">
-                          <div className="rounded-xl border border-slate-700/80 bg-slate-900/60 p-4 mb-4">
-                            <p className="text-xs font-semibold text-slate-300 mb-2">What is USER.md?</p>
-                            <p className="text-xs text-slate-400 leading-relaxed">A personal identity document about you - your background, preferences, and context. This helps your AI understand who you are.</p>
-                            <p className="text-xs text-slate-500 mt-2 italic">Example: "I'm Omri, a full-stack developer in Austin. I prefer async communication and work best mornings."</p>
-                          </div>
-
+                          <p className="text-sm text-slate-300">Confirm your core profile details from OAuth before continuing.</p>
                           <div className="space-y-3">
                             <div>
-                              <label className="mb-2 block text-sm font-medium text-slate-300">Your Name (Optional)</label>
+                              <label className="mb-2 block text-sm font-medium text-slate-300">Display Name</label>
                               <input
                                 type="text"
-                                value={userMdData.name}
-                                onChange={(e) => setUserMdData({ ...userMdData, name: e.target.value })}
+                                value={profileData.displayName}
+                                onChange={(e) => setProfileData({ ...profileData, displayName: e.target.value })}
                                 className="min-h-[48px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
-                                placeholder="e.g., YOUR_NAME"
+                                placeholder="Your display name"
                               />
                             </div>
                             <div>
-                              <label className="mb-2 block text-sm font-medium text-slate-300">Email (Optional)</label>
+                              <label className="mb-2 block text-sm font-medium text-slate-300">Email</label>
                               <input
                                 type="email"
-                                value={userMdData.email}
-                                onChange={(e) => setUserMdData({ ...userMdData, email: e.target.value })}
+                                value={profileData.email}
+                                onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
                                 className="min-h-[48px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
                                 placeholder="your@email.com"
                               />
                             </div>
                             <div>
-                              <label className="mb-2 block text-sm font-medium text-slate-300">Location (Optional)</label>
+                              <label className="mb-2 block text-sm font-medium text-slate-300">Username *</label>
                               <input
                                 type="text"
-                                value={userMdData.location}
-                                onChange={(e) => setUserMdData({ ...userMdData, location: e.target.value })}
+                                value={profileData.username}
+                                onChange={(e) => setProfileData({ ...profileData, username: e.target.value })}
                                 className="min-h-[48px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
-                                placeholder="e.g., Austin, Texas"
-                              />
-                            </div>
-                            <div>
-                              <label className="mb-2 block text-sm font-medium text-slate-300">Bio (Optional)</label>
-                              <textarea
-                                value={userMdData.bio}
-                                onChange={(e) => setUserMdData({ ...userMdData, bio: e.target.value })}
-                                className="min-h-[100px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
-                                placeholder="Tell us about yourself..."
+                                placeholder="Choose a username"
                               />
                             </div>
                           </div>
 
                           <div className="flex gap-3 pt-2">
-                            <button
-                              onClick={() => setIsSignup(false)}
-                              className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-800"
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              onClick={() => setSignupStep(3)}
-                              className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500"
-                            >
-                              Next
-                            </button>
-                            <button
-                              onClick={completeOAuthSignup}
-                              disabled={signupCompleting}
-                              className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-300 transition-colors hover:bg-slate-800 disabled:opacity-60"
-                            >
-                              {signupCompleting ? 'Creating…' : 'Skip'}
-                            </button>
+                            <button onClick={() => setIsSignup(false)} className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-800">Cancel</button>
+                            <button onClick={() => setSignupStep(3)} disabled={!profileData.username.trim()} className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-60">Next</button>
                           </div>
                         </div>
                       )}
 
                       {signupStep === 3 && (
-                        // SOUL.md setup
                         <div className="space-y-4">
                           <div className="rounded-xl border border-slate-700/80 bg-slate-900/60 p-4 mb-4">
-                            <p className="text-xs font-semibold text-slate-300 mb-2">What is SOUL.md?</p>
-                            <p className="text-xs text-slate-400 leading-relaxed">Your personality and values document - how you think, what you care about, and how you want to be treated.</p>
-                            <p className="text-xs text-slate-500 mt-2 italic">Example: "I value clarity and direct feedback. I'm driven by learning. I prefer asynchronous, written communication."</p>
+                            <p className="text-xs font-semibold text-slate-300 mb-2">About USER.md</p>
+                            <p className="text-xs text-slate-400 leading-relaxed">USER.md is a quick profile for your assistant: who you are and your context.</p>
+                            <p className="text-xs text-slate-500 mt-2 italic">Example: "I'm Omri, a full-stack developer in Austin. I prefer async communication and work best in the morning."</p>
                           </div>
-
-                          <div className="space-y-3">
-                            <div>
-                              <label className="mb-2 block text-sm font-medium text-slate-300">Your Traits (Optional)</label>
-                              <textarea
-                                value={soulMdData.traits}
-                                onChange={(e) => setSoulMdData({ ...soulMdData, traits: e.target.value })}
-                                className="min-h-[80px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
-                                placeholder="e.g., Analytical, creative, detail-oriented..."
-                              />
-                            </div>
-                            <div>
-                              <label className="mb-2 block text-sm font-medium text-slate-300">Your Values (Optional)</label>
-                              <textarea
-                                value={soulMdData.values}
-                                onChange={(e) => setSoulMdData({ ...soulMdData, values: e.target.value })}
-                                className="min-h-[80px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
-                                placeholder="e.g., Integrity, learning, autonomy..."
-                              />
-                            </div>
-                          </div>
-
+                          <textarea
+                            value={userMdText}
+                            onChange={(e) => setUserMdText(e.target.value)}
+                            className="min-h-[140px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
+                            placeholder="Write a few lines about yourself (optional)"
+                          />
                           <div className="flex gap-3 pt-2">
-                            <button
-                              onClick={() => setSignupStep(2)}
-                              className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-800"
-                            >
-                              Back
-                            </button>
-                            <button
-                              onClick={completeOAuthSignup}
-                              disabled={signupCompleting}
-                              className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-60"
-                            >
-                              {signupCompleting ? 'Creating…' : 'Complete'}
-                            </button>
-                            <button
-                              onClick={completeOAuthSignup}
-                              disabled={signupCompleting}
-                              className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-300 transition-colors hover:bg-slate-800 disabled:opacity-60"
-                            >
-                              {signupCompleting ? 'Creating…' : 'Skip'}
-                            </button>
+                            <button onClick={() => setSignupStep(2)} className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-800">Back</button>
+                            <button onClick={() => setSignupStep(4)} className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500">Next</button>
+                            <button onClick={() => { setUserMdText(''); setSignupStep(4); }} className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-300 transition-colors hover:bg-slate-800">Skip</button>
                           </div>
                         </div>
                       )}
 
                       {signupStep === 4 && (
-                        // Complete
                         <div className="space-y-4">
-                          <div className="rounded-xl border border-emerald-500/35 bg-emerald-500/10 p-4 text-center">
-                            <p className="text-sm font-semibold text-emerald-300 mb-2">Welcome to MyApi!</p>
-                            <p className="text-xs text-slate-300">Your account has been created. Redirecting to dashboard...</p>
+                          <div className="rounded-xl border border-slate-700/80 bg-slate-900/60 p-4 mb-4">
+                            <p className="text-xs font-semibold text-slate-300 mb-2">About SOUL.md</p>
+                            <p className="text-xs text-slate-400 leading-relaxed">SOUL.md captures how you think and like to collaborate.</p>
+                            <p className="text-xs text-slate-500 mt-2 italic">Example: "I value clarity and direct feedback. Prefer concise written communication and autonomy."</p>
+                          </div>
+                          <textarea
+                            value={soulMdText}
+                            onChange={(e) => setSoulMdText(e.target.value)}
+                            className="min-h-[140px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
+                            placeholder="Share values, preferences, and work style (optional)"
+                          />
+                          <div className="flex gap-3 pt-2">
+                            <button onClick={() => setSignupStep(3)} className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-800">Back</button>
+                            <button onClick={completeOAuthSignup} disabled={signupCompleting} className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-60">{signupCompleting ? 'Creating…' : 'Complete'}</button>
+                            <button onClick={() => { setSoulMdText(''); completeOAuthSignup(); }} disabled={signupCompleting} className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-300 transition-colors hover:bg-slate-800 disabled:opacity-60">{signupCompleting ? 'Creating…' : 'Skip'}</button>
                           </div>
                         </div>
                       )}
