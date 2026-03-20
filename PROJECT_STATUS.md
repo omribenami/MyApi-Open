@@ -342,16 +342,71 @@ Priority: HIGH (user privacy + GDPR compliance)
 
 ## 📋 Phase 4: Enterprise (SSO+RBAC) (5-6 weeks)
 
+### Overview
+Implement workspace-based SSO (SAML 2.0, OIDC) and fine-grained role-based access control (RBAC) for enterprise deployments.
+
 ### Features
-- [ ] SAML 2.0 support
-- [ ] OIDC support
-- [ ] Custom role creation
-- [ ] Fine-grained permissions
-- [ ] User directory sync
+
+**SAML 2.0 Support:**
+- [ ] Okta, Azure AD, Google Workspace, Ping Identity integration
+- [ ] Service provider (SP) configuration
+- [ ] Metadata generation + assertion validation
+- [ ] Attribute mapping (email → user, groups → roles)
+- [ ] JIT provisioning + auto-activation
+
+**OIDC Support:**
+- [ ] Generic OIDC provider support
+- [ ] Authorization Code + Implicit flows
+- [ ] Token introspection + validation
+- [ ] User info endpoint integration
+- [ ] Scope-based claims mapping
+
+**RBAC Enhancements:**
+- [ ] Custom role creation (workspace-level)
+- [ ] Permission templates (admin, developer, viewer, custom)
+- [ ] Resource-level permissions (workspace, team, service, skill)
+- [ ] Permission inheritance model
+- [ ] Audit log for all role changes
+
+**Enterprise Features:**
+- [ ] Single sign-on dashboard
+- [ ] Provider management (add/remove/configure)
+- [ ] User auto-provisioning rules
+- [ ] Role mapping configuration
+- [ ] Session management (logout all devices)
+
+### Deliverables
+- [ ] `src/lib/sso/SSOGateway.js` (core SAML/OIDC engine)
+- [ ] `src/lib/sso/SamlHandler.js` (SAML assertion parser)
+- [ ] `src/lib/sso/OidcHandler.js` (OIDC token validator)
+- [ ] `src/routes/sso.js` (10+ endpoints)
+- [ ] Workspace settings UI: SSO configuration tab
+- [ ] Audit log integration for SSO events
+- [ ] Documentation: SSO setup guides per provider
+
+### Implementation Plan
+1. **Week 1-2:** SAML SP implementation + metadata endpoint
+2. **Week 2-3:** OIDC flow + token validation
+3. **Week 3-4:** JIT provisioning + role mapping
+4. **Week 4-5:** UI + audit logging
+5. **Week 5-6:** Testing, docs, rollout
+
+### Success Criteria
+- ✅ OAuth flow works with Okta SAML
+- ✅ OAuth flow works with Azure AD (OIDC)
+- ✅ Users auto-provisioned on first login
+- ✅ Role mapping applied correctly
+- ✅ All SSO events logged with full context
+- ✅ Zero password resets for SSO users
+- ✅ Dashboard functional 100% under SSO
 
 ### Status
 ```
-Status: ⬜ NOT STARTED - Blocked by Phase 1-3
+Status: ⬜ PENDING
+Target: 2026-M7-9 (September-November)
+Effort: 5-6 weeks
+Priority: HIGH (enterprise tier feature)
+Blocker: None (can start after Phase 3.6)
 ```
 
 ---
