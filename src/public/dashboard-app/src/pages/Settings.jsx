@@ -1402,11 +1402,22 @@ function Settings() {
 
   const handleDeleteAccount = async () => {
     setIsDeleting(true);
-    // Simulate deletion — hook up to real endpoint
-    await new Promise((r) => setTimeout(r, 1200));
-    setIsDeleting(false);
-    setShowDeleteModal(false);
-    logout();
+    try {
+      const res = await fetch('/api/v1/account', {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(payload?.error || 'Failed to delete account');
+      }
+      setShowDeleteModal(false);
+      logout();
+    } catch (err) {
+      alert(err?.message || 'Failed to delete account');
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (

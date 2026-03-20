@@ -3161,6 +3161,57 @@ app.get('/api/v1/auth/oauth-signup/pending', (req, res) => {
   });
 });
 
+// DELETE /api/v1/account — self-serve account deletion from settings danger zone
+app.delete('/api/v1/account', authenticate, (req, res) => {
+  try {
+    const userId = String(req.user?.id || req.tokenMeta?.ownerId || '');
+    if (!userId) return res.status(401).json({ error: 'Authentication required' });
+
+    const user = getUserById(userId);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    if (String(user.email || '').toLowerCase() === 'admin@your.domain.com') {
+      return res.status(400).json({ error: 'Cannot delete power user account from self-service endpoint' });
+    }
+
+    const tx = db.transaction((uid) => {
+      db.prepare('DELETE FROM oauth_tokens WHERE user_id = ?').run(uid);
+      db.prepare('DELETE FROM access_tokens WHERE owner_id = ?').run(uid);
+      db.prepare('DELETE FROM handshakes WHERE user_id = ?').run(uid);
+      db.prepare('DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)').run(uid);
+      db.prepare('DELETE FROM conversations WHERE user_id = ?').run(uid);
+      db.prepare('DELETE FROM persona_documents WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)').run(uid);
+      db.prepare('DELETE FROM persona_skills WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)').run(uid);
+      db.prepare('DELETE FROM skills WHERE owner_id = ?').run(uid);
+      db.prepare('DELETE FROM personas WHERE owner_id = ?').run(uid);
+      db.prepare('DELETE FROM kb_documents WHERE owner_id = ?').run(uid);
+      db.prepare('DELETE FROM users WHERE id = ?').run(uid);
+    });
+
+    tx(userId);
+
+    if (req.session) {
+      req.session.destroy(() => {});
+    }
+    res.clearCookie('myapi_master_token', { path: '/' });
+    res.clearCookie('myapi_user', { path: '/' });
+
+    createAuditLog({
+      requesterId: req.tokenMeta?.tokenId || `self_${userId}`,
+      action: 'delete_own_account',
+      resource: `/account/${userId}`,
+      scope: req.tokenMeta?.scope || 'session',
+      ip: req.ip,
+      details: { email: user.email || null }
+    });
+
+    return res.json({ ok: true, deletedUserId: userId });
+  } catch (error) {
+    console.error('Delete own account error:', error);
+    return res.status(500).json({ error: 'Failed to delete account' });
+  }
+});
+
 // POST /api/v1/auth/oauth-signup/complete — creates user from pending OAuth signup and logs in
 app.post('/api/v1/auth/oauth-signup/complete', (req, res) => {
   const pending = req.session?.oauth_signup;
@@ -4273,11 +4324,13 @@ app.get([
         .replace(/[^a-zA-Z0-9_.-]/g, '')
         .slice(0, 30) || `${service}_${Date.now()}`;
 
-      const existingByUsername = getUserByUsername(usernameBase);
       const appUserByEmail = email
         ? getUsers().find((u) => String(u.email || '').toLowerCase() === email)
         : null;
-      let appUser = appUserByEmail || existingByUsername || null;
+      // SECURITY: login path must only match existing accounts by trusted identifier (email).
+      // Never match by derived username here, otherwise a non-existent OAuth identity can
+      // accidentally map/create the wrong account flow.
+      let appUser = appUserByEmail || null;
       
       // NEW USER: Store OAuth data in session and route to explicit signup flow (no silent login/create)
       if (!appUser) {
