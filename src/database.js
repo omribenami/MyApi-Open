@@ -3917,41 +3917,61 @@ function getUnreadNotificationCount(workspaceId, userId) {
 }
 
 function getOrCreateNotificationSettings(workspaceId, userId) {
+  // Get or ensure the user has a workspace
+  let actualWorkspaceId = workspaceId;
+  if (!actualWorkspaceId) {
+    actualWorkspaceId = getOrEnsureUserWorkspace(userId);
+  }
+  
+  if (!actualWorkspaceId) {
+    // Fallback to default if workspace creation failed
+    console.warn('[DB] Could not get or create workspace for user:', userId);
+    return { inApp: null, email: null };
+  }
+  
   // Get or create user's preferences for in-app and email channels
   let inAppPrefs = db.prepare(`
     SELECT * FROM notification_preferences
     WHERE workspace_id = ? AND user_id = ? AND channel = 'in-app'
-  `).get(workspaceId, userId);
+  `).get(actualWorkspaceId, userId);
   
   if (!inAppPrefs) {
     const id = 'notif_pref_' + crypto.randomBytes(16).toString('hex');
     const now = Math.floor(Date.now() / 1000);
-    db.prepare(`
-      INSERT INTO notification_preferences (id, workspace_id, user_id, channel, enabled, frequency, created_at, updated_at)
-      VALUES (?, ?, ?, 'in-app', 1, 'immediate', ?, ?)
-    `).run(id, workspaceId, userId, now, now);
-    inAppPrefs = db.prepare(`
-      SELECT * FROM notification_preferences
-      WHERE workspace_id = ? AND user_id = ? AND channel = 'in-app'
-    `).get(workspaceId, userId);
+    try {
+      db.prepare(`
+        INSERT INTO notification_preferences (id, workspace_id, user_id, channel, enabled, frequency, created_at, updated_at)
+        VALUES (?, ?, ?, 'in-app', 1, 'immediate', ?, ?)
+      `).run(id, actualWorkspaceId, userId, now, now);
+      inAppPrefs = db.prepare(`
+        SELECT * FROM notification_preferences
+        WHERE workspace_id = ? AND user_id = ? AND channel = 'in-app'
+      `).get(actualWorkspaceId, userId);
+    } catch (err) {
+      console.error('[DB] Failed to create in-app notification preference:', err.message);
+    }
   }
   
   let emailPrefs = db.prepare(`
     SELECT * FROM notification_preferences
     WHERE workspace_id = ? AND user_id = ? AND channel = 'email'
-  `).get(workspaceId, userId);
+  `).get(actualWorkspaceId, userId);
   
   if (!emailPrefs) {
     const id = 'notif_pref_' + crypto.randomBytes(16).toString('hex');
     const now = Math.floor(Date.now() / 1000);
-    db.prepare(`
-      INSERT INTO notification_preferences (id, workspace_id, user_id, channel, enabled, frequency, created_at, updated_at)
-      VALUES (?, ?, ?, 'email', 0, 'immediate', ?, ?)
-    `).run(id, workspaceId, userId, now, now);
-    emailPrefs = db.prepare(`
-      SELECT * FROM notification_preferences
-      WHERE workspace_id = ? AND user_id = ? AND channel = 'email'
-    `).get(workspaceId, userId);
+    try {
+      db.prepare(`
+        INSERT INTO notification_preferences (id, workspace_id, user_id, channel, enabled, frequency, created_at, updated_at)
+        VALUES (?, ?, ?, 'email', 0, 'immediate', ?, ?)
+      `).run(id, actualWorkspaceId, userId, now, now);
+      emailPrefs = db.prepare(`
+        SELECT * FROM notification_preferences
+        WHERE workspace_id = ? AND user_id = ? AND channel = 'email'
+      `).get(actualWorkspaceId, userId);
+    } catch (err) {
+      console.error('[DB] Failed to create email notification preference:', err.message);
+    }
   }
   
   return { inApp: inAppPrefs, email: emailPrefs };
@@ -4254,6 +4274,81 @@ function updateWorkspace(workspaceId, updates) {
 function deleteWorkspace(workspaceId) {
   const stmt = db.prepare('DELETE FROM workspaces WHERE id = ?');
   return stmt.run(workspaceId).changes > 0;
+}
+
+// Ensure a default workspace exists (for systems without multi-workspace support)
+function ensureDefaultWorkspaceExists() {
+  const existing = db.prepare('SELECT id FROM workspaces WHERE id = ?').get('default');
+  if (existing) {
+    return 'default';
+  }
+  
+  // Try to create a default workspace with a system user
+  // First, try to find or create a system user
+  let systemUser = db.prepare('SELECT id FROM users WHERE id = ?').get('system');
+  if (!systemUser) {
+    // If no system user exists, use the first user in the database
+    systemUser = db.prepare('SELECT id FROM users ORDER BY created_at ASC LIMIT 1').get();
+    if (!systemUser) {
+      // No users exist, we can't create a workspace
+      return null;
+    }
+  }
+  
+  // Create a default workspace
+  const now = new Date().toISOString();
+  try {
+    const stmt = db.prepare(`
+      INSERT INTO workspaces (id, name, owner_id, slug, created_at, updated_at)
+      VALUES ('default', 'Default Workspace', ?, 'default', ?, ?)
+    `);
+    
+    stmt.run(systemUser.id || systemUser, now, now);
+    return 'default';
+  } catch (err) {
+    console.warn('[DB] Failed to create default workspace:', err.message);
+    return null;
+  }
+}
+
+// Get or ensure a workspace for a user (creates one if needed)
+function getOrEnsureUserWorkspace(userId) {
+  // Check if user has any workspace
+  const existing = db.prepare(`
+    SELECT DISTINCT w.id FROM workspaces w
+    LEFT JOIN workspace_members wm ON w.id = wm.workspace_id
+    WHERE w.owner_id = ? OR wm.user_id = ?
+    LIMIT 1
+  `).get(userId, userId);
+  
+  if (existing) {
+    return existing.id;
+  }
+  
+  // Create a default workspace for the user
+  try {
+    const id = 'ws_' + crypto.randomBytes(16).toString('hex');
+    const now = new Date().toISOString();
+    
+    const stmt = db.prepare(`
+      INSERT INTO workspaces (id, name, owner_id, slug, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    
+    stmt.run(id, 'My Workspace', userId, userId.slice(0, 8), now, now);
+    
+    // Add user as owner
+    const memberId = 'wm_' + crypto.randomBytes(16).toString('hex');
+    db.prepare(`
+      INSERT OR IGNORE INTO workspace_members (id, workspace_id, user_id, role, joined_at)
+      VALUES (?, ?, ?, 'owner', ?)
+    `).run(memberId, id, userId, now);
+    
+    return id;
+  } catch (err) {
+    console.warn('[DB] Failed to create user workspace:', err.message);
+    return null;
+  }
 }
 
 function addWorkspaceMember(workspaceId, userId, role = 'member') {
@@ -4859,6 +4954,8 @@ module.exports = {
   getWorkspaces,
   updateWorkspace,
   deleteWorkspace,
+  ensureDefaultWorkspaceExists,
+  getOrEnsureUserWorkspace,
   addWorkspaceMember,
   getWorkspaceMembers,
   updateWorkspaceMemberRole,
