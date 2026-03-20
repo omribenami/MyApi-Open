@@ -20,6 +20,7 @@ import MyListings from './pages/MyListings';
 import Skills from './pages/Skills';
 import DeviceManagement from './pages/DeviceManagement';
 import ActivityLog from './pages/ActivityLog';
+import NotificationCenter from './pages/NotificationCenter';
 import TeamSettings from './pages/TeamSettings';
 import Layout from './components/Layout';
 
@@ -216,6 +217,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <ActivityLog />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/notifications"
+              element={
+                <ProtectedRoute>
+                  <NotificationCenter />
                 </ProtectedRoute>
               }
             />

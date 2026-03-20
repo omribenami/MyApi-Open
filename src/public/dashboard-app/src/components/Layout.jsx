@@ -106,6 +106,7 @@ function Layout({ children, onLogout }) {
     {
       label: 'Resources',
       items: [
+        { path: '/notifications', label: 'Notifications' },
         { path: '/activity', label: 'Activity Log' },
         { path: '/platform-docs', label: 'Platform Docs' },
         { path: '/api-docs', label: 'API Docs' },
