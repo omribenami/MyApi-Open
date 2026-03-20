@@ -134,12 +134,17 @@ function ServiceConnectors() {
       
       console.log(`[Disconnect] Service: ${service.name}, OAuth Provider: ${oauthProvider}`);
       
-      await oauth.disconnect(oauthProvider);
+      const response = await oauth.disconnect(oauthProvider);
+      console.log(`[Disconnect] Response:`, response);
+      
       closeRevokeModal();
       await fetchServices();
     } catch (err) {
       console.error('Failed to revoke service:', err);
-      setError(`Failed to disconnect ${service.label}. Please try again.`);
+      // Show error but allow user to close modal
+      const errorMsg = err?.response?.data?.error || err?.message || 'Unknown error';
+      setError(`Failed to disconnect: ${errorMsg}`);
+      // Don't close modal on error - let user see the error and retry or close manually
     } finally {
       setIsRevoking(false);
     }
@@ -382,13 +387,18 @@ function ServiceConnectors() {
             <p className="text-slate-400 text-center mb-8">
               You're about to disconnect <span className="font-semibold text-red-300 capitalize">{revokeServiceId}</span>. Any integrations relying on this connection will stop working.
             </p>
+            {error && (
+              <div className="mb-6 p-4 bg-red-900/30 border border-red-700/50 rounded-lg">
+                <p className="text-sm text-red-300">{error}</p>
+              </div>
+            )}
             <div className="flex gap-3">
               <button
                 onClick={closeRevokeModal}
                 disabled={isRevoking}
                 className="flex-1 px-4 py-3 bg-slate-700/50 hover:bg-slate-700 border border-slate-600 text-white font-medium rounded-lg transition-all duration-200 disabled:opacity-50"
               >
-                Cancel
+                {error ? 'Close' : 'Cancel'}
               </button>
               <button
                 onClick={() => handleRevoke(services.find((s) => s.name === revokeServiceId))}
