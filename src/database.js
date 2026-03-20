@@ -21,6 +21,25 @@ db.pragma('busy_timeout = 10000'); // 10 second timeout for locked database
 db.pragma('synchronous = NORMAL'); // Balance safety and performance
 db.pragma('wal_autocheckpoint = 1000'); // Checkpoint every 1000 pages
 
+// BUG-5: Helper function for safe migrations with logging
+function safeMigration(sql, ignoreColumnExists = true) {
+  try {
+    db.exec(sql);
+    return true;
+  } catch (error) {
+    // Expected error: column already exists
+    if (ignoreColumnExists && (error.message?.includes('duplicate column') || error.message?.includes('already exists'))) {
+      return true; // Silently ignore expected errors
+    }
+    // Log unexpected errors
+    console.warn('[Database Migration] Unexpected error:', {
+      sql: sql.substring(0, 100),
+      error: error.message
+    });
+    return false;
+  }
+}
+
 // Initialize database schema
 function initDatabase() {
   // Phase 3.5 Pre-Migration: Drop old notification tables before schema initialization
@@ -523,7 +542,9 @@ function initDatabase() {
     'ALTER TABLE vault_tokens ADD COLUMN discovered_api_url TEXT',
     'ALTER TABLE vault_tokens ADD COLUMN discovered_auth_scheme TEXT',
     'ALTER TABLE vault_tokens ADD COLUMN discovered_metadata TEXT',
-    'ALTER TABLE vault_tokens ADD COLUMN last_discovered_at TEXT'
+    'ALTER TABLE vault_tokens ADD COLUMN last_discovered_at TEXT',
+    // BUG-14: Add owner_id to enforce workspace scoping on vault tokens
+    'ALTER TABLE vault_tokens ADD COLUMN owner_id TEXT DEFAULT \'owner\''
   ];
   for (const migration of vaultTokenMigrations) {
     try {
@@ -552,28 +573,29 @@ function initDatabase() {
   } catch (e) {
     // Column already exists — ignore
   }
+  // BUG-5: Use safeMigration for better error logging
   // Stripe subscription columns
-  try { db.exec("ALTER TABLE users ADD COLUMN stripe_subscription_status TEXT"); } catch (e) {}
-  try { db.exec("ALTER TABLE users ADD COLUMN stripe_customer_id TEXT"); } catch (e) {}
-  try { db.exec("ALTER TABLE users ADD COLUMN stripe_subscription_id TEXT"); } catch (e) {}
+  safeMigration("ALTER TABLE users ADD COLUMN stripe_subscription_status TEXT");
+  safeMigration("ALTER TABLE users ADD COLUMN stripe_customer_id TEXT");
+  safeMigration("ALTER TABLE users ADD COLUMN stripe_subscription_id TEXT");
   
   // 2FA columns
-  try { db.exec("ALTER TABLE users ADD COLUMN totp_secret TEXT"); } catch (e) {}
-  try { db.exec("ALTER TABLE users ADD COLUMN two_factor_enabled INTEGER DEFAULT 0"); } catch (e) {}
+  safeMigration("ALTER TABLE users ADD COLUMN totp_secret TEXT");
+  safeMigration("ALTER TABLE users ADD COLUMN two_factor_enabled INTEGER DEFAULT 0");
 
   // Phase 5 migrations: Token encryption key rotation, rate limiting, audit logs
-  try { db.exec("ALTER TABLE oauth_tokens ADD COLUMN key_version INTEGER DEFAULT 1"); } catch (e) {}
-  try { db.exec("ALTER TABLE oauth_tokens ADD COLUMN last_api_call TEXT"); } catch (e) {}
-  try { db.exec("ALTER TABLE audit_log ADD COLUMN service_name TEXT"); } catch (e) {}
-  try { db.exec("ALTER TABLE audit_log ADD COLUMN api_method TEXT"); } catch (e) {}
-  try { db.exec("ALTER TABLE audit_log ADD COLUMN api_endpoint TEXT"); } catch (e) {}
-  try { db.exec("ALTER TABLE audit_log ADD COLUMN status_code INTEGER"); } catch (e) {}
-  try { db.exec("ALTER TABLE audit_log ADD COLUMN response_time_ms INTEGER"); } catch (e) {}
-  try { db.exec("ALTER TABLE audit_log ADD COLUMN workspace_id TEXT"); } catch (e) {}
-  try { db.exec("ALTER TABLE audit_log ADD COLUMN actor_id TEXT"); } catch (e) {}
-  try { db.exec("ALTER TABLE audit_log ADD COLUMN actor_type TEXT"); } catch (e) {}
-  try { db.exec("ALTER TABLE audit_log ADD COLUMN endpoint TEXT"); } catch (e) {}
-  try { db.exec("ALTER TABLE audit_log ADD COLUMN http_method TEXT"); } catch (e) {}
+  safeMigration("ALTER TABLE oauth_tokens ADD COLUMN key_version INTEGER DEFAULT 1");
+  safeMigration("ALTER TABLE oauth_tokens ADD COLUMN last_api_call TEXT");
+  safeMigration("ALTER TABLE audit_log ADD COLUMN service_name TEXT");
+  safeMigration("ALTER TABLE audit_log ADD COLUMN api_method TEXT");
+  safeMigration("ALTER TABLE audit_log ADD COLUMN api_endpoint TEXT");
+  safeMigration("ALTER TABLE audit_log ADD COLUMN status_code INTEGER");
+  safeMigration("ALTER TABLE audit_log ADD COLUMN response_time_ms INTEGER");
+  safeMigration("ALTER TABLE audit_log ADD COLUMN workspace_id TEXT");
+  safeMigration("ALTER TABLE audit_log ADD COLUMN actor_id TEXT");
+  safeMigration("ALTER TABLE audit_log ADD COLUMN actor_type TEXT");
+  safeMigration("ALTER TABLE audit_log ADD COLUMN endpoint TEXT");
+  safeMigration("ALTER TABLE audit_log ADD COLUMN http_method TEXT");
   db.exec('CREATE INDEX IF NOT EXISTS idx_audit_log_workspace_ts ON audit_log(workspace_id, timestamp DESC)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_audit_log_action_ts ON audit_log(action, timestamp DESC)');
 
@@ -935,13 +957,15 @@ function createVaultToken(label, description, token, service, websiteUrl = null,
   };
 }
 
-function getVaultTokens() {
+function getVaultTokens(ownerId = 'owner') {
+  // BUG-14: Enforce workspace scoping by filtering vault tokens by owner_id
   const stmt = db.prepare(`
     SELECT id, label, description, token_preview, service, website_url, discovered_api_url, discovered_auth_scheme, created_at, updated_at
     FROM vault_tokens
+    WHERE owner_id = ?
     ORDER BY created_at DESC
   `);
-  return stmt.all().map(row => ({
+  return stmt.all(ownerId).map(row => ({
     id: row.id,
     name: row.label,
     label: row.label,
@@ -956,9 +980,10 @@ function getVaultTokens() {
   }));
 }
 
-function decryptVaultToken(id) {
+function decryptVaultToken(id, ownerId = 'owner') {
+  // BUG-14: Enforce owner_id check to prevent cross-workspace token access
   const encryptionKey = process.env.VAULT_KEY || 'default-vault-key-change-me';
-  const row = db.prepare('SELECT * FROM vault_tokens WHERE id = ?').get(id);
+  const row = db.prepare('SELECT * FROM vault_tokens WHERE id = ? AND owner_id = ?').get(id, ownerId);
   if (!row) return null;
   try {
     const algorithm = 'aes-256-cbc';
@@ -987,9 +1012,10 @@ function decryptVaultToken(id) {
   }
 }
 
-function deleteVaultToken(id) {
-  const stmt = db.prepare('DELETE FROM vault_tokens WHERE id = ?');
-  const result = stmt.run(id);
+function deleteVaultToken(id, ownerId = 'owner') {
+  // BUG-14: Enforce owner_id check to prevent cross-workspace token deletion
+  const stmt = db.prepare('DELETE FROM vault_tokens WHERE id = ? AND owner_id = ?');
+  const result = stmt.run(id, ownerId);
   return result.changes > 0;
 }
 
@@ -1923,6 +1949,23 @@ function validateStateToken(serviceName, stateToken) {
   return false;
 }
 
+// BUG-11: Cleanup expired OAuth state tokens
+// Call this periodically to prevent accumulation of expired tokens
+function cleanupExpiredStateTokens() {
+  try {
+    const now = new Date().toISOString();
+    const stmt = db.prepare('DELETE FROM oauth_state_tokens WHERE expires_at < ?');
+    const result = stmt.run(now);
+    if (result.changes > 0) {
+      console.log(`[OAuth] Cleaned up ${result.changes} expired state tokens`);
+    }
+    return result.changes;
+  } catch (error) {
+    console.error('Error cleaning up expired state tokens:', error);
+    return 0;
+  }
+}
+
 // Phase 5.1: Token Encryption Key Rotation
 function createKeyVersion(version, algorithm = 'aes-256-gcm') {
   const id = 'key_v' + crypto.randomBytes(8).toString('hex');
@@ -2073,6 +2116,22 @@ function incrementRateLimit(userId, serviceName, limitPerHour = 100) {
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
     insertStmt.run(userId, serviceName, 1, limitPerHour, windowStart, windowEnd, new Date().toISOString());
+  }
+}
+
+// BUG-10: Cleanup old rate limit records to prevent memory leak
+function cleanupOldRateLimits(hoursToKeep = 24) {
+  try {
+    const cutoffTime = new Date(Date.now() - hoursToKeep * 60 * 60 * 1000).toISOString();
+    const stmt = db.prepare('DELETE FROM rate_limits WHERE window_end < ?');
+    const result = stmt.run(cutoffTime);
+    if (result.changes > 0) {
+      console.log(`[Rate Limiter] Cleaned up ${result.changes} old rate limit records`);
+    }
+    return result.changes;
+  } catch (error) {
+    console.error('Error cleaning up rate limits:', error);
+    return 0;
   }
 }
 
@@ -4680,6 +4739,7 @@ module.exports = {
   getOAuthStatus,
   createStateToken,
   validateStateToken,
+  cleanupExpiredStateTokens, // BUG-11: Cleanup expired OAuth state tokens
   // Phase 5: Key rotation and rate limiting
   createKeyVersion,
   getKeyVersions,
@@ -4687,6 +4747,7 @@ module.exports = {
   rotateEncryptionKey,
   checkRateLimit,
   incrementRateLimit,
+  cleanupOldRateLimits, // BUG-10: Cleanup old rate limit records
   // Brain
   createConversation,
   getConversations,
