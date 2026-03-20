@@ -397,11 +397,11 @@ function AccessTokens() {
           </div>
 
           <div className="mt-4 p-4 bg-slate-900 rounded-lg border border-slate-700">
-            <div className="flex items-center justify-between gap-3">
-              <code className="text-sm text-slate-300 font-mono break-all flex-1">
+            <div className="flex flex-col gap-4">
+              <code className="text-sm text-slate-300 font-mono break-all">
                 {masterRevealed ? masterToken : maskToken(masterToken)}
               </code>
-              <div className="flex gap-2 flex-shrink-0">
+              <div className="flex flex-col gap-2">
                 <button
                   onClick={() => setMasterRevealed((v) => !v)}
                   className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 bg-slate-700 hover:bg-slate-600 rounded transition-colors"
