@@ -309,24 +309,35 @@ async function executeServiceMethod({ serviceDef, method, params = {}, token = n
       const https = require('https');
       const http = require('http');
 
-      // Build URL: if method endpoint is absolute use it, otherwise combine with apiRoot
+      // BUG-13: Add try-catch around URL construction to handle invalid URLs
       let targetUrl;
-      if (methodEndpoint && (methodEndpoint.startsWith('http://') || methodEndpoint.startsWith('https://'))) {
-        targetUrl = new URL(methodEndpoint);
-      } else {
-        const base = apiRoot.endsWith('/') ? apiRoot.slice(0, -1) : apiRoot;
-        const ep = (methodEndpoint || '').startsWith('/') ? methodEndpoint : `/${methodEndpoint || ''}`;
-        targetUrl = new URL(base + ep);
-      }
-
-      // Interpolate path params like :owner, :repo, {owner}, {repo}
-      if (effectiveParams) {
-        let pathname = targetUrl.pathname;
-        for (const [k, v] of Object.entries(effectiveParams)) {
-          pathname = pathname.replace(`:${k}`, encodeURIComponent(v));
-          pathname = pathname.replace(`{${k}}`, encodeURIComponent(v));
+      try {
+        // Build URL: if method endpoint is absolute use it, otherwise combine with apiRoot
+        if (methodEndpoint && (methodEndpoint.startsWith('http://') || methodEndpoint.startsWith('https://'))) {
+          targetUrl = new URL(methodEndpoint);
+        } else {
+          const base = apiRoot.endsWith('/') ? apiRoot.slice(0, -1) : apiRoot;
+          const ep = (methodEndpoint || '').startsWith('/') ? methodEndpoint : `/${methodEndpoint || ''}`;
+          targetUrl = new URL(base + ep);
         }
-        targetUrl.pathname = pathname;
+
+        // Interpolate path params like :owner, :repo, {owner}, {repo}
+        if (effectiveParams) {
+          let pathname = targetUrl.pathname;
+          for (const [k, v] of Object.entries(effectiveParams)) {
+            pathname = pathname.replace(`:${k}`, encodeURIComponent(v));
+            pathname = pathname.replace(`{${k}}`, encodeURIComponent(v));
+          }
+          targetUrl.pathname = pathname;
+        }
+      } catch (urlError) {
+        console.error('[Integration Layer] URL construction failed:', {
+          apiRoot,
+          methodEndpoint,
+          params: effectiveParams,
+          error: urlError.message
+        });
+        throw new Error(`Invalid URL construction: ${urlError.message}`);
       }
 
       // For GET requests, add non-path params as query params
