@@ -916,6 +916,8 @@ function authenticate(req, res, next) {
     /^\/api\/v1\/auth\/signup/,
     /^\/api\/v1\/auth\/me/,
     /^\/api\/v1\/auth\/2fa\/challenge/,
+    /^\/api\/v1\/auth\/oauth-signup\/pending/,
+    /^\/api\/v1\/auth\/oauth-signup\/complete/,
     /^\/api\/v1\/billing\/plans/,
     /^\/oauth\//,
   ];
@@ -4347,7 +4349,7 @@ app.get([
       console.log(`[OAuth] Token stored successfully:`, { tokenId: storeResult.id, service, userId: req.session.user.id, scope: storeResult.scope });
     }
 
-    if (req.session.user) {
+    if (req.session.user && typeof getWorkspaces === 'function') {
       const ws = getWorkspaces(req.session.user.id);
       if (ws?.length) {
         incrementUsageDaily(ws[0].id, new Date().toISOString().slice(0, 10), {
@@ -4358,7 +4360,7 @@ app.get([
 
     // Emit notification for service connection (Phase 3.5)
     if (req.session.user) {
-      const ws = getWorkspaces(req.session.user.id);
+      const ws = typeof getWorkspaces === 'function' ? getWorkspaces(req.session.user.id) : [];
       const workspaceId = ws?.[0]?.id || 'default';
       NotificationDispatcher.onServiceConnected(workspaceId, req.session.user.id, service)
         .catch(err => console.error('Notification dispatch error:', err));
