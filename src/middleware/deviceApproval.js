@@ -277,7 +277,7 @@ function deviceApprovalMiddleware(req, res, next) {
     return res.status(403).json({
       error: 'device_approval_error',
       code: 'DEVICE_APPROVAL_FAILED',
-      message: 'Device approval check failed. Please try again or contact support.',
+      message: 'Device approval check failed. Please approve this device in Device Management and try again.',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
