@@ -177,7 +177,8 @@ export function formatCategoryLabel(category, categoryLabel) {
 export function normalizeService(rawService, oauthMeta) {
   const serviceName = rawService.name || rawService.service || 'unknown';
   const label = rawService.label || toDisplayLabel(serviceName, serviceName);
-  const inferredAuthType = inferAuthType(serviceName, rawService.auth_type || rawService.authType || null);
+  // Use oauthMeta.auth_type if available (from /api/v1/oauth/status), otherwise fall back to rawService
+  const inferredAuthType = inferAuthType(serviceName, oauthMeta?.auth_type || rawService.auth_type || rawService.authType || null);
   const apiEndpoint = rawService.api_endpoint || rawService.apiEndpoint || API_ROOT_FALLBACKS[String(serviceName).toLowerCase()] || null;
   const documentationUrl = rawService.documentation_url || rawService.documentationUrl || null;
   const category = rawService.category_name || rawService.categoryName || rawService.category || null;

@@ -289,19 +289,53 @@ Next: Spawn Phase 4 (Enterprise SSO+RBAC)
 
 ## 📋 Phase 3.6: Privacy Gateway & Data Minimization (2-3 weeks)
 
+### Overview
+Add policy-based privacy filtering for guest-scoped access while preserving current dashboard/API payload compatibility.
+
 ### Features
 - [ ] Privacy gateway core (`src/lib/privacy/PrivacyGateway.js`)
-- [ ] Source-specific policies (gmail/calendar/drive/github)
+  - Scope-based filtering (master vs guest)
+  - Safe-by-default enforcement
+  - Recursive scrubbing engine
+- [ ] Source-specific policies:
+  - `policies/gmail.policy.js` (redact financial labels, SSN patterns)
+  - `policies/calendar.policy.js` (redact private event details)
+  - `policies/drive.policy.js` (redact sensitive file names)
+  - `policies/github.policy.js` (redact private repo details)
+  - `policies/default.policy.js` (generic redaction rules)
 - [ ] Shadow mode + feature flag rollout
-- [ ] Redaction observability (`policyVersion`, `redactions[]`)
-- [ ] Backward-compatible response envelope strategy
-- [ ] Settings UI privacy roadmap/status section
-- [ ] Privacy policy page update
+  - Phase 1: Log redactions without enforcement
+  - Phase 2: Enforce for guest/bearer tokens
+  - Phase 3: Expand after regression pass
+- [ ] Redaction observability:
+  - `policyVersion` in response metadata
+  - `redactions[]` array for audit trail
+  - Live redaction logging
+- [ ] Backward-compatible response envelope:
+  - Versioned behavior with `X-MyApi-Version` header
+  - Graceful fallback for older clients
+  - No breaking changes to existing endpoints
+- [ ] Settings UI updates:
+  - ✅ Privacy roadmap card (completed Mar 20)
+  - Privacy policy page update (completed Mar 20)
+  - Privacy controls in Settings → Privacy tab
+- [ ] Testing & QA:
+  - Unit tests for each policy
+  - Integration tests for real data flows
+  - Regression tests (no false positives)
+  - Performance tests (redaction overhead < 5%)
+
+### Implementation Plan
+1. **Week 1:** Core gateway + Gmail/Calendar policies
+2. **Week 2:** Drive/GitHub policies + shadow mode
+3. **Week 3:** Testing, docs, rollout
 
 ### Status
 ```
 Status: ⬜ PLANNED
-Target: 2026-Q2
+Target: 2026-Q2 (April-May)
+Effort: 2-3 weeks
+Priority: HIGH (user privacy + GDPR compliance)
 ```
 
 ---
