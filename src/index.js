@@ -494,7 +494,7 @@ const sessionStore = new BetterSqlite3StoreFactory({
 
 app.use(session({
   store: sessionStore,
-  secret: process.env.SESSION_SECRET || 'myapi-session-secret-change-me',
+  secret: process.env.SESSION_SECRET, // P0 Security Fix: No fallback — validated at startup
   name: 'myapi.sid',
   resave: false,
   saveUninitialized: false,
