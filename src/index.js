@@ -4880,9 +4880,16 @@ app.get([
 
 // Helper: Try to authenticate and populate tokenMeta, but don't fail if not present
 function tryAuthenticate(req) {
+  console.log(`[tryAuth] Attempting authentication...`);
+  console.log(`[tryAuth]   Session ID: ${req.sessionID}`);
+  console.log(`[tryAuth]   Session user: ${req.session?.user ? req.session.user.id : 'NONE'}`);
+  console.log(`[tryAuth]   Auth header: ${req.headers["authorization"] ? 'YES' : 'NO'}`);
+  console.log(`[tryAuth]   Cookies:`, Object.keys(req.cookies || {}));
+
   // Priority 1: Session user
   if (req.session?.user?.id) {
     req.tokenMeta = { tokenId: `sess_${req.session.user.id}`, scope: 'full', ownerId: String(req.session.user.id) };
+    console.log(`[tryAuth] ✅ Authenticated via session: ${req.session.user.id}`);
     return;
   }
 
@@ -4892,15 +4899,21 @@ function tryAuthenticate(req) {
   if (parts.length === 2 && parts[0] === "Bearer") {
     const rawToken = parts[1];
     const tokens = getAccessTokens() || [];
+    console.log(`[tryAuth] Checking Bearer token against ${tokens.length} stored tokens...`);
     for (const tokenMeta of tokens) {
       if (!tokenMeta.revokedAt && bcrypt.compareSync(rawToken, tokenMeta.hash)) {
         req.tokenMeta = { tokenId: tokenMeta.id, scope: tokenMeta.scope, ownerId: String(tokenMeta.ownerId) };
+        console.log(`[tryAuth] ✅ Authenticated via Bearer token: ${tokenMeta.ownerId}`);
         return;
       }
     }
+    console.log(`[tryAuth] ❌ Bearer token didn't match any stored tokens`);
+  } else {
+    console.log(`[tryAuth] ❌ No Bearer token in Authorization header`);
   }
 
   // Not authenticated, but that's ok for this endpoint
+  console.log(`[tryAuth] Not authenticated, will show public view (all disconnected)`);
 }
 
 // GET /api/v1/oauth/status — Get all connected services
