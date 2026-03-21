@@ -49,12 +49,9 @@ class DiscordAdapter {
         res.on('end', () => {
           try {
             const result = JSON.parse(data);
-            console.log('[Discord OAuth] Token exchange response status:', res.statusCode);
             if (result.error) {
-              console.error('[Discord OAuth] Token exchange error:', result.error, result.error_description);
               reject(new Error(`Discord OAuth error: ${result.error_description || result.error}`));
             } else {
-              console.log('[Discord OAuth] Token exchange successful, got access token');
               resolve({
                 accessToken: result.access_token,
                 refreshToken: result.refresh_token || null,
@@ -64,16 +61,12 @@ class DiscordAdapter {
               });
             }
           } catch (e) {
-            console.error('[Discord OAuth] Error parsing token response:', e.message);
             reject(e);
           }
         });
       });
 
-      req.on('error', (err) => {
-        console.error('[Discord OAuth] Request error:', err.message);
-        reject(err);
-      });
+      req.on('error', reject);
       req.write(postData);
       req.end();
     });

@@ -72,7 +72,7 @@ class GoogleAdapter {
                 idToken: result.id_token || null,
                 expiresIn: result.expires_in,
                 tokenType: result.token_type,
-                scope: 'email profile gmail.readonly calendar.readonly'
+                scope: result.scope || 'email profile gmail.readonly calendar.readonly'
               });
             }
           } catch (e) {
