@@ -4878,9 +4878,36 @@ app.get([
   }
 });
 
-// GET /api/v1/oauth/status — Get all connected services (REQUIRES AUTH for user context)
-// Run authenticate middleware to populate req.tokenMeta if masterToken is present
-app.get("/api/v1/oauth/status", authenticate, async (req, res) => {
+// Helper: Try to authenticate and populate tokenMeta, but don't fail if not present
+function tryAuthenticate(req) {
+  // Priority 1: Session user
+  if (req.session?.user?.id) {
+    req.tokenMeta = { tokenId: `sess_${req.session.user.id}`, scope: 'full', ownerId: String(req.session.user.id) };
+    return;
+  }
+
+  // Priority 2: Bearer token
+  const authHeader = req.headers["authorization"] || "";
+  const parts = authHeader.split(" ");
+  if (parts.length === 2 && parts[0] === "Bearer") {
+    const rawToken = parts[1];
+    const tokens = getAccessTokens() || [];
+    for (const tokenMeta of tokens) {
+      if (!tokenMeta.revokedAt && bcrypt.compareSync(rawToken, tokenMeta.hash)) {
+        req.tokenMeta = { tokenId: tokenMeta.id, scope: tokenMeta.scope, ownerId: String(tokenMeta.ownerId) };
+        return;
+      }
+    }
+  }
+
+  // Not authenticated, but that's ok for this endpoint
+}
+
+// GET /api/v1/oauth/status — Get all connected services
+// PUBLIC endpoint, but uses optional authentication to identify user if available
+app.get("/api/v1/oauth/status", async (req, res) => {
+  // Try to authenticate, but don't fail if auth is missing
+  tryAuthenticate(req);
   const statuses = getOAuthStatus();
   
   // Get user ID for token lookup — try multiple sources
