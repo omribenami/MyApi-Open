@@ -37,6 +37,19 @@ function ServiceConnectors() {
   useEffect(() => {
     fetchCategories();
     fetchServices();
+    
+    // Check if we just completed an OAuth flow
+    const params = new URLSearchParams(window.location.search);
+    const oauthStatus = params.get('oauth_status');
+    
+    if (oauthStatus === 'connected' || oauthStatus === 'signup_required' || oauthStatus === 'confirm_login') {
+      // Refetch services to show updated connection status
+      const timer = setTimeout(() => {
+        console.log('[OAuth] Detected completed flow, refetching services...');
+        fetchServices();
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
   }, [masterToken]);
 
   const fetchCategories = async () => {
