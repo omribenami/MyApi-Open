@@ -4846,6 +4846,19 @@ app.get([
     req.session.masterTokenRaw = masterToken;
     console.log(`[OAuth Callback] Set req.session.masterTokenRaw = ${masterToken.slice(0, 20)}...`);
     
+    // CRITICAL FIX (Expert identified): Persist masterToken to access_tokens database table
+    // This allows Bearer token validation to work on subsequent /api/v1/oauth/status calls
+    if (oauthOwnerId && !req.session.masterTokenId) {
+      try {
+        const hash = bcrypt.hashSync(masterToken, 10);
+        const tokenId = createAccessToken(hash, oauthOwnerId, 'full', 'Master Token (OAuth Connect)', null, null);
+        req.session.masterTokenId = tokenId;
+        console.log(`[OAuth Callback] ✅ Created access token for OAuth connect: ${tokenId}`);
+      } catch (err) {
+        console.error(`[OAuth Callback] ❌ Failed to create access token:`, err.message);
+      }
+    }
+    
     // Set master token as a persistent cookie so the dashboard can use it
     res.cookie('myapi_master_token', masterToken, {
       httpOnly: false, // Allow JS to read it
