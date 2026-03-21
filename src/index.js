@@ -4879,7 +4879,8 @@ app.get([
 });
 
 // GET /api/v1/oauth/status — Get all connected services (REQUIRES AUTH for user context)
-app.get("/api/v1/oauth/status", (req, res) => {
+// Run authenticate middleware to populate req.tokenMeta if masterToken is present
+app.get("/api/v1/oauth/status", authenticate, async (req, res) => {
   const statuses = getOAuthStatus();
   
   // Get user ID for token lookup — try multiple sources
@@ -4889,7 +4890,7 @@ app.get("/api/v1/oauth/status", (req, res) => {
   if (req.session?.user?.id) {
     userId = String(req.session.user.id);
   }
-  // Priority 2: Bearer token owner
+  // Priority 2: Bearer token owner from Authorization header
   else if (req.tokenMeta?.ownerId) {
     userId = String(req.tokenMeta.ownerId);
   }
@@ -4897,10 +4898,24 @@ app.get("/api/v1/oauth/status", (req, res) => {
   else if (req.session?.passport?.user) {
     userId = String(req.session.passport.user);
   }
-  // Priority 4: If still no user, check for masterToken in request and resolve its owner
-  else if (req.tokenMeta?.tokenId || req.headers.authorization) {
-    // Already tried, tokenMeta should have been populated by auth middleware
-    userId = req.tokenMeta?.ownerId || null;
+  // Priority 4: Check for masterToken in localStorage cookie
+  else if (req.cookies?.myapi_master_token) {
+    try {
+      const masterTokenRaw = req.cookies.myapi_master_token;
+      const accessTokens = getAccessTokens() || [];
+      const tokenRecord = accessTokens.find(t => {
+        try {
+          return t.token && bcrypt.compareSync(masterTokenRaw, t.token);
+        } catch {
+          return false;
+        }
+      });
+      if (tokenRecord) {
+        userId = String(tokenRecord.ownerId);
+      }
+    } catch (err) {
+      console.warn(`[OAuth Status] Failed to resolve masterToken:`, err.message);
+    }
   }
   
   // Log session state for debugging
@@ -4908,6 +4923,7 @@ app.get("/api/v1/oauth/status", (req, res) => {
     sessionId: req.sessionID,
     sessionUser: req.session?.user ? { id: req.session.user.id, username: req.session.user.username } : null,
     tokenMeta: req.tokenMeta ? { tokenId: req.tokenMeta.tokenId, ownerId: req.tokenMeta.ownerId } : null,
+    hasMasterTokenCookie: Boolean(req.cookies?.myapi_master_token),
     resolvedUserId: userId || 'NONE'
   });
   
