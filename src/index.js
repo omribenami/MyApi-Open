@@ -438,6 +438,34 @@ app.use(express.json({ limit: "100kb" }));
 // Global rate limiter middleware (applies to all requests except exempt paths)
 const globalRateLimitMap = {};
 
+// P1 Security Fix: Cleanup old rate limit entries (in-memory maps grow unbounded)
+setInterval(() => {
+  const now = Date.now();
+  const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+
+  // Clean globalRateLimitMap
+  for (const [key, timestamps] of Object.entries(globalRateLimitMap || {})) {
+    const recentTimestamps = timestamps.filter(ts => now - ts < maxAge);
+    if (recentTimestamps.length === 0) {
+      delete globalRateLimitMap[key];
+    } else {
+      globalRateLimitMap[key] = recentTimestamps;
+    }
+  }
+
+  // Clean rateLimitMap if it exists
+  if (typeof rateLimitMap !== 'undefined') {
+    for (const [key, timestamps] of Object.entries(rateLimitMap || {})) {
+      const recentTimestamps = timestamps.filter(ts => now - ts < maxAge);
+      if (recentTimestamps.length === 0) {
+        delete rateLimitMap[key];
+      } else {
+        rateLimitMap[key] = recentTimestamps;
+      }
+    }
+  }
+}, 60 * 60 * 1000); // Run every hour
+
 app.use((req, res, next) => {
   // CRITICAL: Exempt all auth/dashboard bootstrap paths from rate limiting
   const isExempt = req.path === '/api/v1/auth/me' ||
@@ -7332,7 +7360,7 @@ app.use((err, req, res, next) => {
 // --- Validate Required Secrets (P0 Security Fix) ---
 function validateRequiredSecrets() {
   const isProd = process.env.NODE_ENV === 'production';
-  const requiredSecrets = ['SESSION_SECRET', 'JWT_SECRET', 'ENCRYPTION_KEY'];
+  const requiredSecrets = ['SESSION_SECRET', 'JWT_SECRET', 'ENCRYPTION_KEY', 'VAULT_KEY'];
   
   const missing = [];
   for (const secret of requiredSecrets) {

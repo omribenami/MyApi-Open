@@ -64,7 +64,6 @@ router.post('/auth/login', (req, res) => {
   };
 
   // Generate a session token for client-side auth
-  const crypto = require('crypto');
   const sessionToken = crypto.randomBytes(32).toString('hex');
   if (!global.sessions) global.sessions = {};
   global.sessions[sessionToken] = { userId: row.id, username: row.username, createdAt: Date.now() };
