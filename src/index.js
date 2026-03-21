@@ -1254,9 +1254,11 @@ app.get('/api/v1/manage/audit/agents', authenticate, (req, res) => {
 // Register export data routes
 const exportRoutes = require('./routes/export');
 const importRoutes = require('./routes/import');
+const createVaultInstructionsRoutes = require('./routes/vault-instructions');
 
 app.use('/api/v1/export', authenticate, exportRoutes);
 app.use('/api/v1/import', authenticate, importRoutes);
+app.use('/api/v1/vault', authenticate, createVaultInstructionsRoutes(db, tokenManager, createAuditLog));
 
 // --- PUBLIC: BILLING PLANS ENDPOINT (no auth required) ---
 app.get('/api/v1/billing/plans', (req, res) => {
