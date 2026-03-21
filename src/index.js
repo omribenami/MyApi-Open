@@ -4528,17 +4528,33 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
   
   if (wantsJson) {
     console.log(`[OAuth] Returning JSON response for ${service}`);
-    return res.json({ 
-      ok: true, 
-      authUrl, 
-      state,
-      service
+    // CRITICAL: Save session before responding, otherwise oauthStateMeta won't persist
+    return req.session.save((err) => {
+      if (err) {
+        console.error(`[OAuth Authorize] ❌ Session save failed for JSON response:`, err);
+        return res.status(500).json({ error: 'Failed to save session for OAuth flow' });
+      }
+      res.json({ 
+        ok: true, 
+        authUrl, 
+        state,
+        service
+      });
     });
   }
 
   // Default behavior: redirect to OAuth provider
+  // CRITICAL: Save session before redirect, otherwise oauthStateMeta won't persist
   console.log(`[OAuth] Redirecting to ${service} OAuth provider at: ${authUrl.split('?')[0]}`);
-  return res.redirect(authUrl);
+  console.log(`[OAuth Authorize] Saving session with oauthStateMeta before redirect...`);
+  return req.session.save((err) => {
+    if (err) {
+      console.error(`[OAuth Authorize] ❌ Session save failed:`, err);
+      return res.status(500).json({ error: 'Failed to save session for OAuth flow' });
+    }
+    console.log(`[OAuth Authorize] ✅ Session saved, redirecting to OAuth provider`);
+    res.redirect(authUrl);
+  });
 });
 
 // Catch incomplete OAuth callbacks (e.g., /api/v1/oauth without :service)
@@ -4862,7 +4878,7 @@ app.get([
   }
 });
 
-// GET /api/v1/oauth/status — Get all connected services (PUBLIC - no auth required)
+// GET /api/v1/oauth/status — Get all connected services (REQUIRES AUTH for user context)
 app.get("/api/v1/oauth/status", (req, res) => {
   const statuses = getOAuthStatus();
   
@@ -4881,9 +4897,19 @@ app.get("/api/v1/oauth/status", (req, res) => {
   else if (req.session?.passport?.user) {
     userId = String(req.session.passport.user);
   }
+  // Priority 4: If still no user, check for masterToken in request and resolve its owner
+  else if (req.tokenMeta?.tokenId || req.headers.authorization) {
+    // Already tried, tokenMeta should have been populated by auth middleware
+    userId = req.tokenMeta?.ownerId || null;
+  }
   
-  console.log(`[OAuth Status] Session user: ${req.session?.user?.id || 'none'} | Bearer owner: ${req.tokenMeta?.ownerId || 'none'}`);
-  console.log(`[OAuth Status] Resolved userId=${userId || 'NONE'}`);
+  // Log session state for debugging
+  console.log(`[OAuth Status] Full session dump:`, {
+    sessionId: req.sessionID,
+    sessionUser: req.session?.user ? { id: req.session.user.id, username: req.session.user.username } : null,
+    tokenMeta: req.tokenMeta ? { tokenId: req.tokenMeta.tokenId, ownerId: req.tokenMeta.ownerId } : null,
+    resolvedUserId: userId || 'NONE'
+  });
   
   const services = OAUTH_SERVICES.map(service => {
     const status = statuses.find(s => s.serviceName === service);
