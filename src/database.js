@@ -1732,7 +1732,12 @@ function getOAuthToken(serviceName, userId) {
   `);
   
   const row = stmt.get(serviceName, userId);
-  if (!row) return null;
+  if (!row) {
+    console.log(`[getOAuthToken] No row found for ${serviceName}/${userId.slice(0,8)}`);
+    return null;
+  }
+  
+  console.log(`[getOAuthToken] Found token for ${serviceName}/${userId.slice(0,8)}, attempting decryption...`);
   
   // Decrypt tokens
   const encryptionKey = process.env.VAULT_KEY || 'default-vault-key-change-me';
@@ -1756,6 +1761,7 @@ function getOAuthToken(serviceName, userId) {
       refreshToken = decryptedRefresh;
     }
     
+    console.log(`[getOAuthToken] ✅ Successfully decrypted ${serviceName} token`);
     return {
       id: row.id,
       serviceName: row.service_name,
@@ -1769,7 +1775,7 @@ function getOAuthToken(serviceName, userId) {
       lastApiCall: row.last_api_call  // Phase 5.4: Track last API call
     };
   } catch (e) {
-    console.error('Error decrypting OAuth token:', e);
+    console.error(`[getOAuthToken] ❌ Decryption error for ${serviceName}/${userId.slice(0,8)}:`, e.message);
     return null;
   }
 }
