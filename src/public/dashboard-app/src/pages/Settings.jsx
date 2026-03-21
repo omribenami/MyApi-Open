@@ -5,6 +5,7 @@ import apiRequest from '../utils/apiRequest';
 import DeleteAccountModal from '../components/DeleteAccountModal';
 import ExportDataModal from '../components/ExportDataModal';
 import NotificationSettings from '../components/NotificationSettings';
+import ImportExport from '../components/ImportExport';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared UI helpers
@@ -1530,6 +1531,7 @@ const SECTIONS = [
   { id: 'security', label: 'Security' },
   { id: 'notifications', label: 'Notifications' },
   { id: 'privacy', label: 'Privacy' },
+  { id: 'dataPrivacy', label: 'Data & Privacy' },
   { id: 'danger', label: 'Danger Zone' },
 ];
 
@@ -1593,6 +1595,7 @@ function Settings() {
       {activeSection === 'security' && <SecuritySection />}
       {activeSection === 'notifications' && <NotificationSettings />}
       {activeSection === 'privacy' && <PrivacySection />}
+      {activeSection === 'dataPrivacy' && <ImportExport />}
       {activeSection === 'danger' && (
         <DangerZoneSection
           onRequestExport={() => setShowExportModal(true)}
