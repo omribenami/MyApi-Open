@@ -4494,7 +4494,7 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
   // Create state token for CSRF protection
   let state;
   try {
-    state = createStateToken(service, 10);
+    state = createStateToken(service, 30);
   } catch (stateError) {
     console.error(`[OAuth] Failed to create state token for ${service}:`, stateError);
     return res.status(500).json({ 
