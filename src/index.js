@@ -4850,7 +4850,8 @@ app.get("/api/v1/oauth/status", (req, res) => {
     userId = String(req.session.passport.user);
   }
   
-  console.log(`[OAuth Status] Checking for userId=${userId || 'NONE'}`);
+  console.log(`[OAuth Status] Session user: ${req.session?.user?.id || 'none'} | Bearer owner: ${req.tokenMeta?.ownerId || 'none'}`);
+  console.log(`[OAuth Status] Resolved userId=${userId || 'NONE'}`);
   
   const services = OAUTH_SERVICES.map(service => {
     const status = statuses.find(s => s.serviceName === service);
