@@ -659,21 +659,24 @@ router.post('/', upload.single('file'), async (req, res) => {
 
     console.log(`[IMPORT] Final summary:`, JSON.stringify(summary, null, 2));
 
-    // Check if we were supposed to import personas/skills but didn't
+    // Check if we were supposed to import personas/skills/knowledge but didn't
     const hadPersonasToImport = personasToImport.length > 0;
     const hadSkillsToImport = skillsToImport.length > 0;
+    const hadKnowledgeToImport = kbDocsToImport.length > 0;
     const personaImportFailed = hadPersonasToImport && summary.imported.personas === 0;
     const skillImportFailed = hadSkillsToImport && summary.imported.skills === 0;
+    const knowledgeImportFailed = hadKnowledgeToImport && summary.imported.knowledge === 0;
 
-    if (personaImportFailed || skillImportFailed) {
+    if (personaImportFailed || skillImportFailed || knowledgeImportFailed) {
       console.error(`[IMPORT] CRITICAL: Data loss detected!`);
       console.error(`  - Personas: expected ${personasToImport.length}, got ${summary.imported.personas}`);
       console.error(`  - Skills: expected ${skillsToImport.length}, got ${summary.imported.skills}`);
+      console.error(`  - Knowledge: expected ${kbDocsToImport.length}, got ${summary.imported.knowledge}`);
 
       return res.status(500).json({
         success: false,
-        error: 'Data import failed - personas and/or skills were not saved',
-        message: `Attempted to import ${personasToImport.length} personas and ${skillsToImport.length} skills, but only ${summary.imported.personas} personas and ${summary.imported.skills} skills were saved to the database. This may indicate a database transaction issue.`,
+        error: 'Data import failed - personas, skills, and/or knowledge documents were not saved',
+        message: `Attempted to import ${personasToImport.length} personas, ${skillsToImport.length} skills, and ${kbDocsToImport.length} knowledge documents, but only ${summary.imported.personas} personas, ${summary.imported.skills} skills, and ${summary.imported.knowledge} knowledge documents were saved to the database. This may indicate a database transaction issue.`,
         imported: summary.imported,
         skipped: summary.skipped,
         conflicts: summary.conflicts,
@@ -686,6 +689,8 @@ router.post('/', upload.single('file'), async (req, res) => {
           personasImported: summary.imported.personas,
           skillsExpected: skillsToImport.length,
           skillsImported: summary.imported.skills,
+          knowledgeExpected: kbDocsToImport.length,
+          knowledgeImported: summary.imported.knowledge,
           hasErrors: summary.errors.length > 0
         }
       });
