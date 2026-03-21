@@ -7343,13 +7343,20 @@ function validateRequiredSecrets() {
   }
   
   if (missing.length > 0) {
-    const msg = `❌ FATAL: Missing required secrets: ${missing.join(', ')}. Cannot start in production.`;
-    console.error(msg);
+    console.error('❌ FATAL ERROR: Missing required secrets in production:');
+    missing.forEach(secret => {
+      console.error(`   - ${secret}`);
+    });
+    console.error('\nSet these environment variables before starting production server.');
+    console.error('Example: export SESSION_SECRET="your-secret-here"');
+    
     if (isProd) {
       process.exit(1);
     } else {
       console.warn('⚠️  Running in development mode with missing secrets. This is insecure!');
     }
+  } else if (isProd) {
+    console.log('✅ All required secrets validated');
   }
 }
 
@@ -7358,7 +7365,7 @@ function cleanupExpiredSessions() {
   if (!global.sessions) return;
   
   const now = Date.now();
-  const sessionTTL = 24 * 60 * 60 * 1000; // 24 hours
+  const sessionTTL = 7 * 24 * 60 * 60 * 1000; // 7 days
   let cleanedCount = 0;
   
   for (const [sessionToken, sessionData] of Object.entries(global.sessions)) {
@@ -7372,7 +7379,7 @@ function cleanupExpiredSessions() {
   }
   
   if (cleanedCount > 0) {
-    console.log(`[Cleanup] Removed ${cleanedCount} expired session(s) from global.sessions`);
+    console.log(`[Session Cleanup] Expired ${cleanedCount} old sessions (7-day TTL)`);
   }
 }
 
@@ -7390,12 +7397,18 @@ if (process.env.NODE_ENV !== 'test') {
     
     // BUG-11: Cleanup expired OAuth state tokens every hour
     // BUG-10: Also cleanup old rate limit records
-    // P0 Security Fix: Cleanup expired in-memory sessions
     setInterval(() => {
       cleanupExpiredStateTokens();
       cleanupOldRateLimits(24); // Keep 24 hours of history
-      cleanupExpiredSessions(); // P0 Security: Remove expired global.sessions
     }, 60 * 60 * 1000); // 1 hour
+    
+    // P0 Security Fix: Cleanup expired sessions every 15 minutes (7-day TTL)
+    if (global.sessions) {
+      setInterval(() => {
+        cleanupExpiredSessions();
+      }, 15 * 60 * 1000); // Every 15 minutes
+      console.log('✅ Session cleanup scheduled (7-day TTL, 15-min check interval)');
+    }
   });
 }
 
