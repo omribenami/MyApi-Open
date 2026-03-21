@@ -53,8 +53,8 @@ class WhatsAppAdapter {
   async verifyToken(token) {
     return new Promise((resolve, reject) => {
       const options = {
-        hostname: 'graph.instagram.com',
-        path: '/me?fields=id,name&access_token=' + token,
+        hostname: 'graph.facebook.com',
+        path: '/v19.0/me?fields=id,name&access_token=' + token,
         method: 'GET'
       };
 
@@ -92,8 +92,8 @@ class WhatsAppAdapter {
       });
 
       const options = {
-        hostname: 'graph.instagram.com',
-        path: `/v17.0/${this.businessAccountId}/messages`,
+        hostname: 'graph.facebook.com',
+        path: `/v19.0/${this.businessAccountId}/messages`,
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
