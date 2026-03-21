@@ -32,5 +32,8 @@ backend/venv/
 # Local KB uploaded files
 src/uploads/
 
-# Ignore local app env
-src/.env
+# Environment files - NEVER commit real secrets!
+src/.env*
+!src/.env.example
+src/.env.development
+src/.env.production
