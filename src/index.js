@@ -4755,8 +4755,10 @@ app.get([
       
       // Ensure req.session.user is populated for subsequent API calls
       // This is critical for /api/v1/oauth/status to work after OAuth callback
+      console.log(`[OAuth Callback] Before session.user fix: req.session.user=${req.session.user ? 'SET' : 'UNSET'}, oauthOwnerId=${oauthOwnerId}`);
       if (!req.session.user && oauthOwnerId) {
         const ownerUser = getUserById(oauthOwnerId);
+        console.log(`[OAuth Callback] getUserById(${oauthOwnerId}) returned:`, ownerUser ? 'USER FOUND' : 'USER NOT FOUND');
         if (ownerUser) {
           req.session.user = {
             id: ownerUser.id,
@@ -4766,8 +4768,14 @@ app.get([
             avatarUrl: ownerUser.avatarUrl || null,
             twoFactorEnabled: Boolean(ownerUser.twoFactorEnabled),
           };
-          console.log(`[OAuth] Set session.user for owner: ${oauthOwnerId}`);
+          console.log(`[OAuth Callback] ✅ Set session.user for owner: ${oauthOwnerId}`);
+        } else {
+          console.log(`[OAuth Callback] ❌ Failed to load user from database: ${oauthOwnerId}`);
         }
+      } else if (req.session.user) {
+        console.log(`[OAuth Callback] session.user already set: ${req.session.user.id}`);
+      } else {
+        console.log(`[OAuth Callback] ❌ No oauthOwnerId available, cannot set session.user`);
       }
     }
 
@@ -4829,10 +4837,14 @@ app.get([
     
     const redirectUrl = `/dashboard/?oauth_service=${service}&oauth_status=connected&mode=${encodeURIComponent(stateMeta.mode || 'connect')}&next=${next}`;
     
+    console.log(`[OAuth Callback] Before saving session: req.session.id=${req.sessionID}, req.session.user=${req.session.user ? req.session.user.id : 'UNSET'}`);
     req.session.save((err) => {
       if (err) {
         console.error('[OAuth] Session save error:', err);
+      } else {
+        console.log(`[OAuth Callback] ✅ Session saved successfully. ID=${req.sessionID}`);
       }
+      console.log(`[OAuth Callback] Redirecting to: ${redirectUrl}`);
       res.redirect(redirectUrl);
     });
   } catch (error) {
