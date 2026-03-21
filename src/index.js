@@ -7329,8 +7329,58 @@ app.use((err, req, res, next) => {
   });
 });
 
+// --- Validate Required Secrets (P0 Security Fix) ---
+function validateRequiredSecrets() {
+  const isProd = process.env.NODE_ENV === 'production';
+  const requiredSecrets = ['SESSION_SECRET', 'JWT_SECRET', 'ENCRYPTION_KEY'];
+  
+  const missing = [];
+  for (const secret of requiredSecrets) {
+    const value = process.env[secret];
+    if (!value || String(value).trim().length === 0) {
+      missing.push(secret);
+    }
+  }
+  
+  if (missing.length > 0) {
+    const msg = `❌ FATAL: Missing required secrets: ${missing.join(', ')}. Cannot start in production.`;
+    console.error(msg);
+    if (isProd) {
+      process.exit(1);
+    } else {
+      console.warn('⚠️  Running in development mode with missing secrets. This is insecure!');
+    }
+  }
+}
+
+// Cleanup function for global.sessions (P0 Security Fix: Session Memory Leak)
+function cleanupExpiredSessions() {
+  if (!global.sessions) return;
+  
+  const now = Date.now();
+  const sessionTTL = 24 * 60 * 60 * 1000; // 24 hours
+  let cleanedCount = 0;
+  
+  for (const [sessionToken, sessionData] of Object.entries(global.sessions)) {
+    if (sessionData && sessionData.createdAt) {
+      const age = now - sessionData.createdAt;
+      if (age > sessionTTL) {
+        delete global.sessions[sessionToken];
+        cleanedCount++;
+      }
+    }
+  }
+  
+  if (cleanedCount > 0) {
+    console.log(`[Cleanup] Removed ${cleanedCount} expired session(s) from global.sessions`);
+  }
+}
+
 // --- Start ---
 if (process.env.NODE_ENV !== 'test') {
+  // Validate required secrets BEFORE bootstrap
+  validateRequiredSecrets();
+  
   bootstrap();
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`Server ready on http://0.0.0.0:${PORT}`);
@@ -7340,9 +7390,11 @@ if (process.env.NODE_ENV !== 'test') {
     
     // BUG-11: Cleanup expired OAuth state tokens every hour
     // BUG-10: Also cleanup old rate limit records
+    // P0 Security Fix: Cleanup expired in-memory sessions
     setInterval(() => {
       cleanupExpiredStateTokens();
       cleanupOldRateLimits(24); // Keep 24 hours of history
+      cleanupExpiredSessions(); // P0 Security: Remove expired global.sessions
     }, 60 * 60 * 1000); // 1 hour
   });
 }
