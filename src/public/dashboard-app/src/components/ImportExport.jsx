@@ -306,7 +306,8 @@ function ImportExport() {
 
         {/* File upload area */}
         <div className="mb-6">
-          <label
+          <div
+            onClick={() => fileInputRef.current?.click()}
             onDragOver={handleDragOver}
             onDrop={handleDrop}
             className="flex flex-col items-center justify-center gap-3 p-8 border-2 border-dashed border-slate-600 rounded-lg bg-slate-900 bg-opacity-50 hover:border-blue-500 hover:bg-slate-900 transition-colors cursor-pointer"
@@ -325,7 +326,7 @@ function ImportExport() {
               onChange={handleFileSelect}
               className="hidden"
             />
-          </label>
+          </div>
         </div>
 
         {/* Progress bar */}
