@@ -1256,6 +1256,10 @@ app.use('/api/v1/export', authenticate, exportRoutes);
 app.use('/api/v1/import', authenticate, importRoutes);
 app.use('/api/v1/vault', authenticate, createVaultInstructionsRoutes(db, null, createAuditLog));
 
+// FAL Image Generation API
+const falImagesRoutes = require('./routes/fal-images');
+app.use('/api/v1/fal', authenticate, falImagesRoutes);
+
 // --- PUBLIC: BILLING PLANS ENDPOINT (no auth required) ---
 app.get('/api/v1/billing/plans', (req, res) => {
   try {
