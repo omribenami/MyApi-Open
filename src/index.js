@@ -375,14 +375,8 @@ const isAdapterConfigured = (adapter) => {
   );
 };
 const isOAuthServiceEnabled = (service) => {
-  // Instagram is tied to Facebook app setup in this product.
-  // If Facebook is configured, treat Instagram as enabled too.
-  if (service === 'instagram') {
-    const fbAdapter = oauthAdapters.facebook;
-    const fbEnabledByConfig = oauthConfig.facebook?.enabled !== false;
-    return Boolean(fbEnabledByConfig && isAdapterConfigured(fbAdapter));
-  }
-
+  // All OAuth services follow the same pattern:
+  // Check if the service config allows it AND the adapter has credentials configured
   const adapter = oauthAdapters[service];
   const enabledByConfig = oauthConfig[service]?.enabled !== false;
   return Boolean(enabledByConfig && isAdapterConfigured(adapter));
