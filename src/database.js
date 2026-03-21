@@ -904,6 +904,9 @@ function createVaultToken(label, description, token, service, websiteUrl = null,
 
   // Simple encryption using crypto (AES-256-CBC)
   const algorithm = 'aes-256-cbc';
+  // TODO (BUG-J, P3): Replace hardcoded 'salt' with VAULT_SALT env var or random salt per deployment
+  // Currently using static salt 'salt' for key derivation - should use dynamic salt
+  // See similar occurrences at lines ~991, ~1643, ~1745, ~1980
   const key = crypto.scryptSync(encryptionKey, 'salt', 32);
   const iv = crypto.randomBytes(16);
   const cipher = crypto.createCipheriv(algorithm, key, iv);
