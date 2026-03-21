@@ -1,15 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
-import apiRequest from '../utils/apiRequest';
+import { useState, useRef } from 'react';
 
-const IMPORT_STATS_TYPES = [
-  { key: 'personas', label: 'Personas' },
-  { key: 'skills', label: 'Skills' },
-  { key: 'documents', label: 'Documents' },
-  { key: 'settings', label: 'Settings' },
-  { key: 'identity', label: 'Identity' },
-];
-
-function ImportConfirmationDialog({ isOpen, onConfirm, onCancel, importStats, isConfirming }) {
+function ImportConfirmationDialog({ isOpen, onConfirm, onCancel, isConfirming }) {
   if (!isOpen) return null;
 
   return (
@@ -26,27 +17,21 @@ function ImportConfirmationDialog({ isOpen, onConfirm, onCancel, importStats, is
           </div>
         </div>
 
-        {/* Import summary */}
+        {/* Info about what will be imported */}
         <div className="bg-yellow-900 bg-opacity-20 border border-yellow-800 rounded-lg p-4 mb-6">
-          <p className="text-sm font-medium text-yellow-300 mb-3">Items to be imported:</p>
-          <div className="space-y-2">
-            {importStats && Object.entries(importStats).map(([key, count]) => {
-              if (!count || count === 0) return null;
-              const label = IMPORT_STATS_TYPES.find(t => t.key === key)?.label || key;
-              return (
-                <div key={key} className="flex items-center justify-between text-sm text-yellow-200">
-                  <span>{label}</span>
-                  <span className="font-semibold">{count}</span>
-                </div>
-              );
-            })}
-          </div>
+          <p className="text-sm font-medium text-yellow-300 mb-2">This import will restore:</p>
+          <ul className="text-sm text-yellow-200 space-y-1 list-disc list-inside">
+            <li>Personas and their configurations</li>
+            <li>Skills and their scripts</li>
+            <li>Profile information</li>
+            <li>Settings and preferences</li>
+          </ul>
         </div>
 
-        {/* Warning */}
+        {/* Security warning */}
         <div className="bg-red-900 bg-opacity-20 border border-red-800 rounded-lg p-3 mb-6">
           <p className="text-xs text-red-300">
-            ⚠️ Import will <span className="font-semibold">NOT</span> restore tokens or API credentials for security reasons.
+            🔒 Import will <span className="font-semibold">NOT</span> restore tokens or API credentials for security reasons.
           </p>
         </div>
 
@@ -78,7 +63,6 @@ function ImportExport() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
-  const [importStats, setImportStats] = useState(null);
   const [importError, setImportError] = useState('');
   const [importSuccess, setImportSuccess] = useState('');
   const [showConfirmation, setShowConfirmation] = useState(false);
@@ -115,14 +99,6 @@ function ImportExport() {
       setImportError('Please select a file to import');
       return;
     }
-    // Extract basic stats from file (in real scenario, you'd analyze the ZIP)
-    setImportStats({
-      personas: 3,
-      skills: 5,
-      documents: 12,
-      settings: 1,
-      identity: 1,
-    });
     setShowConfirmation(true);
   };
 
@@ -150,15 +126,15 @@ function ImportExport() {
         
         // Handle specific error cases
         if (response.status === 400) {
-          throw new Error(errorData.message || 'Invalid or corrupted ZIP file');
+          throw new Error(errorData.error || errorData.message || 'Invalid or corrupted ZIP file');
         } else if (response.status === 401) {
           throw new Error('Unauthorized. Please log in again.');
         } else if (response.status === 403) {
           throw new Error('You do not have permission to import data');
         } else if (response.status === 500) {
-          throw new Error('Server error. Please try again later.');
+          throw new Error(errorData.error || 'Server error. Please try again later.');
         } else {
-          throw new Error(errorData.message || `Import failed with status ${response.status}`);
+          throw new Error(errorData.error || errorData.message || `Import failed with status ${response.status}`);
         }
       }
 
@@ -169,24 +145,43 @@ function ImportExport() {
       
       // Process import results and create log
       const log = [];
-      if (result.imported?.personas?.length > 0) {
-        log.push(`✅ Imported ${result.imported.personas.length} persona(s)`);
+      if (result.imported) {
+        const imported = result.imported;
+        
+        // Handle personas (can be array or number)
+        const personasCount = Array.isArray(imported.personas) ? imported.personas.length : imported.personas;
+        if (personasCount > 0) {
+          log.push(`✅ Imported ${personasCount} persona(s)`);
+        }
+        
+        // Handle skills (can be array or number)
+        const skillsCount = Array.isArray(imported.skills) ? imported.skills.length : imported.skills;
+        if (skillsCount > 0) {
+          log.push(`✅ Imported ${skillsCount} skill(s)`);
+        }
+        
+        // Handle profile
+        if (imported.profile) {
+          log.push('✅ Imported profile data');
+        }
+        
+        // Handle settings
+        if (imported.settings) {
+          log.push('✅ Imported settings');
+        }
       }
-      if (result.imported?.skills?.length > 0) {
-        log.push(`✅ Imported ${result.imported.skills.length} skill(s)`);
-      }
-      if (result.imported?.documents?.length > 0) {
-        log.push(`✅ Imported ${result.imported.documents.length} document(s)`);
-      }
-      if (result.imported?.identity) {
-        log.push('✅ Imported identity data');
-      }
-      if (result.imported?.settings) {
-        log.push('✅ Imported settings');
+      
+      // Add skipped info if any
+      if (result.skipped) {
+        const skipped = result.skipped;
+        if (skipped.personas > 0 || skipped.skills > 0) {
+          log.push(`⚠️ Skipped ${skipped.personas} persona(s) and ${skipped.skills} skill(s) (name conflicts)`);
+        }
       }
 
       setImportLog(log);
-      setImportSuccess(`Data imported successfully! ${log.length} sections updated.`);
+      const message = result.message || `Data imported successfully! ${log.length} sections updated.`;
+      setImportSuccess(message);
       setSelectedFile(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
       setShowConfirmation(false);
@@ -444,7 +439,6 @@ function ImportExport() {
         isOpen={showConfirmation}
         onConfirm={handleConfirmImport}
         onCancel={() => setShowConfirmation(false)}
-        importStats={importStats}
         isConfirming={isConfirming}
       />
     </div>
