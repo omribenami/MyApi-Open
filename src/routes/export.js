@@ -7,6 +7,7 @@ const {
   getUserById,
   getAccessTokens,
   getPersonas,
+  getSkills,
   getKBDocuments,
   getKBDocumentById,
   getServices,
@@ -87,6 +88,7 @@ async function buildZipExport({ ownerId, workspaceId, exportMode, includeFiles }
   const soulMdPath = process.env.SOUL_MD_PATH || '/home/jarvis/.openclaw/workspace/SOUL.md';
 
   const personas = withLegacyOwnerFallback(getPersonas) || [];
+  const skills = withLegacyOwnerFallback(getSkills) || [];
   const kbDocs = withLegacyOwnerFallback(getKBDocuments) || [];
   const services = getServices() || [];
   const servicePrefs = getServicePreferences(ownerId) || [];
@@ -124,6 +126,28 @@ async function buildZipExport({ ownerId, workspaceId, exportMode, includeFiles }
     const config = sanitizePortableObject(persona.config || persona.template_data || null);
     if (config) {
       addJson(`personas/configs/${persona.id}.json`, config);
+    }
+  });
+
+  const skillsList = skills.map((skill) => ({
+    id: skill.id,
+    name: skill.name,
+    description: skill.description,
+    version: skill.version,
+    author: skill.author,
+    category: skill.category,
+    repoUrl: skill.repo_url,
+    createdAt: skill.created_at || skill.createdAt,
+    updatedAt: skill.updated_at || skill.updatedAt,
+  }));
+  addJson('skills/skills.json', skillsList);
+  skills.forEach((skill) => {
+    if (skill.script_content) {
+      addText(`skills/scripts/${skill.id}.js`, skill.script_content);
+    }
+    const config = sanitizePortableObject(skill.config_json || null);
+    if (config) {
+      addJson(`skills/configs/${skill.id}.json`, config);
     }
   });
 
@@ -238,6 +262,7 @@ async function buildZipExport({ ownerId, workspaceId, exportMode, includeFiles }
     sections: {
       profile: true,
       personas: true,
+      skills: true,
       connectors: true,
       knowledge: true,
       settings: true,
@@ -269,6 +294,7 @@ async function buildZipExport({ ownerId, workspaceId, exportMode, includeFiles }
  *  - profile: boolean (include USER.md and identity)
  *  - tokens: boolean (include token metadata)
  *  - personas: boolean (include personas and SOUL.md)
+ *  - skills: boolean (include skills with scripts and configs)
  *  - knowledge: boolean (include KB documents)
  *  - settings: boolean (include settings)
  */
@@ -322,6 +348,7 @@ router.get('/', async (req, res) => {
       profile: req.query.profile !== 'false',
       tokens: req.query.tokens !== 'false',
       personas: req.query.personas !== 'false',
+      skills: req.query.skills !== 'false',
       knowledge: req.query.knowledge !== 'false',
       settings: req.query.settings !== 'false',
     };
@@ -467,6 +494,35 @@ router.get('/', async (req, res) => {
       } catch (error) {
         exportData.sections.personas = {
           error: `Failed to export personas: ${error.message}`,
+        };
+      }
+    }
+
+    // === SKILLS SECTION ===
+    if (sections.skills) {
+      try {
+        const skillsData = withLegacyOwnerFallback(getSkills) || [];
+        const skillExports = skillsData.map((skill) => ({
+          id: skill.id,
+          name: skill.name,
+          description: skill.description,
+          version: skill.version,
+          author: skill.author,
+          category: skill.category,
+          scriptContent: skill.script_content,
+          configJson: skill.config_json,
+          repoUrl: skill.repo_url,
+          createdAt: skill.created_at || skill.createdAt,
+          updatedAt: skill.updated_at || skill.updatedAt,
+        }));
+
+        exportData.sections.skills = {
+          count: skillExports.length,
+          skills: skillExports,
+        };
+      } catch (error) {
+        exportData.sections.skills = {
+          error: `Failed to export skills: ${error.message}`,
         };
       }
     }
