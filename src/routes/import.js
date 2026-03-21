@@ -238,9 +238,14 @@ router.post('/', upload.single('file'), async (req, res) => {
     const importUserId = manifest.userId || manifest.ownerId;
     if (importUserId && importUserId !== ownerId) {
       return res.status(403).json({ 
-        error: 'Cannot import data from a different user',
-        importedFromUser: importUserId,
-        currentUser: ownerId
+        error: 'Cross-account import not allowed',
+        message: 'This ZIP file was exported from a different account. Data can only be imported to the same account it was exported from.',
+        details: {
+          exportedFromUserId: importUserId,
+          currentlyLoggedInAs: ownerId,
+          reason: 'This is a security measure to prevent accidental data mixing between accounts.'
+        },
+        solution: 'Please log in with the original account (the one that exported this data) to import it.'
       });
     }
 

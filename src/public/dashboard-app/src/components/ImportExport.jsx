@@ -130,6 +130,10 @@ function ImportExport() {
         } else if (response.status === 401) {
           throw new Error('Unauthorized. Please log in again.');
         } else if (response.status === 403) {
+          // Cross-account import error - show detailed message
+          if (errorData.message) {
+            throw new Error(`${errorData.error}\n\n${errorData.message}\n\n${errorData.solution || ''}`);
+          }
           throw new Error('You do not have permission to import data');
         } else if (response.status === 500) {
           throw new Error(errorData.error || 'Server error. Please try again later.');
