@@ -4471,10 +4471,12 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
 
   // Store OAuth flow metadata in session
   req.session.oauthStateMeta = req.session.oauthStateMeta || {};
+  const ownerId = req.session?.user?.id ? String(req.session.user.id) : null;
+  console.log(`[OAuth Authorize] ${service} flow initiated: req.session.user=${req.session?.user?.id || 'UNSET'} -> ownerId=${ownerId || 'NULL'}`);
   req.session.oauthStateMeta[state] = {
     mode,
     forcePrompt,
-    ownerId: req.session?.user?.id ? String(req.session.user.id) : null,
+    ownerId,
     returnTo: String(req.query.returnTo || '/dashboard/'),
     createdAt: Date.now(),
   };
@@ -4740,6 +4742,7 @@ app.get([
 
     // Store token for authenticated owner (connect flow and non-primary login flow)
     const oauthOwnerId = req.session?.user?.id ? String(req.session.user.id) : (stateMeta?.ownerId ? String(stateMeta.ownerId) : null);
+    console.log(`[OAuth Callback] Determining oauthOwnerId: req.session.user.id=${req.session?.user?.id || 'UNSET'}, stateMeta.ownerId=${stateMeta?.ownerId || 'UNSET'} -> oauthOwnerId=${oauthOwnerId || 'NULL'}`);
 
     // Never auto-login users in connect mode.
     // If user is unauthenticated, abort to prevent unexpected account restoration.
