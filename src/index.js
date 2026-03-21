@@ -4767,17 +4767,22 @@ app.get([
     }
 
     if (oauthOwnerId && !tokenStoredForUser) {
-      console.log(`[OAuth] Storing ${service} token for owner: ${oauthOwnerId} (mode=${stateMeta.mode || 'connect'})`);
+      console.log(`[OAuth Callback] Storing ${service} token for owner: ${oauthOwnerId} (mode=${stateMeta.mode || 'connect'})`);
       const storeResult = storeOAuthToken(service, oauthOwnerId, tokenData.accessToken, tokenData.refreshToken || null, expiresAt, tokenData.scope);
       tokenStoredForUser = true;
-      console.log(`[OAuth] Token stored successfully:`, { tokenId: storeResult.id, service, userId: oauthOwnerId, scope: storeResult.scope });
+      console.log(`[OAuth Callback] ✅ Token stored:`, { service, userId: oauthOwnerId });
       
-      // Ensure req.session.user is populated for subsequent API calls
-      // This is critical for /api/v1/oauth/status to work after OAuth callback
-      console.log(`[OAuth Callback] Before session.user fix: req.session.user=${req.session.user ? 'SET' : 'UNSET'}, oauthOwnerId=${oauthOwnerId}`);
+      // CRITICAL: Ensure req.session.user is populated for subsequent API calls
+      // This is absolutely essential for /api/v1/oauth/status to find the user
+      console.log(`[OAuth Callback] Setting session.user for connect flow...`);
+      console.log(`[OAuth Callback]   Before: req.session.user = ${req.session.user ? req.session.user.id : 'NULL'}`);
+      console.log(`[OAuth Callback]   oauthOwnerId = ${oauthOwnerId}`);
+      
       if (!req.session.user && oauthOwnerId) {
+        console.log(`[OAuth Callback]   Calling getUserById(${oauthOwnerId})...`);
         const ownerUser = getUserById(oauthOwnerId);
-        console.log(`[OAuth Callback] getUserById(${oauthOwnerId}) returned:`, ownerUser ? 'USER FOUND' : 'USER NOT FOUND');
+        console.log(`[OAuth Callback]   getUserById returned:`, ownerUser ? `USER FOUND: ${ownerUser.id}` : 'NULL');
+        
         if (ownerUser) {
           req.session.user = {
             id: ownerUser.id,
@@ -4787,14 +4792,14 @@ app.get([
             avatarUrl: ownerUser.avatarUrl || null,
             twoFactorEnabled: Boolean(ownerUser.twoFactorEnabled),
           };
-          console.log(`[OAuth Callback] ✅ Set session.user for owner: ${oauthOwnerId}`);
+          console.log(`[OAuth Callback] ✅ SUCCESS: Set req.session.user = ${req.session.user.id}`);
         } else {
-          console.log(`[OAuth Callback] ❌ Failed to load user from database: ${oauthOwnerId}`);
+          console.log(`[OAuth Callback] ❌ FAILURE: getUserById returned NULL for ${oauthOwnerId}`);
         }
       } else if (req.session.user) {
-        console.log(`[OAuth Callback] session.user already set: ${req.session.user.id}`);
+        console.log(`[OAuth Callback]   Already set: ${req.session.user.id}`);
       } else {
-        console.log(`[OAuth Callback] ❌ No oauthOwnerId available, cannot set session.user`);
+        console.log(`[OAuth Callback] ❌ No oauthOwnerId to use`);
       }
     }
 
