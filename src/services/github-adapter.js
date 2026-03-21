@@ -11,6 +11,13 @@ class GitHubAdapter {
     this.redirectUri = config.redirectUri || process.env.GITHUB_REDIRECT_URI || 'http://localhost:4500/api/v1/oauth/callback/github';
   }
 
+  isConfigured() {
+    return !!(
+      this.clientId &&
+      this.clientSecret
+    );
+  }
+
   getAuthorizationUrl(state, runtimeAuthParams = {}) {
     const params = {
       client_id: this.clientId,
@@ -73,14 +80,20 @@ class GitHubAdapter {
 
   async revokeToken(token) {
     return new Promise((resolve, reject) => {
+      const body = JSON.stringify({
+        access_token: token
+      });
+
       const options = {
         hostname: 'api.github.com',
-        path: '/applications/' + this.clientId + '/token',
+        path: '/applications/' + this.clientId + '/grant',
         method: 'DELETE',
-        auth: this.clientId + ':' + this.clientSecret,
         headers: {
+          'Authorization': 'Basic ' + Buffer.from(this.clientId + ':' + this.clientSecret).toString('base64'),
+          'Content-Type': 'application/json',
           'Accept': 'application/vnd.github.v3+json',
-          'User-Agent': 'MyApi-OAuth'
+          'User-Agent': 'MyApi-OAuth',
+          'Content-Length': body.length
         }
       };
 
@@ -93,6 +106,7 @@ class GitHubAdapter {
       });
 
       req.on('error', reject);
+      req.write(body);
       req.end();
     });
   }
