@@ -4841,6 +4841,11 @@ app.get([
     const next = encodeURIComponent(safeReturnTo);
     const masterToken = req.session.masterTokenRaw || 'myapi_' + crypto.randomBytes(32).toString("hex");
     
+    // CRITICAL: Store masterToken in session so /api/v1/auth/me can return it to the frontend
+    // This allows the frontend to store it in localStorage and use it for future API calls
+    req.session.masterTokenRaw = masterToken;
+    console.log(`[OAuth Callback] Set req.session.masterTokenRaw = ${masterToken.slice(0, 20)}...`);
+    
     // Set master token as a persistent cookie so the dashboard can use it
     res.cookie('myapi_master_token', masterToken, {
       httpOnly: false, // Allow JS to read it
