@@ -1,8 +1,0 @@
-Database initialized at: /opt/MyApi/src/db.sqlite
-=== MyApi Platform Started ===
-Master token already exists
-Port: 4500
-Dashboard: http://localhost:4500/dashboard/
-API: http://localhost:4500/api/v1/
-==============================
-Server ready on http://localhost:4500

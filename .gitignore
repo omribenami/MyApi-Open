@@ -35,3 +35,4 @@ src/uploads/
 # Environment files - NEVER commit real secrets!
 src/.env*
 !src/.env.example
+logs/
