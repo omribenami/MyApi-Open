@@ -4752,6 +4752,23 @@ app.get([
       const storeResult = storeOAuthToken(service, oauthOwnerId, tokenData.accessToken, tokenData.refreshToken || null, expiresAt, tokenData.scope);
       tokenStoredForUser = true;
       console.log(`[OAuth] Token stored successfully:`, { tokenId: storeResult.id, service, userId: oauthOwnerId, scope: storeResult.scope });
+      
+      // Ensure req.session.user is populated for subsequent API calls
+      // This is critical for /api/v1/oauth/status to work after OAuth callback
+      if (!req.session.user && oauthOwnerId) {
+        const ownerUser = getUserById(oauthOwnerId);
+        if (ownerUser) {
+          req.session.user = {
+            id: ownerUser.id,
+            username: ownerUser.username,
+            displayName: ownerUser.displayName || ownerUser.username,
+            email: ownerUser.email || null,
+            avatarUrl: ownerUser.avatarUrl || null,
+            twoFactorEnabled: Boolean(ownerUser.twoFactorEnabled),
+          };
+          console.log(`[OAuth] Set session.user for owner: ${oauthOwnerId}`);
+        }
+      }
     }
 
     if (req.session.user && typeof getWorkspaces === 'function') {
