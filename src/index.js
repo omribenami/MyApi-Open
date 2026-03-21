@@ -7403,12 +7403,10 @@ if (process.env.NODE_ENV !== 'test') {
     }, 60 * 60 * 1000); // 1 hour
     
     // P0 Security Fix: Cleanup expired sessions every 15 minutes (7-day TTL)
-    if (global.sessions) {
-      setInterval(() => {
-        cleanupExpiredSessions();
-      }, 15 * 60 * 1000); // Every 15 minutes
-      console.log('✅ Session cleanup scheduled (7-day TTL, 15-min check interval)');
-    }
+    setInterval(() => {
+      cleanupExpiredSessions();
+    }, 15 * 60 * 1000); // Every 15 minutes
+    console.log('✅ Session cleanup scheduled (7-day TTL, 15-min check interval)');
   });
 }
 
