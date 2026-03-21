@@ -3,7 +3,6 @@ import { useAuthStore } from '../stores/authStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import apiRequest from '../utils/apiRequest';
 import DeleteAccountModal from '../components/DeleteAccountModal';
-import ExportDataModal from '../components/ExportDataModal';
 import NotificationSettings from '../components/NotificationSettings';
 import ImportExport from '../components/ImportExport';
 
@@ -1320,42 +1319,10 @@ function ImportDataModal({ isOpen, onClose }) {
 // Danger Zone Section
 // ─────────────────────────────────────────────────────────────────────────────
 
-function DangerZoneSection({ onRequestExport, onRequestImport, onRequestDelete }) {
+function DangerZoneSection({ onRequestDelete }) {
   return (
     <SectionCard title="Danger Zone" description="Irreversible account actions" danger>
       <div className="space-y-4">
-        {/* Export */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 bg-slate-900 border border-slate-700 rounded-lg">
-          <div>
-            <p className="text-sm font-semibold text-white">Export All Data</p>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Download a complete copy of your account data in JSON format
-            </p>
-          </div>
-          <button
-            onClick={onRequestExport}
-            className="flex-shrink-0 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium rounded-lg transition-colors text-sm border border-slate-600"
-          >
-            Export Data
-          </button>
-        </div>
-
-        {/* Import */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 bg-slate-900 border border-slate-700 rounded-lg">
-          <div>
-            <p className="text-sm font-semibold text-white">Import Data</p>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Restore your profile, settings, and personas from a ZIP export.
-            </p>
-          </div>
-          <button
-            onClick={onRequestImport}
-            className="flex-shrink-0 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium rounded-lg transition-colors text-sm border border-slate-600"
-          >
-            Import Data
-          </button>
-        </div>
-
         {/* Delete Account */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 bg-red-950 bg-opacity-40 border border-red-900 rounded-lg">
           <div>
@@ -1538,7 +1505,6 @@ const SECTIONS = [
 function Settings() {
   const { activeSection, setActiveSection } = useSettingsStore();
   const { logout } = useAuthStore();
-  const [showExportModal, setShowExportModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -1598,13 +1564,11 @@ function Settings() {
       {activeSection === 'dataPrivacy' && <ImportExport />}
       {activeSection === 'danger' && (
         <DangerZoneSection
-          onRequestExport={() => setShowExportModal(true)}
           onRequestDelete={() => setShowDeleteModal(true)}
         />
       )}
 
       {/* Modals */}
-      <ExportDataModal isOpen={showExportModal} onClose={() => setShowExportModal(false)} />
       <DeleteAccountModal
         isOpen={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
