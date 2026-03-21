@@ -63,11 +63,11 @@ function isSensitiveKey(key) {
  */
 function stripSensitiveData(obj, depth = 0) {
   if (depth > 10) return obj; // Prevent infinite recursion
-  
+
   if (Array.isArray(obj)) {
     return obj.map(item => stripSensitiveData(item, depth + 1));
   }
-  
+
   if (obj && typeof obj === 'object') {
     const cleaned = {};
     for (const [key, value] of Object.entries(obj)) {
@@ -79,38 +79,38 @@ function stripSensitiveData(obj, depth = 0) {
     }
     return cleaned;
   }
-  
+
   return obj;
 }
 
 /**
  * POST /api/v1/import
  * Imports data from a v3 ZIP export.
- * 
+ *
  * PHASE 1: Verify ZIP Structure
  * - Extract ZIP to memory
  * - Verify manifest.json exists and is valid
  * - Verify checksums.sha256 matches all files
  * - List files in the import
- * 
+ *
  * PHASE 2: Parse Data Safely
  * - Read manifest to understand what's being imported
  * - Parse data.json, personas, skills
  * - SKIP any section containing sensitive data
  * - Only process: profiles, personas, skills, settings
- * 
+ *
  * PHASE 3: Validate Before Import
  * - Check user_id matches current user
  * - Check for conflicts (persona/skill name conflicts)
  * - Calculate what will be created/updated/skipped
- * 
+ *
  * PHASE 4: Execute Import
  * - Use transaction for atomicity
  * - Update user profile
  * - Insert new personas (skip if conflict)
  * - Insert new skills (skip if conflict)
  * - Merge settings
- * 
+ *
  * PHASE 5: Return Response
  * - Summary of what was imported
  */
@@ -153,7 +153,7 @@ router.post('/', upload.single('file'), async (req, res) => {
 
     // Enforce schemaVersion 2.0 or 3.0
     if (!manifest.schemaVersion || !(manifest.schemaVersion.startsWith('2.') || manifest.schemaVersion.startsWith('3.'))) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Unsupported export schema version',
         schemaVersion: manifest.schemaVersion
       });
@@ -187,7 +187,7 @@ router.post('/', upload.single('file'), async (req, res) => {
             checksumMismatch = true;
             continue;
           }
-          
+
           const buffer = await file.async('arraybuffer');
           const actualHash = sha256Buffer(Buffer.from(buffer));
           if (actualHash !== expectedHash) {
@@ -237,7 +237,7 @@ router.post('/', upload.single('file'), async (req, res) => {
     // 2.2 Check user_id matches (prevent cross-user import)
     const importUserId = manifest.userId || manifest.ownerId;
     if (importUserId && importUserId !== ownerId) {
-      return res.status(403).json({ 
+      return res.status(403).json({
         error: 'Cross-account import not allowed',
         message: 'This ZIP file was exported from a different account. Data can only be imported to the same account it was exported from.',
         details: {
@@ -297,7 +297,9 @@ router.post('/', upload.single('file'), async (req, res) => {
       try {
         const personasText = await personasFile.async('text');
         const personasData = JSON.parse(personasText);
-        
+        console.log(`[IMPORT-PHASE3] Parsed personas from ZIP:`, JSON.stringify(personasData, null, 2).substring(0, 500));
+        console.log(`[IMPORT-PHASE3] Existing personas for user ${ownerId}:`, existingPersonas.map(p => p.name));
+
         for (const pd of personasData) {
           // Skip if duplicate name exists
           const conflict = existingPersonas.find(p => p.name === pd.name);
@@ -347,6 +349,8 @@ router.post('/', upload.single('file'), async (req, res) => {
       try {
         const skillsText = await skillsFile.async('text');
         const skillsData = JSON.parse(skillsText);
+        console.log(`[IMPORT-PHASE3] Parsed skills from ZIP:`, JSON.stringify(skillsData, null, 2).substring(0, 500));
+        console.log(`[IMPORT-PHASE3] Existing skills for user ${ownerId}:`, existingSkills.map(s => s.name));
         
         for (const sd of skillsData) {
           // Skip if duplicate name exists
@@ -420,14 +424,23 @@ router.post('/', upload.single('file'), async (req, res) => {
     // ============================================================
     // PHASE 4: Execute Import (with Transaction)
     // ============================================================
+
+    // DEBUG: Log what we're about to import
+    console.log(`[IMPORT] Starting import for user ${ownerId}`);
+    console.log(`[IMPORT] Personas to import: ${personasToImport.length}`, personasToImport);
+    console.log(`[IMPORT] Skills to import: ${skillsToImport.length}`, skillsToImport);
+
     try {
       // Start transaction
       const insertProfile = db.transaction(() => {
+        console.log(`[IMPORT-TX] Transaction callback started`);
+
         // 4.1 Update user profile
         if (profileData) {
           try {
+            console.log(`[IMPORT-TX] Updating user profile for ${ownerId}`);
             db.prepare(`
-              UPDATE users SET 
+              UPDATE users SET
                 displayName = COALESCE(?, displayName),
                 avatarUrl = COALESCE(?, avatarUrl)
               WHERE id = ?
@@ -437,7 +450,9 @@ router.post('/', upload.single('file'), async (req, res) => {
               ownerId
             );
             summary.imported.profile = 1;
+            console.log(`[IMPORT-TX] Profile updated successfully`);
           } catch (e) {
+            console.error(`[IMPORT-TX] Profile update error:`, e.message);
             summary.errors.push(`Profile update failed: ${e.message}`);
           }
         }
@@ -448,14 +463,17 @@ router.post('/', upload.single('file'), async (req, res) => {
             const workspaceDir = process.env.WORKSPACE_DIR || '/home/jarvis/.openclaw/workspace';
             const userMdPath = process.env.USER_MD_PATH || path.join(workspaceDir, 'USER.md');
             const soulMdPath = process.env.SOUL_MD_PATH || path.join(workspaceDir, 'SOUL.md');
-            
+
             if (userMdContent && userMdContent.trim()) {
               fs.writeFileSync(userMdPath, userMdContent);
+              console.log(`[IMPORT-TX] Wrote USER.md to ${userMdPath}`);
             }
             if (soulMdContent && soulMdContent.trim()) {
               fs.writeFileSync(soulMdPath, soulMdContent);
+              console.log(`[IMPORT-TX] Wrote SOUL.md to ${soulMdPath}`);
             }
           } catch (e) {
+            console.error(`[IMPORT-TX] Markdown file write error:`, e.message);
             summary.errors.push(`Markdown file write failed: ${e.message}`);
           }
         }
@@ -465,9 +483,10 @@ router.post('/', upload.single('file'), async (req, res) => {
           try {
             const privacy = settingsData.privacyPreferences || {};
             const notifications = settingsData.notifications || {};
-            
+
+            console.log(`[IMPORT-TX] Updating settings for ${ownerId}`);
             db.prepare(`
-              UPDATE users SET 
+              UPDATE users SET
                 profile_public = COALESCE(?, profile_public),
                 show_activity = COALESCE(?, show_activity),
                 allow_data_export = COALESCE(?, allow_data_export),
@@ -483,31 +502,45 @@ router.post('/', upload.single('file'), async (req, res) => {
               ownerId
             );
             summary.imported.settings = 1;
+            console.log(`[IMPORT-TX] Settings updated successfully`);
           } catch (e) {
+            console.error(`[IMPORT-TX] Settings update error:`, e.message);
             summary.errors.push(`Settings update failed: ${e.message}`);
           }
         }
 
         // 4.3 Import personas
+        console.log(`[IMPORT-TX] Starting persona import (${personasToImport.length} personas)`);
         for (const persona of personasToImport) {
           try {
-            createPersona(
+            console.log(`[IMPORT-TX] Creating persona: "${persona.name}"`);
+            const result = createPersona(
               persona.name,
               persona.config?.soul_content || '',
               persona.description,
               persona.config || null,
               ownerId
             );
-            summary.imported.personas++;
+            if (result && result.id) {
+              summary.imported.personas++;
+              console.log(`[IMPORT-TX] ✓ Persona created: "${persona.name}" (ID: ${result.id})`);
+            } else {
+              console.error(`[IMPORT-TX] ✗ createPersona returned falsy result:`, result);
+              summary.errors.push(`Persona import failed (${persona.name}): createPersona returned no ID`);
+            }
           } catch (e) {
+            console.error(`[IMPORT-TX] ✗ Persona import error for "${persona.name}":`, e.message, e.stack);
             summary.errors.push(`Persona import failed (${persona.name}): ${e.message}`);
           }
         }
+        console.log(`[IMPORT-TX] Persona import complete. Counter: ${summary.imported.personas}/${personasToImport.length}`);
 
         // 4.4 Import skills
+        console.log(`[IMPORT-TX] Starting skill import (${skillsToImport.length} skills)`);
         for (const skill of skillsToImport) {
           try {
-            createSkill(
+            console.log(`[IMPORT-TX] Creating skill: "${skill.name}"`);
+            const result = createSkill(
               skill.name,
               skill.description,
               skill.version,
@@ -518,15 +551,25 @@ router.post('/', upload.single('file'), async (req, res) => {
               skill.repoUrl,
               ownerId
             );
-            summary.imported.skills++;
+            if (result && result.id) {
+              summary.imported.skills++;
+              console.log(`[IMPORT-TX] ✓ Skill created: "${skill.name}" (ID: ${result.id})`);
+            } else {
+              console.error(`[IMPORT-TX] ✗ createSkill returned falsy result:`, result);
+              summary.errors.push(`Skill import failed (${skill.name}): createSkill returned no ID`);
+            }
           } catch (e) {
+            console.error(`[IMPORT-TX] ✗ Skill import error for "${skill.name}":`, e.message, e.stack);
             summary.errors.push(`Skill import failed (${skill.name}): ${e.message}`);
           }
         }
+        console.log(`[IMPORT-TX] Skill import complete. Counter: ${summary.imported.skills}/${skillsToImport.length}`);
       });
 
       // Execute transaction
+      console.log(`[IMPORT] Executing transaction...`);
       insertProfile();
+      console.log(`[IMPORT] Transaction executed successfully`);
     } catch (error) {
       summary.errors.push(`Transaction failed: ${error.message}`);
       return res.status(500).json({
@@ -539,11 +582,45 @@ router.post('/', upload.single('file'), async (req, res) => {
     // ============================================================
     // PHASE 5: Return Response
     // ============================================================
-    const totalImported = summary.imported.profile + 
-                         summary.imported.settings + 
-                         summary.imported.personas + 
+    const totalImported = summary.imported.profile +
+                         summary.imported.settings +
+                         summary.imported.personas +
                          summary.imported.skills;
     const totalSkipped = summary.skipped.personas + summary.skipped.skills;
+
+    console.log(`[IMPORT] Final summary:`, JSON.stringify(summary, null, 2));
+
+    // Check if we were supposed to import personas/skills but didn't
+    const hadPersonasToImport = personasToImport.length > 0;
+    const hadSkillsToImport = skillsToImport.length > 0;
+    const personaImportFailed = hadPersonasToImport && summary.imported.personas === 0;
+    const skillImportFailed = hadSkillsToImport && summary.imported.skills === 0;
+
+    if (personaImportFailed || skillImportFailed) {
+      console.error(`[IMPORT] CRITICAL: Data loss detected!`);
+      console.error(`  - Personas: expected ${personasToImport.length}, got ${summary.imported.personas}`);
+      console.error(`  - Skills: expected ${skillsToImport.length}, got ${summary.imported.skills}`);
+
+      return res.status(500).json({
+        success: false,
+        error: 'Data import failed - personas and/or skills were not saved',
+        message: `Attempted to import ${personasToImport.length} personas and ${skillsToImport.length} skills, but only ${summary.imported.personas} personas and ${summary.imported.skills} skills were saved to the database. This may indicate a database transaction issue.`,
+        imported: summary.imported,
+        skipped: summary.skipped,
+        conflicts: summary.conflicts,
+        filesProcessed: summary.filesProcessed,
+        checksumErrors: summary.checksumMismatchCount,
+        errors: summary.errors,
+        schemaVersion: manifest.schemaVersion,
+        diagnostic: {
+          personasExpected: personasToImport.length,
+          personasImported: summary.imported.personas,
+          skillsExpected: skillsToImport.length,
+          skillsImported: summary.imported.skills,
+          hasErrors: summary.errors.length > 0
+        }
+      });
+    }
 
     return res.status(200).json({
       success: true,
@@ -559,9 +636,9 @@ router.post('/', upload.single('file'), async (req, res) => {
 
   } catch (error) {
     console.error('Import error:', error);
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: 'Internal server error during import',
-      message: error.message 
+      message: error.message
     });
   }
 });
