@@ -12,6 +12,7 @@ const {
   getSkills,
   createSkill,
   updateSkill,
+  addKBDocument,
   db
 } = require('../database');
 
@@ -216,7 +217,8 @@ router.post('/', upload.single('file'), async (req, res) => {
         profile: 0,
         settings: 0,
         personas: 0,
-        skills: 0
+        skills: 0,
+        knowledge: 0
       },
       skipped: {
         personas: 0,
@@ -407,7 +409,46 @@ router.post('/', upload.single('file'), async (req, res) => {
       }
     }
 
-    // 3.4 Validate and pre-process settings
+    // 3.4 Validate and pre-process knowledge base documents
+    const kbDocsToImport = [];
+    const kbDir = contents.folder('knowledge/docs');
+    
+    if (kbDir) {
+      try {
+        console.log(`[IMPORT-PHASE3] Processing knowledge base documents...`);
+        
+        // Iterate through all files in knowledge/docs/
+        for (const [relativePath, file] of Object.entries(kbDir.files)) {
+          if (!relativePath.endsWith('.md')) {
+            continue; // Skip non-markdown files
+          }
+          
+          try {
+            const content = await file.async('text');
+            const docName = path.basename(relativePath, '.md');
+            
+            kbDocsToImport.push({
+              path: relativePath,
+              name: docName,
+              content: content,
+              title: docName // Use filename as title if not available
+            });
+            
+            console.log(`[IMPORT-PHASE3] Queued KB doc: ${relativePath}`);
+          } catch (e) {
+            console.warn(`[IMPORT-PHASE3] Failed to read KB doc ${relativePath}:`, e.message);
+            summary.errors.push(`KB doc read error: ${relativePath} - ${e.message}`);
+          }
+        }
+        
+        console.log(`[IMPORT-PHASE3] Parsed ${kbDocsToImport.length} knowledge base documents`);
+      } catch (e) {
+        console.warn(`[IMPORT-PHASE3] Knowledge base folder processing error:`, e.message);
+        // Don't fail the entire import if KB processing fails
+      }
+    }
+
+    // 3.5 Validate and pre-process settings
     let settingsData = null;
     const settingsFile = contents.file('settings/settings.json');
     if (settingsFile) {
@@ -564,6 +605,33 @@ router.post('/', upload.single('file'), async (req, res) => {
           }
         }
         console.log(`[IMPORT-TX] Skill import complete. Counter: ${summary.imported.skills}/${skillsToImport.length}`);
+
+        // 4.5 Import knowledge base documents
+        console.log(`[IMPORT-TX] Starting KB document import (${kbDocsToImport.length} documents)`);
+        for (const doc of kbDocsToImport) {
+          try {
+            console.log(`[IMPORT-TX] Creating KB document: "${doc.title}"`);
+            const result = addKBDocument(
+              'imported', // source
+              doc.title,
+              doc.content,
+              null, // embeddingVector
+              null, // metadata
+              ownerId
+            );
+            if (result && result.id) {
+              summary.imported.knowledge++;
+              console.log(`[IMPORT-TX] ✓ KB document created: "${doc.title}" (ID: ${result.id})`);
+            } else {
+              console.error(`[IMPORT-TX] ✗ addKBDocument returned falsy result:`, result);
+              summary.errors.push(`KB document import failed (${doc.title}): addKBDocument returned no ID`);
+            }
+          } catch (e) {
+            console.error(`[IMPORT-TX] ✗ KB document import error for "${doc.title}":`, e.message, e.stack);
+            summary.errors.push(`KB document import failed (${doc.title}): ${e.message}`);
+          }
+        }
+        console.log(`[IMPORT-TX] KB document import complete. Counter: ${summary.imported.knowledge}/${kbDocsToImport.length}`);
       });
 
       // Execute transaction
@@ -585,7 +653,8 @@ router.post('/', upload.single('file'), async (req, res) => {
     const totalImported = summary.imported.profile +
                          summary.imported.settings +
                          summary.imported.personas +
-                         summary.imported.skills;
+                         summary.imported.skills +
+                         summary.imported.knowledge;
     const totalSkipped = summary.skipped.personas + summary.skipped.skills;
 
     console.log(`[IMPORT] Final summary:`, JSON.stringify(summary, null, 2));

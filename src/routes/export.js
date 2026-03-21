@@ -137,6 +137,8 @@ async function buildZipExport({ ownerId, workspaceId, exportMode, includeFiles }
     author: skill.author,
     category: skill.category,
     repoUrl: skill.repo_url,
+    script_content: skill.script_content || '',
+    config_json: skill.config_json ? JSON.parse(skill.config_json) : null,
     createdAt: skill.created_at || skill.createdAt,
     updatedAt: skill.updated_at || skill.updatedAt,
   }));
