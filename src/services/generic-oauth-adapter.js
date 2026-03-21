@@ -18,6 +18,11 @@ class GenericOAuthAdapter {
     this.revokeTokenParam = config.revokeTokenParam || 'token';
     this.extraAuthParams = config.extraAuthParams || {};
     this.extraTokenParams = config.extraTokenParams || {};
+    
+    // Warn if verifyUrl is missing (token validation won't work properly)
+    if (this.clientId && this.clientSecret && this.redirectUri && this.authUrl && this.tokenUrl && !this.verifyUrl) {
+      console.warn(`[OAuth] ${this.serviceName} adapter is configured but missing verifyUrl. Token validation will be skipped.`);
+    }
   }
 
   isConfigured() {
@@ -98,7 +103,10 @@ class GenericOAuthAdapter {
   }
 
   async verifyToken(token) {
-    if (!this.verifyUrl) return { valid: true, data: { skipped: true } };
+    if (!this.verifyUrl) {
+      console.warn(`[${this.serviceName}] Token verification skipped: verifyUrl not configured. This service will not validate tokens after exchange.`);
+      return { valid: true, data: { skipped: true, warning: 'verifyUrl not configured' } };
+    }
     const endpoint = new URL(this.verifyUrl);
     const path = `${endpoint.pathname}${endpoint.search}${endpoint.search ? '&' : '?'}access_token=${encodeURIComponent(token)}`;
     const result = await this._request({
