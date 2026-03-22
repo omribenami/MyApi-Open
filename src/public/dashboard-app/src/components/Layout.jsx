@@ -120,11 +120,18 @@ function Layout({ children, onLogout }) {
     }
   ];
 
+  // Enterprise settings - accessible to workspace owners/admins
+  navGroups.push({
+    label: 'Workspace',
+    items: [
+      { path: '/enterprise', label: 'Enterprise (SSO+RBAC)' },
+    ]
+  });
+
   if (isPowerUser) {
     navGroups.push({
       label: 'Admin',
       items: [
-        { path: '/enterprise', label: 'Enterprise (SSO+RBAC)' },
         { path: '/users', label: 'Users' }
       ]
     });

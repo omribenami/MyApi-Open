@@ -5,13 +5,15 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useAuthStore } from '../stores/authStore';
 import TeamMembers from '../components/TeamMembers';
 import InviteModal from '../components/InviteModal';
 import './TeamSettings.css';
 
 const TeamSettings = () => {
-  const { currentWorkspace, user } = useAuth();
+  const { user, masterToken } = useAuthStore();
+  const [workspaces, setWorkspaces] = useState([]);
+  const [currentWorkspace, setCurrentWorkspace] = useState(null);
   const [members, setMembers] = useState([]);
   const [invitations, setInvitations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -20,28 +22,43 @@ const TeamSettings = () => {
   const [activeTab, setActiveTab] = useState('members');
 
   useEffect(() => {
-    if (!currentWorkspace) {
-      setLoading(false);
-      return;
-    }
+    fetchWorkspaces();
+  }, [masterToken]);
 
-    fetchMembers();
-    fetchInvitations();
-  }, [currentWorkspace]);
-
-  const fetchMembers = async () => {
+  const fetchWorkspaces = async () => {
     try {
-      const response = await fetch(
-        `/api/v1/workspaces/${currentWorkspace.id}/members`,
-        {
-          headers: {
-            'X-Workspace-ID': currentWorkspace.id
-          }
-        }
-      );
+      setLoading(true);
+      const headers = masterToken ? { 'Authorization': `Bearer ${masterToken}` } : {};
+      const response = await fetch('/api/v1/workspaces', {
+        headers,
+        credentials: 'include'
+      });
+      if (!response.ok) throw new Error('Failed to fetch workspaces');
+      const data = await response.json();
+      const workspaceList = data.data || data.workspaces || [];
+      setWorkspaces(workspaceList);
+      
+      if (workspaceList.length > 0) {
+        setCurrentWorkspace(workspaceList[0]);
+        fetchMembers(workspaceList[0].id);
+        fetchInvitations(workspaceList[0].id);
+      }
+    } catch (err) {
+      setError(err.message);
+      setLoading(false);
+    }
+  };
+
+  const fetchMembers = async (workspaceId) => {
+    try {
+      const headers = masterToken ? { 'Authorization': `Bearer ${masterToken}` } : {};
+      const response = await fetch(`/api/v1/workspaces/${workspaceId}/members`, {
+        headers,
+        credentials: 'include'
+      });
       if (!response.ok) throw new Error('Failed to fetch members');
       const data = await response.json();
-      setMembers(data.members || []);
+      setMembers(data.data || data.members || []);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -49,19 +66,16 @@ const TeamSettings = () => {
     }
   };
 
-  const fetchInvitations = async () => {
+  const fetchInvitations = async (workspaceId) => {
     try {
-      const response = await fetch(
-        `/api/v1/workspaces/${currentWorkspace.id}/invitations`,
-        {
-          headers: {
-            'X-Workspace-ID': currentWorkspace.id
-          }
-        }
-      );
+      const headers = masterToken ? { 'Authorization': `Bearer ${masterToken}` } : {};
+      const response = await fetch(`/api/v1/workspaces/${workspaceId}/invitations`, {
+        headers,
+        credentials: 'include'
+      });
       if (!response.ok) throw new Error('Failed to fetch invitations');
       const data = await response.json();
-      setInvitations(data.invitations || []);
+      setInvitations(data.data || data.invitations || []);
     } catch (err) {
       console.error('Error fetching invitations:', err);
     }
