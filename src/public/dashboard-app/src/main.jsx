@@ -45,8 +45,15 @@ if (typeof window !== 'undefined') {
       // Ignore cleanup errors and still try a one-time clean navigation.
     }
 
-    // Avoid hard reload storms on storage corruption; let app recover in-place.
-    console.warn('[MyApi] Corruption recovery executed. Auto-reload suppressed to prevent loop.');
+    // Perform a single clean reload so the browser can start with a fresh
+    // storage/IndexedDB state. The sessionStorage guards above ensure this
+    // reload only happens once every 30 minutes, preventing reload storms.
+    console.warn('[MyApi] Corruption recovery executed. Reloading for clean state.');
+    try {
+      window.location.replace(window.location.href);
+    } catch {
+      // If navigation fails, the app will continue in a degraded but functional state.
+    }
   };
 
   const messageFromError = (value) => {

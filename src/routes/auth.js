@@ -6,6 +6,7 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
+const { getAccessTokens } = require('../database');
 
 const router = express.Router();
 
@@ -238,7 +239,8 @@ router.post('/logout', (req, res) => {
  * GET /api/v1/auth/me
  * Get current authenticated user info
  * IMPORTANT: This endpoint is NOT wrapped in authenticate() middleware,
- * so it must check req.session.user directly (for OAuth session auth).
+ * so it must check req.session.user directly (for OAuth session auth)
+ * and validate Bearer tokens manually.
  */
 router.get('/me', (req, res) => {
   try {
@@ -248,7 +250,7 @@ router.get('/me', (req, res) => {
       userId = String(req.session.user.id);
     }
     
-    // Fallback to Bearer token if no session
+    // Fallback to tokenMeta (set by authenticate middleware if this route is wrapped)
     if (!userId && req.tokenMeta?.ownerId) {
       userId = String(req.tokenMeta.ownerId);
     }
@@ -256,6 +258,30 @@ router.get('/me', (req, res) => {
     // Fallback to req.user (in case this route is later wrapped in authenticate())
     if (!userId && req.user?.id) {
       userId = String(req.user.id);
+    }
+
+    // Fallback: directly validate Bearer token from Authorization header.
+    // This route is excluded from the global authenticate() middleware so we must
+    // validate Bearer tokens here to support master-token re-authentication.
+    if (!userId) {
+      const authHeader = req.headers.authorization || '';
+      const parts = authHeader.split(' ');
+      if (parts.length === 2 && parts[0] === 'Bearer') {
+        const rawToken = parts[1];
+        const tokens = getAccessTokens() || [];
+        for (const tokenRecord of tokens) {
+          if (
+            !tokenRecord.revokedAt &&
+            bcrypt.compareSync(rawToken, tokenRecord.hash)
+          ) {
+            if (tokenRecord.expiresAt && new Date(tokenRecord.expiresAt) <= new Date()) {
+              continue; // skip expired tokens
+            }
+            userId = String(tokenRecord.ownerId);
+            break;
+          }
+        }
+      }
     }
 
     if (!userId) {
