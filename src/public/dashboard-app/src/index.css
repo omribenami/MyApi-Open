@@ -101,3 +101,19 @@ code {
     @apply bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg shadow-blue-600/20;
   }
 }
+
+/* Toast animations */
+@keyframes slideIn {
+  from {
+    transform: translateX(400px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-in {
+  animation: slideIn 0.3s ease-out;
+}

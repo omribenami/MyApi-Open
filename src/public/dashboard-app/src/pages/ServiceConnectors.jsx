@@ -4,6 +4,8 @@ import { useServicesStore } from '../stores/servicesStore';
 import ServiceCard from '../components/ServiceCard';
 import ServiceDetailModal from '../components/ServiceDetailModal';
 import ServiceConfigModal from '../components/ServiceConfigModal';
+import Toast from '../components/Toast';
+import { useToast } from '../hooks/useToast';
 import { startOAuthFlow } from '../utils/oauth';
 import { oauth } from '../utils/apiClient';
 import { normalizeService, getStatusMeta, formatAuthTypeLabel } from '../utils/serviceCatalog';
@@ -24,6 +26,8 @@ function ServiceConnectors() {
     revokeServiceId,
   } = useServicesStore();
 
+  const { toasts, showSuccessToast, showInfoToast } = useToast();
+
   const [isRevoking, setIsRevoking] = useState(false);
   const [connectError, setConnectError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -41,17 +45,24 @@ function ServiceConnectors() {
     // Check if we just completed an OAuth flow
     const params = new URLSearchParams(window.location.search);
     const oauthStatus = params.get('oauth_status');
+    const oauthService = params.get('oauth_service');
     
-    if (oauthStatus === 'connected' || oauthStatus === 'signup_required' || oauthStatus === 'confirm_login') {
-      // Refetch services to show updated connection status
-      // Increased delay to 3 seconds to ensure OAuth token is persisted to database
+    if (oauthStatus === 'connected' && oauthService) {
+      // Show success message
+      showSuccessToast(`✅ ${oauthService.charAt(0).toUpperCase() + oauthService.slice(1)} connected successfully!`);
+      
+      // Refetch services
       const timer = setTimeout(() => {
         console.log('[OAuth] Detected completed flow, refetching services...');
         fetchServices();
-      }, 3000);
+      }, 1500); // Reduced from 3s since user sees feedback immediately
       return () => clearTimeout(timer);
     }
-  }, [masterToken]);
+    
+    if (oauthStatus === 'signup_required' || oauthStatus === 'confirm_login') {
+      showInfoToast(`Completing ${oauthService} setup...`);
+    }
+  }, [masterToken, showSuccessToast, showInfoToast]);
 
   const fetchCategories = async () => {
     try {
@@ -207,6 +218,15 @@ function ServiceConnectors() {
 
   return (
     <div className="space-y-8">
+      {/* OAuth Success Toast */}
+      {successMessage && (
+        <div className="fixed top-6 right-6 z-50 animate-slide-in">
+          <div className="bg-green-500/90 backdrop-blur-sm text-white px-6 py-3 rounded-lg shadow-xl border border-green-400/30 flex items-center gap-3">
+            <span className="text-lg">{successMessage}</span>
+          </div>
+        </div>
+      )}
+
       <div>
         <h1 className="text-4xl font-bold text-white tracking-tight">Services & Integrations</h1>
         <p className="mt-3 text-base text-slate-400">Discover, connect, and manage all your service integrations in one unified dashboard. Monitor connection status and handle authentication securely.</p>
@@ -443,6 +463,19 @@ function ServiceConnectors() {
         }}
         onSave={handleConfigSave}
       />
+
+      {/* Toast Notifications */}
+      <div className="fixed bottom-4 right-4 space-y-2 z-50">
+        {toasts.map((toast) => (
+          <Toast
+            key={toast.id}
+            id={toast.id}
+            message={toast.message}
+            type={toast.type}
+            onClose={() => {}}
+          />
+        ))}
+      </div>
     </div>
   );
 }
