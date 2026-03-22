@@ -531,7 +531,7 @@ app.use(express.json({ limit: "100kb" }));
 const globalRateLimitMap = {};
 
 // P1 Security Fix: Cleanup old rate limit entries (in-memory maps grow unbounded)
-setInterval(() => {
+const rateLimitCleanupInterval = setInterval(() => {
   const now = Date.now();
   const maxAge = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -557,6 +557,7 @@ setInterval(() => {
     }
   }
 }, 60 * 60 * 1000); // Run every hour
+rateLimitCleanupInterval.unref?.();
 
 app.use((req, res, next) => {
   // CRITICAL: Exempt all auth/dashboard bootstrap paths from rate limiting
@@ -602,18 +603,22 @@ const secureCookie = process.env.SESSION_COOKIE_SECURE
   ? String(process.env.SESSION_COOKIE_SECURE).toLowerCase() === 'true'
   : isProd;
 
-const sessionDbPath = process.env.SESSION_DB_PATH || path.join(__dirname, 'db.sqlite');
-const sessionDb = new BetterSqlite3(sessionDbPath);
-const sessionStore = new BetterSqlite3StoreFactory({
-  client: sessionDb,
-  expired: {
-    clear: true,
-    intervalMs: 15 * 60 * 1000,
-  },
-});
+let sessionStore;
+let sessionDb = null;
+if (process.env.NODE_ENV !== 'test') {
+  const sessionDbPath = process.env.SESSION_DB_PATH || path.join(__dirname, 'db.sqlite');
+  sessionDb = new BetterSqlite3(sessionDbPath);
+  sessionStore = new BetterSqlite3StoreFactory({
+    client: sessionDb,
+    expired: {
+      clear: true,
+      intervalMs: 15 * 60 * 1000,
+    },
+  });
+}
 
 app.use(session({
-  store: sessionStore,
+  ...(sessionStore ? { store: sessionStore } : {}),
   secret: process.env.SESSION_SECRET, // P0 Security Fix: No fallback - validated at startup
   name: 'myapi.sid',
   resave: false,
