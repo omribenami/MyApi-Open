@@ -160,6 +160,12 @@ const {
   getRolesByWorkspace,
   createRole,
   getOrEnsureUserWorkspace,
+  // Phase 5: Compliance & Retention
+  createRetentionPolicy,
+  getRetentionPolicies,
+  updateRetentionPolicy,
+  createComplianceAuditLog,
+  getComplianceAuditLogs,
 } = require("./database");
 
 // OAuth service adapters
@@ -7538,6 +7544,79 @@ app.post('/api/v1/enterprise/rbac/roles', authenticate, (req, res) => {
   } catch (err) {
     console.error('[Enterprise] Role creation error:', err);
     res.status(500).json({ error: 'Failed to create role' });
+  }
+});
+
+// ========== PHASE 5: PRIVACY RETENTION & COMPLIANCE ==========
+
+// GET /api/v1/privacy/retention-policy
+app.get('/api/v1/privacy/retention-policy', authenticate, (req, res) => {
+  try {
+    const workspaceId = req.workspaceId || (req.user ? getOrEnsureUserWorkspace(req.user.id) : null);
+    if (!workspaceId) return res.status(401).json({ error: 'Workspace context required' });
+
+    const policies = getRetentionPolicies(workspaceId) || [];
+    res.json({ data: policies });
+  } catch (err) {
+    console.error('[Privacy] retention-policy get error:', err);
+    res.status(500).json({ error: 'Failed to fetch retention policy' });
+  }
+});
+
+// POST /api/v1/privacy/retention-policy
+app.post('/api/v1/privacy/retention-policy', authenticate, (req, res) => {
+  try {
+    const workspaceId = req.workspaceId || (req.user ? getOrEnsureUserWorkspace(req.user.id) : null);
+    if (!workspaceId) return res.status(401).json({ error: 'Workspace context required' });
+
+    const { entityType, retentionDays, autoDelete = true } = req.body || {};
+    if (!entityType || !Number.isInteger(Number(retentionDays)) || Number(retentionDays) < 1) {
+      return res.status(400).json({ error: 'entityType and positive retentionDays are required' });
+    }
+
+    const existing = (getRetentionPolicies(workspaceId) || []).find(p => p.entity_type === entityType);
+    let policy;
+    if (existing) {
+      policy = updateRetentionPolicy(existing.id, { retentionDays: Number(retentionDays), autoDelete: !!autoDelete });
+    } else {
+      policy = createRetentionPolicy(workspaceId, entityType, Number(retentionDays), req.user?.id);
+      if (!autoDelete) {
+        policy = updateRetentionPolicy(policy.id, { retentionDays: Number(retentionDays), autoDelete: false });
+      }
+    }
+
+    createComplianceAuditLog(
+      workspaceId,
+      req.user?.id || null,
+      'retention_policy_updated',
+      'retention_policy',
+      policy?.id || null,
+      JSON.stringify({ entityType, retentionDays: Number(retentionDays), autoDelete: !!autoDelete }),
+      req.ip,
+      req.headers['user-agent'] || null
+    );
+
+    res.json({ data: policy, message: 'Retention policy saved' });
+  } catch (err) {
+    console.error('[Privacy] retention-policy post error:', err);
+    res.status(500).json({ error: 'Failed to save retention policy' });
+  }
+});
+
+// GET /api/v1/admin/compliance/audit-trail
+app.get('/api/v1/admin/compliance/audit-trail', authenticate, (req, res) => {
+  try {
+    if (req.tokenMeta?.scope !== 'full') return res.status(403).json({ error: 'Full scope required' });
+
+    const workspaceId = req.workspaceId || (req.user ? getOrEnsureUserWorkspace(req.user.id) : null);
+    if (!workspaceId) return res.status(401).json({ error: 'Workspace context required' });
+
+    const limit = Math.min(500, Math.max(1, Number(req.query.limit || 100)));
+    const logs = getComplianceAuditLogs(workspaceId, limit);
+    res.json({ data: logs });
+  } catch (err) {
+    console.error('[Compliance] audit-trail error:', err);
+    res.status(500).json({ error: 'Failed to fetch compliance audit trail' });
   }
 });
 

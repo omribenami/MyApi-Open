@@ -39,3 +39,26 @@
 ### Notes
 - Previous blocker "Identifier rotateEncryptionKey already declared" is fixed.
 - Week 2 changes are ready for another reviewer pass.
+
+## 2026-03-22 16:52 CDT — Week 3 DEV Start (Retention + Compliance APIs)
+
+### DEV
+Implemented initial Week 3 backend APIs in `src/index.js`:
+1. `GET /api/v1/privacy/retention-policy`
+2. `POST /api/v1/privacy/retention-policy`
+3. `GET /api/v1/admin/compliance/audit-trail`
+
+Details:
+- Uses workspace-scoped policy operations.
+- Creates compliance audit entries on policy updates.
+- Adds full-scope gate for compliance audit-trail endpoint.
+
+Build/Runtime:
+- Frontend build passes.
+- Backend restarted successfully (Server ready on :4500).
+
+### REVIEW
+- Pending (next step: Opus 4.6 review of Week 3 endpoints).
+
+### QA
+- Pending reviewer outcome.
