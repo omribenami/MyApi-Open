@@ -1150,6 +1150,11 @@ function PrivacySection() {
     clearPrivacySuccess,
   } = useSettingsStore();
 
+  const [retentionPolicies, setRetentionPolicies] = useState([]);
+  const [retentionEntityType, setRetentionEntityType] = useState('compliance_audit_logs');
+  const [retentionDays, setRetentionDays] = useState(365);
+  const [retentionSaving, setRetentionSaving] = useState(false);
+
   useEffect(() => {
     if (privacySuccess) {
       const t = setTimeout(clearPrivacySuccess, 3000);
@@ -1168,6 +1173,22 @@ function PrivacySection() {
         }
       })
       .catch(() => {});
+  }, [masterToken]);
+
+  const loadRetentionPolicies = async () => {
+    try {
+      const headers = masterToken ? { Authorization: `Bearer ${masterToken}` } : {};
+      const res = await fetch('/api/v1/privacy/retention-policy', { headers, credentials: 'include' });
+      if (!res.ok) return;
+      const data = await res.json();
+      setRetentionPolicies(data?.data || []);
+    } catch (_) {
+      // ignore UI-only fetch errors
+    }
+  };
+
+  useEffect(() => {
+    loadRetentionPolicies();
   }, [masterToken]);
 
   const handleSave = async () => {
@@ -1191,6 +1212,34 @@ function PrivacySection() {
       setPrivacySuccess(e.message || 'Failed to save privacy settings');
     } finally {
       setPrivacySaving(false);
+    }
+  };
+
+  const handleSaveRetention = async () => {
+    setRetentionSaving(true);
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(masterToken ? { Authorization: `Bearer ${masterToken}` } : {}),
+      };
+      const res = await fetch('/api/v1/privacy/retention-policy', {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: JSON.stringify({
+          entityType: retentionEntityType,
+          retentionDays: Number(retentionDays),
+          autoDelete: true,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Failed to save retention policy');
+      setPrivacySuccess('Retention policy saved');
+      await loadRetentionPolicies();
+    } catch (e) {
+      setPrivacySuccess(e.message || 'Failed to save retention policy');
+    } finally {
+      setRetentionSaving(false);
     }
   };
 
@@ -1288,6 +1337,59 @@ function PrivacySection() {
                 </div>
               </label>
             ))}
+          </div>
+        </div>
+
+        <div className="p-4 bg-slate-900 border border-slate-700 rounded-lg">
+          <p className="text-sm font-semibold text-white mb-3">Data Retention Policies (Phase 5)</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Entity</label>
+              <select
+                value={retentionEntityType}
+                onChange={(e) => setRetentionEntityType(e.target.value)}
+                className="w-full rounded-md bg-slate-800 border border-slate-700 px-3 py-2 text-sm text-slate-100"
+              >
+                <option value="compliance_audit_logs">Compliance Audit Logs</option>
+                <option value="activity_logs">Activity Logs</option>
+                <option value="notifications">Notifications</option>
+                <option value="sessions">Sessions</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Retention Days</label>
+              <input
+                type="number"
+                min={1}
+                value={retentionDays}
+                onChange={(e) => setRetentionDays(e.target.value)}
+                className="w-full rounded-md bg-slate-800 border border-slate-700 px-3 py-2 text-sm text-slate-100"
+              />
+            </div>
+            <div className="flex items-end">
+              <button
+                onClick={handleSaveRetention}
+                disabled={retentionSaving}
+                className="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-md text-sm"
+              >
+                {retentionSaving ? 'Saving...' : 'Save Retention'}
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <p className="text-xs text-slate-400 mb-2">Current policies</p>
+            {retentionPolicies.length === 0 ? (
+              <p className="text-xs text-slate-500">No custom retention policies yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {retentionPolicies.map((p) => (
+                  <div key={p.id} className="text-xs text-slate-300 border border-slate-800 rounded px-3 py-2">
+                    <span className="font-medium">{p.entity_type}</span> · {p.retention_days} days · auto-delete: {p.auto_delete ? 'on' : 'off'}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

@@ -62,3 +62,24 @@ Build/Runtime:
 
 ### QA
 - Pending reviewer outcome.
+
+## 2026-03-22 17:02 CDT — Week 3 UI (Privacy/Retention) Added
+
+### DEV
+- Extended Settings → Privacy section with retention policy UI:
+  - Entity selector
+  - Retention days input
+  - Save Retention action
+  - Current policies list
+- Wired to Week 3 APIs:
+  - `GET /api/v1/privacy/retention-policy`
+  - `POST /api/v1/privacy/retention-policy`
+
+Build:
+- dashboard build successful.
+
+### REVIEW
+- pending (next Opus pass)
+
+### QA
+- pending review outcome
