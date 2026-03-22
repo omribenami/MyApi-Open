@@ -597,6 +597,84 @@ function initDatabase() {
   safeMigration("ALTER TABLE users ADD COLUMN totp_secret TEXT");
   safeMigration("ALTER TABLE users ADD COLUMN two_factor_enabled INTEGER DEFAULT 0");
 
+  // Phase 5: Encryption & Compliance
+  // Encryption metadata columns
+  safeMigration("ALTER TABLE vault_tokens ADD COLUMN encryption_version INTEGER DEFAULT 1");
+  safeMigration("ALTER TABLE oauth_tokens ADD COLUMN encryption_version INTEGER DEFAULT 1");
+  safeMigration("ALTER TABLE users ADD COLUMN pii_encrypted INTEGER DEFAULT 0");
+  safeMigration("ALTER TABLE conversations ADD COLUMN encryption_version INTEGER DEFAULT 1");
+
+  // Encryption key management table
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS encryption_keys (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT,
+        algorithm TEXT NOT NULL,
+        key_hash TEXT NOT NULL UNIQUE,
+        key_salt TEXT,
+        created_at INTEGER NOT NULL,
+        rotated_at INTEGER,
+        status TEXT DEFAULT 'active',
+        created_by_user_id TEXT,
+        FOREIGN KEY(workspace_id) REFERENCES workspaces(id)
+      )
+    `);
+    // Index for workspace queries
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_encryption_keys_workspace ON encryption_keys(workspace_id)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_encryption_keys_status ON encryption_keys(status)`);
+  } catch (e) {
+    console.warn('[Database] Encryption keys table already exists:', e.message);
+  }
+
+  // Data retention policies table
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS data_retention_policies (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        entity_type TEXT NOT NULL,
+        retention_days INTEGER NOT NULL,
+        auto_delete INTEGER DEFAULT 1,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        created_by_user_id TEXT,
+        FOREIGN KEY(workspace_id) REFERENCES workspaces(id),
+        UNIQUE(workspace_id, entity_type)
+      )
+    `);
+    // Index for queries
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_retention_policies_workspace ON data_retention_policies(workspace_id)`);
+  } catch (e) {
+    console.warn('[Database] Retention policies table already exists:', e.message);
+  }
+
+  // Compliance audit logs table (immutable append-only)
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS compliance_audit_logs (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        user_id TEXT,
+        action TEXT NOT NULL,
+        entity_type TEXT NOT NULL,
+        entity_id TEXT,
+        data_accessed TEXT,
+        ip_address TEXT,
+        user_agent TEXT,
+        status TEXT,
+        timestamp INTEGER NOT NULL,
+        FOREIGN KEY(workspace_id) REFERENCES workspaces(id)
+      )
+    `);
+    // Index for queries (immutable, append-only)
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_compliance_logs_workspace ON compliance_audit_logs(workspace_id)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_compliance_logs_timestamp ON compliance_audit_logs(timestamp)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_compliance_logs_user ON compliance_audit_logs(user_id)`);
+  } catch (e) {
+    console.warn('[Database] Compliance audit logs table already exists:', e.message);
+  }
+
   // Phase 5 migrations: Token encryption key rotation, rate limiting, audit logs
   safeMigration("ALTER TABLE oauth_tokens ADD COLUMN key_version INTEGER DEFAULT 1");
   safeMigration("ALTER TABLE oauth_tokens ADD COLUMN last_api_call TEXT");
@@ -5175,6 +5253,223 @@ function removeRoleFromUser(userId, roleId, workspaceId) {
   }
 }
 
+// ========================= PHASE 5: ENCRYPTION & COMPLIANCE =========================
+
+/**
+ * Create encryption key
+ */
+function createEncryptionKey(workspaceId, algorithm, keyHash, keySalt, createdByUserId) {
+  const id = 'enckey_' + crypto.randomBytes(12).toString('hex');
+  const now = Math.floor(Date.now() / 1000);
+  
+  try {
+    const stmt = db.prepare(`
+      INSERT INTO encryption_keys (id, workspace_id, algorithm, key_hash, key_salt, created_at, status, created_by_user_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    
+    stmt.run(id, workspaceId, algorithm, keyHash, keySalt, now, 'active', createdByUserId);
+    return { id, workspaceId, algorithm, keyHash, created_at: now, status: 'active' };
+  } catch (error) {
+    console.error('[Encryption] Create key error:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Get encryption keys for workspace
+ */
+function getEncryptionKeys(workspaceId, status = 'active') {
+  try {
+    const stmt = db.prepare(`
+      SELECT * FROM encryption_keys 
+      WHERE workspace_id = ? AND status = ?
+      ORDER BY created_at DESC
+    `);
+    return stmt.all(workspaceId, status) || [];
+  } catch (error) {
+    console.error('[Encryption] Get keys error:', error.message);
+    return [];
+  }
+}
+
+/**
+ * Get encryption key by hash
+ */
+function getEncryptionKeyByHash(workspaceId, keyHash) {
+  try {
+    const stmt = db.prepare(`
+      SELECT * FROM encryption_keys 
+      WHERE workspace_id = ? AND key_hash = ?
+    `);
+    return stmt.get(workspaceId, keyHash) || null;
+  } catch (error) {
+    console.error('[Encryption] Get key by hash error:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Get active encryption key (most recent)
+ */
+function getActiveEncryptionKey(workspaceId) {
+  try {
+    const stmt = db.prepare(`
+      SELECT * FROM encryption_keys 
+      WHERE workspace_id = ? AND status = 'active'
+      ORDER BY created_at DESC
+      LIMIT 1
+    `);
+    return stmt.get(workspaceId) || null;
+  } catch (error) {
+    console.error('[Encryption] Get active key error:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Rotate encryption key
+ */
+function rotateEncryptionKey(workspaceId, oldKeyId, newKeyId) {
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    
+    // Mark old key as rotated
+    const oldStmt = db.prepare(`
+      UPDATE encryption_keys SET status = 'rotated', rotated_at = ?
+      WHERE id = ? AND workspace_id = ?
+    `);
+    oldStmt.run(now, oldKeyId, workspaceId);
+    
+    // Make new key active
+    const newStmt = db.prepare(`
+      UPDATE encryption_keys SET status = 'active'
+      WHERE id = ? AND workspace_id = ?
+    `);
+    newStmt.run(newKeyId, workspaceId);
+    
+    return { status: 'success', oldKeyId, newKeyId, rotatedAt: now };
+  } catch (error) {
+    console.error('[Encryption] Rotate key error:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Create data retention policy
+ */
+function createRetentionPolicy(workspaceId, entityType, retentionDays, createdByUserId) {
+  const id = 'rpolicy_' + crypto.randomBytes(12).toString('hex');
+  const now = Math.floor(Date.now() / 1000);
+  
+  try {
+    const stmt = db.prepare(`
+      INSERT INTO data_retention_policies (id, workspace_id, entity_type, retention_days, auto_delete, created_at, updated_at, created_by_user_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    
+    stmt.run(id, workspaceId, entityType, retentionDays, 1, now, now, createdByUserId);
+    return { id, workspaceId, entityType, retentionDays, auto_delete: true, created_at: now };
+  } catch (error) {
+    console.error('[Retention] Create policy error:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Get retention policies for workspace
+ */
+function getRetentionPolicies(workspaceId) {
+  try {
+    const stmt = db.prepare(`
+      SELECT * FROM data_retention_policies 
+      WHERE workspace_id = ?
+      ORDER BY created_at DESC
+    `);
+    return stmt.all(workspaceId) || [];
+  } catch (error) {
+    console.error('[Retention] Get policies error:', error.message);
+    return [];
+  }
+}
+
+/**
+ * Update retention policy
+ */
+function updateRetentionPolicy(policyId, updates) {
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const fields = [];
+    const values = [];
+    
+    if ('retentionDays' in updates) {
+      fields.push('retention_days = ?');
+      values.push(updates.retentionDays);
+    }
+    
+    if ('autoDelete' in updates) {
+      fields.push('auto_delete = ?');
+      values.push(updates.autoDelete ? 1 : 0);
+    }
+    
+    fields.push('updated_at = ?');
+    values.push(now);
+    values.push(policyId);
+    
+    if (fields.length <= 1) return null;
+    
+    const stmt = db.prepare(`
+      UPDATE data_retention_policies SET ${fields.join(', ')} WHERE id = ?
+    `);
+    stmt.run(...values);
+    
+    const getStmt = db.prepare('SELECT * FROM data_retention_policies WHERE id = ?');
+    return getStmt.get(policyId);
+  } catch (error) {
+    console.error('[Retention] Update policy error:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Create compliance audit log (immutable)
+ */
+function createComplianceAuditLog(workspaceId, userId, action, entityType, entityId, dataAccessed = null, ipAddress = null, userAgent = null) {
+  const id = 'audit_' + crypto.randomBytes(12).toString('hex');
+  const timestamp = Math.floor(Date.now() / 1000);
+  
+  try {
+    const stmt = db.prepare(`
+      INSERT INTO compliance_audit_logs (id, workspace_id, user_id, action, entity_type, entity_id, data_accessed, ip_address, user_agent, status, timestamp)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    
+    stmt.run(id, workspaceId, userId, action, entityType, entityId, dataAccessed, ipAddress, userAgent, 'success', timestamp);
+    return { id, workspaceId, userId, action, timestamp };
+  } catch (error) {
+    console.error('[Compliance] Audit log error:', error.message);
+    throw error;
+  }
+}
+
+/**
+ * Get compliance audit logs
+ */
+function getComplianceAuditLogs(workspaceId, limit = 100) {
+  try {
+    const stmt = db.prepare(`
+      SELECT * FROM compliance_audit_logs 
+      WHERE workspace_id = ?
+      ORDER BY timestamp DESC
+      LIMIT ?
+    `);
+    return stmt.all(workspaceId, limit) || [];
+  } catch (error) {
+    console.error('[Compliance] Get logs error:', error.message);
+    return [];
+  }
+}
+
 /**
  * Create SSO configuration
  */
@@ -5501,4 +5796,15 @@ module.exports = {
   getSSOConfigurationsByWorkspace,
   getSSOConfigurationByProvider,
   updateSSOConfiguration,
+  // Phase 5: Encryption & Compliance
+  createEncryptionKey,
+  getEncryptionKeys,
+  getEncryptionKeyByHash,
+  rotateEncryptionKey,
+  getActiveEncryptionKey,
+  createRetentionPolicy,
+  getRetentionPolicies,
+  updateRetentionPolicy,
+  createComplianceAuditLog,
+  getComplianceAuditLogs,
 };
