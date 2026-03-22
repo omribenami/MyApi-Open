@@ -188,6 +188,36 @@ function Dashboard() {
     }
   };
 
+  // Handle OAuth redirect params: forward to the intended target page (e.g. /services)
+  // The OAuth callback always redirects to /dashboard/?oauth_status=...&next=...
+  // but the ServiceConnectors page needs to receive those params to show the result.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const oauthStatus = params.get('oauth_status');
+    const oauthService = params.get('oauth_service');
+
+    if (oauthStatus && oauthService) {
+      const rawNext = params.get('next');
+      let targetPath = '/services'; // default
+
+      if (rawNext) {
+        const decoded = decodeURIComponent(rawNext);
+        // Router basename is /dashboard, so strip that prefix
+        const routerPath = decoded.replace(/^\/dashboard/, '') || '/services';
+        targetPath = routerPath || '/services';
+      }
+
+      // Forward relevant OAuth params to the target page
+      const forwardedParams = new URLSearchParams();
+      forwardedParams.set('oauth_status', oauthStatus);
+      forwardedParams.set('oauth_service', oauthService);
+      if (params.get('mode')) forwardedParams.set('mode', params.get('mode'));
+      if (params.get('error')) forwardedParams.set('error', params.get('error'));
+
+      navigate(`${targetPath}?${forwardedParams.toString()}`, { replace: true });
+    }
+  }, [navigate]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Initial setup
   useEffect(() => {
     if (!isAuthenticated) return undefined;

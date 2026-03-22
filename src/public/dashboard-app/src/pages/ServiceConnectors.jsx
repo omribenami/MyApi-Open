@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { useServicesStore } from '../stores/servicesStore';
 import ServiceCard from '../components/ServiceCard';
@@ -12,6 +13,7 @@ import { normalizeService, getStatusMeta, formatAuthTypeLabel } from '../utils/s
 import { getOAuthProvider } from '../utils/oauthProviderMap';
 
 function ServiceConnectors() {
+  const navigate = useNavigate();
   const masterToken = useAuthStore((state) => state.masterToken);
   const {
     services,
@@ -37,6 +39,7 @@ function ServiceConnectors() {
   const [selectedServiceDetail, setSelectedServiceDetail] = useState(null);
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
   const [serviceToConfig, setServiceToConfig] = useState(null);
+  const [oauthSuccessService, setOauthSuccessService] = useState(null);
 
   useEffect(() => {
     fetchCategories();
@@ -48,21 +51,26 @@ function ServiceConnectors() {
     const oauthService = params.get('oauth_service');
     
     if (oauthStatus === 'connected' && oauthService) {
-      // Show success message
-      showSuccessToast(`✅ ${oauthService.charAt(0).toUpperCase() + oauthService.slice(1)} connected successfully!`);
+      // Show prominent success banner and toast
+      setOauthSuccessService(oauthService);
+      showSuccessToast(`✅ ${oauthService.charAt(0).toUpperCase() + oauthService.slice(1)} connected successfully!`, 6000);
       
-      // Refetch services
+      // Clear OAuth params from URL via React Router to prevent re-triggering on re-renders
+      navigate('/services', { replace: true });
+      
+      // Refetch services to reflect the newly connected service
       const timer = setTimeout(() => {
         console.log('[OAuth] Detected completed flow, refetching services...');
         fetchServices();
-      }, 1500); // Reduced from 3s since user sees feedback immediately
+      }, 1500);
       return () => clearTimeout(timer);
     }
     
     if (oauthStatus === 'signup_required' || oauthStatus === 'confirm_login') {
       showInfoToast(`Completing ${oauthService} setup...`);
     }
-  }, [masterToken, showSuccessToast, showInfoToast]);
+  }, [masterToken, navigate, showSuccessToast, showInfoToast]);
+
 
   const fetchCategories = async () => {
     try {
@@ -228,6 +236,37 @@ function ServiceConnectors() {
         <h1 className="text-4xl font-bold text-white tracking-tight">Services & Integrations</h1>
         <p className="mt-3 text-base text-slate-400">Discover, connect, and manage all your service integrations in one unified dashboard. Monitor connection status and handle authentication securely.</p>
       </div>
+
+      {/* OAuth Success Banner */}
+      {oauthSuccessService && (
+        <div className="rounded-xl border border-emerald-500/50 bg-gradient-to-r from-emerald-900/40 to-emerald-800/20 backdrop-blur-sm p-5 flex items-center gap-4 shadow-lg shadow-emerald-900/20">
+          <div className="flex-shrink-0">
+            <div className="h-12 w-12 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center">
+              <svg className="h-6 w-6 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-base font-semibold text-emerald-200">
+              {oauthSuccessService.charAt(0).toUpperCase() + oauthSuccessService.slice(1)} connected successfully!
+            </p>
+            <p className="text-sm text-emerald-400/80 mt-0.5">
+              Your service is now active and ready to use. You can manage it below.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setOauthSuccessService(null)}
+            className="flex-shrink-0 p-2 rounded-lg text-emerald-400/70 hover:text-emerald-300 hover:bg-emerald-500/10 transition-colors"
+            aria-label="Dismiss"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <SummaryTile label="Total Services" value={summary.total} icon="📦" />
