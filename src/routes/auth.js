@@ -244,20 +244,26 @@ router.post('/logout', (req, res) => {
  */
 router.get('/me', (req, res) => {
   try {
+    const { getAccessTokens } = require('../database');
+    const bcrypt = require('bcrypt');
+    
     // Check session auth FIRST (OAuth login via browser)
     let userId = null;
     if (req.session && req.session.user && req.session.user.id) {
       userId = String(req.session.user.id);
+      console.log(`[Auth/Me] Authenticated via session: ${userId}`);
     }
     
     // Fallback to tokenMeta (set by authenticate middleware if this route is wrapped)
     if (!userId && req.tokenMeta?.ownerId) {
       userId = String(req.tokenMeta.ownerId);
+      console.log(`[Auth/Me] Authenticated via req.tokenMeta: ${userId}`);
     }
     
     // Fallback to req.user (in case this route is later wrapped in authenticate())
     if (!userId && req.user?.id) {
       userId = String(req.user.id);
+      console.log(`[Auth/Me] Authenticated via req.user: ${userId}`);
     }
 
     // Fallback: directly validate Bearer token from Authorization header.
@@ -285,6 +291,7 @@ router.get('/me', (req, res) => {
     }
 
     if (!userId) {
+      console.log(`[Auth/Me] No authentication found (no session, no valid Bearer token)`);
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
