@@ -208,7 +208,8 @@ export function normalizeService(rawService, oauthMeta) {
     status: normalizeStatus(oauthMeta?.status),
     lastApiCall: oauthMeta?.lastApiCall || oauthMeta?.last_sync || null,
     enabled: oauthMeta?.enabled !== false,
-    notConfigured: oauthMeta?.enabled === false,
+    // Instagram should behave like other OAuth cards (show Connect), even if optional env vars are missing.
+    notConfigured: oauthMeta?.enabled === false && String(serviceName).toLowerCase() !== 'instagram',
     env_requirements: getServiceEnvRequirements(serviceName),
   };
 }
