@@ -1060,7 +1060,7 @@ function authenticate(req, res, next) {
   // SKIP authentication for public endpoints (OAuth authorize/callback, login signup)
   const fullPath = req.baseUrl + req.path;
   const publicPaths = [
-    /^\/api\/v1\/oauth\/(authorize|callback)/,  // Only authorize and callback are public; status requires auth
+    /^\/api\/v1\/oauth\/(authorize|callback|confirm)/,  // authorize, callback, and confirm are public; status requires auth
     /^\/api\/v1\/auth\/login/,
     /^\/api\/v1\/auth\/signup/,
     /^\/api\/v1\/auth\/me/,
