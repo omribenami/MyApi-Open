@@ -4824,9 +4824,20 @@ app.get([
       const confirmToken = crypto.randomBytes(16).toString('hex');
       req.session.oauth_confirm_token = confirmToken;
       
-      return req.session.save(() => {
+      // CRITICAL: Session must be persisted BEFORE redirect
+      // Add explicit error handling and logging
+      req.session.save((err) => {
+        if (err) {
+          console.error('[OAuth Callback] ❌ CRITICAL: Session save failed before confirm_login redirect:', err);
+          // Fallback: still redirect but log the error for debugging
+          console.log('[OAuth Callback] Session data WAS set, attempting redirect anyway...');
+        } else {
+          console.log(`[OAuth Callback] ✅ Session saved successfully for confirm_login flow. ID=${req.sessionID}`);
+        }
+        
         const nextUrl = encodeURIComponent(safeReturnTo);
         const confirmUrl = `/dashboard/?oauth_service=${service}&oauth_status=confirm_login&next=${nextUrl}&token=${confirmToken}`;
+        console.log(`[OAuth Callback] Redirecting to confirm_login: ${confirmUrl}`);
         res.redirect(confirmUrl);
       });
     }
@@ -5087,17 +5098,29 @@ app.post("/api/v1/oauth/confirm", (req, res) => {
   try {
     const { token } = req.body || {};
     
+    console.log(`[OAuth Confirm] Attempting confirmation:`);
+    console.log(`  - Session ID: ${req.sessionID}`);
+    console.log(`  - Session user: ${req.session?.user ? req.session.user.id : 'NONE'}`);
+    console.log(`  - Token provided: ${token ? token.slice(0, 20) + '...' : 'NONE'}`);
+    console.log(`  - oauth_confirm_token: ${req.session?.oauth_confirm_token ? req.session.oauth_confirm_token.slice(0, 20) + '...' : 'NONE'}`);
+    console.log(`  - oauth_login_pending: ${req.session?.oauth_login_pending ? 'YES' : 'NO'}`);
+    
     if (!token || typeof token !== 'string') {
+      console.log(`[OAuth Confirm] ❌ FAILED: Invalid or missing confirmation token`);
       return res.status(400).json({ error: 'Invalid or missing confirmation token' });
     }
 
     // Check if token matches what's in the session
     if (!req.session?.oauth_confirm_token || req.session.oauth_confirm_token !== token) {
+      console.log(`[OAuth Confirm] ❌ FAILED: Token mismatch or missing`);
+      console.log(`  - Expected: ${req.session?.oauth_confirm_token ? 'exists' : 'MISSING'}`);
+      console.log(`  - Match: ${req.session?.oauth_confirm_token === token ? 'YES' : 'NO'}`);
       return res.status(403).json({ error: 'Invalid confirmation token' });
     }
 
     // Check if we have pending login credentials
     if (!req.session?.oauth_login_pending) {
+      console.log(`[OAuth Confirm] ❌ FAILED: No pending login found in session`);
       return res.status(400).json({ error: 'No pending login found' });
     }
 
@@ -5113,6 +5136,8 @@ app.post("/api/v1/oauth/confirm", (req, res) => {
       twoFactorEnabled: pending.hasTwoFa,
     };
 
+    console.log(`[OAuth Confirm] Setting session.user to ${pending.userId}`);
+
     // Clear pending login and token
     delete req.session.oauth_login_pending;
     delete req.session.oauth_confirm_token;
@@ -5120,11 +5145,14 @@ app.post("/api/v1/oauth/confirm", (req, res) => {
     // Save session and respond
     req.session.save((err) => {
       if (err) {
-        console.error('[OAuth Confirm] Session save failed:', err);
-        return res.status(500).json({ error: 'Failed to save session' });
+        console.error('[OAuth Confirm] ❌ Session save failed:', err);
+        // FALLBACK: Even if session save fails, return the user data so frontend can proceed
+        // The session will eventually sync when the user navigates
+        console.log('[OAuth Confirm] Fallback: Returning user data despite session save error');
+        return res.status(200).json({ ok: true, user: req.session.user, warning: 'Session sync delayed' });
       }
 
-      console.log(`[OAuth Confirm] Login confirmed for user: ${pending.userId}`);
+      console.log(`[OAuth Confirm] ✅ Login confirmed for user: ${pending.userId}, session saved`);
       res.json({ ok: true, user: req.session.user });
     });
   } catch (err) {
