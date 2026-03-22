@@ -242,23 +242,63 @@ router.post('/logout', (req, res) => {
  */
 router.get('/me', (req, res) => {
   try {
+    const { getAccessTokens } = require('../database');
+    const bcrypt = require('bcrypt');
+    
     // Check session auth FIRST (OAuth login via browser)
     let userId = null;
     if (req.session && req.session.user && req.session.user.id) {
       userId = String(req.session.user.id);
+      console.log(`[Auth/Me] Authenticated via session: ${userId}`);
     }
     
     // Fallback to Bearer token if no session
+    if (!userId) {
+      const authHeader = req.headers["authorization"] || "";
+      const parts = authHeader.split(" ");
+      
+      if (parts.length === 2 && parts[0] === "Bearer") {
+        const rawToken = parts[1];
+        const tokens = getAccessTokens() || [];
+        
+        console.log(`[Auth/Me] Checking Bearer token against ${tokens.length} stored tokens`);
+        
+        for (const tokenMeta of tokens) {
+          // Skip revoked tokens and expired tokens
+          if (tokenMeta.revokedAt) continue;
+          
+          try {
+            if (bcrypt.compareSync(rawToken, tokenMeta.hash)) {
+              userId = String(tokenMeta.ownerId);
+              console.log(`[Auth/Me] Authenticated via Bearer token: ${userId}`);
+              break;
+            }
+          } catch (compareErr) {
+            // bcrypt comparison failed, continue to next token
+            continue;
+          }
+        }
+        
+        if (!userId) {
+          console.log(`[Auth/Me] Bearer token didn't match any stored tokens`);
+        }
+      }
+    }
+    
+    // Fallback to req.tokenMeta (in case this route is later wrapped in authenticate())
     if (!userId && req.tokenMeta?.ownerId) {
       userId = String(req.tokenMeta.ownerId);
+      console.log(`[Auth/Me] Authenticated via req.tokenMeta: ${userId}`);
     }
     
     // Fallback to req.user (in case this route is later wrapped in authenticate())
     if (!userId && req.user?.id) {
       userId = String(req.user.id);
+      console.log(`[Auth/Me] Authenticated via req.user: ${userId}`);
     }
 
     if (!userId) {
+      console.log(`[Auth/Me] No authentication found (no session, no valid Bearer token)`);
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
