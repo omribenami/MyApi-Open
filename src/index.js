@@ -5065,13 +5065,27 @@ function tryAuthenticate(req) {
 
 // GET /api/v1/oauth/status - Get all connected services
 // PROTECTED endpoint: requires authentication for reliable userId resolution
-app.get("/api/v1/oauth/status", authenticate, async (req, res) => {
-  // authenticate middleware guarantees req.tokenMeta is set with valid ownerId
-  // Get user ID from authenticate middleware (guaranteed to be valid)
-  const userId = String(req.tokenMeta?.ownerId || req.session?.user?.id);
-
+app.get("/api/v1/oauth/status", async (req, res) => {
+  // Note: This endpoint is PUBLIC because it's called from dashboard during OAuth flow
+  // It needs to work even before user is fully authenticated
+  tryAuthenticate(req); // Best effort to identify user if logged in
+  
+  // Get user ID from available sources (in order of priority)
+  let userId = null;
+  if (req.session?.user?.id) {
+    userId = String(req.session.user.id);
+  } else if (req.tokenMeta?.ownerId) {
+    userId = String(req.tokenMeta.ownerId);
+  }
+  
+  // If no user identified, return empty/all-disconnected status (public access)
   if (!userId) {
-    return res.status(401).json({ error: "Unauthorized" });
+    const services = OAUTH_SERVICES.map(service => ({
+      name: service,
+      status: "disconnected",
+      reason: "not_authenticated"
+    }));
+    return res.json({ services });
   }
 
   console.log(`[OAuth Status] Resolved userId: ${userId} (from tokenMeta.ownerId=${req.tokenMeta?.ownerId || 'null'}, session.user=${req.session?.user?.id || 'null'})`);
