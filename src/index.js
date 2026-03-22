@@ -1060,7 +1060,7 @@ function authenticate(req, res, next) {
   // SKIP authentication for public endpoints (OAuth authorize/callback, login signup)
   const fullPath = req.baseUrl + req.path;
   const publicPaths = [
-    /^\/api\/v1\/oauth\//,
+    /^\/api\/v1\/oauth\/(authorize|callback)/,  // Only authorize and callback are public; status requires auth
     /^\/api\/v1\/auth\/login/,
     /^\/api\/v1\/auth\/signup/,
     /^\/api\/v1\/auth\/me/,
@@ -4516,7 +4516,7 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
   // This checks session, Bearer token, and masterToken cookie
   tryAuthenticate(req);
   
-  // Get ownerId from multiple sources (priority order)
+  // Get ownerId from multiple sources (SAME priority as callback will use)
   let ownerId = null;
   if (req.session?.user?.id) {
     ownerId = String(req.session.user.id);
@@ -4524,8 +4524,29 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
   } else if (req.tokenMeta?.ownerId) {
     ownerId = String(req.tokenMeta.ownerId);
     console.log(`[OAuth Authorize] Got ownerId from Bearer token: ${ownerId}`);
+  } else if (req.cookies?.myapi_master_token) {
+    // FALLBACK: Extract ownerId from masterToken cookie
+    try {
+      const masterTokenRaw = req.cookies.myapi_master_token;
+      const accessTokens = getAccessTokens() || [];
+      const tokenRecord = accessTokens.find(t => {
+        try {
+          return t.token && bcrypt.compareSync(masterTokenRaw, t.token);
+        } catch {
+          return false;
+        }
+      });
+      if (tokenRecord) {
+        ownerId = String(tokenRecord.ownerId);
+        console.log(`[OAuth Authorize] Got ownerId from masterToken cookie: ${ownerId}`);
+      }
+    } catch (err) {
+      console.warn(`[OAuth Authorize] Failed to extract ownerId from masterToken:`, err.message);
+    }
   }
   
+  // Log the resolved ownerId
+  console.log(`[OAuth Authorize] Final ownerId: ${ownerId || 'NULL'} (from session=${req.session?.user?.id || 'null'}, Bearer=${req.tokenMeta?.ownerId || 'null'}, masterToken=${req.cookies?.myapi_master_token ? 'present' : 'absent'})`);
   console.log(`[OAuth Authorize] ${service} flow initiated: req.session.user=${req.session?.user?.id || 'UNSET'}, req.tokenMeta.ownerId=${req.tokenMeta?.ownerId || 'UNSET'} -> ownerId=${ownerId || 'NULL'}`);
   req.session.oauthStateMeta[state] = {
     mode,
@@ -4812,6 +4833,7 @@ app.get([
 
     // Store token for authenticated owner (connect flow and non-primary login flow)
     const oauthOwnerId = req.session?.user?.id ? String(req.session.user.id) : (stateMeta?.ownerId ? String(stateMeta.ownerId) : null);
+    console.log(`[OAuth Callback] Using oauthOwnerId: ${oauthOwnerId} (from session.user: ${req.session?.user?.id || 'null'}, from stateMeta: ${stateMeta?.ownerId || 'null'})`);
     console.log(`[OAuth Callback] Determining oauthOwnerId: req.session.user.id=${req.session?.user?.id || 'UNSET'}, stateMeta.ownerId=${stateMeta?.ownerId || 'UNSET'} -> oauthOwnerId=${oauthOwnerId || 'NULL'}`);
 
     // Never auto-login users in connect mode.
@@ -4994,67 +5016,19 @@ function tryAuthenticate(req) {
 }
 
 // GET /api/v1/oauth/status — Get all connected services
-// PUBLIC endpoint, but uses optional authentication to identify user if available
-app.get("/api/v1/oauth/status", async (req, res) => {
-  // Try to authenticate, but don't fail if auth is missing
-  tryAuthenticate(req);
+// PROTECTED endpoint: requires authentication for reliable userId resolution
+app.get("/api/v1/oauth/status", authenticate, async (req, res) => {
+  // authenticate middleware guarantees req.tokenMeta is set with valid ownerId
+  // Get user ID from authenticate middleware (guaranteed to be valid)
+  const userId = String(req.tokenMeta?.ownerId || req.session?.user?.id);
+  
+  if (!userId) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  
+  console.log(`[OAuth Status] Resolved userId: ${userId} (from tokenMeta.ownerId=${req.tokenMeta?.ownerId || 'null'}, session.user=${req.session?.user?.id || 'null'})`);
+  
   const statuses = getOAuthStatus();
-  
-  // Get user ID for token lookup — try multiple sources
-  let userId = null;
-  
-  // Priority 1: Session user
-  if (req.session?.user?.id) {
-    userId = String(req.session.user.id);
-  }
-  // Priority 2: Bearer token owner from Authorization header
-  else if (req.tokenMeta?.ownerId) {
-    userId = String(req.tokenMeta.ownerId);
-  }
-  // Priority 3: Try to extract from session cookie if available
-  else if (req.session?.passport?.user) {
-    userId = String(req.session.passport.user);
-  }
-  // Priority 4: Check for masterToken in localStorage cookie
-  else if (req.cookies?.myapi_master_token) {
-    try {
-      const masterTokenRaw = req.cookies.myapi_master_token;
-      const accessTokens = getAccessTokens() || [];
-      const tokenRecord = accessTokens.find(t => {
-        try {
-          return t.token && bcrypt.compareSync(masterTokenRaw, t.token);
-        } catch {
-          return false;
-        }
-      });
-      if (tokenRecord) {
-        userId = String(tokenRecord.ownerId);
-      }
-    } catch (err) {
-      console.warn(`[OAuth Status] Failed to resolve masterToken:`, err.message);
-    }
-  }
-
-  // CRITICAL FIX (P0): If no userId found from above methods, check if session.oauthStateMeta has pending ownerId
-  // This handles the case where req.session.user wasn't populated yet after OAuth callback
-  if (!userId && req.session?.oauthStateMeta) {
-    for (const [state, meta] of Object.entries(req.session.oauthStateMeta || {})) {
-      if (meta?.ownerId) {
-        console.log(`[OAuth Status] RECOVERY: Found ownerId from oauthStateMeta: ${meta.ownerId}`);
-        userId = String(meta.ownerId);
-        break;
-      }
-    }
-  }
-  
-  // Log session state for debugging
-  console.log(`[OAuth Status] Full session dump:`, {
-    sessionId: req.sessionID,
-    sessionUser: req.session?.user ? { id: req.session.user.id, username: req.session.user.username } : null,
-    tokenMeta: req.tokenMeta ? { tokenId: req.tokenMeta.tokenId, ownerId: req.tokenMeta.ownerId } : null,
-    hasMasterTokenCookie: Boolean(req.cookies?.myapi_master_token),
-    resolvedUserId: userId || 'NONE'
-  });
   
   const services = OAUTH_SERVICES.map(service => {
     const status = statuses.find(s => s.serviceName === service);
