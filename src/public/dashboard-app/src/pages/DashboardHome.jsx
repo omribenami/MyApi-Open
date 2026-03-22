@@ -32,6 +32,8 @@ function DashboardHome() {
     skills: 0,
     activeSkills: 0,
     kbDocs: 0,
+    billingPlan: 'free',
+    billingUsagePercent: 0,
   });
   const [loading, setLoading] = useState(true);
   const [health, setHealth] = useState(null);
@@ -42,7 +44,7 @@ function DashboardHome() {
       try {
         const headers = masterToken ? { 'Authorization': `Bearer ${masterToken}` } : {};
 
-        const [healthRes, tokensRes, vaultRes, connectorsRes, myListingsRes, personasRes, skillsRes, kbRes] = await Promise.all([
+        const [healthRes, tokensRes, vaultRes, connectorsRes, myListingsRes, personasRes, skillsRes, kbRes, billingRes] = await Promise.all([
           fetch('/health'),
           fetch('/api/v1/tokens', { headers }).catch(() => ({ ok: false })),
           fetch('/api/v1/vault/tokens', { headers }).catch(() => ({ ok: false })),
@@ -51,6 +53,7 @@ function DashboardHome() {
           fetch('/api/v1/personas', { headers }).catch(() => ({ ok: false })),
           fetch('/api/v1/skills', { headers }).catch(() => ({ ok: false })),
           fetch('/api/v1/brain/knowledge-base', { headers }).catch(() => ({ ok: false })),
+          fetch('/api/v1/billing/current', { headers, credentials: 'include' }).catch(() => ({ ok: false })),
         ]);
 
         if (healthRes.ok) {
@@ -102,6 +105,15 @@ function DashboardHome() {
           const kbData = await kbRes.json();
           const docs = Array.isArray(kbData) ? kbData : (kbData.data || kbData.documents || []);
           setStats((s) => ({ ...s, kbDocs: docs.length }));
+        }
+
+        if (billingRes.ok) {
+          const billingData = await billingRes.json();
+          const plan = billingData.data?.plan || billingData.plan || 'free';
+          const usage = billingData.data?.usage || billingData.usage || 0;
+          const limit = billingData.data?.limit || billingData.limit || 100;
+          const usagePercent = limit > 0 ? Math.round((usage / limit) * 100) : 0;
+          setStats((s) => ({ ...s, billingPlan: plan, billingUsagePercent: usagePercent }));
         }
       } catch (err) {
         console.error('Failed to fetch dashboard data:', err);
@@ -162,6 +174,12 @@ function DashboardHome() {
       link: '/my-listings',
       description: 'Published to marketplace',
     },
+    {
+      label: 'Billing Plan',
+      value: stats.billingPlan.charAt(0).toUpperCase() + stats.billingPlan.slice(1),
+      link: '/settings?section=billing',
+      description: `Usage: ${stats.billingUsagePercent}%`,
+    },
   ];
 
   if (loading) {
@@ -196,6 +214,21 @@ function DashboardHome() {
           </div>
           <p className="text-xs text-slate-400 mt-2">
             {health.uptime && `Uptime: ${formatUptime(health.uptime)}`}
+          </p>
+        </div>
+      )}
+
+      {/* Billing Warning */}
+      {stats.billingUsagePercent > 80 && (
+        <div className="rounded-md bg-amber-900/20 border border-amber-700 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-medium text-amber-200">⚠️ API Usage Warning</h3>
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs border border-amber-700 text-amber-300 bg-amber-900/20">
+              {stats.billingUsagePercent}% used
+            </span>
+          </div>
+          <p className="text-xs text-amber-300/80 mt-2">
+            You're approaching your API limit. <Link to="/settings?section=billing" className="underline hover:text-amber-200">Upgrade your plan</Link> to continue.
           </p>
         </div>
       )}

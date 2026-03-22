@@ -1035,6 +1035,109 @@ function AIAgentTrackingSection() {
   );
 }
 
+function AuditLogsSection() {
+  const masterToken = useAuthStore((state) => state.masterToken);
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [filters, setFilters] = useState({ action: '', resource: '' });
+
+  useEffect(() => {
+    const fetchLogs = async () => {
+      setLoading(true);
+      try {
+        const headers = masterToken ? { Authorization: `Bearer ${masterToken}` } : {};
+        const params = new URLSearchParams({
+          limit: '50',
+          ...(filters.action && { action: filters.action }),
+          ...(filters.resource && { resource: filters.resource }),
+        });
+        const res = await fetch(`/api/v1/audit/logs?${params}`, { headers, credentials: 'include' });
+        if (res.ok) {
+          const data = await res.json();
+          setLogs(data.data || data.logs || []);
+        }
+      } catch (err) {
+        console.error('Failed to fetch audit logs:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchLogs();
+  }, [masterToken, filters]);
+
+  return (
+    <div className="space-y-6">
+      <SectionCard title="Audit Logs" description="View all account activities and security events">
+        {/* Filters */}
+        <div className="mb-6 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-200 mb-2">Action</label>
+              <input
+                type="text"
+                placeholder="e.g., login, token_created"
+                value={filters.action}
+                onChange={(e) => setFilters({ ...filters, action: e.target.value })}
+                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-200 mb-2">Resource</label>
+              <input
+                type="text"
+                placeholder="e.g., token, service"
+                value={filters.resource}
+                onChange={(e) => setFilters({ ...filters, resource: e.target.value })}
+                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Logs Table */}
+        {loading ? (
+          <div className="text-center text-slate-400">Loading audit logs...</div>
+        ) : logs.length === 0 ? (
+          <div className="text-center text-slate-400">No audit logs found</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-700">
+                  <th className="text-left px-4 py-2 text-slate-300">Timestamp</th>
+                  <th className="text-left px-4 py-2 text-slate-300">Action</th>
+                  <th className="text-left px-4 py-2 text-slate-300">Resource</th>
+                  <th className="text-left px-4 py-2 text-slate-300">Status</th>
+                  <th className="text-left px-4 py-2 text-slate-300">Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                {logs.map((log, idx) => (
+                  <tr key={idx} className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors">
+                    <td className="px-4 py-2 text-slate-400">
+                      {new Date(log.created_at * 1000 || log.timestamp).toLocaleString()}
+                    </td>
+                    <td className="px-4 py-2 text-slate-300 font-mono text-xs">{log.action}</td>
+                    <td className="px-4 py-2 text-slate-300">{log.resource || '-'}</td>
+                    <td className="px-4 py-2">
+                      <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-semibold ${
+                        log.status === 'success' ? 'bg-green-900/30 text-green-300' : 'bg-red-900/30 text-red-300'
+                      }`}>
+                        {log.status || 'unknown'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-slate-400 text-xs max-w-xs truncate">{log.details || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </SectionCard>
+    </div>
+  );
+}
+
 function PrivacySection() {
   const masterToken = useAuthStore((state) => state.masterToken);
   const {
@@ -1496,6 +1599,7 @@ const SECTIONS = [
   { id: 'profile', label: 'Profile' },
   { id: 'billing', label: 'Plans' },
   { id: 'security', label: 'Security' },
+  { id: 'audit', label: 'Audit Logs' },
   { id: 'notifications', label: 'Notifications' },
   { id: 'privacy', label: 'Privacy' },
   { id: 'dataPrivacy', label: 'Data & Privacy' },
@@ -1559,6 +1663,7 @@ function Settings() {
       {activeSection === 'profile' && <ProfileSection />}
       {activeSection === 'billing' && <BillingSection />}
       {activeSection === 'security' && <SecuritySection />}
+      {activeSection === 'audit' && <AuditLogsSection />}
       {activeSection === 'notifications' && <NotificationSettings />}
       {activeSection === 'privacy' && <PrivacySection />}
       {activeSection === 'dataPrivacy' && <ImportExport />}
