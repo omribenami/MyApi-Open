@@ -224,15 +224,6 @@ function ServiceConnectors() {
 
   return (
     <div className="space-y-8">
-      {/* OAuth Success Toast */}
-      {successMessage && (
-        <div className="fixed top-6 right-6 z-50 animate-slide-in">
-          <div className="bg-green-500/90 backdrop-blur-sm text-white px-6 py-3 rounded-lg shadow-xl border border-green-400/30 flex items-center gap-3">
-            <span className="text-lg">{successMessage}</span>
-          </div>
-        </div>
-      )}
-
       <div>
         <h1 className="text-4xl font-bold text-white tracking-tight">Services & Integrations</h1>
         <p className="mt-3 text-base text-slate-400">Discover, connect, and manage all your service integrations in one unified dashboard. Monitor connection status and handle authentication securely.</p>
