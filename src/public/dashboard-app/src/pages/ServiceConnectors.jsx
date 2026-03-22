@@ -44,10 +44,11 @@ function ServiceConnectors() {
     
     if (oauthStatus === 'connected' || oauthStatus === 'signup_required' || oauthStatus === 'confirm_login') {
       // Refetch services to show updated connection status
+      // Increased delay to 3 seconds to ensure OAuth token is persisted to database
       const timer = setTimeout(() => {
         console.log('[OAuth] Detected completed flow, refetching services...');
         fetchServices();
-      }, 1000);
+      }, 3000);
       return () => clearTimeout(timer);
     }
   }, [masterToken]);
