@@ -597,6 +597,21 @@ function initDatabase() {
   safeMigration("ALTER TABLE users ADD COLUMN totp_secret TEXT");
   safeMigration("ALTER TABLE users ADD COLUMN two_factor_enabled INTEGER DEFAULT 0");
 
+  // Migration tracking (non-destructive, rollback-friendly)
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        applied_at INTEGER NOT NULL,
+        checksum TEXT
+      )
+    `);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_schema_migrations_applied ON schema_migrations(applied_at DESC)`);
+  } catch (e) {
+    console.warn('[Database] schema_migrations table already exists:', e.message);
+  }
+
   // Phase 5: Encryption & Compliance
   // Encryption metadata columns
   safeMigration("ALTER TABLE vault_tokens ADD COLUMN encryption_version INTEGER DEFAULT 1");
@@ -610,9 +625,11 @@ function initDatabase() {
       CREATE TABLE IF NOT EXISTS encryption_keys (
         id TEXT PRIMARY KEY,
         workspace_id TEXT,
+        key_id TEXT UNIQUE,
         algorithm TEXT NOT NULL,
         key_hash TEXT NOT NULL UNIQUE,
         key_salt TEXT,
+        master_key_id TEXT,
         created_at INTEGER NOT NULL,
         rotated_at INTEGER,
         status TEXT DEFAULT 'active',
@@ -626,6 +643,11 @@ function initDatabase() {
   } catch (e) {
     console.warn('[Database] Encryption keys table already exists:', e.message);
   }
+
+  // Backward-compatible enrichments for existing encryption_keys tables
+  safeMigration("ALTER TABLE encryption_keys ADD COLUMN key_id TEXT");
+  safeMigration("ALTER TABLE encryption_keys ADD COLUMN master_key_id TEXT");
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_encryption_keys_key_id ON encryption_keys(key_id)`);
 
   // Data retention policies table
   try {
@@ -671,6 +693,22 @@ function initDatabase() {
     db.exec(`CREATE INDEX IF NOT EXISTS idx_compliance_logs_workspace ON compliance_audit_logs(workspace_id)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_compliance_logs_timestamp ON compliance_audit_logs(timestamp)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_compliance_logs_user ON compliance_audit_logs(user_id)`);
+
+    // Enforce append-only semantics
+    db.exec(`
+      CREATE TRIGGER IF NOT EXISTS trg_compliance_audit_no_update
+      BEFORE UPDATE ON compliance_audit_logs
+      BEGIN
+        SELECT RAISE(ABORT, 'compliance_audit_logs is append-only');
+      END;
+    `);
+    db.exec(`
+      CREATE TRIGGER IF NOT EXISTS trg_compliance_audit_no_delete
+      BEFORE DELETE ON compliance_audit_logs
+      BEGIN
+        SELECT RAISE(ABORT, 'compliance_audit_logs is append-only');
+      END;
+    `);
   } catch (e) {
     console.warn('[Database] Compliance audit logs table already exists:', e.message);
   }
@@ -5255,23 +5293,45 @@ function removeRoleFromUser(userId, roleId, workspaceId) {
 
 // ========================= PHASE 5: ENCRYPTION & COMPLIANCE =========================
 
+function recordSchemaMigration(name, checksum = null) {
+  try {
+    const stmt = db.prepare(`INSERT OR IGNORE INTO schema_migrations (id, name, applied_at, checksum) VALUES (?, ?, ?, ?)`);
+    const id = 'mig_' + crypto.randomBytes(10).toString('hex');
+    stmt.run(id, name, Math.floor(Date.now() / 1000), checksum);
+    return true;
+  } catch (error) {
+    console.error('[Migration] recordSchemaMigration failed');
+    return false;
+  }
+}
+
+function getSchemaMigrations(limit = 100) {
+  try {
+    const stmt = db.prepare(`SELECT * FROM schema_migrations ORDER BY applied_at DESC LIMIT ?`);
+    return stmt.all(limit);
+  } catch (error) {
+    return [];
+  }
+}
+
 /**
  * Create encryption key
  */
-function createEncryptionKey(workspaceId, algorithm, keyHash, keySalt, createdByUserId) {
+function createEncryptionKey(workspaceId, algorithm, keyHash, keySalt, createdByUserId, masterKeyId = null) {
   const id = 'enckey_' + crypto.randomBytes(12).toString('hex');
+  const keyId = 'kid_' + crypto.randomBytes(10).toString('hex');
   const now = Math.floor(Date.now() / 1000);
-  
+
   try {
     const stmt = db.prepare(`
-      INSERT INTO encryption_keys (id, workspace_id, algorithm, key_hash, key_salt, created_at, status, created_by_user_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO encryption_keys (id, workspace_id, key_id, algorithm, key_hash, key_salt, master_key_id, created_at, status, created_by_user_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    
-    stmt.run(id, workspaceId, algorithm, keyHash, keySalt, now, 'active', createdByUserId);
-    return { id, workspaceId, algorithm, keyHash, created_at: now, status: 'active' };
+
+    stmt.run(id, workspaceId, keyId, algorithm, keyHash, keySalt, masterKeyId, now, 'active', createdByUserId);
+    return { id, keyId, workspaceId, algorithm, keyHash, created_at: now, status: 'active' };
   } catch (error) {
-    console.error('[Encryption] Create key error:', error.message);
+    console.error('[Encryption] Create key error');
     throw error;
   }
 }
@@ -5797,6 +5857,8 @@ module.exports = {
   getSSOConfigurationByProvider,
   updateSSOConfiguration,
   // Phase 5: Encryption & Compliance
+  recordSchemaMigration,
+  getSchemaMigrations,
   createEncryptionKey,
   getEncryptionKeys,
   getEncryptionKeyByHash,

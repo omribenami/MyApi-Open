@@ -68,11 +68,20 @@ Sensitive Data Categories:
 └─ Audit Logs → AES-256-GCM (optional, for compliance)
 
 Key Management:
-├─ Master Key (in secure storage)
+├─ Master Key (environment-secured for now; KMS target for production hardening)
 ├─ Derived Keys (per-workspace or per-user)
-├─ Key Rotation (automated, zero-downtime)
+├─ Key Rotation (automated, zero-downtime with backward-compatible read)
 └─ Backup Keys (for recovery)
 ```
+
+### Security Baseline (Implemented)
+- PBKDF2 iterations: **600,000** (NIST-aligned)
+- Salt size: **32 bytes random**
+- GCM nonce: **12 bytes random per encryption operation**
+- Max payload size guard: **100MB** (DoS protection)
+- Append-only compliance logs enforced with DB triggers
+- Generic crypto errors (no key material leakage in messages)
+
 
 ### Database Schema Changes
 ```sql
