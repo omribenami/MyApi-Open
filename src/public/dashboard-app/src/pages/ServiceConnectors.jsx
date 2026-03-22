@@ -26,7 +26,7 @@ function ServiceConnectors() {
     revokeServiceId,
   } = useServicesStore();
 
-  const { toasts, showSuccessToast, showInfoToast } = useToast();
+  const { toasts, removeToast, showSuccessToast, showErrorToast, showInfoToast } = useToast();
 
   const [isRevoking, setIsRevoking] = useState(false);
   const [connectError, setConnectError] = useState(null);
@@ -107,7 +107,9 @@ function ServiceConnectors() {
       }));
     } catch (err) {
       console.error('Failed to fetch services:', err);
-      setError('Could not load services. Please refresh the page.');
+      const message = 'Could not load services. Please refresh the page.';
+      setError(message);
+      showErrorToast(message);
     } finally {
       setIsLoading(false);
     }
@@ -155,7 +157,9 @@ function ServiceConnectors() {
       await startOAuthFlow(oauthProvider, { mode: 'connect', returnTo: '/dashboard/services' });
     } catch (err) {
       console.error('OAuth flow error:', err);
-      setError(`Failed to connect ${service.label}. Please try again.`);
+      const message = `Failed to connect ${service.label}. Please try again.`;
+      setError(message);
+      showErrorToast(message);
     }
   };
 
@@ -178,7 +182,9 @@ function ServiceConnectors() {
       console.error('Failed to revoke service:', err);
       // Show error but allow user to close modal
       const errorMsg = err?.response?.data?.error || err?.message || 'Unknown error';
-      setError(`Failed to disconnect: ${errorMsg}`);
+      const message = `Failed to disconnect: ${errorMsg}`;
+      setError(message);
+      showErrorToast(message);
       // Don't close modal on error - let user see the error and retry or close manually
     } finally {
       setIsRevoking(false);
@@ -472,7 +478,7 @@ function ServiceConnectors() {
             id={toast.id}
             message={toast.message}
             type={toast.type}
-            onClose={() => {}}
+            onClose={() => removeToast(toast.id)}
           />
         ))}
       </div>

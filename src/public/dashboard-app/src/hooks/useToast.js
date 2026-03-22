@@ -18,6 +18,10 @@ export function useToast() {
     return id;
   }, []);
 
+  const removeToast = useCallback((id) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
   const showSuccessToast = useCallback((message, duration = 3000) => {
     return showToast(message, 'success', duration);
   }, [showToast]);
@@ -30,5 +34,5 @@ export function useToast() {
     return showToast(message, 'info', duration);
   }, [showToast]);
 
-  return { toasts, showToast, showSuccessToast, showErrorToast, showInfoToast };
+  return { toasts, showToast, removeToast, showSuccessToast, showErrorToast, showInfoToast };
 }
