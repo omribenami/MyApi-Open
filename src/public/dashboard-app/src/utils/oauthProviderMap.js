@@ -29,6 +29,13 @@ const OAUTH_PROVIDER_MAP = {
   'reddit': 'reddit',
   'linkedin': 'linkedin',
   'notion': 'notion',
+  'microsoft365': 'microsoft365',
+  'dropbox': 'dropbox',
+  'trello': 'trello',
+  'zoom': 'zoom',
+  'hubspot': 'hubspot',
+  'salesforce': 'salesforce',
+  'jira': 'jira',
 };
 
 /**

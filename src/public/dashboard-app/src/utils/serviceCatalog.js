@@ -41,6 +41,11 @@ const BRAND_LOGOS = {
   jira: `${SIMPLE_ICONS_BASE}/jira/0052CC`,
   trello: `${SIMPLE_ICONS_BASE}/trello/0052CC`,
   airtable: `${SIMPLE_ICONS_BASE}/airtable/18BFFF`,
+  microsoft365: `${SIMPLE_ICONS_BASE}/microsoft365/D83B01`,
+  dropbox: `${SIMPLE_ICONS_BASE}/dropbox/0061FF`,
+  zoom: `${SIMPLE_ICONS_BASE}/zoom/0B5CFF`,
+  hubspot: `${SIMPLE_ICONS_BASE}/hubspot/FF7A59`,
+  salesforce: `${SIMPLE_ICONS_BASE}/salesforce/00A1E0`,
   email: `${SIMPLE_ICONS_BASE}/gmail/EA4335`,
   fal: `${SIMPLE_ICONS_BASE}/falai/7C3AED`,
 };
@@ -61,6 +66,11 @@ const BRAND_LOGO_FALLBACKS = {
   bitbucket: `${JSDELIVR_SIMPLE_ICONS_BASE}/bitbucket.svg`,
   azuredevops: `${JSDELIVR_SIMPLE_ICONS_BASE}/azuredevops.svg`,
   notion: `${JSDELIVR_SIMPLE_ICONS_BASE}/notion.svg`,
+  microsoft365: `${JSDELIVR_SIMPLE_ICONS_BASE}/microsoft365.svg`,
+  dropbox: `${JSDELIVR_SIMPLE_ICONS_BASE}/dropbox.svg`,
+  zoom: `${JSDELIVR_SIMPLE_ICONS_BASE}/zoom.svg`,
+  hubspot: `${JSDELIVR_SIMPLE_ICONS_BASE}/hubspot.svg`,
+  salesforce: `${JSDELIVR_SIMPLE_ICONS_BASE}/salesforce.svg`,
   fal: `${JSDELIVR_SIMPLE_ICONS_BASE}/falai.svg`,
 };
 
@@ -76,6 +86,13 @@ const SERVICE_ENV_REQUIREMENTS = {
   slack: ['SLACK_CLIENT_ID', 'SLACK_CLIENT_SECRET', 'SLACK_REDIRECT_URI'],
   discord: ['DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'DISCORD_REDIRECT_URI'],
   whatsapp: ['WHATSAPP_BUSINESS_ACCOUNT_ID', 'WHATSAPP_API_TOKEN', 'WHATSAPP_WEBHOOK_TOKEN'],
+  microsoft365: ['MICROSOFT365_CLIENT_ID', 'MICROSOFT365_CLIENT_SECRET', 'MICROSOFT365_REDIRECT_URI'],
+  dropbox: ['DROPBOX_CLIENT_ID', 'DROPBOX_CLIENT_SECRET', 'DROPBOX_REDIRECT_URI'],
+  trello: ['TRELLO_CLIENT_ID', 'TRELLO_CLIENT_SECRET', 'TRELLO_REDIRECT_URI'],
+  zoom: ['ZOOM_CLIENT_ID', 'ZOOM_CLIENT_SECRET', 'ZOOM_REDIRECT_URI'],
+  hubspot: ['HUBSPOT_CLIENT_ID', 'HUBSPOT_CLIENT_SECRET', 'HUBSPOT_REDIRECT_URI'],
+  salesforce: ['SALESFORCE_CLIENT_ID', 'SALESFORCE_CLIENT_SECRET', 'SALESFORCE_REDIRECT_URI'],
+  jira: ['JIRA_CLIENT_ID', 'JIRA_CLIENT_SECRET', 'JIRA_REDIRECT_URI'],
   email: ['EMAIL_PROVIDER', 'EMAIL_FROM', 'SMTP_HOST', 'SMTP_PORT'],
   fal: ['FAL_API_KEY (optional global fallback)'],
 };
@@ -130,7 +147,8 @@ const KNOWN_STATUS = new Set(['connected', 'pending', 'error', 'disconnected']);
 
 const OAUTH_SERVICES = new Set([
   'google', 'github', 'facebook', 'instagram', 'tiktok', 'twitter', 'reddit',
-  'linkedin', 'slack', 'discord', 'whatsapp', 'notion', 'gitlab', 'bitbucket', 'telegram'
+  'linkedin', 'slack', 'discord', 'whatsapp', 'notion', 'gitlab', 'bitbucket', 'telegram',
+  'microsoft365', 'dropbox', 'trello', 'zoom', 'hubspot', 'salesforce', 'jira'
 ]);
 
 const API_ROOT_FALLBACKS = {
@@ -145,6 +163,13 @@ const API_ROOT_FALLBACKS = {
   slack: 'https://slack.com/api',
   discord: 'https://discord.com/api/v10',
   notion: 'https://api.notion.com/v1',
+  microsoft365: 'https://graph.microsoft.com',
+  dropbox: 'https://api.dropboxapi.com/2',
+  trello: 'https://api.trello.com/1',
+  zoom: 'https://api.zoom.us/v2',
+  hubspot: 'https://api.hubapi.com',
+  salesforce: 'https://login.salesforce.com',
+  jira: 'https://api.atlassian.com',
 };
 
 function normalizeStatus(status) {
