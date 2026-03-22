@@ -74,6 +74,8 @@ function Layout({ children, onLogout }) {
     try { return JSON.parse(localStorage.getItem('tokenData') || '{}'); } catch { return {}; }
   })();
   const isPowerUser = String(user?.email || '').toLowerCase() === 'admin@your.domain.com';
+  const effectivePlan = String(user?.plan || tokenData?.plan || 'free').toLowerCase();
+  const hasEnterpriseAccess = effectivePlan === 'enterprise';
 
   const isActive = (path) => (path === '/' ? location.pathname === path : location.pathname.startsWith(path));
 
@@ -120,13 +122,15 @@ function Layout({ children, onLogout }) {
     }
   ];
 
-  // Enterprise settings - accessible to workspace owners/admins
-  navGroups.push({
-    label: 'Workspace',
-    items: [
-      { path: '/enterprise', label: 'Enterprise (SSO+RBAC)' },
-    ]
-  });
+  // Enterprise settings: visible only to enterprise plan
+  if (hasEnterpriseAccess) {
+    navGroups.push({
+      label: 'Workspace',
+      items: [
+        { path: '/enterprise', label: 'Enterprise (SSO+RBAC)' },
+      ]
+    });
+  }
 
   if (isPowerUser) {
     navGroups.push({

@@ -3,6 +3,7 @@ import { useAuthStore } from '../stores/authStore';
 
 function EnterpriseSettings() {
   const masterToken = useAuthStore((state) => state.masterToken);
+  const user = useAuthStore((state) => state.user);
   const [activeTab, setActiveTab] = useState('sso');
   const [ssoConfig, setSsoConfig] = useState({
     enabled: false,
@@ -22,6 +23,8 @@ function EnterpriseSettings() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const effectivePlan = String(user?.plan || 'free').toLowerCase();
+  const hasEnterpriseAccess = effectivePlan === 'enterprise';
 
   useEffect(() => {
     fetchEnterpriseConfig();
@@ -86,6 +89,21 @@ function EnterpriseSettings() {
     { id: 'sso', label: 'Single Sign-On (SSO)' },
     { id: 'rbac', label: 'Roles & Permissions' },
   ];
+
+  if (!hasEnterpriseAccess) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold text-white">Enterprise Settings</h1>
+          <p className="text-slate-400 mt-1">This section is available on the Enterprise plan.</p>
+        </div>
+        <div className="rounded-lg border border-amber-700 bg-amber-900/20 p-5 text-amber-200">
+          <p className="font-medium">Your current plan: {effectivePlan}</p>
+          <p className="text-sm mt-1">Upgrade to Enterprise to access SSO (SAML/OIDC) and advanced RBAC controls.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
