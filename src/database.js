@@ -169,6 +169,18 @@ function initDatabase() {
       expires_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS oauth_pending_logins (
+      id TEXT PRIMARY KEY,
+      service_name TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      token TEXT NOT NULL UNIQUE,
+      user_data TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_oauth_pending_logins_token ON oauth_pending_logins(token);
+    CREATE INDEX IF NOT EXISTS idx_oauth_pending_logins_expires ON oauth_pending_logins(expires_at);
+
     CREATE TABLE IF NOT EXISTS conversations (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,

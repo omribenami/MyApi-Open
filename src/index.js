@@ -483,7 +483,7 @@ app.use((req, res, next) => {
   // CRITICAL: Exempt Bearer token (API/agent) requests from global rate limiting
   // Device approval middleware will handle rate limiting for API tokens
   const hasBearer = req.headers.authorization?.startsWith('Bearer ') || req.query.token || req.query.api_key;
-  
+
   if (isExempt || hasBearer) {
     return next();
   }
@@ -498,9 +498,9 @@ app.use((req, res, next) => {
 
   if (globalRateLimitMap[key].length >= maxRequests) {
     const retryAfterSeconds = Math.max(1, Math.ceil((windowMs - (now - globalRateLimitMap[key][0])) / 1000));
-    return res.status(429).json({ 
+    return res.status(429).json({
       error: 'Rate limit exceeded',
-      retryAfter: retryAfterSeconds 
+      retryAfter: retryAfterSeconds
     });
   }
 
@@ -524,7 +524,7 @@ const sessionStore = new BetterSqlite3StoreFactory({
 
 app.use(session({
   store: sessionStore,
-  secret: process.env.SESSION_SECRET, // P0 Security Fix: No fallback — validated at startup
+  secret: process.env.SESSION_SECRET, // P0 Security Fix: No fallback - validated at startup
   name: 'myapi.sid',
   resave: false,
   saveUninitialized: false,
@@ -684,7 +684,7 @@ app.use('/api/v1', onboardRoutes);
 
 // --- AI-Discoverable API Root & Well-Known Endpoints ---
 
-// GET /api/v1/ — API discovery root (unauthenticated)
+// GET /api/v1/ - API discovery root (unauthenticated)
 app.get('/api/v1/', (req, res) => {
   res.json({
     name: 'MyApi',
@@ -716,7 +716,7 @@ app.get('/api/v1/', (req, res) => {
   });
 });
 
-// GET /api/v1/quick-start — step-by-step guide for AI agents
+// GET /api/v1/quick-start - step-by-step guide for AI agents
 app.get('/api/v1/quick-start', (req, res) => {
   const hasAuth = !!(req.headers.authorization || '').match(/^Bearer\s+.+/i);
   res.json({
@@ -764,12 +764,12 @@ app.get('/api/v1/quick-start', (req, res) => {
   });
 });
 
-// /.well-known/openapi — standard discovery path
+// /.well-known/openapi - standard discovery path
 app.get('/.well-known/openapi.json', (req, res) => {
   res.redirect('/openapi.json');
 });
 
-// /.well-known/ai-plugin.json — ChatGPT/AI plugin discovery standard
+// /.well-known/ai-plugin.json - ChatGPT/AI plugin discovery standard
 app.get('/.well-known/ai-plugin.json', (req, res) => {
   const host = req.headers.host || 'www.myapiai.com';
   res.json({
@@ -797,11 +797,11 @@ app.get('/api/v1/users/me', authenticate, (req, res) => {
       if (m) identity[m[1].trim()] = (m[2] || '').trim();
     }
   }
-  
+
   // Fetch full user data from database to include avatarUrl
   const userId = req.user?.id;
   let user = req.user || { id: 'owner', username: 'owner' };
-  
+
   if (userId) {
     try {
       const fullUser = getUserById(userId);
@@ -820,14 +820,14 @@ app.get('/api/v1/users/me', authenticate, (req, res) => {
       // Fall back to req.user
     }
   }
-  
+
   res.json({ user, identity });
 });
 
 app.put('/api/v1/users/me', authenticate, (req, res) => {
   const fields = req.body || {};
   const userId = req.user?.id;
-  
+
   if (!userId) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
@@ -869,9 +869,9 @@ app.put('/api/v1/users/me', authenticate, (req, res) => {
   // Return updated user so frontend has fresh data
   const { getUserById } = require('./database');
   const updatedUser = getUserById(userId);
-  res.json({ 
+  res.json({
     ok: true,
-    user: updatedUser 
+    user: updatedUser
   });
 });
 
@@ -1070,13 +1070,13 @@ function authenticate(req, res, next) {
     /^\/api\/v1\/billing\/plans/,
     /^\/oauth\//,
   ];
-  
+
   const isPublicPath = publicPaths.some(pattern => pattern.test(fullPath));
   if (isPublicPath) {
     return next();
   }
 
-  // 1) Session auth (human dashboard) — HIGHEST PRIORITY
+  // 1) Session auth (human dashboard) - HIGHEST PRIORITY
   // CRITICAL: If session exists, use it EXCLUSIVELY. Never fall through to Bearer token auth.
   // Device approval only applies to API tokens, not session auth.
   // Sessions are from OAuth logins (browser), which are already protected by session cookies + CORS.
@@ -1085,11 +1085,11 @@ function authenticate(req, res, next) {
     req.authType = 'session';
     // session users are treated as "full" for MVP; we will add RBAC later.
     req.tokenMeta = { tokenId: `sess_${req.user.id}`, scope: 'full', ownerId: String(req.user.id), label: 'session' };
-    
+
     // SKIP device approval entirely for session auth.
     // Browsers don't have "devices" in the master-token sense; they have sessions.
     // Device approval is only for API token/agent access.
-    // Session auth is complete and secure — return immediately.
+    // Session auth is complete and secure - return immediately.
     return next();
   }
 
@@ -1098,7 +1098,7 @@ function authenticate(req, res, next) {
   let rawToken = null;
   const authHeader = req.headers["authorization"] || "";
   const parts = authHeader.split(" ");
-  
+
   if (parts.length === 2 && parts[0] === "Bearer") {
     rawToken = parts[1];
   } else if (req.query.token) {
@@ -1135,7 +1135,7 @@ function authenticate(req, res, next) {
   }
   req.tokenMeta = matched;
   req.authType = 'bearer';
-  
+
   // For Bearer tokens (agents/APIs), enforce device approval.
   // This adds a layer of security: even if a master token is leaked, the attacker
   // still needs to approve the device fingerprint before accessing protected APIs.
@@ -1143,19 +1143,19 @@ function authenticate(req, res, next) {
   // and read-only activity don't require approval.
   // Use req.baseUrl to get the full path (req.path is relative to mount point)
   const routePath = req.baseUrl + req.path;
-  const skipDeviceApproval = routePath.startsWith('/api/v1/auth/') || 
+  const skipDeviceApproval = routePath.startsWith('/api/v1/auth/') ||
                              routePath.startsWith('/api/v1/devices') ||
                              routePath.startsWith('/api/v1/oauth/') ||
                              routePath.startsWith('/api/v1/users') ||
                              routePath.startsWith('/api/v1/billing') ||
                              (routePath.startsWith('/api/v1/activity') && req.method === 'GET');
-  
+
   if (skipDeviceApproval) {
     return next();
   }
-  
+
   // BUG-8: Removed SKIP_DEVICE_APPROVAL bypass - device approval is now mandatory for all API access
-  
+
   // Apply device approval for agents on protected routes
   return deviceApprovalMiddleware(req, res, next);
 }
@@ -1226,14 +1226,14 @@ app.get('/api/v1/manage/audit/agents', authenticate, (req, res) => {
   try {
     const logs = auditLogService.getRecent(1000, 0);
     const agentMap = {};
-    
+
     logs.forEach(log => {
       if (!log.request_id) return;
-      
+
       const userAgent = log.user_agent || '';
       let agentName = 'Unknown';
       let agentType = 'browser';
-      
+
       if (userAgent.includes('Jarvis')) {
         agentName = 'Jarvis';
         agentType = 'ai';
@@ -1247,7 +1247,7 @@ app.get('/api/v1/manage/audit/agents', authenticate, (req, res) => {
         agentName = 'Python';
         agentType = 'script';
       }
-      
+
       if (!agentMap[agentName]) {
         agentMap[agentName] = {
           agentName,
@@ -1258,15 +1258,15 @@ app.get('/api/v1/manage/audit/agents', authenticate, (req, res) => {
           endpointsAccessed: []
         };
       }
-      
+
       agentMap[agentName].accessCount++;
       agentMap[agentName].lastAccess = log.created_at;
-      
+
       if (log.resource && !agentMap[agentName].endpointsAccessed.includes(log.resource)) {
         agentMap[agentName].endpointsAccessed.push(log.resource);
       }
     });
-    
+
     res.json({
       ok: true,
       agents: Object.values(agentMap)
@@ -1296,14 +1296,14 @@ app.get('/api/v1/billing/plans', (req, res) => {
     // Try to get plans from database first
     const stmt = db.prepare(`
       SELECT id, name, price_cents, description, features,
-             monthly_api_call_limit, max_services, max_team_members, 
+             monthly_api_call_limit, max_services, max_team_members,
              max_skills_per_persona, stripe_product_id, active
       FROM pricing_plans
       WHERE active = 1
       ORDER BY display_order ASC
     `);
     const dbPlans = stmt.all();
-    
+
     if (dbPlans && dbPlans.length > 0) {
       // Transform database plans to frontend format
       const plans = dbPlans.map(plan => ({
@@ -1709,7 +1709,7 @@ async function discoverApiFromWebsite(websiteUrl) {
 
   const urlObj = new URL(normalizedWebsiteUrl);
   const origin = urlObj.origin;
-  
+
   // Heuristic: If hostname starts with www., guess api.domain.com
   let guessedApiOrigin = `${origin}/api`;
   if (urlObj.hostname.startsWith('www.')) {
@@ -1876,7 +1876,7 @@ const discoveryJson = (req, res) => {
  '/v1', '/api', '/v1/docs', '/api/v1/docs', '/developer',
 ].forEach(p => app.get(p, discoveryJson));
 
-// robots.txt — point crawlers and AIs to the API
+// robots.txt - point crawlers and AIs to the API
 app.get('/robots.txt', (req, res) => {
   const host = req.headers.host || 'www.myapiai.com';
   res.type('text/plain').send(
@@ -1893,7 +1893,7 @@ Sitemap: https://${host}/sitemap.xml
 `);
 });
 
-// sitemap.xml — list all discoverable endpoints
+// sitemap.xml - list all discoverable endpoints
 app.get('/sitemap.xml', (req, res) => {
   const host = req.headers.host || 'www.myapiai.com';
   const urls = [
@@ -1908,7 +1908,7 @@ ${urls.map(u => `  <url><loc>https://${host}${u}</loc></url>`).join('\n')}
   res.type('application/xml').send(xml);
 });
 
-// /health — useful for monitoring + AI discovery
+// /health - useful for monitoring + AI discovery
 app.get('/api/v1/health', (req, res) => {
   res.json({ status: 'ok', api: '/api/v1/', docs: '/openapi.json' });
 });
@@ -2209,7 +2209,7 @@ app.post("/api/v1/vault/tokens", authenticate, async (req, res) => {
 
     const shouldDiscoverApi = parseFlexibleBoolean(discoverApi);
     let discovery = shouldDiscoverApi ? await discoverApiFromWebsite(normalizedWebsiteUrl) : null;
-    
+
     // If not discovering, or if discovery failed to find one, but user provided an explicit API URL
     const manualApiUrl = req.body.discoveredApiUrl || req.body.apiUrl;
     if (manualApiUrl && (!discovery || !discovery.apiBaseUrl)) {
@@ -2299,15 +2299,15 @@ app.delete("/api/v1/vault/tokens/:id", authenticate, (req, res) => {
 // Create a new guest token with fine-grained scopes
 app.post("/api/v1/tokens", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can create tokens" });
-  
+
   const { label = "Guest Token", scopes, expiresInHours, description, allowedPersonas } = req.body;
-  
+
   // Parse scopes - support both template names and individual scopes
   let finalScopes = [];
   if (!scopes) {
     return res.status(400).json({ error: "scopes field is required" });
   }
-  
+
   if (typeof scopes === 'string') {
     // Handle template like "read", "professional", etc.
     const expanded = expandScopeTemplate(scopes);
@@ -2335,20 +2335,20 @@ app.post("/api/v1/tokens", authenticate, (req, res) => {
   } else {
     return res.status(400).json({ error: "scopes must be a string or array" });
   }
-  
+
   // Remove duplicates
   finalScopes = [...new Set(finalScopes)];
-  
+
   if (finalScopes.length === 0) {
     return res.status(400).json({ error: "No valid scopes provided" });
   }
-  
+
   // Create the token
   const rawToken = 'myapi_' + crypto.randomBytes(32).toString("hex");
   const hash = bcrypt.hashSync(rawToken, 10);
   let expiresAt = null;
   if (expiresInHours) expiresAt = new Date(Date.now() + expiresInHours * 3600000).toISOString();
-  
+
   // Validate allowedPersonas if provided
   const personaIds = Array.isArray(allowedPersonas) && allowedPersonas.length > 0
     ? allowedPersonas.map(Number).filter(n => !isNaN(n))
@@ -2391,22 +2391,22 @@ app.post("/api/v1/tokens", authenticate, (req, res) => {
 // Get details of a specific token with its scopes
 app.get("/api/v1/tokens/:id", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can view token details" });
-  
+
   const tokens = getAccessTokens();
   const token = tokens.find(t => t.tokenId === req.params.id);
-  
+
   if (!token) return res.status(404).json({ error: "Token not found" });
-  
+
   const scopes = getTokenScopes(req.params.id);
-  
-  createAuditLog({ 
-    requesterId: req.tokenMeta.tokenId, 
-    action: "view_token", 
-    resource: `/tokens/${req.params.id}`, 
-    scope: req.tokenMeta.scope, 
-    ip: req.ip 
+
+  createAuditLog({
+    requesterId: req.tokenMeta.tokenId,
+    action: "view_token",
+    resource: `/tokens/${req.params.id}`,
+    scope: req.tokenMeta.scope,
+    ip: req.ip
   });
-  
+
   res.json({
     data: {
       id: token.tokenId,
@@ -2425,16 +2425,16 @@ app.get("/api/v1/tokens/:id", authenticate, (req, res) => {
 // Update token scopes
 app.put("/api/v1/tokens/:id", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can update tokens" });
-  
+
   const { scopes } = req.body;
   if (!scopes || (!Array.isArray(scopes) && typeof scopes !== 'string')) {
     return res.status(400).json({ error: "scopes must be provided as a string or array" });
   }
-  
+
   const tokens = getAccessTokens();
   const token = tokens.find(t => t.tokenId === req.params.id);
   if (!token) return res.status(404).json({ error: "Token not found" });
-  
+
   // Parse new scopes
   let finalScopes = [];
   if (typeof scopes === 'string') {
@@ -2460,32 +2460,32 @@ app.put("/api/v1/tokens/:id", authenticate, (req, res) => {
       }
     }
   }
-  
+
   // Remove duplicates
   finalScopes = [...new Set(finalScopes)];
-  
+
   if (finalScopes.length === 0) {
     return res.status(400).json({ error: "No valid scopes provided" });
   }
-  
+
   // Update token scopes: revoke old, grant new
   revokeScopes(req.params.id);
   grantScopes(req.params.id, finalScopes);
-  
+
   // Update the scope field in access_tokens
   const updateStmt = db.prepare('UPDATE access_tokens SET scope = ? WHERE id = ?');
   updateStmt.run(JSON.stringify(finalScopes), req.params.id);
-  
-  createAuditLog({ 
-    requesterId: req.tokenMeta.tokenId, 
-    action: "update_token_scopes", 
-    resource: `/tokens/${req.params.id}`, 
-    scope: req.tokenMeta.scope, 
+
+  createAuditLog({
+    requesterId: req.tokenMeta.tokenId,
+    action: "update_token_scopes",
+    resource: `/tokens/${req.params.id}`,
+    scope: req.tokenMeta.scope,
     ip: req.ip,
     details: { newScopes: finalScopes }
   });
-  
-  res.json({ 
+
+  res.json({
     data: {
       id: req.params.id,
       scopes: finalScopes,
@@ -2497,18 +2497,18 @@ app.put("/api/v1/tokens/:id", authenticate, (req, res) => {
 // List available scopes (requires admin:* or special access)
 app.get("/api/v1/scopes", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can list scopes" });
-  
+
   const scopes = getAllScopes();
-  
-  createAuditLog({ 
-    requesterId: req.tokenMeta.tokenId, 
-    action: "list_scopes", 
-    resource: "/scopes", 
-    scope: req.tokenMeta.scope, 
-    ip: req.ip 
+
+  createAuditLog({
+    requesterId: req.tokenMeta.tokenId,
+    action: "list_scopes",
+    resource: "/scopes",
+    scope: req.tokenMeta.scope,
+    ip: req.ip
   });
-  
-  res.json({ 
+
+  res.json({
     data: {
       scopes: scopes,
       templates: {
@@ -2599,7 +2599,7 @@ app.post('/api/v1/tokens/master/bootstrap', authenticate, (req, res) => {
 
     // Do NOT revoke existing master tokens! This breaks external scripts.
     // revokeExistingMasterTokens(ownerId);
-    
+
     const rawToken = 'myapi_' + crypto.randomBytes(32).toString("hex");
     const hash = bcrypt.hashSync(rawToken, 10);
     const tokenId = createAccessToken(hash, ownerId, 'full', 'Master Token (Dashboard Session)', null, null);
@@ -2641,10 +2641,10 @@ app.delete("/api/v1/tokens/:id", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can revoke tokens" });
   const revoked = revokeAccessToken(req.params.id);
   if (!revoked) return res.status(404).json({ error: "Token not found" });
-  
+
   // Also revoke all scopes for this token
   revokeScopes(req.params.id);
-  
+
   // Emit notification
   NotificationService.emitNotification(req.tokenMeta.ownerId, 'token_revoked',
     'Token Revoked',
@@ -2654,37 +2654,37 @@ app.delete("/api/v1/tokens/:id", authenticate, (req, res) => {
   NotificationService.logActivity(req.tokenMeta.ownerId, 'token_revoked', 'token', {
     resourceId: req.params.id, actorType: 'user', actorId: req.tokenMeta.ownerId, result: 'success', ipAddress: req.ip,
   });
-  
-  createAuditLog({ 
-    requesterId: req.tokenMeta.tokenId, 
-    action: "revoke_token", 
-    resource: `/tokens/${req.params.id}`, 
-    scope: req.tokenMeta.scope, 
-    ip: req.ip 
+
+  createAuditLog({
+    requesterId: req.tokenMeta.tokenId,
+    action: "revoke_token",
+    resource: `/tokens/${req.params.id}`,
+    scope: req.tokenMeta.scope,
+    ip: req.ip
   });
-  
+
   res.json({ data: { tokenId: req.params.id, revoked: true } });
 });
 
 // List all tokens (legacy endpoint with scopes)
 app.get("/api/v1/tokens", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can list tokens" });
-  
+
   const tokens = getAccessTokens();
   const tokensWithScopes = tokens.map(t => ({
     ...t,
     scopes: getTokenScopes(t.tokenId),
     allowedPersonas: t.allowedPersonas || null
   }));
-  
-  createAuditLog({ 
-    requesterId: req.tokenMeta.tokenId, 
-    action: "list_tokens", 
-    resource: "/tokens", 
-    scope: req.tokenMeta.scope, 
-    ip: req.ip 
+
+  createAuditLog({
+    requesterId: req.tokenMeta.tokenId,
+    action: "list_tokens",
+    resource: "/tokens",
+    scope: req.tokenMeta.scope,
+    ip: req.ip
   });
-  
+
   res.json({ data: tokensWithScopes });
 });
 
@@ -2692,10 +2692,10 @@ app.get("/api/v1/tokens", authenticate, (req, res) => {
 app.post("/api/v1/tokens/validate", authRateLimit, (req, res) => {
   const { token } = req.body;
   if (!token) return res.status(400).json({ error: "token is required" });
-  
+
   const tokens = getAccessTokens();
   let matched = null;
-  
+
   // Find matching token
   for (const tokenRecord of tokens) {
     if (!tokenRecord.revokedAt && bcrypt.compareSync(token, tokenRecord.hash)) {
@@ -2703,33 +2703,33 @@ app.post("/api/v1/tokens/validate", authRateLimit, (req, res) => {
       break;
     }
   }
-  
+
   if (!matched) {
-    createAuditLog({ 
-      requesterId: "unknown", 
-      action: "token_validation_failed", 
-      resource: "/tokens/validate", 
-      ip: req.ip 
+    createAuditLog({
+      requesterId: "unknown",
+      action: "token_validation_failed",
+      resource: "/tokens/validate",
+      ip: req.ip
     });
     return res.status(401).json({ error: "Invalid token" });
   }
-  
-  createAuditLog({ 
-    requesterId: matched.tokenId, 
-    action: "token_validated", 
-    resource: "/tokens/validate", 
+
+  createAuditLog({
+    requesterId: matched.tokenId,
+    action: "token_validated",
+    resource: "/tokens/validate",
     scope: matched.scope,
-    ip: req.ip 
+    ip: req.ip
   });
-  
+
   // Return minimal safe info
-  res.json({ 
-    data: { 
+  res.json({
+    data: {
       valid: true,
       tokenId: matched.tokenId,
       scope: matched.scope,
       label: matched.label
-    } 
+    }
   });
 });
 
@@ -3124,7 +3124,7 @@ app.post("/api/v1/connectors", authenticate, (req, res) => {
 app.get("/api/v1/gateway/context", authenticate, (req, res) => {
   // Only master token can access full context
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can access gateway context" });
-  
+
   try {
     // Read USER.md
     let userProfile = {};
@@ -3139,7 +3139,7 @@ app.get("/api/v1/gateway/context", authenticate, (req, res) => {
         }
       }
     }
-    
+
     // Get active persona from database
     let soulProfile = {};
     const activePersona = getActivePersona();
@@ -3168,7 +3168,7 @@ app.get("/api/v1/gateway/context", authenticate, (req, res) => {
         }
       }
     }
-    
+
     // Read MEMORY.md
     const memoryMdPath = path.join(__dirname, "..", "..", "..", "MEMORY.md");
     let memoryContext = {};
@@ -3176,10 +3176,10 @@ app.get("/api/v1/gateway/context", authenticate, (req, res) => {
       const raw = fs.readFileSync(memoryMdPath, "utf8");
       memoryContext.raw = raw; // Include full MEMORY.md
     }
-    
+
     // Get available connectors
     const connectors = getConnectors();
-    
+
     // Get vault tokens (without exposing values)
     const vaultTokens = getVaultTokens().map(t => ({
       id: t.id,
@@ -3188,7 +3188,7 @@ app.get("/api/v1/gateway/context", authenticate, (req, res) => {
       createdAt: t.createdAt,
       // Never include the actual token value
     }));
-    
+
     // Get all personas (for meta)
     const allPersonas = getPersonas(getRequestOwnerId(req));
     const personaList = allPersonas.map(p => ({
@@ -3197,7 +3197,7 @@ app.get("/api/v1/gateway/context", authenticate, (req, res) => {
       active: p.active,
       created_at: p.created_at
     }));
-    
+
     // Assemble gateway context
     const context = {
       timestamp: new Date().toISOString(),
@@ -3225,7 +3225,7 @@ app.get("/api/v1/gateway/context", authenticate, (req, res) => {
         activePersonaId: activePersona ? activePersona.id : null,
       },
     };
-    
+
     // Log the request
     createAuditLog({
       requesterId: req.tokenMeta.tokenId,
@@ -3234,7 +3234,7 @@ app.get("/api/v1/gateway/context", authenticate, (req, res) => {
       scope: req.tokenMeta.scope,
       ip: req.ip,
     });
-    
+
     res.json({ data: context });
   } catch (error) {
     createAuditLog({
@@ -3338,43 +3338,43 @@ app.post("/api/v1/auth/login", authRateLimit, (req, res) => {
 app.post("/api/v1/auth/token-login", authRateLimit, (req, res) => {
   const { token } = req.body;
   if (!token) return res.status(400).json({ error: "token is required" });
-  
+
   // Verify token against stored tokens
   const tokens = getAccessTokens();
   const tokenRecord = tokens.find(t => {
     // Check if token matches the hash
     return bcrypt.compareSync(token, t.hash);
   });
-  
+
   if (!tokenRecord || tokenRecord.revokedAt) {
     return res.status(401).json({ error: "Invalid or revoked token" });
   }
-  
+
   // Create session
   const sessionToken = crypto.randomBytes(32).toString('hex');
   if (!global.sessions) global.sessions = {};
-  global.sessions[sessionToken] = { 
+  global.sessions[sessionToken] = {
     tokenId: tokenRecord.tokenId,
     ownerId: tokenRecord.ownerId,
     scope: tokenRecord.scope,
-    createdAt: Date.now() 
+    createdAt: Date.now()
   };
-  
-  createAuditLog({ 
-    requesterId: tokenRecord.tokenId, 
-    action: "token_login", 
-    resource: "/auth/token-login", 
-    scope: tokenRecord.scope, 
-    ip: req.ip 
+
+  createAuditLog({
+    requesterId: tokenRecord.tokenId,
+    action: "token_login",
+    resource: "/auth/token-login",
+    scope: tokenRecord.scope,
+    ip: req.ip
   });
-  
-  res.json({ 
-    data: { 
-      sessionToken, 
+
+  res.json({
+    data: {
+      sessionToken,
       token: tokenRecord.tokenId,
       scope: tokenRecord.scope,
       message: "Token authentication successful"
-    } 
+    }
   });
 });
 
@@ -3428,7 +3428,7 @@ app.get("/api/v1/auth/me", (req, res) => {
   res.status(401).json({ error: "Invalid session" });
 });
 
-// GET /api/v1/auth/oauth-signup/pending — returns pending OAuth signup state
+// GET /api/v1/auth/oauth-signup/pending - returns pending OAuth signup state
 app.get('/api/v1/auth/oauth-signup/pending', (req, res) => {
   const pending = req.session?.oauth_signup || null;
   if (!pending) return res.status(404).json({ error: 'No pending OAuth signup' });
@@ -3447,7 +3447,7 @@ app.get('/api/v1/auth/oauth-signup/pending', (req, res) => {
   });
 });
 
-// DELETE /api/v1/account — self-serve account deletion from settings danger zone
+// DELETE /api/v1/account - self-serve account deletion from settings danger zone
 app.delete('/api/v1/account', authenticate, (req, res) => {
   try {
     const userId = String(req.user?.id || req.tokenMeta?.ownerId || '');
@@ -3497,7 +3497,7 @@ app.delete('/api/v1/account', authenticate, (req, res) => {
   }
 });
 
-// POST /api/v1/auth/oauth-signup/complete — creates user from pending OAuth signup and logs in
+// POST /api/v1/auth/oauth-signup/complete - creates user from pending OAuth signup and logs in
 app.post('/api/v1/auth/oauth-signup/complete', async (req, res) => {
   const pending = req.session?.oauth_signup;
   if (!pending) return res.status(400).json({ error: 'No pending OAuth signup session' });
@@ -3637,7 +3637,7 @@ app.post('/api/v1/auth/oauth-signup/complete', async (req, res) => {
   });
 });
 
-// GET /api/v1/auth/debug — Public diagnostic endpoint
+// GET /api/v1/auth/debug - Public diagnostic endpoint
 // No auth required; helps diagnose session/token issues
 app.get("/api/v1/auth/debug", (req, res) => {
   const hasSession = Boolean(req.session && req.session.user);
@@ -3645,7 +3645,7 @@ app.get("/api/v1/auth/debug", (req, res) => {
   const sessionUserId = req.session?.user?.id || null;
   const bearerToken = req.headers.authorization?.replace("Bearer ", "") || null;
   const cookies = req.headers.cookie || '';
-  
+
   res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.json({
     timestamp: new Date().toISOString(),
@@ -3844,10 +3844,10 @@ app.post('/api/v1/auth/2fa/challenge', twoFactorRateLimit, (req, res) => {
 
     if (!req.session.masterTokenRaw) {
       const existingTokens = getAccessTokens();
-      const hasValidMaster = existingTokens.some(t => 
+      const hasValidMaster = existingTokens.some(t =>
         t.scope === 'full' && !t.revokedAt && t.ownerId === String(pendingUser.id)
       );
-      
+
       if (!hasValidMaster) {
         const rawMasterToken = 'myapi_' + crypto.randomBytes(32).toString("hex");
         const hash = bcrypt.hashSync(rawMasterToken, 10);
@@ -3881,7 +3881,7 @@ app.post("/api/v1/auth/logout", (req, res) => {
   }
 
   const sid = req.sessionID;
-  
+
   // BUG-12: Ensure ALL session data is cleared before responding
   // Clear all session properties that might contain sensitive data
   delete req.session.pending_2fa_user;
@@ -3899,12 +3899,12 @@ app.post("/api/v1/auth/logout", (req, res) => {
   req.session.destroy((err) => {
     // Also attempt to destroy from store if available
     if (typeof req.sessionStore?.destroy === 'function' && sid) {
-      try { 
+      try {
         req.sessionStore.destroy(sid, (storeErr) => {
           if (storeErr) {
             console.warn('[logout] session store destroy returned error:', storeErr.message);
           }
-        }); 
+        });
       } catch (e) {
         console.warn('[logout] session store destroy threw error:', e.message);
       }
@@ -3938,7 +3938,7 @@ app.post("/api/v1/users", authenticate, (req, res) => {
   if (!requirePowerUser(req, res)) return;
   const { username, displayName, email, timezone, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: "username and password are required" });
-  
+
   if (!isStrongPassword(password)) {
     return res.status(400).json({ error: "Password must be at least 8 characters and contain 3 of: uppercase, lowercase, number, symbol" });
   }
@@ -4089,7 +4089,7 @@ app.post('/api/v1/users/cleanup-test-users', authenticate, (req, res) => {
 // NEW: HANDSHAKES (AI Agent Access Requests)
 // ============================
 
-// PUBLIC: AI agent initiates a handshake request (no auth required — this is the entry point)
+// PUBLIC: AI agent initiates a handshake request (no auth required - this is the entry point)
 app.post("/api/v1/handshakes", (req, res) => {
   const { agentId, userId, requestedScopes, message } = req.body;
   if (!agentId || !requestedScopes || !Array.isArray(requestedScopes)) {
@@ -4172,12 +4172,12 @@ app.get("/api/v1/handshakes/:id/status", (req, res) => {
 // PERSONAS - SOUL.md Variants
 // ============================
 
-// POST /api/v1/personas — Create new persona
+// POST /api/v1/personas - Create new persona
 app.post("/api/v1/personas", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can create personas" });
   const { name, soul_content, description, templateData } = req.body;
   if (!name || !soul_content) return res.status(400).json({ error: "name and soul_content are required" });
-  
+
   // Validate soul_content is markdown-like
   if (typeof soul_content !== 'string' || soul_content.trim().length === 0) {
     return res.status(400).json({ error: "soul_content must be non-empty markdown text" });
@@ -4187,17 +4187,17 @@ app.post("/api/v1/personas", authenticate, (req, res) => {
   const personaCount = getPersonas(ownerId).length;
   const personaLimitErr = enforcePlanLimit(req, 'personas', personaCount, 1);
   if (personaLimitErr) return res.status(403).json(personaLimitErr);
-  
+
   const persona = createPersona(name, soul_content, description, templateData, ownerId);
-  createAuditLog({ 
-    requesterId: req.tokenMeta.tokenId, 
-    action: "create_persona", 
-    resource: `/personas/${persona.id}`, 
-    scope: req.tokenMeta.scope, 
+  createAuditLog({
+    requesterId: req.tokenMeta.tokenId,
+    action: "create_persona",
+    resource: `/personas/${persona.id}`,
+    scope: req.tokenMeta.scope,
     ip: req.ip,
     details: { name, description }
   });
-  
+
   res.status(201).json({
     data: {
       id: persona.id,
@@ -4208,19 +4208,19 @@ app.post("/api/v1/personas", authenticate, (req, res) => {
   });
 });
 
-// GET /api/v1/personas — List all personas
+// GET /api/v1/personas - List all personas
 app.get("/api/v1/personas", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can list personas" });
   const ownerId = getRequestOwnerId(req);
   const personas = getPersonas(ownerId);
-  createAuditLog({ 
-    requesterId: req.tokenMeta.tokenId, 
-    action: "list_personas", 
-    resource: "/personas", 
-    scope: req.tokenMeta.scope, 
+  createAuditLog({
+    requesterId: req.tokenMeta.tokenId,
+    action: "list_personas",
+    resource: "/personas",
+    scope: req.tokenMeta.scope,
     ip: req.ip
   });
-  
+
   res.json({
     data: personas.map(p => ({
       id: p.id,
@@ -4234,21 +4234,21 @@ app.get("/api/v1/personas", authenticate, (req, res) => {
   });
 });
 
-// GET /api/v1/personas/:id — Get specific persona (including soul_content)
+// GET /api/v1/personas/:id - Get specific persona (including soul_content)
 app.get("/api/v1/personas/:id", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can view personas" });
   const ownerId = getRequestOwnerId(req);
   const persona = getPersonaById(parseInt(req.params.id), ownerId);
   if (!persona) return res.status(404).json({ error: "Persona not found" });
-  
-  createAuditLog({ 
-    requesterId: req.tokenMeta.tokenId, 
-    action: "get_persona", 
-    resource: `/personas/${persona.id}`, 
-    scope: req.tokenMeta.scope, 
+
+  createAuditLog({
+    requesterId: req.tokenMeta.tokenId,
+    action: "get_persona",
+    resource: `/personas/${persona.id}`,
+    scope: req.tokenMeta.scope,
     ip: req.ip
   });
-  
+
   res.json({
     data: {
       id: persona.id,
@@ -4263,25 +4263,25 @@ app.get("/api/v1/personas/:id", authenticate, (req, res) => {
   });
 });
 
-// PUT /api/v1/personas/:id — Update persona or set as active
+// PUT /api/v1/personas/:id - Update persona or set as active
 app.put("/api/v1/personas/:id", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can update personas" });
   const personaId = parseInt(req.params.id);
   const ownerId = getRequestOwnerId(req);
   const persona = getPersonaById(personaId, ownerId);
   if (!persona) return res.status(404).json({ error: "Persona not found" });
-  
+
   const { name, soul_content, description, active } = req.body;
-  
+
   // If setting as active
   if (active === true) {
     const updated = setActivePersona(personaId, ownerId);
     syncActivePersonaToSoulFile();
-    createAuditLog({ 
-      requesterId: req.tokenMeta.tokenId, 
-      action: "update_persona", 
-      resource: `/personas/${personaId}`, 
-      scope: req.tokenMeta.scope, 
+    createAuditLog({
+      requesterId: req.tokenMeta.tokenId,
+      action: "update_persona",
+      resource: `/personas/${personaId}`,
+      scope: req.tokenMeta.scope,
       ip: req.ip,
       details: { action: "set_active" }
     });
@@ -4300,11 +4300,11 @@ app.put("/api/v1/personas/:id", authenticate, (req, res) => {
     // Update persona fields
     const updated = updatePersona(personaId, { name, soul_content, description }, ownerId);
     if (updated.active) syncActivePersonaToSoulFile();
-    createAuditLog({ 
-      requesterId: req.tokenMeta.tokenId, 
-      action: "update_persona", 
-      resource: `/personas/${personaId}`, 
-      scope: req.tokenMeta.scope, 
+    createAuditLog({
+      requesterId: req.tokenMeta.tokenId,
+      action: "update_persona",
+      resource: `/personas/${personaId}`,
+      scope: req.tokenMeta.scope,
       ip: req.ip,
       details: { fields: Object.keys(req.body) }
     });
@@ -4322,7 +4322,7 @@ app.put("/api/v1/personas/:id", authenticate, (req, res) => {
   }
 });
 
-// DELETE /api/v1/personas/:id — Remove persona (if not the only one)
+// DELETE /api/v1/personas/:id - Remove persona (if not the only one)
 app.delete("/api/v1/personas/:id", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can delete personas" });
   const personaId = parseInt(req.params.id);
@@ -4330,22 +4330,22 @@ app.delete("/api/v1/personas/:id", authenticate, (req, res) => {
   const deleted = deletePersona(personaId, ownerId);
   if (deleted === null) return res.status(400).json({ error: "Cannot delete the last remaining persona" });
   if (!deleted) return res.status(404).json({ error: "Persona not found" });
-  
+
   syncActivePersonaToSoulFile();
-  createAuditLog({ 
-    requesterId: req.tokenMeta.tokenId, 
-    action: "delete_persona", 
-    resource: `/personas/${personaId}`, 
-    scope: req.tokenMeta.scope, 
+  createAuditLog({
+    requesterId: req.tokenMeta.tokenId,
+    action: "delete_persona",
+    resource: `/personas/${personaId}`,
+    scope: req.tokenMeta.scope,
     ip: req.ip
   });
-  
+
   res.json({ ok: true });
 });
 
 // --- Persona Documents ---
 
-// GET /api/v1/personas/:id/documents — Get attached KB documents
+// GET /api/v1/personas/:id/documents - Get attached KB documents
 app.get("/api/v1/personas/:id/documents", authenticate, (req, res) => {
   const personaId = parseInt(req.params.id);
   const ownerId = getRequestOwnerId(req);
@@ -4353,25 +4353,25 @@ app.get("/api/v1/personas/:id/documents", authenticate, (req, res) => {
   res.json({ data: docs });
 });
 
-// POST /api/v1/personas/:id/documents — Attach a KB document
+// POST /api/v1/personas/:id/documents - Attach a KB document
 app.post("/api/v1/personas/:id/documents", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Insufficient scope" });
   const personaId = parseInt(req.params.id);
   const { documentId } = req.body;
   if (!documentId) return res.status(400).json({ error: "documentId required" });
-  
+
   const ownerId = getRequestOwnerId(req);
   const persona = getPersonaById(personaId, ownerId);
   if (!persona) return res.status(404).json({ error: "Persona not found" });
 
   const doc = getKBDocumentById(documentId, ownerId);
   if (!doc) return res.status(404).json({ error: "Document not found" });
-  
+
   attachDocumentToPersona(personaId, documentId);
   res.json({ ok: true });
 });
 
-// DELETE /api/v1/personas/:id/documents/:docId — Detach a KB document
+// DELETE /api/v1/personas/:id/documents/:docId - Detach a KB document
 app.delete("/api/v1/personas/:id/documents/:docId", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Insufficient scope" });
   const personaId = parseInt(req.params.id);
@@ -4444,7 +4444,7 @@ app.get('/api/v1/oauth/authorize/twitter/x', (req, res) => {
   return res.redirect(`/api/v1/oauth/authorize/twitter${suffix}`);
 });
 
-// GET /api/v1/oauth/authorize/:service — Start OAuth flow
+// GET /api/v1/oauth/authorize/:service - Start OAuth flow
 app.get("/api/v1/oauth/authorize/:service", (req, res) => {
   const { service } = req.params;
   const mode = (req.query.mode || 'connect').toString();
@@ -4452,13 +4452,13 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
     ? ['1', 'true', 'yes'].includes(String(req.query.forcePrompt).toLowerCase())
     : null;
   const forcePrompt = explicitForcePrompt == null ? mode === 'login' : explicitForcePrompt;
-  
+
   // CRITICAL FIX: If masterToken is passed as query param, set it in Authorization header for authentication
   if (req.query.token && !req.headers.authorization) {
     req.headers.authorization = `Bearer ${req.query.token}`;
     console.log(`[OAuth Authorize] Injected Bearer token from query param`);
   }
-  
+
   // DEBUG: Log all requests
   console.log(`[OAuth] authorize/${service} requested`);
   console.log(`[OAuth] Mode: ${mode}`);
@@ -4467,7 +4467,7 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
   // Validate service parameter
   if (!service || typeof service !== 'string' || service.trim().length === 0) {
     console.log(`[OAuth] ERROR: Invalid service parameter: "${service}"`);
-    return res.status(400).json({ 
+    return res.status(400).json({
       error: 'Invalid service parameter',
       message: `Service parameter must be a non-empty string. Got: ${typeof service}`
     });
@@ -4476,7 +4476,7 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
   // Check if service is in the list of supported OAuth services
   if (!OAUTH_SERVICES.includes(service)) {
     console.log(`[OAuth] ERROR: Service "${service}" not in supported services. Available: ${OAUTH_SERVICES.join(', ')}`);
-    return res.status(400).json({ 
+    return res.status(400).json({
       error: `Service "${service}" not supported`,
       availableServices: OAUTH_SERVICES,
       message: `The service "${service}" is not available for OAuth. Available services are: ${OAUTH_SERVICES.join(', ')}`
@@ -4488,8 +4488,8 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
     const adapter = oauthAdapters[service];
     const isConfigured = adapter ? isAdapterConfigured(adapter) : false;
     console.log(`[OAuth] ERROR: Service "${service}" is not enabled. Configured: ${isConfigured}`);
-    
-    return res.status(400).json({ 
+
+    return res.status(400).json({
       error: `Service "${service}" is not enabled or configured`,
       message: `OAuth for "${service}" is either disabled or missing required configuration (clientId, clientSecret, redirectUri)`,
       service: service,
@@ -4503,7 +4503,7 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
     state = createStateToken(service, 30);
   } catch (stateError) {
     console.error(`[OAuth] Failed to create state token for ${service}:`, stateError);
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: 'Failed to initialize OAuth flow',
       message: 'Could not create secure state token'
     });
@@ -4511,11 +4511,11 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
 
   // Store OAuth flow metadata in session
   req.session.oauthStateMeta = req.session.oauthStateMeta || {};
-  
+
   // Try to authenticate the user to get ownerId
   // This checks session, Bearer token, and masterToken cookie
   tryAuthenticate(req);
-  
+
   // Get ownerId from multiple sources (SAME priority as callback will use)
   let ownerId = null;
   if (req.session?.user?.id) {
@@ -4544,7 +4544,7 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
       console.warn(`[OAuth Authorize] Failed to extract ownerId from masterToken:`, err.message);
     }
   }
-  
+
   // Log the resolved ownerId
   console.log(`[OAuth Authorize] Final ownerId: ${ownerId || 'NULL'} (from session=${req.session?.user?.id || 'null'}, Bearer=${req.tokenMeta?.ownerId || 'null'}, masterToken=${req.cookies?.myapi_master_token ? 'present' : 'absent'})`);
   console.log(`[OAuth Authorize] ${service} flow initiated: req.session.user=${req.session?.user?.id || 'UNSET'}, req.tokenMeta.ownerId=${req.tokenMeta?.ownerId || 'UNSET'} -> ownerId=${ownerId || 'NULL'}`);
@@ -4583,7 +4583,7 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
     authUrl = adapter.getAuthorizationUrl(state, runtimeAuthParams);
   } catch (authError) {
     console.error(`[OAuth] Failed to generate authorization URL for ${service}:`, authError);
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: 'Failed to generate authorization URL',
       message: authError.message || 'Could not generate OAuth authorization URL'
     });
@@ -4600,7 +4600,7 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
 
   // Determine response format (JSON or redirect)
   const wantsJson = String(req.query.json || '').toLowerCase() === '1';
-  
+
   if (wantsJson) {
     console.log(`[OAuth] Returning JSON response for ${service}`);
     // CRITICAL: Save session before responding, otherwise oauthStateMeta won't persist
@@ -4609,9 +4609,9 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
         console.error(`[OAuth Authorize] ❌ Session save failed for JSON response:`, err);
         return res.status(500).json({ error: 'Failed to save session for OAuth flow' });
       }
-      res.json({ 
-        ok: true, 
-        authUrl, 
+      res.json({
+        ok: true,
+        authUrl,
         state,
         service
       });
@@ -4635,13 +4635,13 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
 // Catch incomplete OAuth callbacks (e.g., /api/v1/oauth without :service)
 // and provide helpful error message
 app.get(["/api/v1/oauth", "/oauth"], (req, res) => {
-  return res.status(400).json({ 
+  return res.status(400).json({
     error: "OAuth callback incomplete - missing service parameter",
     hint: "Expected /api/v1/oauth/callback/:service (e.g., /api/v1/oauth/callback/google)"
   });
 });
 
-// GET /api/v1/oauth/callback/:service — Handle OAuth callback
+// GET /api/v1/oauth/callback/:service - Handle OAuth callback
 // Also support legacy/public callback paths to avoid provider-side 404s when
 // an app is configured without the /api/v1 prefix.
 app.get([
@@ -4766,7 +4766,7 @@ app.get([
       // Never match by derived username here, otherwise a non-existent OAuth identity can
       // accidentally map/create the wrong account flow.
       let appUser = appUserByEmail || null;
-      
+
       // NEW USER: Store OAuth data in session and route to explicit signup flow (no silent login/create)
       if (!appUser) {
         req.session.oauth_signup = {
@@ -4797,7 +4797,7 @@ app.get([
       // BUG-6: EXISTING USER: Store credentials in session and require explicit user confirmation
       // Do NOT auto-login without user consent, even for existing accounts
       appUser = updateUserOAuthProfile(appUser.id, { displayName: name, email, avatarUrl }) || appUser;
-      
+
       // Store OAuth credentials in session pending user confirmation
       req.session.oauth_login_pending = {
         service,
@@ -4819,22 +4819,59 @@ app.get([
       };
 
       console.log(`[OAuth] Stored pending login credentials in session for user: ${appUser.id}`);
-      
+
       // Redirect to confirmation page instead of auto-logging in
       const confirmToken = crypto.randomBytes(16).toString('hex');
+
+      // Store BOTH in session AND in database as backup
+      // Session: for normal case where cookies are sent
       req.session.oauth_confirm_token = confirmToken;
-      
+      req.session.oauth_login_pending = {
+        userId: userProfile.id,
+        email: userProfile.email,
+        username: userProfile.name,
+        displayName: userProfile.display_name,
+        avatarUrl: userProfile.picture,
+        hasTwoFa: userProfile.two_factor_enabled || false,
+      };
+
+      // Database: backup in case session cookie is lost
+      const dbConfirmId = 'oauth_confirm_' + crypto.randomBytes(16).toString('hex');
+      const confirmExpiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // 15 min expiry
+      try {
+        db.prepare(`
+          INSERT INTO oauth_pending_logins (id, service_name, user_id, token, user_data, created_at, expires_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          dbConfirmId,
+          service,
+          userProfile.id,
+          confirmToken,
+          JSON.stringify({
+            userId: userProfile.id,
+            email: userProfile.email,
+            username: userProfile.name,
+            displayName: userProfile.display_name,
+            avatarUrl: userProfile.picture,
+            hasTwoFa: userProfile.two_factor_enabled || false,
+          }),
+          new Date().toISOString(),
+          confirmExpiresAt
+        );
+        console.log(`[OAuth Callback] ✅ Stored pending login in DB: ${dbConfirmId}`);
+      } catch (dbErr) {
+        console.error('[OAuth Callback] Warning: Failed to store pending login in DB:', dbErr.message);
+        // Continue anyway - session storage is the primary mechanism
+      }
+
       // CRITICAL: Session must be persisted BEFORE redirect
-      // Add explicit error handling and logging
       req.session.save((err) => {
         if (err) {
-          console.error('[OAuth Callback] ❌ CRITICAL: Session save failed before confirm_login redirect:', err);
-          // Fallback: still redirect but log the error for debugging
-          console.log('[OAuth Callback] Session data WAS set, attempting redirect anyway...');
+          console.error('[OAuth Callback] ❌ Session save failed before confirm_login redirect:', err);
         } else {
-          console.log(`[OAuth Callback] ✅ Session saved successfully for confirm_login flow. ID=${req.sessionID}`);
+          console.log(`[OAuth Callback] ✅ Session saved. ID=${req.sessionID}`);
         }
-        
+
         const nextUrl = encodeURIComponent(safeReturnTo);
         const confirmUrl = `/dashboard/?oauth_service=${service}&oauth_status=confirm_login&next=${nextUrl}&token=${confirmToken}`;
         console.log(`[OAuth Callback] Redirecting to confirm_login: ${confirmUrl}`);
@@ -4858,18 +4895,18 @@ app.get([
       const storeResult = storeOAuthToken(service, oauthOwnerId, tokenData.accessToken, tokenData.refreshToken || null, expiresAt, tokenData.scope);
       tokenStoredForUser = true;
       console.log(`[OAuth Callback] ✅ Token stored:`, { service, userId: oauthOwnerId });
-      
+
       // CRITICAL: Ensure req.session.user is populated for subsequent API calls
       // This is absolutely essential for /api/v1/oauth/status to find the user
       console.log(`[OAuth Callback] Setting session.user for connect flow...`);
       console.log(`[OAuth Callback]   Before: req.session.user = ${req.session.user ? req.session.user.id : 'NULL'}`);
       console.log(`[OAuth Callback]   oauthOwnerId = ${oauthOwnerId}`);
-      
+
       if (!req.session.user && oauthOwnerId) {
         console.log(`[OAuth Callback]   Calling getUserById(${oauthOwnerId})...`);
         const ownerUser = getUserById(oauthOwnerId);
         console.log(`[OAuth Callback]   getUserById returned:`, ownerUser ? `USER FOUND: ${ownerUser.id}` : 'NULL');
-        
+
         if (ownerUser) {
           req.session.user = {
             id: ownerUser.id,
@@ -4905,7 +4942,7 @@ app.get([
       const workspaceId = ws?.[0]?.id || 'default';
       NotificationDispatcher.onServiceConnected(workspaceId, req.session.user.id, service)
         .catch(err => console.error('Notification dispatch error:', err));
-      
+
       // Legacy notification (keep for compatibility)
       NotificationService.emitNotification(req.session.user.id, 'service_connected',
         `${service.charAt(0).toUpperCase() + service.slice(1)} Connected`,
@@ -4927,12 +4964,12 @@ app.get([
 
     const next = encodeURIComponent(safeReturnTo);
     const masterToken = req.session.masterTokenRaw || 'myapi_' + crypto.randomBytes(32).toString("hex");
-    
+
     // CRITICAL: Store masterToken in session so /api/v1/auth/me can return it to the frontend
     // This allows the frontend to store it in localStorage and use it for future API calls
     req.session.masterTokenRaw = masterToken;
     console.log(`[OAuth Callback] Set req.session.masterTokenRaw = ${masterToken.slice(0, 20)}...`);
-    
+
     // CRITICAL FIX (Expert identified): Persist masterToken to access_tokens database table
     // This allows Bearer token validation to work on subsequent /api/v1/oauth/status calls
     if (oauthOwnerId && !req.session.masterTokenId) {
@@ -4945,7 +4982,7 @@ app.get([
         console.error(`[OAuth Callback] ❌ Failed to create access token:`, err.message);
       }
     }
-    
+
     // Set master token as a persistent cookie so the dashboard can use it
     res.cookie('myapi_master_token', masterToken, {
       httpOnly: false, // Allow JS to read it
@@ -4953,7 +4990,7 @@ app.get([
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
       sameSite: 'lax'
     });
-    
+
     // Also set user info for quick access (use session.user which is already set)
     if (req.session.user) {
       res.cookie('myapi_user', JSON.stringify(req.session.user), {
@@ -4963,9 +5000,9 @@ app.get([
         sameSite: 'lax'
       });
     }
-    
+
     const redirectUrl = `/dashboard/?oauth_service=${service}&oauth_status=connected&mode=${encodeURIComponent(stateMeta.mode || 'connect')}&next=${next}`;
-    
+
     console.log(`[OAuth Callback] Before saving session: req.session.id=${req.sessionID}, req.session.user=${req.session.user ? req.session.user.id : 'UNSET'}`);
     req.session.save((err) => {
       if (err) {
@@ -5026,28 +5063,28 @@ function tryAuthenticate(req) {
   console.log(`[tryAuth] Not authenticated, will show public view (all disconnected)`);
 }
 
-// GET /api/v1/oauth/status — Get all connected services
+// GET /api/v1/oauth/status - Get all connected services
 // PROTECTED endpoint: requires authentication for reliable userId resolution
 app.get("/api/v1/oauth/status", authenticate, async (req, res) => {
   // authenticate middleware guarantees req.tokenMeta is set with valid ownerId
   // Get user ID from authenticate middleware (guaranteed to be valid)
   const userId = String(req.tokenMeta?.ownerId || req.session?.user?.id);
-  
+
   if (!userId) {
     return res.status(401).json({ error: "Unauthorized" });
   }
-  
+
   console.log(`[OAuth Status] Resolved userId: ${userId} (from tokenMeta.ownerId=${req.tokenMeta?.ownerId || 'null'}, session.user=${req.session?.user?.id || 'null'})`);
-  
+
   const statuses = getOAuthStatus();
-  
+
   const services = OAUTH_SERVICES.map(service => {
     const status = statuses.find(s => s.serviceName === service);
-    
+
     // Check if user has an active token for this service (with error handling)
     let token = null;
     let connectionStatus = "disconnected";
-    
+
     if (userId) {
       try {
         token = getOAuthToken(service, userId);
@@ -5066,7 +5103,7 @@ app.get("/api/v1/oauth/status", authenticate, async (req, res) => {
       console.log(`[OAuth Status DEBUG] No userId found for ${service}`);
       connectionStatus = "disconnected";
     }
-    
+
     return {
       name: service,
       status: connectionStatus,
@@ -5078,7 +5115,7 @@ app.get("/api/v1/oauth/status", authenticate, async (req, res) => {
       auth_type_label: 'OAuth 2.0'
     };
   });
-  
+
   // Log if authenticated
   if (req.tokenMeta?.tokenId || req.session?.user?.id) {
     createAuditLog({
@@ -5089,22 +5126,22 @@ app.get("/api/v1/oauth/status", authenticate, async (req, res) => {
       ip: req.ip
     });
   }
-  
+
   res.json({ services });
 });
 
-// POST /api/v1/oauth/confirm — Confirm pending OAuth login
+// POST /api/v1/oauth/confirm - Confirm pending OAuth login
 app.post("/api/v1/oauth/confirm", (req, res) => {
   try {
     const { token } = req.body || {};
-    
+
     console.log(`[OAuth Confirm] Attempting confirmation:`);
     console.log(`  - Session ID: ${req.sessionID}`);
     console.log(`  - Session user: ${req.session?.user ? req.session.user.id : 'NONE'}`);
     console.log(`  - Token provided: ${token ? token.slice(0, 20) + '...' : 'NONE'}`);
     console.log(`  - oauth_confirm_token: ${req.session?.oauth_confirm_token ? req.session.oauth_confirm_token.slice(0, 20) + '...' : 'NONE'}`);
     console.log(`  - oauth_login_pending: ${req.session?.oauth_login_pending ? 'YES' : 'NO'}`);
-    
+
     if (!token || typeof token !== 'string') {
       console.log(`[OAuth Confirm] ❌ FAILED: Invalid or missing confirmation token`);
       return res.status(400).json({ error: 'Invalid or missing confirmation token' });
@@ -5118,13 +5155,35 @@ app.post("/api/v1/oauth/confirm", (req, res) => {
       return res.status(403).json({ error: 'Invalid confirmation token' });
     }
 
-    // Check if we have pending login credentials
-    if (!req.session?.oauth_login_pending) {
-      console.log(`[OAuth Confirm] ❌ FAILED: No pending login found in session`);
-      return res.status(400).json({ error: 'No pending login found' });
+    // Check if we have pending login credentials (try session first, then database as fallback)
+    let pending = req.session?.oauth_login_pending;
+    
+    if (!pending) {
+      console.log(`[OAuth Confirm] Session data missing, checking database for backup...`);
+      
+      // Fallback: Check if token exists in database as backup
+      // This handles the case where session cookie was lost (e.g., user cleared browser storage)
+      try {
+        const pendingLogin = db.prepare(`
+          SELECT user_data FROM oauth_pending_logins 
+          WHERE token = ? 
+          ORDER BY created_at DESC 
+          LIMIT 1
+        `).get(token);
+        
+        if (pendingLogin) {
+          pending = JSON.parse(pendingLogin.user_data);
+          console.log(`[OAuth Confirm] ✅ Found backup pending login in database`);
+        }
+      } catch (dbErr) {
+        console.error('[OAuth Confirm] Error querying database backup:', dbErr.message);
+      }
     }
-
-    const pending = req.session.oauth_login_pending;
+    
+    if (!pending) {
+      console.log(`[OAuth Confirm] ❌ FAILED: No pending login found in session or database`);
+      return res.status(400).json({ error: 'No pending login found. Please try signing up again.' });
+    }
 
     // Move pending login to actual session user
     req.session.user = {
@@ -5161,18 +5220,18 @@ app.post("/api/v1/oauth/confirm", (req, res) => {
   }
 });
 
-// POST /api/v1/oauth/disconnect/:service — Revoke OAuth connection
+// POST /api/v1/oauth/disconnect/:service - Revoke OAuth connection
 app.post("/api/v1/oauth/disconnect/:service", authenticate, async (req, res) => {
   const { service } = req.params;
-  
+
   // Validate service
   if (!OAUTH_SERVICES.includes(service)) {
     return res.status(400).json({ error: "Invalid OAuth service" });
   }
-  
+
   try {
     const userId = getOAuthUserId(req);
-    
+
     // Try to get token, but handle decryption errors gracefully
     let token = null;
     try {
@@ -5182,11 +5241,11 @@ app.post("/api/v1/oauth/disconnect/:service", authenticate, async (req, res) => 
       // Token is corrupted/unreadable, just delete it from DB
       token = { accessToken: null };
     }
-    
+
     if (!token) {
       return res.status(404).json({ error: "No token found for this service" });
     }
-    
+
     // Try to revoke on remote service (only if we have a valid token)
     if (token.accessToken) {
       try {
@@ -5197,17 +5256,17 @@ app.post("/api/v1/oauth/disconnect/:service", authenticate, async (req, res) => 
         // Don't fail if remote revocation fails - continue with local deletion
       }
     }
-    
+
     // Delete token from database (always do this)
     revokeOAuthToken(service, userId);
-    
+
     // Update OAuth status
     updateOAuthStatus(service, "disconnected");
 
     // Log disconnection (with safety check for tokenMeta)
     const requesterId = req.tokenMeta?.tokenId || req.session?.user?.id || 'unknown';
     const scope = req.tokenMeta?.scope || 'session';
-    
+
     createAuditLog({
       requesterId,
       action: "oauth_disconnect",
@@ -5216,14 +5275,14 @@ app.post("/api/v1/oauth/disconnect/:service", authenticate, async (req, res) => 
       ip: req.ip,
       details: { service }
     });
-    
+
     res.json({ ok: true, message: `Successfully disconnected ${service}` });
   } catch (error) {
     console.error(`OAuth disconnect error for ${service}:`, error.message);
-    
+
     const requesterId = req.tokenMeta?.tokenId || req.session?.user?.id || 'unknown';
     const scope = req.tokenMeta?.scope || 'session';
-    
+
     createAuditLog({
       requesterId,
       action: "oauth_disconnect_error",
@@ -5232,32 +5291,32 @@ app.post("/api/v1/oauth/disconnect/:service", authenticate, async (req, res) => 
       ip: req.ip,
       details: { service, error: error.message }
     });
-    
+
     res.status(500).json({ error: "Failed to disconnect OAuth service", message: error.message });
   }
 });
 
-// GET /api/v1/oauth/test/:service — Test token validity
+// GET /api/v1/oauth/test/:service - Test token validity
 app.get("/api/v1/oauth/test/:service", authenticate, async (req, res) => {
   const { service } = req.params;
-  
+
   // Validate service
   if (!OAUTH_SERVICES.includes(service)) {
     return res.status(400).json({ error: "Invalid OAuth service" });
   }
-  
+
   try {
     const userId = getOAuthUserId(req);
     const token = getOAuthToken(service, userId);
-    
+
     if (!token) {
       return res.status(404).json({ error: "No token found for this service" });
     }
-    
+
     // Verify token
     const adapter = oauthAdapters[service];
     const verification = await adapter.verifyToken(token.accessToken);
-    
+
     createAuditLog({
       requesterId: req.tokenMeta.tokenId,
       action: "oauth_test",
@@ -5266,7 +5325,7 @@ app.get("/api/v1/oauth/test/:service", authenticate, async (req, res) => {
       ip: req.ip,
       details: { service, valid: verification.valid }
     });
-    
+
     res.json({
       service,
       valid: verification.valid,
@@ -5281,18 +5340,18 @@ app.get("/api/v1/oauth/test/:service", authenticate, async (req, res) => {
 
 // ===== PHASE 5: KEY ROTATION & RATE LIMITING =====
 
-// POST /api/v1/keys/rotate — Rotate encryption keys for OAuth tokens
+// POST /api/v1/keys/rotate - Rotate encryption keys for OAuth tokens
 app.post("/api/v1/keys/rotate", authenticate, adminOnly, async (req, res) => {
   try {
     const { rotateEncryptionKey } = require('./database');
     const newVaultKey = req.body.vaultKey || process.env.VAULT_KEY;
-    
+
     if (!newVaultKey) {
       return res.status(400).json({ error: "vaultKey required in request body or VAULT_KEY env var" });
     }
-    
+
     const result = rotateEncryptionKey(newVaultKey);
-    
+
     createAuditLog({
       requesterId: req.tokenMeta.tokenId,
       action: "key_rotation",
@@ -5301,7 +5360,7 @@ app.post("/api/v1/keys/rotate", authenticate, adminOnly, async (req, res) => {
       ip: req.ip,
       details: { newVersion: result.newVersion, tokensRotated: result.tokensRotated }
     });
-    
+
     res.json({
       ok: true,
       message: "Encryption keys rotated successfully",
@@ -5315,13 +5374,13 @@ app.post("/api/v1/keys/rotate", authenticate, adminOnly, async (req, res) => {
   }
 });
 
-// GET /api/v1/keys/status — Check encryption key status
+// GET /api/v1/keys/status - Check encryption key status
 app.get("/api/v1/keys/status", authenticate, adminOnly, (req, res) => {
   try {
     const { getKeyVersions, getCurrentKeyVersion } = require('./database');
     const versions = getKeyVersions();
     const current = getCurrentKeyVersion();
-    
+
     res.json({
       currentVersion: current,
       allVersions: versions,
@@ -5448,11 +5507,11 @@ app.get('/api/v1/services/:serviceName/test', authenticate, async (req, res) => 
     const { serviceName } = req.params;
     const { getServiceByName } = require('./database');
     const service = getServiceByName(serviceName);
-    
+
     if (!service) {
       return res.status(404).json({ error: 'Service not found' });
     }
-    
+
     let testResult;
 
     if (serviceName === 'fal') {
@@ -5510,7 +5569,7 @@ app.get('/api/v1/services/:serviceName/test', authenticate, async (req, res) => 
         message: `✅ Service is available and ready to integrate. Use the documentation link to set up authentication.`
       };
     }
-    
+
     createAuditLog({
       requesterId: req.tokenMeta.tokenId,
       action: 'service_test',
@@ -5519,7 +5578,7 @@ app.get('/api/v1/services/:serviceName/test', authenticate, async (req, res) => 
       ip: req.ip,
       details: { service: serviceName }
     });
-    
+
     res.json(testResult);
   } catch (err) {
     console.error('Service test error:', err);
@@ -5635,7 +5694,7 @@ app.post('/api/v1/services/:serviceName/execute', authenticate, async (req, res)
   }
 });
 
-// POST /api/v1/services/:serviceName/proxy — Direct API proxy (pass-through to service API)
+// POST /api/v1/services/:serviceName/proxy - Direct API proxy (pass-through to service API)
 // Allows AI agents to call any endpoint on a connected service without predefined methods
 app.post('/api/v1/services/:serviceName/proxy', authenticate, async (req, res) => {
   try {
@@ -5706,7 +5765,7 @@ app.post('/api/v1/services/:serviceName/proxy', authenticate, async (req, res) =
     const { checkRateLimit, incrementRateLimit } = require('./database');
     const rateLimitConfig = { 'github': 100, 'google': 150, 'slack': 120, 'discord': 100 };
     const limitPerHour = rateLimitConfig[serviceName] || 100;
-    
+
     const rateLimit = checkRateLimit(userId, serviceName, limitPerHour);
     if (!rateLimit.allowed) {
       return res.status(429).json({
@@ -5721,14 +5780,14 @@ app.post('/api/v1/services/:serviceName/proxy', authenticate, async (req, res) =
     const https = require('https');
     const http = require('http');
     const targetUrl = new URL(apiPath.startsWith('/') ? `${apiRoot}${apiPath}` : `${apiRoot}/${apiPath}`);
-    
+
     // Phase 3: Auto-inject service preferences (defaults)
     let finalBody = reqBody ? JSON.parse(JSON.stringify(reqBody)) : {};  // Deep copy
     try {
       const servicePrefs = getServicePreference(userId, serviceName);
       if (servicePrefs && servicePrefs.preferences) {
         const prefs = servicePrefs.preferences;
-        
+
         // Auto-inject defaults based on service type
         if (serviceName === 'slack') {
           // If no channel is specified, inject the default
@@ -5788,7 +5847,7 @@ app.post('/api/v1/services/:serviceName/proxy', authenticate, async (req, res) =
       console.error(`[ServicePrefs] Error injecting preferences for ${serviceName}:`, err.message);
       // Continue anyway - preferences are optional
     }
-    
+
     // Add query params
     if (queryParams && typeof queryParams === 'object') {
       Object.entries(queryParams).forEach(([k, v]) => targetUrl.searchParams.set(k, v));
@@ -5817,7 +5876,7 @@ app.post('/api/v1/services/:serviceName/proxy', authenticate, async (req, res) =
 
     // Track timing for response_time_ms
     const startTime = Date.now();
-    
+
     const result = await new Promise((resolve, reject) => {
       const request = transport.request(targetUrl, { method, headers }, (response) => {
         let data = '';
@@ -5834,7 +5893,7 @@ app.post('/api/v1/services/:serviceName/proxy', authenticate, async (req, res) =
     });
 
     const responseTimeMs = Date.now() - startTime;
-    
+
     // Increment rate limit counter
     incrementRateLimit(userId, serviceName, limitPerHour);
 
@@ -5876,7 +5935,7 @@ app.post('/api/v1/services/:serviceName/proxy', authenticate, async (req, res) =
       const instructionManager = new InstructionManager(db);
       const proxyInstructions = instructionManager.getProxyResponseInstructions(token.id || 'unknown', serviceName);
       const nextEndpoints = instructionManager.getNextEndpoints(serviceName);
-      
+
       if (proxyInstructions) {
         instructionsData = {
           instructions: proxyInstructions.instructions,
@@ -5944,11 +6003,11 @@ const brainConfig = (() => {
   }
 })();
 
-const contextEngine = new ContextEngine({ 
-  maxHistoryMessages: brainConfig.context?.maxHistoryMessages || 10 
+const contextEngine = new ContextEngine({
+  maxHistoryMessages: brainConfig.context?.maxHistoryMessages || 10
 });
-const knowledgeBase = new KnowledgeBase({ 
-  chunkSize: brainConfig.embeddings?.chunkSize || 500 
+const knowledgeBase = new KnowledgeBase({
+  chunkSize: brainConfig.embeddings?.chunkSize || 500
 });
 let llmAdapter = null;
 
@@ -6017,7 +6076,7 @@ async function persistUploadFile(uploadedFile) {
 
 function getLLMAdapter() {
   if (!llmAdapter) {
-    llmAdapter = new LLMAdapter({ 
+    llmAdapter = new LLMAdapter({
       model: brainConfig.llm?.model || 'gemini-pro',
       temperature: brainConfig.llm?.temperature || 0.7,
       maxTokens: brainConfig.llm?.maxTokens || 2048
@@ -6150,8 +6209,8 @@ app.post('/api/v1/brain/chat', authenticate, async (req, res) => {
     // Call LLM
     const llm = getLLMAdapter();
     const llmResponse = await llm.createCompletion(
-      systemPrompt, 
-      message, 
+      systemPrompt,
+      message,
       history
     );
 
@@ -6166,7 +6225,7 @@ app.post('/api/v1/brain/chat', authenticate, async (req, res) => {
       resource: '/api/v1/brain/chat',
       scope: req.tokenMeta.scope,
       ip: req.ip,
-      details: { 
+      details: {
         conversationId: convId,
         model: llmResponse.model,
         tokensUsed: llmResponse.tokensUsed
@@ -6198,7 +6257,7 @@ app.post('/api/v1/brain/chat', authenticate, async (req, res) => {
 app.get('/api/v1/brain/conversations', authenticate, (req, res) => {
   try {
     const conversations = getConversations(req.tokenMeta.tokenId);
-    
+
     createAuditLog({
       requesterId: req.tokenMeta.tokenId,
       action: 'brain_conversations_list',
@@ -6564,7 +6623,7 @@ app.get('/api/v1/dashboard/stats', authenticate, (req, res) => {
 function parseGitHubRepoUrl(repoUrl) {
   if (!repoUrl) return null;
   const trimmed = String(repoUrl).trim().replace(/\.git$/, '');
-  
+
   const treeMatch = trimmed.match(/^https?:\/\/github\.com\/([^\/]+)\/([^\/\?#]+)\/tree\/([^\/]+)\/(.+)$/i);
   if (treeMatch) {
     return {
@@ -6592,7 +6651,7 @@ async function fetchGitHubRepoMetadata(repoUrl) {
 
   const defaultBranch = parsed.branch || repo.default_branch || 'main';
   const subpathPrefix = parsed.subpath ? `${parsed.subpath}/` : '';
-  
+
   const readmeRes = await fetch(`https://raw.githubusercontent.com/${parsed.owner}/${parsed.repo}/${defaultBranch}/${subpathPrefix}README.md`, { headers });
   const pkgRes = await fetch(`https://raw.githubusercontent.com/${parsed.owner}/${parsed.repo}/${defaultBranch}/${subpathPrefix}package.json`, { headers });
   const skillDocRes = await fetch(`https://raw.githubusercontent.com/${parsed.owner}/${parsed.repo}/${defaultBranch}/${subpathPrefix}SKILL.md`, { headers });
@@ -6966,7 +7025,7 @@ app.post('/api/v1/marketplace/:id/rate', authenticate, (req, res) => {
         resourceId: listing.id, resourceName: listingName, actorType: 'user', actorId: userId, actorName: userName, result: 'success',
       });
     }
-    
+
     res.json(result);
   } catch (err) {
     console.error('Marketplace rate error:', err);
@@ -7291,7 +7350,7 @@ if (WebSocketServer) {
 
   wss.on('connection', (ws, req) => {
     console.log('New WebSocket connection');
-    
+
     let userId = null;
     let isAuthenticated = false;
 
@@ -7299,7 +7358,7 @@ if (WebSocketServer) {
     ws.on('message', (message) => {
       try {
         const data = JSON.parse(message);
-        
+
         // Authentication message
         if (data.type === 'auth' && data.token) {
           // Validate token and extract userId
@@ -7307,12 +7366,12 @@ if (WebSocketServer) {
           // In production, validate the JWT/bearer token
           isAuthenticated = true;
           userId = data.userId || 'unknown';
-          
+
           if (!wsConnections.has(userId)) {
             wsConnections.set(userId, []);
           }
           wsConnections.get(userId).push(ws);
-          
+
           ws.send(JSON.stringify({
             type: 'authenticated',
             message: 'WebSocket connection authenticated',
@@ -7358,7 +7417,7 @@ if (WebSocketServer) {
         userAgent: data.userAgent,
         timestamp: new Date().toISOString(),
       });
-      
+
       connections.forEach((connection) => {
         if (connection.readyState === 1) { // WebSocket.OPEN
           connection.send(message);
@@ -7397,7 +7456,7 @@ app.use((err, req, res, next) => {
 function validateRequiredSecrets() {
   const isProd = process.env.NODE_ENV === 'production';
   const requiredSecrets = ['SESSION_SECRET', 'JWT_SECRET', 'ENCRYPTION_KEY', 'VAULT_KEY'];
-  
+
   const missing = [];
   for (const secret of requiredSecrets) {
     const value = process.env[secret];
@@ -7405,7 +7464,7 @@ function validateRequiredSecrets() {
       missing.push(secret);
     }
   }
-  
+
   if (missing.length > 0) {
     console.error('❌ FATAL ERROR: Missing required secrets in production:');
     missing.forEach(secret => {
@@ -7413,7 +7472,7 @@ function validateRequiredSecrets() {
     });
     console.error('\nSet these environment variables before starting production server.');
     console.error('Example: export SESSION_SECRET="your-secret-here"');
-    
+
     if (isProd) {
       process.exit(1);
     } else {
@@ -7427,11 +7486,11 @@ function validateRequiredSecrets() {
 // Cleanup function for global.sessions (P0 Security Fix: Session Memory Leak)
 function cleanupExpiredSessions() {
   if (!global.sessions) return;
-  
+
   const now = Date.now();
   const sessionTTL = 7 * 24 * 60 * 60 * 1000; // 7 days
   let cleanedCount = 0;
-  
+
   for (const [sessionToken, sessionData] of Object.entries(global.sessions)) {
     if (sessionData && sessionData.createdAt) {
       const age = now - sessionData.createdAt;
@@ -7441,7 +7500,7 @@ function cleanupExpiredSessions() {
       }
     }
   }
-  
+
   if (cleanedCount > 0) {
     console.log(`[Session Cleanup] Expired ${cleanedCount} old sessions (7-day TTL)`);
   }
@@ -7451,21 +7510,21 @@ function cleanupExpiredSessions() {
 if (process.env.NODE_ENV !== 'test') {
   // Validate required secrets BEFORE bootstrap
   validateRequiredSecrets();
-  
+
   bootstrap();
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`Server ready on http://0.0.0.0:${PORT}`);
     if (WebSocketServer) {
       console.log(`WebSocket ready on ws://0.0.0.0:${PORT}`);
     }
-    
+
     // BUG-11: Cleanup expired OAuth state tokens every hour
     // BUG-10: Also cleanup old rate limit records
     setInterval(() => {
       cleanupExpiredStateTokens();
       cleanupOldRateLimits(24); // Keep 24 hours of history
     }, 60 * 60 * 1000); // 1 hour
-    
+
     // P0 Security Fix: Cleanup expired sessions every 15 minutes (7-day TTL)
     setInterval(() => {
       cleanupExpiredSessions();
