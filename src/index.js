@@ -4859,7 +4859,9 @@ app.get([
       }
 
       // CRITICAL: Session must be persisted BEFORE redirect
-      req.session.save((err) => {
+      // NOTE: `return` is required here to stop the outer function from continuing
+      // and sending a second response, which would crash the server.
+      return req.session.save((err) => {
         if (err) {
           console.error('[OAuth Callback] ❌ Session save failed before confirm_login redirect:', err);
         } else {

@@ -40,12 +40,28 @@ function LogIn() {
     const callback = handleOAuthCallback();
     if (callback) {
       if (callback.status === 'confirm_login' || callback.status === 'connected') {
-        // OAuth successful (or confirmation required), fetch user and redirect to dashboard
-        fetch('/api/v1/auth/me', { credentials: 'include' })
-          .then(async (res) => {
-            if (!res.ok) return null;
-            return res.json();
-          })
+        // Confirm the OAuth login (if a token is present) then fetch user and redirect
+        const confirmToken = callback.token;
+        const doConfirm = confirmToken
+          ? fetch('/api/v1/oauth/confirm', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ token: confirmToken }),
+            }).then(async (res) => {
+              if (!res.ok) return null;
+              return res.json();
+            })
+          : Promise.resolve({ ok: true });
+
+        doConfirm
+          .then(() =>
+            fetch('/api/v1/auth/me', { credentials: 'include' })
+              .then(async (res) => {
+                if (!res.ok) return null;
+                return res.json();
+              })
+          )
           .then((sessionUser) => {
             if (sessionUser) {
               if (sessionUser?.bootstrap?.masterToken) {

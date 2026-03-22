@@ -77,11 +77,27 @@ function Login() {
     const callback = handleOAuthCallback();
     if (callback) {
       if (callback.status === 'confirm_login') {
-        // Auto-confirm the OAuth login and fetch user data
-        fetch('/api/v1/auth/me', { credentials: 'include' })
+        // Confirm the OAuth login by posting the token, then fetch user data
+        const confirmToken = callback.token;
+        fetch('/api/v1/oauth/confirm', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ token: confirmToken }),
+        })
           .then(async (res) => {
             if (!res.ok) return null;
             return res.json();
+          })
+          .then((confirmResult) => {
+            if (confirmResult?.ok) {
+              return fetch('/api/v1/auth/me', { credentials: 'include' })
+                .then(async (res) => {
+                  if (!res.ok) return null;
+                  return res.json();
+                });
+            }
+            return null;
           })
           .then((sessionUser) => {
             if (sessionUser) {

@@ -56,10 +56,11 @@ export function handleOAuthCallback() {
   const status = urlParams.get('oauth_status');
   const error = urlParams.get('error');
   const mode = urlParams.get('mode');
+  const token = urlParams.get('token');
 
   if (!service) return null;
 
-  return { service, status, error, mode };
+  return { service, status, error, mode, token };
 }
 
 export function clearOAuthSession() {
