@@ -1566,6 +1566,25 @@ function revokeExistingMasterTokens(ownerId) {
   db.prepare("UPDATE access_tokens SET revoked_at = ? WHERE owner_id = ? AND scope = 'full' AND revoked_at IS NULL").run(now, ownerId);
 }
 
+function pruneRedundantMasterTokens(ownerId, keep = 3) {
+  try {
+    const tokens = (getAccessTokens(ownerId) || [])
+      .filter(t => t.scope === 'full' && !t.revokedAt)
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    if (tokens.length <= keep) return { pruned: 0, kept: tokens.length };
+
+    const toRevoke = tokens.slice(keep);
+    for (const t of toRevoke) {
+      revokeAccessToken(t.tokenId);
+    }
+    return { pruned: toRevoke.length, kept: keep };
+  } catch (e) {
+    console.error('pruneRedundantMasterTokens error:', e.message);
+    return { pruned: 0, kept: 0, error: true };
+  }
+}
+
 // --- Scope Filter (Brain logic) ---
 function filterByScope(data, scope) {
   if (scope === "full") return data;
@@ -2685,8 +2704,10 @@ app.post('/api/v1/tokens/master/bootstrap', authenticate, (req, res) => {
     const ownerId = req?.tokenMeta?.ownerId || req?.session?.user?.id || req?.user?.id;
     if (!ownerId) return res.status(401).json({ error: 'Not authenticated' });
 
-    // Do NOT revoke existing master tokens! This breaks external scripts.
-    // revokeExistingMasterTokens(ownerId);
+    // Reuse existing session token if available (avoid duplicate DB rows)
+    if (req.session?.masterTokenRaw && req.session?.masterTokenId) {
+      return res.json({ data: { id: req.session.masterTokenId, token: req.session.masterTokenRaw, scope: 'full' } });
+    }
 
     const rawToken = 'myapi_' + crypto.randomBytes(32).toString("hex");
     const hash = bcrypt.hashSync(rawToken, 10);
@@ -2695,7 +2716,7 @@ app.post('/api/v1/tokens/master/bootstrap', authenticate, (req, res) => {
     if (req.session) {
       req.session.masterTokenRaw = rawToken;
       req.session.masterTokenId = tokenId;
-      req.session.save?.();  // Explicitly save session
+      req.session.save?.();
     }
 
     // Also save to global.sessions for Bearer token users
@@ -2708,13 +2729,16 @@ app.post('/api/v1/tokens/master/bootstrap', authenticate, (req, res) => {
       }
     }
 
+    // Keep only minimal safe active full-scope tokens
+    const prune = pruneRedundantMasterTokens(ownerId, 3);
+
     createAuditLog({
       requesterId: req?.tokenMeta?.tokenId || ownerId,
       action: 'bootstrap_master_token',
       resource: '/tokens/master/bootstrap',
       scope: req?.tokenMeta?.scope || 'session',
       ip: req.ip,
-      details: { tokenId, ownerId }
+      details: { tokenId, ownerId, pruned: prune.pruned }
     });
 
     res.json({ data: { id: tokenId, token: rawToken, scope: 'full' } });
@@ -5061,7 +5085,8 @@ app.get([
         const hash = bcrypt.hashSync(masterToken, 10);
         const tokenId = createAccessToken(hash, oauthOwnerId, 'full', 'Master Token (OAuth Connect)', null, null);
         req.session.masterTokenId = tokenId;
-        console.log(`[OAuth Callback] ✅ Created access token for OAuth connect: ${tokenId}`);
+        const prune = pruneRedundantMasterTokens(oauthOwnerId, 3);
+        console.log(`[OAuth Callback] ✅ Created access token for OAuth connect: ${tokenId} (pruned ${prune.pruned || 0})`);
       } catch (err) {
         console.error(`[OAuth Callback] ❌ Failed to create access token:`, err.message);
       }
