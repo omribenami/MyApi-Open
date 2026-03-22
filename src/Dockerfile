@@ -19,6 +19,16 @@ RUN npm ci
 # Build/compile native modules (if needed)
 RUN npm rebuild better-sqlite3
 
+# Copy frontend package files and install frontend dependencies
+COPY public/dashboard-app/package*.json ./public/dashboard-app/
+RUN cd public/dashboard-app && npm ci
+
+# Copy application code
+COPY . .
+
+# Build the React/Vite frontend (outputs to public/dist/)
+RUN npm run build:frontend
+
 # Production stage
 FROM node:22-alpine
 
@@ -33,6 +43,9 @@ COPY --from=builder /app/node_modules ./node_modules
 
 # Copy application code
 COPY --chown=node:node . .
+
+# Copy built frontend assets from builder (public/dist/ is excluded from COPY . . via .dockerignore)
+COPY --from=builder --chown=node:node /app/public/dist ./public/dist
 
 # Create directories for data and logs
 RUN mkdir -p data logs && \
