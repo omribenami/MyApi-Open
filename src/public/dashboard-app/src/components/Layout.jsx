@@ -123,7 +123,10 @@ function Layout({ children, onLogout }) {
   if (isPowerUser) {
     navGroups.push({
       label: 'Admin',
-      items: [{ path: '/users', label: 'Users' }]
+      items: [
+        { path: '/enterprise', label: 'Enterprise (SSO+RBAC)' },
+        { path: '/users', label: 'Users' }
+      ]
     });
   }
 

@@ -13,6 +13,7 @@ import Personas from './pages/Personas';
 import KnowledgeBase from './pages/KnowledgeBase';
 import Identity from './pages/Identity';
 import Settings from './pages/Settings';
+import EnterpriseSettings from './pages/EnterpriseSettings';
 import UserManagement from './pages/UserManagement';
 import PlatformDocs from './pages/PlatformDocs';
 import ApiDocs from './pages/ApiDocs';
@@ -273,6 +274,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <TeamSettings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/enterprise"
+              element={
+                <ProtectedRoute>
+                  <EnterpriseSettings />
                 </ProtectedRoute>
               }
             />
