@@ -23,7 +23,7 @@ const BRAND_LOGOS = {
   tiktok: `${SIMPLE_ICONS_BASE}/tiktok/FFFFFF`,
   twitter: `${SIMPLE_ICONS_BASE}/x/FFFFFF`,
   reddit: `${SIMPLE_ICONS_BASE}/reddit/FF4500`,
-  linkedin: `${SIMPLE_ICONS_BASE}/linkedin/0A66C2`,
+  linkedin: `${SIMPLE_ICONS_BASE}/linkedin`,
   slack: `${SIMPLE_ICONS_BASE}/slack/4A154B`,
   discord: `${SIMPLE_ICONS_BASE}/discord/5865F2`,
   whatsapp: `${SIMPLE_ICONS_BASE}/whatsapp/25D366`,
@@ -42,7 +42,7 @@ const BRAND_LOGOS = {
   trello: `${SIMPLE_ICONS_BASE}/trello/0052CC`,
   airtable: `${SIMPLE_ICONS_BASE}/airtable/18BFFF`,
   email: `${SIMPLE_ICONS_BASE}/gmail/EA4335`,
-  fal: `${SIMPLE_ICONS_BASE}/fal/7C3AED`,
+  fal: `${SIMPLE_ICONS_BASE}/falai/7C3AED`,
 };
 
 const BRAND_LOGO_FALLBACKS = {
@@ -61,6 +61,7 @@ const BRAND_LOGO_FALLBACKS = {
   bitbucket: `${JSDELIVR_SIMPLE_ICONS_BASE}/bitbucket.svg`,
   azuredevops: `${JSDELIVR_SIMPLE_ICONS_BASE}/azuredevops.svg`,
   notion: `${JSDELIVR_SIMPLE_ICONS_BASE}/notion.svg`,
+  fal: `${JSDELIVR_SIMPLE_ICONS_BASE}/falai.svg`,
 };
 
 const SERVICE_ENV_REQUIREMENTS = {
