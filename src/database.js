@@ -5,11 +5,28 @@ const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const MigrationRunner = require('./lib/migrationRunner');
 
-// Use environment variable if set, otherwise default to db.sqlite in src directory
-const dbPath = process.env.DB_PATH 
-  ? path.resolve(process.env.DB_PATH) 
-  : path.join(__dirname, 'db.sqlite');
+// Database path resolution (prevents accidental empty-db boot)
+// Priority:
+// 1) DB_PATH env var (explicit override)
+// 2) src/data/myapi.db (primary production db)
+// 3) src/db.sqlite (legacy fallback)
+function resolveDbPath() {
+  if (process.env.DB_PATH) return path.resolve(process.env.DB_PATH);
+
+  const primary = path.join(__dirname, 'data', 'myapi.db');
+  const legacy = path.join(__dirname, 'db.sqlite');
+
+  if (fs.existsSync(primary)) return primary;
+  if (fs.existsSync(legacy)) return legacy;
+
+  // First-run fallback: create primary location
+  return primary;
+}
+
+const dbPath = resolveDbPath();
+fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 const db = new Database(dbPath);
+console.log('[Database] Using DB at:', dbPath);
 
 function normalizeOwnerId(ownerId) {
   const v = String(ownerId || '').trim();
