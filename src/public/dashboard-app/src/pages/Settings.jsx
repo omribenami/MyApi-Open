@@ -1144,10 +1144,13 @@ function PrivacySection() {
     privacy,
     privacySaving,
     privacySuccess,
+    privacyError,
     updatePrivacy,
     setPrivacySaving,
     setPrivacySuccess,
     clearPrivacySuccess,
+    setPrivacyError,
+    clearPrivacyError,
   } = useSettingsStore();
 
   const [retentionPolicies, setRetentionPolicies] = useState([]);
@@ -1161,6 +1164,13 @@ function PrivacySection() {
       return () => clearTimeout(t);
     }
   }, [privacySuccess]);
+
+  useEffect(() => {
+    if (privacyError) {
+      const t = setTimeout(clearPrivacyError, 5000);
+      return () => clearTimeout(t);
+    }
+  }, [privacyError]);
 
   useEffect(() => {
     const headers = masterToken ? { Authorization: `Bearer ${masterToken}` } : {};
@@ -1201,6 +1211,7 @@ function PrivacySection() {
 
   const handleSave = async () => {
     setPrivacySaving(true);
+    clearPrivacyError();
     try {
       const headers = {
         'Content-Type': 'application/json',
@@ -1229,13 +1240,20 @@ function PrivacySection() {
       localStorage.setItem('cookie_pref_v1', mode);
       setPrivacySuccess('Privacy settings saved');
     } catch (e) {
-      setPrivacySuccess(e.message || 'Failed to save privacy settings');
+      setPrivacyError(e.message || 'Failed to save privacy settings');
     } finally {
       setPrivacySaving(false);
     }
   };
 
   const handleSaveRetention = async () => {
+    clearPrivacyError();
+    const days = Number(retentionDays);
+    if (!Number.isInteger(days) || days < 1) {
+      setPrivacyError('Retention days must be a positive whole number');
+      return;
+    }
+
     setRetentionSaving(true);
     try {
       const headers = {
@@ -1248,7 +1266,7 @@ function PrivacySection() {
         credentials: 'include',
         body: JSON.stringify({
           entityType: retentionEntityType,
-          retentionDays: Number(retentionDays),
+          retentionDays: days,
           autoDelete: true,
         }),
       });
@@ -1257,36 +1275,17 @@ function PrivacySection() {
       setPrivacySuccess('Retention policy saved');
       await loadRetentionPolicies();
     } catch (e) {
-      setPrivacySuccess(e.message || 'Failed to save retention policy');
+      setPrivacyError(e.message || 'Failed to save retention policy');
     } finally {
       setRetentionSaving(false);
     }
   };
 
   return (
-    <SectionCard title="Privacy Controls" description="Control how your data is used and who can see your profile">
+    <SectionCard title="Privacy Controls" description="Manage your privacy preferences, cookie mode, and data retention settings">
       <div className="space-y-4">
         {privacySuccess && <SuccessBanner message={privacySuccess} onClose={clearPrivacySuccess} />}
-
-        <div className="p-4 bg-blue-950/30 border border-blue-900 rounded-lg">
-          <div className="flex items-center justify-between gap-3 mb-2">
-            <p className="text-sm font-semibold text-blue-200">Privacy Gateway Roadmap</p>
-            <span className="text-[11px] px-2 py-0.5 rounded bg-blue-900 text-blue-200 border border-blue-800">Planned · Q2</span>
-          </div>
-          <p className="text-xs text-slate-300">
-            We are rolling out source-specific privacy filtering for guest/scoped access with audit visibility
-            (<code className="mx-1 text-slate-200">policyVersion</code>, <code className="text-slate-200">redactions[]</code>)
-            in a backward-compatible shadow mode first.
-          </p>
-          <ul className="mt-2 text-xs text-slate-400 list-disc pl-5 space-y-1">
-            <li>Phase 1: observe-only shadow mode</li>
-            <li>Phase 2: enforce guest/bearer privacy rules</li>
-            <li>Phase 3: expand coverage after regression pass</li>
-          </ul>
-          <a href="/privacy" className="inline-block mt-3 text-xs text-blue-300 hover:text-blue-200 underline">
-            View privacy policy updates
-          </a>
-        </div>
+        {privacyError && <ErrorBanner message={privacyError} onClose={clearPrivacyError} />}
 
         <div>
           <ToggleRow
@@ -1303,34 +1302,6 @@ function PrivacySection() {
           />
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">Profile Visibility</label>
-          <div className="space-y-2">
-            {[
-              { value: 'private', label: 'Private', description: 'Only you can see your profile' },
-              { value: 'team', label: 'Team', description: 'Visible to members of your organization' },
-              { value: 'public', label: 'Public', description: 'Anyone with the link can view' },
-            ].map((opt) => (
-              <label
-                key={opt.value}
-                className="flex items-center gap-3 p-3 bg-slate-900 border border-slate-700 rounded-lg cursor-pointer hover:border-slate-600 transition-colors"
-              >
-                <input
-                  type="radio"
-                  name="profileVisibility"
-                  value={opt.value}
-                  checked={privacy.profileVisibility === opt.value}
-                  onChange={() => updatePrivacy('profileVisibility', opt.value)}
-                  className="accent-blue-500"
-                />
-                <div>
-                  <p className="text-sm font-medium text-white">{opt.label}</p>
-                  <p className="text-xs text-slate-400">{opt.description}</p>
-                </div>
-              </label>
-            ))}
-          </div>
-        </div>
 
         <div>
           <label className="block text-sm font-medium text-slate-300 mb-2">Cookie Preferences</label>
@@ -1361,7 +1332,7 @@ function PrivacySection() {
         </div>
 
         <div className="p-4 bg-slate-900 border border-slate-700 rounded-lg">
-          <p className="text-sm font-semibold text-white mb-3">Data Retention Policies (Phase 5)</p>
+          <p className="text-sm font-semibold text-white mb-3">Data Retention Policies</p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs text-slate-400 mb-1">Entity</label>
@@ -1392,7 +1363,7 @@ function PrivacySection() {
                 disabled={retentionSaving}
                 className="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-md text-sm"
               >
-                {retentionSaving ? 'Saving...' : 'Save Retention'}
+                {retentionSaving ? 'Saving...' : 'Save Policy'}
               </button>
             </div>
           </div>

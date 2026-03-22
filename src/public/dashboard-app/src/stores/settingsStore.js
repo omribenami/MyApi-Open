@@ -32,11 +32,11 @@ export const useSettingsStore = create((set) => ({
   privacy: {
     dataSharing: false,
     apiLogging: true,
-    profileVisibility: 'private',
     cookieMode: 'essential',
   },
   privacySaving: false,
   privacySuccess: null,
+  privacyError: null,
 
   // Section navigation
   setActiveSection: (section) => set({ activeSection: section }),
@@ -113,4 +113,6 @@ export const useSettingsStore = create((set) => ({
   setPrivacySaving: (v) => set({ privacySaving: v }),
   setPrivacySuccess: (msg) => set({ privacySuccess: msg }),
   clearPrivacySuccess: () => set({ privacySuccess: null }),
+  setPrivacyError: (msg) => set({ privacyError: msg }),
+  clearPrivacyError: () => set({ privacyError: null }),
 }));
