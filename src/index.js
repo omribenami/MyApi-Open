@@ -1,9 +1,10 @@
-require('dotenv').config();
+const path = require("path");
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+require('dotenv').config(); // fallback to current working dir .env if present
 const express = require("express");
 const helmet = require("helmet");
 const cors = require("cors");
 const bcrypt = require("bcrypt");
-const path = require("path");
 const crypto = require("crypto");
 const fs = require("fs");
 const multer = require('multer');

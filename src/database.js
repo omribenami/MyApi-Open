@@ -1,5 +1,6 @@
 const Database = require('better-sqlite3');
 const path = require('path');
+const fs = require('fs');
 const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const MigrationRunner = require('./lib/migrationRunner');
@@ -1648,41 +1649,86 @@ function deletePersona(id, ownerId = 'owner') {
 }
 
 // OAuth Tokens
+const OAUTH_TOKEN_ALGO = 'aes-256-gcm';
+const LEGACY_DEFAULT_VAULT_KEY = 'default-vault-key-change-me';
+
+function deriveOAuthKey(rawKey) {
+  return crypto.scryptSync(String(rawKey || ''), 'salt', 32);
+}
+
+function getOAuthKeyCandidates() {
+  const current = String(process.env.VAULT_KEY || '').trim();
+  const candidates = [];
+  const seen = new Set();
+  const add = (label, raw) => {
+    const v = String(raw || '').trim();
+    if (!v || seen.has(v)) return;
+    seen.add(v);
+    candidates.push({ label, raw: v });
+  };
+
+  add('current', current);
+
+  // Optional recovery keys: comma-separated list of previous VAULT_KEY values.
+  // Useful after key rotation to decrypt and re-encrypt old OAuth rows.
+  const previous = String(process.env.VAULT_KEY_PREVIOUS || '').trim();
+  if (previous) {
+    for (const [idx, raw] of previous.split(',').map(v => v.trim()).filter(Boolean).entries()) {
+      add(`previous-${idx + 1}`, raw);
+    }
+  }
+
+  // Recovery fallback: try literal VAULT_KEY from project .env in case shell/env parsing altered special chars
+  try {
+    const envPath = path.resolve(__dirname, '../.env');
+    if (fs.existsSync(envPath)) {
+      const rawEnv = fs.readFileSync(envPath, 'utf8');
+      const line = rawEnv.split(/\r?\n/).find(l => l.startsWith('VAULT_KEY='));
+      if (line) {
+        const rawLiteral = line.slice('VAULT_KEY='.length).trim();
+        add('env-file-literal', rawLiteral);
+        add('env-file-unquoted', rawLiteral.replace(/^['\"]|['\"]$/g, ''));
+      }
+    }
+  } catch {
+    // best-effort only
+  }
+
+  // Backward compatibility: old tokens may have been encrypted with fallback key
+  add('legacy-default', LEGACY_DEFAULT_VAULT_KEY);
+
+  return candidates;
+}
+
+function encryptOAuthTokenValue(plainText, keyBytes) {
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv(OAUTH_TOKEN_ALGO, keyBytes, iv);
+  let encrypted = cipher.update(String(plainText || ''), 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  return JSON.stringify({
+    encrypted,
+    iv: iv.toString('hex'),
+    authTag: cipher.getAuthTag().toString('hex')
+  });
+}
+
 function storeOAuthToken(serviceName, userId, accessToken, refreshToken, expiresAt, scope) {
   const id = 'oauth_' + crypto.randomBytes(16).toString('hex');
   const now = new Date().toISOString();
-  
+
   // Encrypt tokens using AES-256-GCM
-  const encryptionKey = process.env.VAULT_KEY || 'default-vault-key-change-me';
-  const algorithm = 'aes-256-gcm';
-  const key = crypto.scryptSync(encryptionKey, 'salt', 32);
-  const iv = crypto.randomBytes(16);
-  const cipher = crypto.createCipheriv(algorithm, key, iv);
-  
-  let encryptedAccess = cipher.update(accessToken, 'utf8', 'hex');
-  encryptedAccess += cipher.final('hex');
-  const authTag = cipher.getAuthTag().toString('hex');
-  
-  // Store encrypted access token with IV and authTag
-  const accessTokenEncrypted = JSON.stringify({
-    encrypted: encryptedAccess,
-    iv: iv.toString('hex'),
-    authTag: authTag
-  });
-  
+  const encryptionKey = String(process.env.VAULT_KEY || '').trim();
+  if (!encryptionKey) {
+    throw new Error('VAULT_KEY is required to store OAuth tokens securely');
+  }
+  const key = deriveOAuthKey(encryptionKey);
+
+  const accessTokenEncrypted = encryptOAuthTokenValue(accessToken, key);
+
   // Encrypt refresh token if present
   let refreshTokenEncrypted = null;
   if (refreshToken) {
-    const cipher2 = crypto.createCipheriv(algorithm, key, crypto.randomBytes(16));
-    let encryptedRefresh = cipher2.update(refreshToken, 'utf8', 'hex');
-    encryptedRefresh += cipher2.final('hex');
-    const authTag2 = cipher2.getAuthTag().toString('hex');
-    const iv2 = crypto.randomBytes(16).toString('hex');
-    refreshTokenEncrypted = JSON.stringify({
-      encrypted: encryptedRefresh,
-      iv: iv2,
-      authTag: authTag2
-    });
+    refreshTokenEncrypted = encryptOAuthTokenValue(refreshToken, key);
   }
   
   // Upsert: replace existing token for same service+user instead of creating duplicates
@@ -1745,54 +1791,92 @@ function getOAuthToken(serviceName, userId) {
     ORDER BY created_at DESC
     LIMIT 1
   `);
-  
+
   const row = stmt.get(serviceName, userId);
   if (!row) {
     console.log(`[getOAuthToken] No row found for ${serviceName}/${userId.slice(0,8)}`);
     return null;
   }
-  
+
   console.log(`[getOAuthToken] Found token for ${serviceName}/${userId.slice(0,8)}, attempting decryption...`);
-  
-  // Decrypt tokens
-  const encryptionKey = process.env.VAULT_KEY || 'default-vault-key-change-me';
-  const algorithm = 'aes-256-gcm';
-  const key = crypto.scryptSync(encryptionKey, 'salt', 32);
-  
-  try {
-    const accessData = JSON.parse(row.access_token);
-    const decipher = crypto.createDecipheriv(algorithm, key, Buffer.from(accessData.iv, 'hex'));
-    decipher.setAuthTag(Buffer.from(accessData.authTag, 'hex'));
-    let decrypted = decipher.update(accessData.encrypted, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
-    
-    let refreshToken = null;
-    if (row.refresh_token) {
-      const refreshData = JSON.parse(row.refresh_token);
-      const decipher2 = crypto.createDecipheriv(algorithm, key, Buffer.from(refreshData.iv, 'hex'));
-      decipher2.setAuthTag(Buffer.from(refreshData.authTag, 'hex'));
-      let decryptedRefresh = decipher2.update(refreshData.encrypted, 'hex', 'utf8');
-      decryptedRefresh += decipher2.final('utf8');
-      refreshToken = decryptedRefresh;
+
+  const accessData = JSON.parse(row.access_token);
+  const refreshData = row.refresh_token ? JSON.parse(row.refresh_token) : null;
+
+  let usedLabel = null;
+  let decryptedAccess = null;
+  let decryptedRefresh = null;
+
+  for (const candidate of getOAuthKeyCandidates()) {
+    try {
+      const key = deriveOAuthKey(candidate.raw);
+      const decipher = crypto.createDecipheriv(OAUTH_TOKEN_ALGO, key, Buffer.from(accessData.iv, 'hex'));
+      decipher.setAuthTag(Buffer.from(accessData.authTag, 'hex'));
+      let access = decipher.update(accessData.encrypted, 'hex', 'utf8');
+      access += decipher.final('utf8');
+
+      let refresh = null;
+      if (refreshData) {
+        try {
+          const decipher2 = crypto.createDecipheriv(OAUTH_TOKEN_ALGO, key, Buffer.from(refreshData.iv, 'hex'));
+          decipher2.setAuthTag(Buffer.from(refreshData.authTag, 'hex'));
+          refresh = decipher2.update(refreshData.encrypted, 'hex', 'utf8');
+          refresh += decipher2.final('utf8');
+        } catch {
+          // Legacy bug: some refresh tokens were stored with a mismatched IV.
+          // Keep access token usable even if refresh token cannot be decrypted.
+          refresh = null;
+        }
+      }
+
+      usedLabel = candidate.label;
+      decryptedAccess = access;
+      decryptedRefresh = refresh;
+      break;
+    } catch {
+      // try next key candidate
     }
-    
-    console.log(`[getOAuthToken] ✅ Successfully decrypted ${serviceName} token`);
-    return {
-      id: row.id,
-      serviceName: row.service_name,
-      userId: row.user_id,
-      accessToken: decrypted,
-      refreshToken,
-      expiresAt: row.expires_at,
-      scope: row.scope,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      lastApiCall: row.last_api_call  // Phase 5.4: Track last API call
-    };
-  } catch (e) {
-    console.error(`[getOAuthToken] ❌ Decryption error for ${serviceName}/${userId.slice(0,8)}:`, e.message);
+  }
+
+  if (!decryptedAccess) {
+    console.error(`[getOAuthToken] ❌ Decryption error for ${serviceName}/${userId.slice(0,8)}: unable to decrypt with current or legacy key`);
     return null;
   }
+
+  // Self-heal legacy encrypted rows by re-encrypting with current key
+  const currentKey = String(process.env.VAULT_KEY || '').trim();
+  if (usedLabel !== 'current' && currentKey) {
+    try {
+      const newKey = deriveOAuthKey(currentKey);
+      db.prepare(`
+        UPDATE oauth_tokens
+        SET access_token = ?, refresh_token = ?, updated_at = ?
+        WHERE id = ?
+      `).run(
+        encryptOAuthTokenValue(decryptedAccess, newKey),
+        decryptedRefresh ? encryptOAuthTokenValue(decryptedRefresh, newKey) : null,
+        new Date().toISOString(),
+        row.id
+      );
+      console.log(`[getOAuthToken] ♻️ Re-encrypted legacy ${serviceName} token with current VAULT_KEY`);
+    } catch (healErr) {
+      console.warn(`[getOAuthToken] ⚠️ Failed to re-encrypt ${serviceName} token:`, healErr.message);
+    }
+  }
+
+  console.log(`[getOAuthToken] ✅ Successfully decrypted ${serviceName} token`);
+  return {
+    id: row.id,
+    serviceName: row.service_name,
+    userId: row.user_id,
+    accessToken: decryptedAccess,
+    refreshToken: decryptedRefresh,
+    expiresAt: row.expires_at,
+    scope: row.scope,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    lastApiCall: row.last_api_call  // Phase 5.4: Track last API call
+  };
 }
 
 /**
