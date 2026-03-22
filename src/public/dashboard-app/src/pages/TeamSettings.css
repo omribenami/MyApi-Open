@@ -1,15 +1,16 @@
-/* TeamSettings Styles */
+/* TeamSettings Styles (dark-theme compatible) */
 
 .team-settings {
   max-width: 1200px;
   margin: 0 auto;
   padding: 24px;
+  color: #e2e8f0;
 }
 
 .team-settings.empty {
   text-align: center;
   padding: 60px 24px;
-  color: #999;
+  color: #cbd5e1;
 }
 
 .team-settings-header {
@@ -20,26 +21,26 @@
   margin: 0 0 8px 0;
   font-size: 28px;
   font-weight: 600;
-  color: #333;
+  color: #f8fafc;
 }
 
 .workspace-context {
   margin: 0;
-  color: #666;
+  color: #94a3b8;
   font-size: 14px;
 }
 
 .workspace-context strong {
-  color: #667eea;
+  color: #93c5fd;
   font-weight: 600;
 }
 
 .error-banner {
   padding: 12px 16px;
-  background-color: #fee;
-  border: 1px solid #fcc;
+  background-color: rgba(127, 29, 29, 0.35);
+  border: 1px solid #b91c1c;
   border-radius: 6px;
-  color: #c33;
+  color: #fecaca;
   margin-bottom: 16px;
 }
 
@@ -47,7 +48,7 @@
   display: flex;
   gap: 12px;
   margin-bottom: 24px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid #334155;
 }
 
 .tab-button {
@@ -58,17 +59,17 @@
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
-  color: #666;
+  color: #94a3b8;
   transition: all 0.2s ease;
 }
 
 .tab-button:hover {
-  color: #333;
+  color: #e2e8f0;
 }
 
 .tab-button.active {
-  color: #667eea;
-  border-bottom-color: #667eea;
+  color: #93c5fd;
+  border-bottom-color: #3b82f6;
 }
 
 .tab-content {
@@ -76,17 +77,13 @@
 }
 
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .invite-button {
   padding: 10px 16px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
   color: white;
   border: none;
   border-radius: 6px;
@@ -98,20 +95,15 @@
 }
 
 .invite-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.35);
 }
 
-.loading {
-  text-align: center;
-  padding: 40px;
-  color: #999;
-}
-
+.loading,
 .empty-state {
   text-align: center;
   padding: 40px;
-  color: #999;
+  color: #94a3b8;
 }
 
 .invitations-list {
@@ -125,8 +117,8 @@
   justify-content: space-between;
   align-items: center;
   padding: 16px;
-  background: #f9f9f9;
-  border: 1px solid #eee;
+  background: #0f172a;
+  border: 1px solid #334155;
   border-radius: 6px;
 }
 
@@ -137,26 +129,26 @@
 .invitation-email {
   margin: 0;
   font-weight: 500;
-  color: #333;
+  color: #e2e8f0;
 }
 
 .invitation-role {
   margin: 4px 0 0 0;
   font-size: 13px;
-  color: #666;
+  color: #94a3b8;
 }
 
 .invitation-expires {
   margin: 4px 0 0 0;
   font-size: 13px;
-  color: #999;
+  color: #94a3b8;
 }
 
 .delete-button {
   padding: 8px 12px;
-  background-color: #fee;
-  color: #c33;
-  border: 1px solid #fcc;
+  background-color: rgba(127, 29, 29, 0.25);
+  color: #fecaca;
+  border: 1px solid #b91c1c;
   border-radius: 4px;
   cursor: pointer;
   font-size: 13px;
@@ -165,5 +157,5 @@
 }
 
 .delete-button:hover {
-  background-color: #fdd;
+  background-color: rgba(127, 29, 29, 0.4);
 }

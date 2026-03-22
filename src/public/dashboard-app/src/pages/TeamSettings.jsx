@@ -94,7 +94,7 @@ const TeamSettings = () => {
   };
 
   const handleInvitationSent = () => {
-    fetchInvitations();
+    if (currentWorkspace?.id) fetchInvitations(currentWorkspace.id);
     setShowInviteModal(false);
   };
 
@@ -185,13 +185,16 @@ const TeamSettings = () => {
                           className="delete-button"
                           onClick={async () => {
                             try {
+                              const headers = {
+                                'X-Workspace-ID': currentWorkspace.id,
+                                ...(masterToken ? { Authorization: `Bearer ${masterToken}` } : {})
+                              };
                               const response = await fetch(
                                 `/api/v1/invitations/${invitation.id}`,
                                 {
                                   method: 'DELETE',
-                                  headers: {
-                                    'X-Workspace-ID': currentWorkspace.id
-                                  }
+                                  headers,
+                                  credentials: 'include'
                                 }
                               );
                               if (response.ok) {
