@@ -474,7 +474,7 @@ app.use((req, res, next) => {
                    req.path === '/api/v1/auth/debug' ||
                    req.path === '/api/v1/auth/logout' ||
                    req.path === '/api/v1/dashboard/metrics' ||
-                   req.path === '/api/v1/privacy/cookies' ||
+                   (req.path === '/api/v1/privacy/cookies' && req.method === 'GET') ||
                    req.path.startsWith('/api/v1/ws') ||
                    req.path === '/health' ||
                    req.path === '/ping' ||
@@ -912,7 +912,7 @@ app.get('/api/v1/privacy/cookies', (req, res) => {
   res.json({ data: pref });
 });
 
-app.put('/api/v1/privacy/cookies', authenticate, (req, res) => {
+app.put('/api/v1/privacy/cookies', rateLimit(60000, 20, 'cookies-write'), (req, res) => {
   const ownerId = getRequestOwnerId(req);
   const mode = String(req.body?.mode || '').toLowerCase();
   if (!['all', 'essential', 'none'].includes(mode)) {
@@ -930,8 +930,13 @@ app.put('/api/v1/privacy/cookies', authenticate, (req, res) => {
   } catch {}
 
   data[ownerId] = { mode, updatedAt: new Date().toISOString() };
-  fs.mkdirSync(path.dirname(COOKIE_PREFS_PATH), { recursive: true });
-  fs.writeFileSync(COOKIE_PREFS_PATH, JSON.stringify(data, null, 2));
+  try {
+    fs.mkdirSync(path.dirname(COOKIE_PREFS_PATH), { recursive: true });
+    fs.writeFileSync(COOKIE_PREFS_PATH, JSON.stringify(data, null, 2));
+  } catch (err) {
+    console.error('[Privacy/Cookies] Failed to persist cookie preference:', err);
+    return res.status(500).json({ error: 'Failed to save cookie preference' });
+  }
 
   res.json({ ok: true, data: data[ownerId] });
 });
@@ -947,7 +952,6 @@ const RATE_LIMIT_EXEMPT_PATHS = [
   '/api/v1/auth/debug',
   '/api/v1/auth/logout',
   '/api/v1/dashboard/metrics',
-  '/api/v1/privacy/cookies',
   '/api/v1/oauth/status',
   '/api/v1/ws',
   '/dashboard/',
@@ -1115,7 +1119,7 @@ function authenticate(req, res, next) {
   let matched = null;
   for (const tokenMeta of tokens) {
     // Check that token is not revoked, not expired, and hash matches
-    if (!tokenMeta.revokedAt && bcrypt.compareSync(rawToken, tokenMeta.hash)) {
+    if (!tokenMeta.revokedAt && tokenMeta.hash && bcrypt.compareSync(rawToken, tokenMeta.hash)) {
       // Check expiration: if expiresAt is set and is in the past, reject the token
       if (tokenMeta.expiresAt) {
         const expiryTime = new Date(tokenMeta.expiresAt);

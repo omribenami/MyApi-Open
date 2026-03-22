@@ -278,6 +278,7 @@ router.get('/me', (req, res) => {
         for (const tokenRecord of tokens) {
           if (
             !tokenRecord.revokedAt &&
+            tokenRecord.hash &&
             bcrypt.compareSync(rawToken, tokenRecord.hash)
           ) {
             if (tokenRecord.expiresAt && new Date(tokenRecord.expiresAt) <= new Date()) {
