@@ -4,6 +4,15 @@ const fs = require('fs');
 const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const MigrationRunner = require('./lib/migrationRunner');
+const {
+  encrypt,
+  decrypt,
+  generateEncryptionKey,
+  hashKey,
+  generateSalt,
+  deriveKey,
+  ENCRYPTION_VERSION,
+} = require('./lib/encryption');
 
 // Database path resolution (prevents accidental empty-db boot)
 // Priority:
@@ -730,6 +739,23 @@ function initDatabase() {
     console.warn('[Database] Compliance audit logs table already exists:', e.message);
   }
 
+  // PII secure storage table (separate from login-critical users table)
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS user_pii_secure (
+        user_id TEXT PRIMARY KEY,
+        encrypted_payload TEXT NOT NULL,
+        salt_hex TEXT NOT NULL,
+        encryption_version INTEGER DEFAULT 1,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY(user_id) REFERENCES users(id)
+      )
+    `);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_user_pii_secure_updated ON user_pii_secure(updated_at DESC)`);
+  } catch (e) {
+    console.warn('[Database] user_pii_secure table already exists:', e.message);
+  }
+
   // Phase 5 migrations: Token encryption key rotation, rate limiting, audit logs
   safeMigration("ALTER TABLE oauth_tokens ADD COLUMN key_version INTEGER DEFAULT 1");
   safeMigration("ALTER TABLE oauth_tokens ADD COLUMN last_api_call TEXT");
@@ -1044,22 +1070,15 @@ function initDatabase() {
 }
 
 // Vault Tokens
-function createVaultToken(label, description, token, service, websiteUrl = null, discovery = null) {
+function createVaultToken(label, description, token, service, websiteUrl = null, discovery = null, ownerId = 'owner') {
   const id = 'vt_' + crypto.randomBytes(16).toString('hex');
-  const encryptionKey = process.env.VAULT_KEY || 'default-vault-key-change-me';
 
-  // Simple encryption using crypto (AES-256-CBC)
-  const algorithm = 'aes-256-cbc';
-  // TODO (BUG-J, P3): Replace hardcoded 'salt' with VAULT_SALT env var or random salt per deployment
-  // Currently using static salt 'salt' for key derivation - should use dynamic salt
-  // See similar occurrences at lines ~991, ~1643, ~1745, ~1980
-  const key = crypto.scryptSync(encryptionKey, 'salt', 32);
-  const iv = crypto.randomBytes(16);
-  const cipher = crypto.createCipheriv(algorithm, key, iv);
-  let encrypted = cipher.update(token, 'utf8', 'hex');
-  encrypted += cipher.final('hex');
-  // Store IV with encrypted data
-  encrypted = iv.toString('hex') + ':' + encrypted;
+  // Phase 5: versioned AES-256-GCM encryption for vault tokens
+  const masterHex = crypto.createHash('sha256').update(String(process.env.VAULT_KEY || '')).digest('hex');
+  const salt = generateSalt();
+  const key = deriveKey(masterHex, salt);
+  const payload = encrypt(String(token || ''), key);
+  const encrypted = JSON.stringify({ ...payload, salt: salt.toString('hex') });
 
   const tokenPreview = token.length > 8 ? token.slice(0, 4) + '***' + token.slice(-4) : '***';
   const now = new Date().toISOString();
@@ -1072,9 +1091,9 @@ function createVaultToken(label, description, token, service, websiteUrl = null,
     INSERT INTO vault_tokens (
       id, label, description, encrypted_token, token_preview,
       service, website_url, discovered_api_url, discovered_auth_scheme, discovered_metadata, last_discovered_at,
-      created_at, updated_at
+      created_at, updated_at, owner_id, encryption_version
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   stmt.run(
@@ -1090,7 +1109,9 @@ function createVaultToken(label, description, token, service, websiteUrl = null,
     discoveredMetadata,
     discovery ? now : null,
     now,
-    now
+    now,
+    ownerId,
+    ENCRYPTION_VERSION
   );
 
   return {
@@ -1132,17 +1153,36 @@ function getVaultTokens(ownerId = 'owner') {
 
 function decryptVaultToken(id, ownerId = 'owner') {
   // BUG-14: Enforce owner_id check to prevent cross-workspace token access
-  const encryptionKey = process.env.VAULT_KEY || 'default-vault-key-change-me';
   const row = db.prepare('SELECT * FROM vault_tokens WHERE id = ? AND owner_id = ?').get(id, ownerId);
   if (!row) return null;
   try {
-    const algorithm = 'aes-256-cbc';
-    const key = crypto.scryptSync(encryptionKey, 'salt', 32);
-    const [ivHex, encryptedData] = row.encrypted_token.split(':');
-    const iv = Buffer.from(ivHex, 'hex');
-    const decipher = crypto.createDecipheriv(algorithm, key, iv);
-    let decrypted = decipher.update(encryptedData, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
+    let decrypted = null;
+
+    // Phase 5 format (JSON payload with salt + AES-GCM)
+    try {
+      const p = JSON.parse(row.encrypted_token);
+      if (p && p.ciphertext && (p.nonce || p.iv) && p.authTag && p.salt) {
+        const masterHex = crypto.createHash('sha256').update(String(process.env.VAULT_KEY || '')).digest('hex');
+        const key = deriveKey(masterHex, Buffer.from(p.salt, 'hex'));
+        decrypted = decrypt(p, key);
+      }
+    } catch (_) {
+      // fallthrough to legacy format
+    }
+
+    // Legacy format fallback (AES-256-CBC, iv:ciphertext)
+    if (decrypted == null) {
+      const encryptionKey = process.env.VAULT_KEY || 'default-vault-key-change-me';
+      const algorithm = 'aes-256-cbc';
+      const key = crypto.scryptSync(encryptionKey, 'salt', 32);
+      const [ivHex, encryptedData] = String(row.encrypted_token || '').split(':');
+      if (!ivHex || !encryptedData) throw new Error('legacy format parse failed');
+      const iv = Buffer.from(ivHex, 'hex');
+      const decipher = crypto.createDecipheriv(algorithm, key, iv);
+      decrypted = decipher.update(encryptedData, 'hex', 'utf8');
+      decrypted += decipher.final('utf8');
+    }
+
     return {
       id: row.id,
       name: row.label,
@@ -1511,6 +1551,33 @@ function getUserById(id) {
   return { ...u, twoFactorEnabled: Boolean(u.twoFactorEnabled) };
 }
 
+function getPiiMasterKey() {
+  const raw = String(process.env.VAULT_KEY || '').trim();
+  if (!raw) throw new Error('VAULT_KEY is required for PII encryption');
+  return crypto.createHash('sha256').update(raw).digest('hex');
+}
+
+function encryptPiiObject(obj) {
+  const masterHex = getPiiMasterKey();
+  const salt = generateSalt();
+  const key = deriveKey(masterHex, salt);
+  const payload = encrypt(JSON.stringify(obj || {}), key);
+  return {
+    encrypted_payload: JSON.stringify(payload),
+    salt_hex: salt.toString('hex'),
+    encryption_version: ENCRYPTION_VERSION,
+  };
+}
+
+function decryptPiiObject(encryptedPayload, saltHex) {
+  if (!encryptedPayload || !saltHex) return null;
+  const masterHex = getPiiMasterKey();
+  const key = deriveKey(masterHex, Buffer.from(saltHex, 'hex'));
+  const payload = typeof encryptedPayload === 'string' ? JSON.parse(encryptedPayload) : encryptedPayload;
+  const txt = decrypt(payload, key);
+  return JSON.parse(txt);
+}
+
 function updateUserPlan(userId, plan) {
   const allowed = ['free', 'pro', 'enterprise'];
   const normalizedPlan = String(plan || '').toLowerCase().trim();
@@ -1522,6 +1589,31 @@ function updateUserPlan(userId, plan) {
   return getUserById(userId);
 }
 
+function upsertUserPiiSecure(userId, piiObj = {}) {
+  const now = new Date().toISOString();
+  const enc = encryptPiiObject(piiObj);
+  const existing = db.prepare('SELECT user_id FROM user_pii_secure WHERE user_id = ?').get(userId);
+  if (existing) {
+    db.prepare('UPDATE user_pii_secure SET encrypted_payload = ?, salt_hex = ?, encryption_version = ?, updated_at = ? WHERE user_id = ?')
+      .run(enc.encrypted_payload, enc.salt_hex, enc.encryption_version, now, userId);
+  } else {
+    db.prepare('INSERT INTO user_pii_secure (user_id, encrypted_payload, salt_hex, encryption_version, updated_at) VALUES (?, ?, ?, ?, ?)')
+      .run(userId, enc.encrypted_payload, enc.salt_hex, enc.encryption_version, now);
+  }
+  db.prepare('UPDATE users SET pii_encrypted = 1 WHERE id = ?').run(userId);
+  return true;
+}
+
+function getUserPiiSecure(userId) {
+  const row = db.prepare('SELECT * FROM user_pii_secure WHERE user_id = ?').get(userId);
+  if (!row) return null;
+  try {
+    return decryptPiiObject(row.encrypted_payload, row.salt_hex);
+  } catch (_) {
+    return null;
+  }
+}
+
 function updateUserOAuthProfile(userId, { displayName, email, avatarUrl } = {}) {
   const current = getUserById(userId);
   if (!current) return null;
@@ -1529,6 +1621,19 @@ function updateUserOAuthProfile(userId, { displayName, email, avatarUrl } = {}) 
   const nextEmail = (email || '').trim() || current.email || null;
   const nextAvatar = (avatarUrl || '').trim() || current.avatarUrl || null;
   db.prepare('UPDATE users SET display_name = ?, email = ?, avatar_url = ? WHERE id = ?').run(nextDisplay, nextEmail, nextAvatar, userId);
+
+  // Store PII snapshot encrypted (email, displayName, avatarUrl, timezone)
+  try {
+    upsertUserPiiSecure(userId, {
+      email: nextEmail,
+      displayName: nextDisplay,
+      avatarUrl: nextAvatar,
+      timezone: current.timezone || null,
+    });
+  } catch (e) {
+    console.warn('[PII] Failed to upsert secure profile');
+  }
+
   return getUserById(userId);
 }
 
@@ -1834,15 +1939,8 @@ function getOAuthKeyCandidates() {
 }
 
 function encryptOAuthTokenValue(plainText, keyBytes) {
-  const iv = crypto.randomBytes(16);
-  const cipher = crypto.createCipheriv(OAUTH_TOKEN_ALGO, keyBytes, iv);
-  let encrypted = cipher.update(String(plainText || ''), 'utf8', 'hex');
-  encrypted += cipher.final('hex');
-  return JSON.stringify({
-    encrypted,
-    iv: iv.toString('hex'),
-    authTag: cipher.getAuthTag().toString('hex')
-  });
+  const payload = encrypt(String(plainText || ''), keyBytes);
+  return JSON.stringify(payload);
 }
 
 function storeOAuthToken(serviceName, userId, accessToken, refreshToken, expiresAt, scope) {
@@ -1943,20 +2041,31 @@ function getOAuthToken(serviceName, userId) {
   for (const candidate of getOAuthKeyCandidates()) {
     try {
       const key = deriveOAuthKey(candidate.raw);
-      const decipher = crypto.createDecipheriv(OAUTH_TOKEN_ALGO, key, Buffer.from(accessData.iv, 'hex'));
-      decipher.setAuthTag(Buffer.from(accessData.authTag, 'hex'));
-      let access = decipher.update(accessData.encrypted, 'hex', 'utf8');
-      access += decipher.final('utf8');
+
+      // Phase 5 format (encrypt.js payload with nonce/ciphertext/authTag)
+      let access = null;
+      if (accessData && accessData.ciphertext && (accessData.nonce || accessData.iv) && accessData.authTag) {
+        access = decrypt(accessData, key);
+      } else {
+        // Legacy format fallback ({ encrypted, iv, authTag })
+        const decipher = crypto.createDecipheriv(OAUTH_TOKEN_ALGO, key, Buffer.from(accessData.iv, 'hex'));
+        decipher.setAuthTag(Buffer.from(accessData.authTag, 'hex'));
+        access = decipher.update(accessData.encrypted, 'hex', 'utf8');
+        access += decipher.final('utf8');
+      }
 
       let refresh = null;
       if (refreshData) {
         try {
-          const decipher2 = crypto.createDecipheriv(OAUTH_TOKEN_ALGO, key, Buffer.from(refreshData.iv, 'hex'));
-          decipher2.setAuthTag(Buffer.from(refreshData.authTag, 'hex'));
-          refresh = decipher2.update(refreshData.encrypted, 'hex', 'utf8');
-          refresh += decipher2.final('utf8');
+          if (refreshData && refreshData.ciphertext && (refreshData.nonce || refreshData.iv) && refreshData.authTag) {
+            refresh = decrypt(refreshData, key);
+          } else {
+            const decipher2 = crypto.createDecipheriv(OAUTH_TOKEN_ALGO, key, Buffer.from(refreshData.iv, 'hex'));
+            decipher2.setAuthTag(Buffer.from(refreshData.authTag, 'hex'));
+            refresh = decipher2.update(refreshData.encrypted, 'hex', 'utf8');
+            refresh += decipher2.final('utf8');
+          }
         } catch {
-          // Legacy bug: some refresh tokens were stored with a mismatched IV.
           // Keep access token usable even if refresh token cannot be decrypted.
           refresh = null;
         }
@@ -5678,6 +5787,8 @@ module.exports = {
   getUserById,
   updateUserPlan,
   updateUserOAuthProfile,
+  upsertUserPiiSecure,
+  getUserPiiSecure,
   updateUserSubscriptionStatus,
   getUserTotpSecret,
   setUserTotpSecret,
