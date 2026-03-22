@@ -95,6 +95,12 @@ function Layout({ children, onLogout }) {
       ]
     },
     {
+      label: 'Teams',
+      items: [
+        { path: '/settings/team', label: 'Team Settings' },
+      ]
+    },
+    {
       label: 'AI & Data',
       items: [
         { path: '/identity', label: 'Identity' },
@@ -137,6 +143,7 @@ function Layout({ children, onLogout }) {
   };
 
   const userMenuItems = [
+    { path: '/settings/team', label: '👥 Teams & Members' },
     { path: '/my-listings', label: 'My Listings' },
     { path: '/settings', label: 'Settings' },
   ];
