@@ -1074,13 +1074,18 @@ function createVaultToken(label, description, token, service, websiteUrl = null,
   const id = 'vt_' + crypto.randomBytes(16).toString('hex');
 
   // Phase 5: versioned AES-256-GCM encryption for vault tokens
-  const masterHex = crypto.createHash('sha256').update(String(process.env.VAULT_KEY || '')).digest('hex');
+  const vaultKey = String(process.env.VAULT_KEY || '').trim();
+  if (!vaultKey) {
+    throw new Error('VAULT_KEY is required to store vault tokens securely');
+  }
+  const masterHex = crypto.createHash('sha256').update(vaultKey).digest('hex');
   const salt = generateSalt();
   const key = deriveKey(masterHex, salt);
-  const payload = encrypt(String(token || ''), key);
+  const tokenStr = String(token || '');
+  const payload = encrypt(tokenStr, key);
   const encrypted = JSON.stringify({ ...payload, salt: salt.toString('hex') });
 
-  const tokenPreview = token.length > 8 ? token.slice(0, 4) + '***' + token.slice(-4) : '***';
+  const tokenPreview = tokenStr.length > 8 ? tokenStr.slice(0, 4) + '***' + tokenStr.slice(-4) : '***';
   const now = new Date().toISOString();
 
   const discoveredApiUrl = discovery?.apiBaseUrl || null;
@@ -1156,13 +1161,19 @@ function decryptVaultToken(id, ownerId = 'owner') {
   const row = db.prepare('SELECT * FROM vault_tokens WHERE id = ? AND owner_id = ?').get(id, ownerId);
   if (!row) return null;
   try {
+    const vaultKey = String(process.env.VAULT_KEY || '').trim();
+    if (!vaultKey) {
+      // fail-closed by default (same policy as OAuth storage)
+      return null;
+    }
+
     let decrypted = null;
 
     // Phase 5 format (JSON payload with salt + AES-GCM)
     try {
       const p = JSON.parse(row.encrypted_token);
       if (p && p.ciphertext && (p.nonce || p.iv) && p.authTag && p.salt) {
-        const masterHex = crypto.createHash('sha256').update(String(process.env.VAULT_KEY || '')).digest('hex');
+        const masterHex = crypto.createHash('sha256').update(vaultKey).digest('hex');
         const key = deriveKey(masterHex, Buffer.from(p.salt, 'hex'));
         decrypted = decrypt(p, key);
       }
@@ -1172,7 +1183,9 @@ function decryptVaultToken(id, ownerId = 'owner') {
 
     // Legacy format fallback (AES-256-CBC, iv:ciphertext)
     if (decrypted == null) {
-      const encryptionKey = process.env.VAULT_KEY || 'default-vault-key-change-me';
+      const allowLegacyDefault = String(process.env.ALLOW_LEGACY_DEFAULT_VAULT_KEY || '').toLowerCase() === 'true';
+      const encryptionKey = vaultKey || (allowLegacyDefault ? 'default-vault-key-change-me' : null);
+      if (!encryptionKey) return null;
       const algorithm = 'aes-256-cbc';
       const key = crypto.scryptSync(encryptionKey, 'salt', 32);
       const [ivHex, encryptedData] = String(row.encrypted_token || '').split(':');
@@ -5516,7 +5529,7 @@ function getActiveEncryptionKey(workspaceId) {
 /**
  * Rotate encryption key
  */
-function rotateEncryptionKey(workspaceId, oldKeyId, newKeyId) {
+function rotateWorkspaceEncryptionKey(workspaceId, oldKeyId, newKeyId) {
   try {
     const now = Math.floor(Date.now() / 1000);
     
@@ -5990,7 +6003,7 @@ module.exports = {
   createEncryptionKey,
   getEncryptionKeys,
   getEncryptionKeyByHash,
-  rotateEncryptionKey,
+  rotateWorkspaceEncryptionKey,
   getActiveEncryptionKey,
   createRetentionPolicy,
   getRetentionPolicies,
