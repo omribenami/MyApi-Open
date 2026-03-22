@@ -152,6 +152,14 @@ const {
   upsertInvoice,
   incrementUsageDaily,
   getUsageDaily,
+  // Phase 4: Enterprise SSO & RBAC
+  getSSOConfigurationsByWorkspace,
+  getSSOConfigurationByProvider,
+  createSSOConfiguration,
+  updateSSOConfiguration,
+  getRolesByWorkspace,
+  createRole,
+  getOrEnsureUserWorkspace,
 } = require("./database");
 
 // OAuth service adapters
@@ -7373,6 +7381,138 @@ app.get('/api/v1/marketplace-my', authenticate, (req, res) => {
   } catch (err) {
     console.error('My listings error:', err);
     res.status(500).json({ error: 'Failed to get your listings' });
+  }
+});
+
+// ========== PHASE 4: ENTERPRISE SSO + RBAC ==========
+
+// GET /api/v1/enterprise/sso/config - Get SSO configuration
+app.get('/api/v1/enterprise/sso/config', authenticate, (req, res) => {
+  try {
+    const workspaceId = req.workspaceId || (req.user ? getOrEnsureUserWorkspace(req.user.id) : null);
+    if (!workspaceId) {
+      return res.status(401).json({ error: 'Workspace context required' });
+    }
+
+    // Get current SSO config (for now, return default template)
+    const config = getSSOConfigurationsByWorkspace(workspaceId);
+    const ssoConfig = config?.[0] ? {
+      enabled: config[0].active === 1,
+      provider: config[0].provider || 'saml',
+      saml: config[0].config?.saml || { entryPoint: '', certificate: '', issuer: '' },
+      oidc: config[0].config?.oidc || { discoveryUrl: '', clientId: '', clientSecret: '' },
+    } : {
+      enabled: false,
+      provider: 'saml',
+      saml: { entryPoint: '', certificate: '', issuer: '' },
+      oidc: { discoveryUrl: '', clientId: '', clientSecret: '' },
+    };
+
+    res.json({ config: ssoConfig });
+  } catch (err) {
+    console.error('[Enterprise] SSO config fetch error:', err);
+    res.status(500).json({ error: 'Failed to fetch SSO configuration' });
+  }
+});
+
+// PUT /api/v1/enterprise/sso/config - Save SSO configuration
+app.put('/api/v1/enterprise/sso/config', authenticate, (req, res) => {
+  try {
+    const workspaceId = req.workspaceId || (req.user ? getOrEnsureUserWorkspace(req.user.id) : null);
+    if (!workspaceId) {
+      return res.status(401).json({ error: 'Workspace context required' });
+    }
+
+    const { enabled, provider, saml, oidc } = req.body;
+
+    // Validate required fields based on provider
+    if (enabled) {
+      if (provider === 'saml' && (!saml?.entryPoint || !saml?.issuer)) {
+        return res.status(400).json({ error: 'SAML requires entryPoint and issuer' });
+      }
+      if (provider === 'oidc' && !oidc?.discoveryUrl) {
+        return res.status(400).json({ error: 'OIDC requires discoveryUrl' });
+      }
+    }
+
+    const config = {
+      enabled,
+      provider: provider || 'saml',
+      saml: saml || {},
+      oidc: oidc || {},
+    };
+
+    // Check if config exists
+    const existing = getSSOConfigurationByProvider(workspaceId, provider);
+    
+    if (existing) {
+      updateSSOConfiguration(existing.id, { 
+        config: { saml, oidc },
+        active: enabled ? 1 : 0 
+      });
+    } else {
+      createSSOConfiguration(workspaceId, provider, { saml, oidc }, req.user?.id);
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'SSO configuration saved',
+      config 
+    });
+  } catch (err) {
+    console.error('[Enterprise] SSO config save error:', err);
+    res.status(500).json({ error: 'Failed to save SSO configuration' });
+  }
+});
+
+// GET /api/v1/enterprise/rbac/roles - Get RBAC roles
+app.get('/api/v1/enterprise/rbac/roles', authenticate, (req, res) => {
+  try {
+    const workspaceId = req.workspaceId || (req.user ? getOrEnsureUserWorkspace(req.user.id) : null);
+    if (!workspaceId) {
+      return res.status(401).json({ error: 'Workspace context required' });
+    }
+
+    const roles = getRolesByWorkspace(workspaceId);
+    
+    // Include default roles if none exist
+    const defaultRoles = [
+      { id: 'owner', name: 'Owner', description: 'Full access. Can manage members, billing, and settings.', permissions: ['*'] },
+      { id: 'admin', name: 'Admin', description: 'Can manage members, create resources, and configure workspace.', permissions: ['members:write', 'resources:write', 'settings:write'] },
+      { id: 'member', name: 'Member', description: 'Can create and manage own resources. Limited workspace access.', permissions: ['resources:write', 'resources:read'] },
+      { id: 'viewer', name: 'Viewer', description: 'Read-only access. Can view resources but cannot make changes.', permissions: ['resources:read'] },
+    ];
+
+    const allRoles = [
+      ...defaultRoles,
+      ...(roles || []).filter(r => !['owner', 'admin', 'member', 'viewer'].includes(r.id))
+    ];
+
+    res.json({ roles: allRoles });
+  } catch (err) {
+    console.error('[Enterprise] RBAC roles fetch error:', err);
+    res.status(500).json({ error: 'Failed to fetch roles' });
+  }
+});
+
+// POST /api/v1/enterprise/rbac/roles - Create custom role
+app.post('/api/v1/enterprise/rbac/roles', authenticate, (req, res) => {
+  try {
+    const workspaceId = req.workspaceId || (req.user ? getOrEnsureUserWorkspace(req.user.id) : null);
+    if (!workspaceId) {
+      return res.status(401).json({ error: 'Workspace context required' });
+    }
+
+    const { name, description, permissions } = req.body;
+    if (!name) {
+      return res.status(400).json({ error: 'Role name is required' });
+    }
+
+    const role = createRole(workspaceId, name, description, req.user?.id, permissions || []);
+    res.status(201).json({ role });
+  } catch (err) {
+    console.error('[Enterprise] Role creation error:', err);
+    res.status(500).json({ error: 'Failed to create role' });
   }
 });
 
