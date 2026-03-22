@@ -141,6 +141,8 @@ const {
   addServiceMethod,
   // Service Preferences (Phase 3)
   getServicePreference,
+  // Workspaces
+  getWorkspaces,
   // Phase 2: Billing & Usage
   getBillingCustomerByWorkspace,
   upsertBillingCustomer,
