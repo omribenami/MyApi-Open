@@ -4453,6 +4453,12 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
     : null;
   const forcePrompt = explicitForcePrompt == null ? mode === 'login' : explicitForcePrompt;
   
+  // CRITICAL FIX: If masterToken is passed as query param, set it in Authorization header for authentication
+  if (req.query.token && !req.headers.authorization) {
+    req.headers.authorization = `Bearer ${req.query.token}`;
+    console.log(`[OAuth Authorize] Injected Bearer token from query param`);
+  }
+  
   // DEBUG: Log all requests
   console.log(`[OAuth] authorize/${service} requested`);
   console.log(`[OAuth] Mode: ${mode}`);
@@ -4505,8 +4511,22 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
 
   // Store OAuth flow metadata in session
   req.session.oauthStateMeta = req.session.oauthStateMeta || {};
-  const ownerId = req.session?.user?.id ? String(req.session.user.id) : null;
-  console.log(`[OAuth Authorize] ${service} flow initiated: req.session.user=${req.session?.user?.id || 'UNSET'} -> ownerId=${ownerId || 'NULL'}`);
+  
+  // Try to authenticate the user to get ownerId
+  // This checks session, Bearer token, and masterToken cookie
+  tryAuthenticate(req);
+  
+  // Get ownerId from multiple sources (priority order)
+  let ownerId = null;
+  if (req.session?.user?.id) {
+    ownerId = String(req.session.user.id);
+    console.log(`[OAuth Authorize] Got ownerId from session: ${ownerId}`);
+  } else if (req.tokenMeta?.ownerId) {
+    ownerId = String(req.tokenMeta.ownerId);
+    console.log(`[OAuth Authorize] Got ownerId from Bearer token: ${ownerId}`);
+  }
+  
+  console.log(`[OAuth Authorize] ${service} flow initiated: req.session.user=${req.session?.user?.id || 'UNSET'}, req.tokenMeta.ownerId=${req.tokenMeta?.ownerId || 'UNSET'} -> ownerId=${ownerId || 'NULL'}`);
   req.session.oauthStateMeta[state] = {
     mode,
     forcePrompt,
@@ -5012,6 +5032,18 @@ app.get("/api/v1/oauth/status", async (req, res) => {
       }
     } catch (err) {
       console.warn(`[OAuth Status] Failed to resolve masterToken:`, err.message);
+    }
+  }
+
+  // CRITICAL FIX (P0): If no userId found from above methods, check if session.oauthStateMeta has pending ownerId
+  // This handles the case where req.session.user wasn't populated yet after OAuth callback
+  if (!userId && req.session?.oauthStateMeta) {
+    for (const [state, meta] of Object.entries(req.session.oauthStateMeta || {})) {
+      if (meta?.ownerId) {
+        console.log(`[OAuth Status] RECOVERY: Found ownerId from oauthStateMeta: ${meta.ownerId}`);
+        userId = String(meta.ownerId);
+        break;
+      }
     }
   }
   

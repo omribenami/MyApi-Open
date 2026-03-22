@@ -20,6 +20,16 @@ export function startOAuthFlow(service, options = {}) {
     if (options.mode) params.append('mode', options.mode);
     if (options.forcePrompt != null) params.append('forcePrompt', String(options.forcePrompt));
     if (options.returnTo) params.append('returnTo', options.returnTo);
+    
+    // CRITICAL FIX: Pass masterToken from localStorage to authenticate the OAuth flow
+    // This ensures the ownerId is captured in the state metadata
+    const masterToken = localStorage.getItem('masterToken');
+    if (masterToken) {
+      params.append('token', masterToken);
+      console.log(`[OAuth] Injecting masterToken from localStorage`);
+    } else {
+      console.warn(`[OAuth] No masterToken found in localStorage! OAuth flow may fail.`);
+    }
 
     const endpoint = `/api/v1/oauth/authorize/${service}?${params.toString()}`;
     console.log(`[OAuth] Redirecting to: ${endpoint}`);
