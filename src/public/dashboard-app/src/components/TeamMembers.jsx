@@ -5,7 +5,6 @@
  */
 
 import React, { useState } from 'react';
-import { useAuth } from '../context/AuthContext';
 import './TeamMembers.css';
 
 const TeamMembers = ({
@@ -13,10 +12,11 @@ const TeamMembers = ({
   currentUserId,
   isOwner,
   canManage,
+  workspaceId,
+  masterToken,
   onMemberRemoved,
   onMemberRoleChanged
 }) => {
-  const { currentWorkspace } = useAuth();
   const [editingMemberId, setEditingMemberId] = useState(null);
   const [editingRole, setEditingRole] = useState(null);
 
@@ -28,14 +28,17 @@ const TeamMembers = ({
 
     try {
       const member = members.find(m => m.id === memberId);
+      const headers = {
+        'Content-Type': 'application/json',
+        'X-Workspace-ID': workspaceId,
+        ...(masterToken ? { Authorization: `Bearer ${masterToken}` } : {})
+      };
       const response = await fetch(
-        `/api/v1/workspaces/${currentWorkspace.id}/members/${member.user_id}`,
+        `/api/v1/workspaces/${workspaceId}/members/${member.user_id}`,
         {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Workspace-ID': currentWorkspace.id
-          },
+          headers,
+          credentials: 'include',
           body: JSON.stringify({ role: newRole })
         }
       );
@@ -59,13 +62,16 @@ const TeamMembers = ({
 
     try {
       const member = members.find(m => m.id === memberId);
+      const headers = {
+        'X-Workspace-ID': workspaceId,
+        ...(masterToken ? { Authorization: `Bearer ${masterToken}` } : {})
+      };
       const response = await fetch(
-        `/api/v1/workspaces/${currentWorkspace.id}/members/${member.user_id}`,
+        `/api/v1/workspaces/${workspaceId}/members/${member.user_id}`,
         {
           method: 'DELETE',
-          headers: {
-            'X-Workspace-ID': currentWorkspace.id
-          }
+          headers,
+          credentials: 'include'
         }
       );
 

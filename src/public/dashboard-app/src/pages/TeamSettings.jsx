@@ -159,6 +159,8 @@ const TeamSettings = () => {
                 currentUserId={user?.id}
                 isOwner={isOwner}
                 canManage={canManageMembers}
+                workspaceId={currentWorkspace.id}
+                masterToken={masterToken}
                 onMemberRemoved={handleMemberRemoved}
                 onMemberRoleChanged={handleMemberRoleChanged}
               />
