@@ -62,6 +62,10 @@ export const useAuthStore = create((set, get) => ({
           sessionToken = sessionStorage.getItem('sessionToken');
         } catch {}
 
+        // Track whether the first session check definitively returned 401 (no active session).
+        // This prevents a redundant second session-only call that would also return 401.
+        let sessionReturned401 = false;
+
         try {
           const sessionCheckRes = await fetch('/api/v1/auth/me', { credentials: 'include' });
           if (sessionCheckRes.ok) {
@@ -86,6 +90,7 @@ export const useAuthStore = create((set, get) => ({
           }
           if (sessionCheckRes.status === 401) {
             resetAuthMeFailureCountOnSuccess();
+            sessionReturned401 = true;
           } else {
             incrementAuthMeFailureCount();
           }
@@ -125,9 +130,20 @@ export const useAuthStore = create((set, get) => ({
           try { JSON.parse(decodeURIComponent(cookieUser)); } catch {}
         }
 
-        if (authMeFailureCount < 2) {
+        // If the first session check already returned 401 and we have a cookie master token,
+        // validate it via Bearer auth. If there is no token at all, skip the redundant
+        // session-only check (it would also return 401, causing a second console error).
+        if (authMeFailureCount < 2 && (!sessionReturned401 || cookieMasterToken)) {
           try {
-            const res = await fetch('/api/v1/auth/me', { credentials: 'include' });
+            let fetchOptions;
+            if (sessionReturned401 && cookieMasterToken) {
+              // Session is confirmed gone; validate the cookie token via Bearer auth instead.
+              fetchOptions = { headers: { Authorization: `Bearer ${cookieMasterToken}` }, credentials: 'include' };
+            } else {
+              fetchOptions = { credentials: 'include' };
+            }
+
+            const res = await fetch('/api/v1/auth/me', fetchOptions);
             if (res.ok) {
               resetAuthMeFailureCountOnSuccess();
               const payload = await res.json();
@@ -147,7 +163,7 @@ export const useAuthStore = create((set, get) => ({
               if (bootstrapToken) {
                 try { localStorage.setItem('masterToken', bootstrapToken); } catch {}
               }
-              set({ user, masterToken: bootstrapToken || null, isAuthenticated: true, error: null, isInitialized: true });
+              set({ user, masterToken: bootstrapToken || cookieMasterToken || null, isAuthenticated: true, error: null, isInitialized: true });
               return;
             }
             incrementAuthMeFailureCount();
