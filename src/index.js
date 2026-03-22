@@ -4826,14 +4826,8 @@ app.get([
       // Store BOTH in session AND in database as backup
       // Session: for normal case where cookies are sent
       req.session.oauth_confirm_token = confirmToken;
-      req.session.oauth_login_pending = {
-        userId: userProfile.id,
-        email: userProfile.email,
-        username: userProfile.name,
-        displayName: userProfile.display_name,
-        avatarUrl: userProfile.picture,
-        hasTwoFa: userProfile.two_factor_enabled || false,
-      };
+      // Note: req.session.oauth_login_pending is already set above with appUser data
+      // No need to redefine it here
 
       // Database: backup in case session cookie is lost
       const dbConfirmId = 'oauth_confirm_' + crypto.randomBytes(16).toString('hex');
@@ -4845,15 +4839,15 @@ app.get([
         `).run(
           dbConfirmId,
           service,
-          userProfile.id,
+          appUser.id,
           confirmToken,
           JSON.stringify({
-            userId: userProfile.id,
-            email: userProfile.email,
-            username: userProfile.name,
-            displayName: userProfile.display_name,
-            avatarUrl: userProfile.picture,
-            hasTwoFa: userProfile.two_factor_enabled || false,
+            userId: appUser.id,
+            email: appUser.email || email,
+            username: appUser.username,
+            displayName: appUser.displayName || name,
+            avatarUrl: appUser.avatarUrl || avatarUrl || null,
+            hasTwoFa: appUser.twoFactorEnabled,
           }),
           new Date().toISOString(),
           confirmExpiresAt
