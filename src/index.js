@@ -968,6 +968,7 @@ app.put('/api/v1/users/me', authenticate, (req, res) => {
 // API Exposure policy
 const EXPOSURE_PATH = path.join(__dirname, 'data', 'exposure_policy.json');
 const COOKIE_PREFS_PATH = path.join(__dirname, 'data', 'cookie_preferences.json');
+const PRIVACY_SETTINGS_PATH = path.join(__dirname, 'data', 'privacy_settings.json');
 const DEFAULT_EXPOSURE = {
   main: { identity: true, vault: true, connectors: true, handshakes: true, audit: true },
   guest: { identity: true, vault: false, connectors: false, handshakes: false, audit: false },
@@ -1026,6 +1027,54 @@ app.put('/api/v1/privacy/cookies', rateLimit(60000, 20, 'cookies-write'), (req, 
   } catch (err) {
     console.error('[Privacy/Cookies] Failed to persist cookie preference:', err);
     return res.status(500).json({ error: 'Failed to save cookie preference' });
+  }
+
+  res.json({ ok: true, data: data[ownerId] });
+});
+
+// Privacy settings (data sharing, API logging)
+app.get('/api/v1/privacy/settings', rateLimit(60000, 60, 'privacy-settings-read'), (req, res) => {
+  let data = {};
+  try {
+    if (fs.existsSync(PRIVACY_SETTINGS_PATH)) data = JSON.parse(fs.readFileSync(PRIVACY_SETTINGS_PATH, 'utf8'));
+  } catch {}
+
+  const ownerId = getRequestOwnerId(req);
+  const defaults = { dataSharing: false, apiLogging: true };
+  const settings = ownerId ? (data[ownerId] || defaults) : defaults;
+  res.json({ data: settings });
+});
+
+app.put('/api/v1/privacy/settings', authenticate, rateLimit(60000, 20, 'privacy-settings-write'), (req, res) => {
+  const ownerId = getRequestOwnerId(req);
+  const { dataSharing, apiLogging } = req.body || {};
+
+  if (dataSharing !== undefined && typeof dataSharing !== 'boolean') {
+    return res.status(400).json({ error: 'dataSharing must be a boolean' });
+  }
+  if (apiLogging !== undefined && typeof apiLogging !== 'boolean') {
+    return res.status(400).json({ error: 'apiLogging must be a boolean' });
+  }
+
+  let data = {};
+  try {
+    if (fs.existsSync(PRIVACY_SETTINGS_PATH)) data = JSON.parse(fs.readFileSync(PRIVACY_SETTINGS_PATH, 'utf8'));
+  } catch {}
+
+  const current = data[ownerId] || { dataSharing: false, apiLogging: true };
+  data[ownerId] = {
+    ...current,
+    ...(dataSharing !== undefined ? { dataSharing } : {}),
+    ...(apiLogging !== undefined ? { apiLogging } : {}),
+    updatedAt: new Date().toISOString(),
+  };
+
+  try {
+    fs.mkdirSync(path.dirname(PRIVACY_SETTINGS_PATH), { recursive: true });
+    fs.writeFileSync(PRIVACY_SETTINGS_PATH, JSON.stringify(data, null, 2));
+  } catch (err) {
+    console.error('[Privacy/Settings] Failed to persist privacy settings:', err);
+    return res.status(500).json({ error: 'Failed to save privacy settings' });
   }
 
   res.json({ ok: true, data: data[ownerId] });

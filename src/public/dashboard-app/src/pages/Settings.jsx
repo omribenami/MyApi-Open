@@ -1173,6 +1173,14 @@ function PrivacySection() {
         }
       })
       .catch(() => {});
+
+    fetch('/api/v1/privacy/settings', { headers, credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (typeof d?.data?.dataSharing === 'boolean') updatePrivacy('dataSharing', d.data.dataSharing);
+        if (typeof d?.data?.apiLogging === 'boolean') updatePrivacy('apiLogging', d.data.apiLogging);
+      })
+      .catch(() => {});
   }, [masterToken]);
 
   const loadRetentionPolicies = async () => {
@@ -1199,13 +1207,25 @@ function PrivacySection() {
         ...(masterToken ? { Authorization: `Bearer ${masterToken}` } : {}),
       };
       const mode = privacy.cookieMode === 'all' ? 'all' : 'essential';
-      const res = await fetch('/api/v1/privacy/cookies', {
-        method: 'PUT',
-        headers,
-        credentials: 'include',
-        body: JSON.stringify({ mode }),
-      });
-      if (!res.ok) throw new Error('Failed to save cookie preferences');
+
+      const [cookieRes, settingsRes] = await Promise.all([
+        fetch('/api/v1/privacy/cookies', {
+          method: 'PUT',
+          headers,
+          credentials: 'include',
+          body: JSON.stringify({ mode }),
+        }),
+        fetch('/api/v1/privacy/settings', {
+          method: 'PUT',
+          headers,
+          credentials: 'include',
+          body: JSON.stringify({ dataSharing: !!privacy.dataSharing, apiLogging: !!privacy.apiLogging }),
+        }),
+      ]);
+
+      if (!cookieRes.ok) throw new Error('Failed to save cookie preferences');
+      if (!settingsRes.ok) throw new Error('Failed to save privacy settings');
+
       localStorage.setItem('cookie_pref_v1', mode);
       setPrivacySuccess('Privacy settings saved');
     } catch (e) {
