@@ -14,6 +14,12 @@ class EmailService {
     this.transporter = null;
     this.fromAddress = process.env.EMAIL_FROM;
     this.fromName = process.env.EMAIL_FROM_NAME || 'MyApi';
+    console.log('[EmailService] Initialized:', {
+      provider: this.provider,
+      fromAddress: this.fromAddress,
+      fromName: this.fromName,
+      resendKeySet: !!process.env.RESEND_API_KEY
+    });
     this.initTransporter();
   }
 
@@ -138,6 +144,12 @@ class EmailService {
    */
   async sendEmail(emailId, emailData) {
     try {
+      console.log('[sendEmail] Checking fromAddress:', {
+        fromAddress: this.fromAddress,
+        provider: this.provider,
+        to: emailData.email_address
+      });
+      
       if (!this.fromAddress) {
         throw new Error('EMAIL_FROM is not configured (required deployment value: noreply@myapiai.com)');
       }
