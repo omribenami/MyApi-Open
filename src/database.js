@@ -4863,6 +4863,22 @@ function getInvitationById(invitationId) {
   } : null;
 }
 
+function getInvitationByEmailAndWorkspace(workspaceId, email) {
+  const stmt = db.prepare('SELECT * FROM workspace_invitations WHERE workspace_id = ? AND email = ? LIMIT 1');
+  const inv = stmt.get(workspaceId, email);
+  return inv ? {
+    id: inv.id,
+    workspaceId: inv.workspace_id,
+    email: inv.email,
+    role: inv.role,
+    createdByUserId: inv.created_by_user_id,
+    createdAt: inv.created_at,
+    expiresAt: inv.expires_at,
+    acceptedAt: inv.accepted_at,
+    acceptedByUserId: inv.accepted_by_user_id
+  } : null;
+}
+
 function acceptWorkspaceInvitation(invitationId, userId) {
   const invitation = getInvitationById(invitationId);
   if (!invitation) return false;
@@ -6026,6 +6042,7 @@ module.exports = {
   createWorkspaceInvitation,
   getWorkspaceInvitations,
   getInvitationById,
+  getInvitationByEmailAndWorkspace,
   acceptWorkspaceInvitation,
   declineWorkspaceInvitation,
   getUserWorkspaceInvitations,
