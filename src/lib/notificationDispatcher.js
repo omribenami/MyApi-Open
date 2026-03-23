@@ -4,14 +4,28 @@
  * Used internally by event handlers throughout the app
  */
 
-const { createNotification, queueNotificationForDelivery } = require('../database');
+const { createNotification, queueNotificationForDelivery, getOrCreateNotificationSettings } = require('../database');
 
 class NotificationDispatcher {
+  /**
+   * Check if in-app notifications are enabled for a user
+   */
+  static isInAppEnabled(workspaceId, userId) {
+    try {
+      const settings = getOrCreateNotificationSettings(workspaceId, userId);
+      return settings.inApp?.enabled === 1;
+    } catch (err) {
+      // Default to enabled if we can't check preferences
+      return true;
+    }
+  }
+
   /**
    * OAuth service connected event
    */
   static async onServiceConnected(workspaceId, userId, serviceName) {
     try {
+      if (!this.isInAppEnabled(workspaceId, userId)) return;
       const title = `${serviceName.charAt(0).toUpperCase() + serviceName.slice(1)} Connected`;
       const message = `Your ${serviceName} account has been successfully linked to MyApi`;
       const notificationId = createNotification(
@@ -34,6 +48,7 @@ class NotificationDispatcher {
    */
   static async onServiceDisconnected(workspaceId, userId, serviceName) {
     try {
+      if (!this.isInAppEnabled(workspaceId, userId)) return;
       const title = `${serviceName.charAt(0).toUpperCase() + serviceName.slice(1)} Disconnected`;
       const message = `Your ${serviceName} account has been removed from MyApi`;
       const notificationId = createNotification(
@@ -56,6 +71,7 @@ class NotificationDispatcher {
    */
   static async onSkillInstalled(workspaceId, userId, skillName, skillId) {
     try {
+      if (!this.isInAppEnabled(workspaceId, userId)) return;
       const title = `Skill Installed: ${skillName}`;
       const message = `You've successfully installed the "${skillName}" skill`;
       const notificationId = createNotification(
@@ -78,6 +94,7 @@ class NotificationDispatcher {
    */
   static async onSkillRemoved(workspaceId, userId, skillName, skillId) {
     try {
+      if (!this.isInAppEnabled(workspaceId, userId)) return;
       const title = `Skill Removed: ${skillName}`;
       const message = `The "${skillName}" skill has been removed from your workspace`;
       const notificationId = createNotification(
@@ -100,6 +117,7 @@ class NotificationDispatcher {
    */
   static async onTeamMemberInvited(workspaceId, userId, invitedEmail, role) {
     try {
+      if (!this.isInAppEnabled(workspaceId, userId)) return;
       const title = `Team Member Invited`;
       const message = `You've invited ${invitedEmail} to join as ${role}`;
       const notificationId = createNotification(
@@ -122,6 +140,7 @@ class NotificationDispatcher {
    */
   static async onTeamInvitationAccepted(workspaceId, userId, memberName) {
     try {
+      if (!this.isInAppEnabled(workspaceId, userId)) return;
       const title = `Team Invitation Accepted`;
       const message = `${memberName} has accepted your team invitation`;
       const notificationId = createNotification(
@@ -144,6 +163,7 @@ class NotificationDispatcher {
    */
   static async onNewDeviceLogin(workspaceId, userId, deviceName, ip) {
     try {
+      if (!this.isInAppEnabled(workspaceId, userId)) return;
       const title = `New Login from ${deviceName}`;
       const message = `Your account was accessed from a new device at ${ip}`;
       const notificationId = createNotification(
@@ -166,6 +186,7 @@ class NotificationDispatcher {
    */
   static async on2FADisabled(workspaceId, userId) {
     try {
+      if (!this.isInAppEnabled(workspaceId, userId)) return;
       const title = `Two-Factor Authentication Disabled`;
       const message = `Your account's 2FA has been disabled. Your account is less secure.`;
       const notificationId = createNotification(
@@ -188,6 +209,7 @@ class NotificationDispatcher {
    */
   static async on2FAEnabled(workspaceId, userId) {
     try {
+      if (!this.isInAppEnabled(workspaceId, userId)) return;
       const title = `Two-Factor Authentication Enabled`;
       const message = `Your account is now protected with 2FA`;
       const notificationId = createNotification(
@@ -210,6 +232,7 @@ class NotificationDispatcher {
    */
   static async onQuotaWarning(workspaceId, userId, percentageUsed) {
     try {
+      if (!this.isInAppEnabled(workspaceId, userId)) return;
       const title = `API Quota Warning`;
       const message = `You've used ${percentageUsed}% of your monthly API quota`;
       const notificationId = createNotification(
@@ -232,6 +255,7 @@ class NotificationDispatcher {
    */
   static async onSubscriptionUpgraded(workspaceId, userId, planName) {
     try {
+      if (!this.isInAppEnabled(workspaceId, userId)) return;
       const title = `Subscription Upgraded`;
       const message = `You've successfully upgraded to the ${planName} plan`;
       const notificationId = createNotification(
@@ -254,6 +278,7 @@ class NotificationDispatcher {
    */
   static async onBillingFailure(workspaceId, userId, reason) {
     try {
+      if (!this.isInAppEnabled(workspaceId, userId)) return;
       const title = `Billing Failed`;
       const message = `There was an issue processing your payment: ${reason}`;
       const notificationId = createNotification(
@@ -276,6 +301,7 @@ class NotificationDispatcher {
    */
   static async onDeviceApproved(workspaceId, userId, deviceName) {
     try {
+      if (!this.isInAppEnabled(workspaceId, userId)) return;
       const title = `Device Approved`;
       const message = `Your device "${deviceName}" has been approved and can now access your account`;
       const notificationId = createNotification(
@@ -298,6 +324,7 @@ class NotificationDispatcher {
    */
   static async onDeviceRevoked(workspaceId, userId, deviceName) {
     try {
+      if (!this.isInAppEnabled(workspaceId, userId)) return;
       const title = `Device Revoked`;
       const message = `Your device "${deviceName}" has been removed and can no longer access your account`;
       const notificationId = createNotification(

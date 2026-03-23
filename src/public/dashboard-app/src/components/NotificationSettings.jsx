@@ -34,12 +34,9 @@ function NotificationSettings() {
     setError(null);
 
     try {
-      const response = await fetch('/api/v1/notifications/preferences', { 
-        credentials: 'include'
-      });
-      if (!response.ok) throw new Error('Failed to fetch');
-      const data = await response.json();
-      setSettings(data.data || {});
+      const headers = masterToken ? { Authorization: `Bearer ${masterToken}` } : undefined;
+      const response = await apiClient.get('/notifications/settings', { headers });
+      setSettings(response.data?.settings || {});
     } catch (err) {
       console.error('Failed to fetch notification settings:', err);
       setError('Failed to load notification settings');

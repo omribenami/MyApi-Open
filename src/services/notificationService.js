@@ -13,20 +13,21 @@ class NotificationService {
    */
   static async emitNotification(userId, type, title, message, options = {}) {
     try {
-      // Get user settings
-      const settings = db.getOrCreateNotificationSettings(userId);
+      // Get user settings (pass null as workspaceId so it resolves the user's workspace)
+      const settings = db.getOrCreateNotificationSettings(null, userId);
       
-      // Extract channel settings for this event type
-      const webKey = `${type}_web`;
-      const emailKey = `${type}_email`;
+      // Resolve the workspace ID from the returned preferences
+      const workspaceId = settings.inApp?.workspace_id || settings.email?.workspace_id
+        || db.getOrEnsureUserWorkspace(userId);
       
-      const webEnabled = settings[webKey] !== 0;
-      const emailEnabled = settings[emailKey] !== 0;
+      // Check channel-level preferences
+      const webEnabled = settings.inApp?.enabled === 1;
+      const emailEnabled = settings.email?.enabled === 1;
       
-      // Create in-app notification if web enabled
+      // Create in-app notification if web/in-app channel is enabled
       let notificationId = null;
       if (webEnabled) {
-        notificationId = db.createNotification(userId, type, title, message, {
+        notificationId = db.createNotification(workspaceId, userId, type, title, message, {
           relatedEntityType: options.relatedEntityType,
           relatedEntityId: options.relatedEntityId,
           data: options.data,

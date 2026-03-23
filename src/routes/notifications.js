@@ -368,10 +368,26 @@ const router = express.Router();
 // Notification dispatcher for internal use (called when events trigger)
 router.dispatchNotification = function(workspaceId, userId, type, title, message, data = null, channels = ['in-app', 'email']) {
   try {
+    // Check user preferences before creating notification
+    const settings = getOrCreateNotificationSettings(workspaceId, userId);
+    const inAppEnabled = settings.inApp?.enabled === 1;
+    const emailEnabled = settings.email?.enabled === 1;
+
+    // Filter channels based on preferences
+    const allowedChannels = channels.filter(ch => {
+      if (ch === 'in-app') return inAppEnabled;
+      if (ch === 'email') return emailEnabled;
+      return true;
+    });
+
+    if (allowedChannels.length === 0) {
+      return { notificationId: null, queued: [], success: true, skipped: true };
+    }
+
     const notificationId = createNotification(workspaceId, userId, type, title, message, data);
     
-    // Queue for delivery to configured channels
-    const queued = queueNotificationForDelivery(notificationId, channels);
+    // Queue for delivery to allowed channels only
+    const queued = queueNotificationForDelivery(notificationId, allowedChannels);
     
     return {
       notificationId,
