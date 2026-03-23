@@ -191,7 +191,7 @@ function Layout({ children, onLogout }) {
             </div>
 
             {/* Workspace Switcher */}
-            <div className="mr-3">
+            <div className="hidden md:block mr-3">
               <WorkspaceSwitcher />
             </div>
 
@@ -243,6 +243,11 @@ function Layout({ children, onLogout }) {
                   <div className="px-4 py-3 border-b border-slate-800 mb-2">
                     <p className="text-sm font-medium text-white truncate">{displayName}</p>
                     <p className="text-xs text-slate-400 truncate">{user?.email || user?.username}</p>
+                  </div>
+
+                  {/* Mobile Workspace Switcher inside menu */}
+                  <div className="md:hidden px-2 py-2 border-b border-slate-800 mb-2">
+                    <WorkspaceSwitcher />
                   </div>
                   
                   {userMenuItems.map((item) => (

@@ -2,10 +2,13 @@
 
 .team-members {
   margin-top: 20px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .members-table {
   width: 100%;
+  min-width: 600px;
   border-collapse: collapse;
   background: white;
   border: 1px solid #eee;
