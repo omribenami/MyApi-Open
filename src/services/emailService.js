@@ -1,10 +1,11 @@
 /**
  * Email Service
- * Handles sending emails via SMTP or SendGrid
+ * Handles sending emails via SMTP, SendGrid, or Resend
  * Configured via environment variables
  */
 
 const nodemailer = require('nodemailer');
+const https = require('https');
 const db = require('../database');
 
 class EmailService {
@@ -20,8 +21,12 @@ class EmailService {
     this.provider = process.env.EMAIL_PROVIDER || 'smtp';
     this.fromAddress = process.env.EMAIL_FROM;
     this.fromName = process.env.EMAIL_FROM_NAME || 'MyApi';
+    this.resendApiKey = process.env.RESEND_API_KEY;
 
-    if (this.provider === 'sendgrid') {
+    if (this.provider === 'resend') {
+      // Resend uses API, not traditional SMTP
+      this.transporter = null; // Will use sendEmailViaResend()
+    } else if (this.provider === 'sendgrid') {
       // SendGrid via nodemailer
       this.transporter = nodemailer.createTransport({
         host: 'smtp.sendgrid.net',
@@ -32,7 +37,7 @@ class EmailService {
         },
       });
     } else {
-      // Standard SMTP
+      // Standard SMTP (default)
       this.transporter = nodemailer.createTransport({
         host: process.env.SMTP_HOST || 'localhost',
         port: parseInt(process.env.SMTP_PORT, 10) || 587,
@@ -55,13 +60,21 @@ class EmailService {
 
     if (!fromAddress) missing.push('EMAIL_FROM');
 
-    if (provider === 'sendgrid') {
+    if (provider === 'resend') {
+      if (!process.env.RESEND_API_KEY) missing.push('RESEND_API_KEY');
+    } else if (provider === 'sendgrid') {
       if (!process.env.SENDGRID_API_KEY) missing.push('SENDGRID_API_KEY');
     } else {
       if (!process.env.SMTP_HOST) missing.push('SMTP_HOST');
       if (!process.env.SMTP_PORT) missing.push('SMTP_PORT');
       if (process.env.SMTP_USER && !process.env.SMTP_PASSWORD) missing.push('SMTP_PASSWORD');
     }
+
+    const authTypeMap = {
+      resend: 'api_key',
+      sendgrid: 'api_key',
+      smtp: 'smtp',
+    };
 
     return {
       provider,
@@ -70,8 +83,54 @@ class EmailService {
       requiredDeploymentFrom: 'noreply@myapiai.com',
       configured: missing.length === 0,
       missing,
-      authType: provider === 'sendgrid' ? 'api_key' : 'smtp',
+      authType: authTypeMap[provider] || 'smtp',
     };
+  }
+
+  /**
+   * Send email via Resend API
+   */
+  async sendEmailViaResend(emailData) {
+    return new Promise((resolve, reject) => {
+      const payload = JSON.stringify({
+        from: `${this.fromName} <${this.fromAddress}>`,
+        to: emailData.email_address,
+        subject: emailData.subject,
+        html: emailData.html_body || emailData.body,
+      });
+
+      const options = {
+        hostname: 'api.resend.com',
+        path: '/emails',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(payload),
+          'Authorization': `Bearer ${this.resendApiKey}`,
+        },
+      };
+
+      const req = https.request(options, (res) => {
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+          try {
+            const response = JSON.parse(data);
+            if (res.statusCode >= 200 && res.statusCode < 300) {
+              resolve({ success: true, messageId: response.id });
+            } else {
+              reject(new Error(`Resend API error: ${response.message || res.statusCode}`));
+            }
+          } catch (e) {
+            reject(new Error(`Failed to parse Resend response: ${e.message}`));
+          }
+        });
+      });
+
+      req.on('error', reject);
+      req.write(payload);
+      req.end();
+    });
   }
 
   /**
@@ -79,23 +138,31 @@ class EmailService {
    */
   async sendEmail(emailId, emailData) {
     try {
-      if (!this.transporter) {
-        throw new Error('Email service not configured');
-      }
-
       if (!this.fromAddress) {
         throw new Error('EMAIL_FROM is not configured (required deployment value: noreply@myapiai.com)');
       }
 
-      const mailOptions = {
-        from: `${this.fromName} <${this.fromAddress}>`,
-        to: emailData.email_address,
-        subject: emailData.subject,
-        html: emailData.html_body || emailData.body,
-        text: emailData.body,
-      };
+      let info;
+      if (this.provider === 'resend') {
+        if (!this.resendApiKey) {
+          throw new Error('RESEND_API_KEY not configured');
+        }
+        info = await this.sendEmailViaResend(emailData);
+      } else {
+        if (!this.transporter) {
+          throw new Error('Email service not configured');
+        }
 
-      const info = await this.transporter.sendMail(mailOptions);
+        const mailOptions = {
+          from: `${this.fromName} <${this.fromAddress}>`,
+          to: emailData.email_address,
+          subject: emailData.subject,
+          html: emailData.html_body || emailData.body,
+          text: emailData.body,
+        };
+
+        info = await this.transporter.sendMail(mailOptions);
+      }
       
       // Mark as sent in database
       db.markEmailAsSent(emailId);
@@ -124,14 +191,31 @@ class EmailService {
     }
 
     const now = new Date().toISOString();
-
-    const info = await this.transporter.sendMail({
-      from: `${this.fromName} <${this.fromAddress}>`,
-      to: toEmail.trim(),
+    const testData = {
+      email_address: toEmail.trim(),
       subject: 'MyApi email service test',
-      text: `This is a test email from MyApi. Sent at ${now}.`,
-      html: `<p>This is a test email from <strong>MyApi</strong>.</p><p>Sent at ${now}.</p>`,
-    });
+      body: `This is a test email from MyApi. Sent at ${now}.`,
+      html_body: `<p>This is a test email from <strong>MyApi</strong>.</p><p>Sent at ${now}.</p>`,
+    };
+
+    let info;
+    if (this.provider === 'resend') {
+      if (!this.resendApiKey) {
+        throw new Error('RESEND_API_KEY not configured');
+      }
+      info = await this.sendEmailViaResend(testData);
+    } else {
+      if (!this.transporter) {
+        throw new Error('Email service not configured');
+      }
+      info = await this.transporter.sendMail({
+        from: `${this.fromName} <${this.fromAddress}>`,
+        to: testData.email_address,
+        subject: testData.subject,
+        text: testData.body,
+        html: testData.html_body,
+      });
+    }
 
     return { success: true, messageId: info.messageId, to: toEmail.trim(), sentAt: now };
   }
@@ -184,6 +268,12 @@ class EmailService {
           error: `Email is not fully configured. Missing: ${config.missing.join(', ')}`,
           config,
         };
+      }
+
+      if (this.provider === 'resend') {
+        // For Resend, just verify the config is set
+        console.log('✓ Resend email service configured');
+        return { success: true, config, provider: 'resend' };
       }
 
       if (!this.transporter) {

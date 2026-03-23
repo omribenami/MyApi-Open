@@ -19,6 +19,7 @@ const EventEmitter = require('events');
 const alertEmitter = new EventEmitter();
 const NotificationService = require('./services/notificationService');
 const NotificationDispatcher = require('./lib/notificationDispatcher');
+const emailService = require('./services/emailService');
 
 const {
   db,
@@ -559,6 +560,19 @@ const rateLimitCleanupInterval = setInterval(() => {
   }
 }, 60 * 60 * 1000); // Run every hour
 rateLimitCleanupInterval.unref?.();
+
+// Email processor: Send pending emails every 5 minutes
+const emailProcessorInterval = setInterval(async () => {
+  try {
+    const result = await emailService.processPendingEmails(50);
+    if (result.sent > 0 || result.failed > 0) {
+      console.log(`[Email] Processed batch: ${result.sent} sent, ${result.failed} failed`);
+    }
+  } catch (err) {
+    console.error('[Email] Error processing pending emails:', err.message);
+  }
+}, 5 * 60 * 1000); // Run every 5 minutes
+emailProcessorInterval.unref?.();
 
 app.use((req, res, next) => {
   // CRITICAL: Exempt all auth/dashboard bootstrap paths from rate limiting
