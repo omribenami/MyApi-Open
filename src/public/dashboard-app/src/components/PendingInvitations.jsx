@@ -27,6 +27,13 @@ function PendingInvitations() {
       setLoading(true);
       setError(null);
       const headers = masterToken ? { 'Authorization': `Bearer ${masterToken}` } : {};
+      
+      // Mobile fallback: Send user email as header in case session cookie is lost
+      // This is common on mobile browsers after OAuth redirects
+      if (user?.email) {
+        headers['X-User-Email'] = user.email;
+      }
+      
       const response = await fetch('/api/v1/invitations', {
         headers,
         credentials: 'include'
@@ -50,6 +57,12 @@ function PendingInvitations() {
     try {
       setError(null);
       const headers = masterToken ? { 'Authorization': `Bearer ${masterToken}` } : {};
+      
+      // Mobile fallback: Send user email as header
+      if (user?.email) {
+        headers['X-User-Email'] = user.email;
+      }
+      
       const response = await fetch(`/api/v1/invitations/${invitationId}/accept`, {
         method: 'POST',
         headers,
@@ -91,6 +104,12 @@ function PendingInvitations() {
     try {
       setError(null);
       const headers = masterToken ? { 'Authorization': `Bearer ${masterToken}` } : {};
+      
+      // Mobile fallback: Send user email as header
+      if (user?.email) {
+        headers['X-User-Email'] = user.email;
+      }
+      
       const response = await fetch(`/api/v1/invitations/${invitationId}`, {
         method: 'DELETE',
         headers,

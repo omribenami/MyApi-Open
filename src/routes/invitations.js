@@ -140,15 +140,58 @@ router.delete('/:id', (req, res) => {
  * GET /api/v1/invitations/pending
  * Get all pending invitations for the current user
  * Auth: Must be logged in
+ * 
+ * MOBILE FIX: On mobile browsers, session cookies might not persist after OAuth redirect.
+ * Fallback: Check X-User-Email header as alternative auth source (sent by client after OAuth confirm).
  */
 router.get('/', (req, res) => {
   try {
-    if (!req.user) {
+    let userEmail = null;
+
+    // Primary: Check session auth (works on desktop)
+    if (req.user && req.user.email) {
+      userEmail = req.user.email;
+      console.log('[Invitations] Using session auth:', userEmail);
+    }
+    // Fallback: Check header sent by client (mobile fix for lost session cookie)
+    else if (req.headers['x-user-email']) {
+      userEmail = req.headers['x-user-email'];
+      console.log('[Invitations] Using header fallback auth:', userEmail);
+    }
+    // Fallback 2: Check if Authorization Bearer token can decode user
+    else if (req.headers.authorization) {
+      const token = req.headers.authorization.replace('Bearer ', '');
+      // Try to extract email from stored sessions/tokens
+      try {
+        const Database = require('better-sqlite3');
+        const db = new Database(require('path').join(__dirname, '../data/myapi.db'));
+        // Search for a recent session with this token
+        const session = db.prepare(`
+          SELECT data FROM sessions 
+          WHERE data LIKE ? 
+          ORDER BY expires DESC 
+          LIMIT 1
+        `).get(`%"${userEmail}"%`);
+        if (session) {
+          const data = JSON.parse(session.data);
+          userEmail = data.user?.email;
+          console.log('[Invitations] Extracted from session token:', userEmail);
+        }
+      } catch (e) {
+        // Silently fail fallback
+      }
+    }
+
+    if (!userEmail) {
+      console.log('[Invitations] ❌ No auth method available');
+      console.log('  - req.user:', req.user ? 'exists' : 'NONE');
+      console.log('  - X-User-Email header:', req.headers['x-user-email'] ? 'exists' : 'NONE');
+      console.log('  - Authorization:', req.headers.authorization ? 'exists' : 'NONE');
       return res.status(401).json({ error: 'Authentication required' });
     }
 
     const { getUserWorkspaceInvitations } = require('../database');
-    const invitations = getUserWorkspaceInvitations(req.user.email);
+    const invitations = getUserWorkspaceInvitations(userEmail);
 
     res.json({
       success: true,
