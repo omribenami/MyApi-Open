@@ -788,6 +788,11 @@ app.use((req, res, next) => {
 app.use('/dashboard', express.static(path.join(__dirname, 'public', 'dist')));
 app.use(express.static(path.join(__dirname, "public")));
 
+// Redirect invitation links to the dashboard where the PendingInvitations UI handles them
+app.get('/accept-invite/:id', (req, res) => {
+  res.redirect('/dashboard/');
+});
+
 // Onboarding routes
 const onboardRoutes = require('./onboard');
 app.use('/api/v1', onboardRoutes);

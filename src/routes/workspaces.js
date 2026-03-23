@@ -13,7 +13,7 @@ const router = express.Router();
 function buildInvitationEmailHtml({ workspaceName, role, invitationId, inviterName }) {
   const appUrl = process.env.APP_BASE_URL || 'https://www.myapiai.com';
   const acceptUrl = `${appUrl}/accept-invite/${invitationId}`;
-  const logoUrl = `${appUrl}/favicon.ico`;
+  const logoUrl = `${appUrl}/dashboard/myapi-logo.svg`;
 
   return `
   <!doctype html>

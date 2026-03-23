@@ -190,11 +190,6 @@ function Layout({ children, onLogout }) {
               ))}
             </div>
 
-            {/* Workspace Switcher */}
-            <div className="hidden md:block mr-3">
-              <WorkspaceSwitcher />
-            </div>
-
             {/* Notification Bell */}
             <div className="relative">
               <button
@@ -240,15 +235,13 @@ function Layout({ children, onLogout }) {
 
               {avatarMenuOpen && (
                 <div className="absolute right-0 top-12 w-56 rounded-xl border border-slate-700 bg-slate-900 shadow-2xl py-2 z-50">
-                  <div className="px-4 py-3 border-b border-slate-800 mb-2">
+                  <div className="px-4 py-3 border-b border-slate-800">
                     <p className="text-sm font-medium text-white truncate">{displayName}</p>
                     <p className="text-xs text-slate-400 truncate">{user?.email || user?.username}</p>
                   </div>
 
-                  {/* Mobile Workspace Switcher inside menu */}
-                  <div className="md:hidden px-2 py-2 border-b border-slate-800 mb-2">
-                    <WorkspaceSwitcher />
-                  </div>
+                  {/* Workspace Switcher - menu variant */}
+                  <WorkspaceSwitcher variant="menu" />
                   
                   {userMenuItems.map((item) => (
                     <Link 
