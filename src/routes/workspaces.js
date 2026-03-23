@@ -99,6 +99,7 @@ const {
   createWorkspaceInvitation,
   getWorkspaceInvitations,
   getInvitationByEmailAndWorkspace,
+  deleteInvitationByEmailAndWorkspace,
   queueEmail,
   getUserById,
   getUserByEmail,
@@ -554,8 +555,15 @@ router.post('/:id/invitations', (req, res) => {
           return res.status(400).json({ error: 'This person is already a member of this workspace' });
         }
       }
-      // If the invitation was accepted but they're no longer a member, allow re-inviting
-      // (they were revoked, so we allow them to be invited again)
+      
+      // If the invitation was accepted but they're no longer a member,
+      // delete the old invitation to allow re-inviting (they were revoked)
+      try {
+        deleteInvitationByEmailAndWorkspace(workspace.id, email);
+      } catch (err) {
+        console.error('Failed to delete old invitation:', err.message);
+        return res.status(500).json({ error: 'Failed to clean up old invitation' });
+      }
     }
 
     const invitation = createWorkspaceInvitation(

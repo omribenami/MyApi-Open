@@ -4886,6 +4886,11 @@ function getInvitationById(invitationId) {
   } : null;
 }
 
+function deleteInvitationByEmailAndWorkspace(workspaceId, email) {
+  const stmt = db.prepare('DELETE FROM workspace_invitations WHERE workspace_id = ? AND email = ?');
+  return stmt.run(workspaceId, email).changes > 0;
+}
+
 function getInvitationByEmailAndWorkspace(workspaceId, email) {
   const stmt = db.prepare('SELECT * FROM workspace_invitations WHERE workspace_id = ? AND email = ? LIMIT 1');
   const inv = stmt.get(workspaceId, email);
@@ -6067,6 +6072,7 @@ module.exports = {
   getWorkspaceInvitations,
   getInvitationById,
   getInvitationByEmailAndWorkspace,
+  deleteInvitationByEmailAndWorkspace,
   acceptWorkspaceInvitation,
   declineWorkspaceInvitation,
   getUserWorkspaceInvitations,
