@@ -64,9 +64,13 @@ function AccessTokens() {
   const [allowedPersonas, setAllowedPersonas] = useState([]); // empty = all
   const [allPersonas, setAllPersonas] = useState(true); // "All Personas" checkbox
 
+  // Re-fetch tokens when switching workspaces or when master token changes
+  const currentWorkspace = useAuthStore((state) => state.currentWorkspace);
   useEffect(() => {
-    if (masterToken) fetchTokens(masterToken);
-  }, [masterToken, fetchTokens]);
+    if (masterToken) {
+      fetchTokens(masterToken);
+    }
+  }, [masterToken, fetchTokens, currentWorkspace?.id]);
 
   // OAuth session fallback: lazily bootstrap master token if missing.
   // ONLY bootstrap if masterToken doesn't already exist in localStorage

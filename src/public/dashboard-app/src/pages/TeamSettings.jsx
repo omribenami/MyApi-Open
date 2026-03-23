@@ -23,10 +23,20 @@ const TeamSettings = () => {
   const [editingName, setEditingName] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState('');
   const [updatingName, setUpdatingName] = useState(false);
+  const currentContextWorkspace = useAuthStore((state) => state.currentWorkspace);
 
   useEffect(() => {
     fetchWorkspaces();
   }, [masterToken]);
+
+  // When workspace context switches, refresh data
+  useEffect(() => {
+    if (currentContextWorkspace?.id && currentWorkspace?.id !== currentContextWorkspace.id) {
+      setCurrentWorkspace(currentContextWorkspace);
+      fetchMembers(currentContextWorkspace.id);
+      fetchInvitations(currentContextWorkspace.id);
+    }
+  }, [currentContextWorkspace?.id]);
 
   const fetchWorkspaces = async () => {
     try {
