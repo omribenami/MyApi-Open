@@ -191,7 +191,7 @@ function Layout({ children, onLogout }) {
             </div>
 
             {/* Workspace Switcher */}
-            <div className="hidden md:block mr-3">
+            <div className="mr-3">
               <WorkspaceSwitcher />
             </div>
 

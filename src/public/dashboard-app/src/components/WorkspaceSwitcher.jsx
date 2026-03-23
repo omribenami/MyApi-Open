@@ -35,9 +35,9 @@ const WorkspaceSwitcher = () => {
     }
   };
 
-  if (!currentWorkspace || !workspaces || workspaces.length === 0) {
-    return null;
-  }
+  // Show switcher even if only one workspace, for testing & visibility
+  const displayName = currentWorkspace?.name || 'Workspace';
+  const displayWorkspaces = workspaces || [];
 
   return (
     <div className="workspace-switcher" ref={dropdownRef}>
@@ -47,22 +47,24 @@ const WorkspaceSwitcher = () => {
         title="Switch workspace"
       >
         <span className="workspace-icon">🏢</span>
-        <span className="workspace-name">{currentWorkspace.name}</span>
-        <span className={`dropdown-arrow ${isOpen ? 'open' : ''}`}>▼</span>
+        <span className="workspace-name">{displayName}</span>
+        {displayWorkspaces.length > 1 && (
+          <span className={`dropdown-arrow ${isOpen ? 'open' : ''}`}>▼</span>
+        )}
       </button>
 
-      {isOpen && (
+      {isOpen && displayWorkspaces.length > 0 && (
         <div className="workspace-dropdown">
           <div className="workspace-dropdown-header">
-            <h4>Workspaces</h4>
+            <h4>Workspaces ({displayWorkspaces.length})</h4>
           </div>
           
           <ul className="workspace-list">
-            {workspaces.map((workspace) => (
+            {displayWorkspaces.map((workspace) => (
               <li key={workspace.id}>
                 <button
                   className={`workspace-option ${
-                    workspace.id === currentWorkspace.id ? 'active' : ''
+                    workspace.id === currentWorkspace?.id ? 'active' : ''
                   }`}
                   onClick={() => handleSwitchWorkspace(workspace.id)}
                 >
@@ -71,7 +73,7 @@ const WorkspaceSwitcher = () => {
                     <span className="workspace-option-name">{workspace.name}</span>
                     <span className="workspace-option-slug">{workspace.slug}</span>
                   </span>
-                  {workspace.id === currentWorkspace.id && (
+                  {workspace.id === currentWorkspace?.id && (
                     <span className="checkmark">✓</span>
                   )}
                 </button>
