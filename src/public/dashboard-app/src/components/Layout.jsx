@@ -6,6 +6,7 @@ import BrandLogo from './BrandLogo';
 import CookieNotice from './CookieNotice';
 import Toast from './Toast';
 import NotificationDropdown from './NotificationDropdown';
+import WorkspaceSwitcher from './WorkspaceSwitcher';
 
 function NavDropdown({ label, items, isActiveFn, onMobileClick }) {
   const [open, setOpen] = useState(false);
@@ -187,6 +188,11 @@ function Layout({ children, onLogout }) {
                   isActiveFn={isActive} 
                 />
               ))}
+            </div>
+
+            {/* Workspace Switcher */}
+            <div className="hidden md:block mr-3">
+              <WorkspaceSwitcher />
             </div>
 
             {/* Notification Bell */}

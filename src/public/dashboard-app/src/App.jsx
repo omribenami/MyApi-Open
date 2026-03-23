@@ -54,11 +54,19 @@ function App() {
   const initialize = useAuthStore((state) => state.initialize);
   const handleLogout = useAuthStore((state) => state.logout);
   const forceUnauthenticated = useAuthStore((state) => state.forceUnauthenticated);
+  const fetchWorkspaces = useAuthStore((state) => state.fetchWorkspaces);
 
   // Initialize auth store on mount
   useEffect(() => {
     initialize();
   }, [initialize]);
+
+  // Keep workspace context loaded globally for switcher + scoped UX
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchWorkspaces();
+    }
+  }, [isAuthenticated, fetchWorkspaces]);
 
   // Handle OAuth callbacks at app level (runs before router decides which component to show)
   useEffect(() => {

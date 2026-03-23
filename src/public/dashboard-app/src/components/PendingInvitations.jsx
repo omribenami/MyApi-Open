@@ -4,11 +4,13 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import './PendingInvitations.css';
 
 function PendingInvitations() {
-  const { user, masterToken } = useAuthStore();
+  const navigate = useNavigate();
+  const { user, masterToken, fetchWorkspaces, setCurrentWorkspace } = useAuthStore();
   const [invitations, setInvitations] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -59,13 +61,26 @@ function PendingInvitations() {
         throw new Error(errorData.error || 'Failed to accept invitation');
       }
 
-      setSuccessMessage('Invitation accepted! You can now access the workspace.');
-      setInvitations(invitations.filter(inv => inv.id !== invitationId));
-      
-      // Refresh workspaces list
+      const data = await response.json();
+      const joinedWorkspace = data.workspace;
+
+      if (joinedWorkspace) {
+        setCurrentWorkspace(joinedWorkspace);
+      }
+
+      await fetchWorkspaces();
+
+      setSuccessMessage(
+        joinedWorkspace?.name
+          ? `Joined "${joinedWorkspace.name}" as ${joinedWorkspace.role || 'member'}. Switched workspace context.`
+          : 'Invitation accepted! Workspace access granted.'
+      );
+      setInvitations(prev => prev.filter(inv => inv.id !== invitationId));
+
+      // Keep momentum: route user to Team Settings in the newly joined context
       setTimeout(() => {
-        window.location.reload();
-      }, 1500);
+        navigate('/settings/team');
+      }, 900);
     } catch (err) {
       setError(err.message);
       console.error('Error accepting invitation:', err);
@@ -88,7 +103,7 @@ function PendingInvitations() {
       }
 
       setSuccessMessage('Invitation declined');
-      setInvitations(invitations.filter(inv => inv.id !== invitationId));
+      setInvitations(prev => prev.filter(inv => inv.id !== invitationId));
     } catch (err) {
       setError(err.message);
       console.error('Error declining invitation:', err);
