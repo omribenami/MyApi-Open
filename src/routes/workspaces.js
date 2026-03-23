@@ -600,8 +600,9 @@ router.post('/:id/invitations', (req, res) => {
       message: 'Invitation sent successfully'
     });
   } catch (error) {
-    console.error('Send invitation error:', error);
-    res.status(500).json({ error: 'Failed to send invitation' });
+    console.error('Send invitation error:', error.message || error);
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ error: error.message || 'Failed to send invitation' });
   }
 });
 module.exports = router;
