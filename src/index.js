@@ -166,6 +166,7 @@ const {
   updateRetentionPolicy,
   createComplianceAuditLog,
   getComplianceAuditLogs,
+  executeRetentionCleanup,
 } = require("./database");
 
 // OAuth service adapters
@@ -7671,6 +7672,35 @@ app.get('/api/v1/admin/compliance/audit-trail', authenticate, (req, res) => {
   } catch (err) {
     console.error('[Compliance] audit-trail error:', err);
     res.status(500).json({ error: 'Failed to fetch compliance audit trail' });
+  }
+});
+
+// POST /api/v1/admin/privacy/retention/run
+app.post('/api/v1/admin/privacy/retention/run', authenticate, (req, res) => {
+  try {
+    if (req.tokenMeta?.scope !== 'full') return res.status(403).json({ error: 'Full scope required' });
+
+    const workspaceId = req.workspaceId || (req.user ? getOrEnsureUserWorkspace(req.user.id) : null);
+    if (!workspaceId) return res.status(401).json({ error: 'Workspace context required' });
+
+    const dryRun = String(req.body?.dryRun || '').toLowerCase() === 'true' || req.body?.dryRun === true;
+    const result = executeRetentionCleanup(workspaceId, { dryRun });
+
+    createComplianceAuditLog(
+      workspaceId,
+      req.user?.id || null,
+      dryRun ? 'retention_cleanup_previewed' : 'retention_cleanup_executed',
+      'retention_policy',
+      null,
+      JSON.stringify({ dryRun, scannedPolicies: result.scannedPolicies, totalDeleted: result.totalDeleted }),
+      req.ip,
+      req.headers['user-agent'] || null
+    );
+
+    res.json({ data: result });
+  } catch (err) {
+    console.error('[Privacy] retention run error:', err);
+    res.status(500).json({ error: 'Failed to run retention cleanup' });
   }
 });
 

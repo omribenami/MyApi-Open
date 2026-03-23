@@ -83,3 +83,27 @@ Build:
 
 ### QA
 - pending review outcome
+
+## 2026-03-22 18:48 CDT — Week 3 DEV: Retention Executor Backend
+
+### DEV
+Implemented retention execution backend with dry-run support:
+- `database.js`
+  - `executeRetentionCleanup(workspaceId, { dryRun })`
+  - Supports cleanup for:
+    - `notifications` (+ dependent `notification_queue` cleanup)
+    - `activity_logs`/`audit_log`
+  - Explicitly skips immutable `compliance_audit_logs` (append-only)
+  - Returns structured per-policy summary (`deleted`, `status`, `reason`)
+- `index.js`
+  - Added admin endpoint: `POST /api/v1/admin/privacy/retention/run`
+  - Requires auth + full scope
+  - Supports `{ dryRun: true }` preview mode
+  - Writes compliance audit event for preview/execution
+
+### Runtime Verification
+- Server restarted successfully on `:4500`
+- Endpoint existence check: unauthenticated request returns `401` (expected)
+
+### REVIEW/QA
+- Pending next pass

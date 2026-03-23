@@ -5557,7 +5557,7 @@ function rotateWorkspaceEncryptionKey(workspaceId, oldKeyId, newKeyId) {
 /**
  * Create data retention policy
  */
-function createRetentionPolicy(workspaceId, entityType, retentionDays, createdByUserId) {
+function createRetentionPolicy(workspaceId, entityType, retentionDays, createdByUserId, autoDelete = true) {
   const id = 'rpolicy_' + crypto.randomBytes(12).toString('hex');
   const now = Math.floor(Date.now() / 1000);
   
@@ -5567,8 +5567,8 @@ function createRetentionPolicy(workspaceId, entityType, retentionDays, createdBy
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
     
-    stmt.run(id, workspaceId, entityType, retentionDays, 1, now, now, createdByUserId);
-    return { id, workspaceId, entityType, retentionDays, auto_delete: true, created_at: now };
+    stmt.run(id, workspaceId, entityType, retentionDays, autoDelete ? 1 : 0, now, now, createdByUserId);
+    return { id, workspaceId, entityType, retentionDays, auto_delete: autoDelete ? 1 : 0, created_at: now };
   } catch (error) {
     console.error('[Retention] Create policy error:', error.message);
     throw error;
@@ -5667,6 +5667,73 @@ function getComplianceAuditLogs(workspaceId, limit = 100) {
     console.error('[Compliance] Get logs error:', error.message);
     return [];
   }
+}
+
+/**
+ * Execute retention cleanup for a workspace (best-effort, per policy)
+ */
+function executeRetentionCleanup(workspaceId, options = {}) {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const dryRun = !!options.dryRun;
+  const policies = (getRetentionPolicies(workspaceId) || []).filter((p) => p && p.auto_delete === 1);
+  const summary = {
+    workspaceId,
+    dryRun,
+    runAt: nowSec,
+    scannedPolicies: policies.length,
+    totalDeleted: 0,
+    results: [],
+  };
+
+  for (const policy of policies) {
+    const entityType = String(policy.entity_type || '');
+    const retentionDays = Number(policy.retention_days || 0);
+    const cutoffSec = nowSec - Math.max(1, retentionDays) * 86400;
+
+    try {
+      if (entityType === 'notifications') {
+        const countStmt = db.prepare(`SELECT COUNT(*) as c FROM notifications WHERE workspace_id = ? AND created_at < ?`);
+        const row = countStmt.get(workspaceId, cutoffSec) || { c: 0 };
+        const count = Number(row.c || 0);
+
+        if (!dryRun && count > 0) {
+          db.prepare(`DELETE FROM notification_queue WHERE notification_id IN (SELECT id FROM notifications WHERE workspace_id = ? AND created_at < ?)`)
+            .run(workspaceId, cutoffSec);
+          db.prepare(`DELETE FROM notifications WHERE workspace_id = ? AND created_at < ?`).run(workspaceId, cutoffSec);
+        }
+
+        summary.totalDeleted += count;
+        summary.results.push({ entityType, retentionDays, deleted: count, status: 'ok' });
+        continue;
+      }
+
+      if (entityType === 'activity_logs' || entityType === 'audit_log') {
+        const cutoffIso = new Date(cutoffSec * 1000).toISOString();
+        const countStmt = db.prepare(`SELECT COUNT(*) as c FROM audit_log WHERE workspace_id = ? AND timestamp < ?`);
+        const row = countStmt.get(workspaceId, cutoffIso) || { c: 0 };
+        const count = Number(row.c || 0);
+
+        if (!dryRun && count > 0) {
+          db.prepare(`DELETE FROM audit_log WHERE workspace_id = ? AND timestamp < ?`).run(workspaceId, cutoffIso);
+        }
+
+        summary.totalDeleted += count;
+        summary.results.push({ entityType, retentionDays, deleted: count, status: 'ok' });
+        continue;
+      }
+
+      if (entityType === 'compliance_audit_logs') {
+        summary.results.push({ entityType, retentionDays, deleted: 0, status: 'skipped', reason: 'immutable_append_only' });
+        continue;
+      }
+
+      summary.results.push({ entityType, retentionDays, deleted: 0, status: 'skipped', reason: 'unsupported_entity_type' });
+    } catch (error) {
+      summary.results.push({ entityType, retentionDays, deleted: 0, status: 'error', error: error.message });
+    }
+  }
+
+  return summary;
 }
 
 /**
@@ -6010,4 +6077,5 @@ module.exports = {
   updateRetentionPolicy,
   createComplianceAuditLog,
   getComplianceAuditLogs,
+  executeRetentionCleanup,
 };
