@@ -1362,13 +1362,14 @@ const notificationsRouter = require('./routes/notifications');
 const activityRoutes = require('./routes/activity');
 const emailRoutes = require('./routes/email');
 const workspacesRoutes = require('./routes/workspaces');
+const invitationsRoutes = require('./routes/invitations');
 const createManagementRoutes = require('./routes/management');
 
 app.use('/api/v1/notifications', authenticate, notificationsRouter);
 app.use('/api/v1/activity', authenticate, activityRoutes);
 app.use('/api/v1/email', authenticate, emailRoutes);
 app.use('/api/v1/workspaces', authenticate, workspacesRoutes);
-app.use('/api/v1/invitations', authenticate, workspacesRoutes);
+app.use('/api/v1/invitations', authenticate, invitationsRoutes);
 
 // Mount management routes (audit, tokens, etc)
 // Note: Management routes require authentication but have their own permission checks
