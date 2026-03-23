@@ -491,22 +491,30 @@ function SecuritySection() {
         body: { device_name: 'Approved Device' },
       });
       
-      if (res.ok) {
-        // Reload data
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || errorData.message || `Server error: ${res.status}`);
+      }
+
+      // Approval succeeded — show success message
+      setDeviceSuccess('Device approved successfully');
+      
+      // Reload data (non-blocking)
+      try {
         const approvedRes = await apiRequest('/devices/approved');
         if (approvedRes.ok) {
           const data = await approvedRes.json();
           setApprovedDevices(data.devices || []);
         }
+      } catch (_) {}
+      
+      try {
         const pendingRes = await apiRequest('/devices/approvals/pending');
         if (pendingRes.ok) {
           const data = await pendingRes.json();
           setPendingApprovals(data.approvals || []);
         }
-      } else {
-        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(errorData.error || errorData.message || `Server error: ${res.status}`);
-      }
+      } catch (_) {}
     } catch (err) {
       console.error('Error approving device:', err);
       setDeviceError(`Failed to approve device: ${err.message}`);
@@ -520,16 +528,22 @@ function SecuritySection() {
         body: { reason: 'Denied by user' },
       });
       
-      if (res.ok) {
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || errorData.message || `Server error: ${res.status}`);
+      }
+
+      // Denial succeeded — show success
+      setDeviceSuccess('Device denied successfully');
+      
+      // Reload pending (non-blocking)
+      try {
         const pendingRes = await apiRequest('/devices/approvals/pending');
         if (pendingRes.ok) {
           const data = await pendingRes.json();
           setPendingApprovals(data.approvals || []);
         }
-      } else {
-        const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(errorData.error || errorData.message || `Server error: ${res.status}`);
-      }
+      } catch (_) {}
     } catch (err) {
       console.error('Error denying device:', err);
       setDeviceError(`Failed to deny device: ${err.message}`);
