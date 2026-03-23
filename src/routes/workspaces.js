@@ -94,6 +94,7 @@ const {
   getWorkspaceMembers,
   updateWorkspaceMemberRole,
   removeWorkspaceMember,
+  removeWorkspaceMemberByUserId,
   getWorkspaceMember,
   createWorkspaceInvitation,
   getWorkspaceInvitations,
@@ -452,7 +453,7 @@ router.delete('/:id/members/:userId', (req, res) => {
       return res.status(400).json({ error: 'Cannot remove workspace owner' });
     }
 
-    const success = removeWorkspaceMember(targetMember.id);
+    const success = removeWorkspaceMemberByUserId(workspace.id, req.params.userId);
     if (!success) {
       return res.status(400).json({ error: 'Failed to remove member' });
     }
@@ -536,14 +537,25 @@ router.post('/:id/invitations', (req, res) => {
       return res.status(400).json({ error: 'Email is required' });
     }
 
-    // Check if already invited or already a member (check ALL invitations, not just pending)
+    // Check if already invited or already a member
     const existingInvitation = getInvitationByEmailAndWorkspace(workspace.id, email);
     if (existingInvitation) {
-      if (existingInvitation.acceptedAt) {
-        return res.status(400).json({ error: 'This person is already a member of this workspace' });
-      } else {
+      // If the invitation is pending, don't allow re-inviting
+      if (!existingInvitation.acceptedAt) {
         return res.status(400).json({ error: 'This email has already been invited. They can accept the pending invitation.' });
       }
+      
+      // If the invitation was accepted, check if they're still a member
+      // (they could have been revoked after accepting)
+      const inviteeUser = getUserByEmail(email);
+      if (inviteeUser) {
+        const isMember = getWorkspaceMember(workspace.id, inviteeUser.id);
+        if (isMember) {
+          return res.status(400).json({ error: 'This person is already a member of this workspace' });
+        }
+      }
+      // If the invitation was accepted but they're no longer a member, allow re-inviting
+      // (they were revoked, so we allow them to be invited again)
     }
 
     const invitation = createWorkspaceInvitation(

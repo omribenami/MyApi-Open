@@ -4769,6 +4769,29 @@ function removeWorkspaceMember(workspaceMemberId) {
   return stmt.run(workspaceMemberId).changes > 0;
 }
 
+function removeWorkspaceMemberByUserId(workspaceId, userId) {
+  // Delete from workspace_members
+  const stmt = db.prepare('DELETE FROM workspace_members WHERE workspace_id = ? AND user_id = ?');
+  const result = stmt.run(workspaceId, userId).changes > 0;
+  
+  // Also clean up the invitation record (mark as declined) to avoid UNIQUE constraint issues
+  // when re-inviting someone who was revoked
+  if (result) {
+    try {
+      const user = getUserById(userId);
+      if (user && user.email) {
+        const invStmt = db.prepare('DELETE FROM workspace_invitations WHERE workspace_id = ? AND email = ?');
+        invStmt.run(workspaceId, user.email);
+      }
+    } catch (err) {
+      // Silent fail - not critical if invitation cleanup fails
+      console.error('Failed to cleanup invitation on member removal:', err.message);
+    }
+  }
+  
+  return result;
+}
+
 function getWorkspaceMember(workspaceId, userId) {
   const stmt = db.prepare(`
     SELECT wm.id, wm.workspace_id, wm.user_id, wm.role, wm.joined_at
@@ -6038,6 +6061,7 @@ module.exports = {
   getWorkspaceMembers,
   updateWorkspaceMemberRole,
   removeWorkspaceMember,
+  removeWorkspaceMemberByUserId,
   getWorkspaceMember,
   createWorkspaceInvitation,
   getWorkspaceInvitations,
