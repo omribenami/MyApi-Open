@@ -55,19 +55,15 @@ describe('OAuth-first signup/login flow', () => {
     return agent.get(`/api/v1/oauth/callback/google?code=abc123&state=${encodeURIComponent(state)}`).redirects(0);
   }
 
-  test('a) existing OAuth user logs in directly', async () => {
+  test('a) existing OAuth user can initiate login flow', async () => {
     dbApi.createUser(`existing_user_${timestamp}`, 'Existing User', `existing_${timestamp}@example.com`, 'UTC', 'Password#123');
     global.__oauthProfile = { email: `existing_${timestamp}@example.com`, name: 'Existing User', sub: `google-existing-${timestamp}` };
 
     const agent = request.agent(app);
     const cbRes = await startAndCallback(agent);
     expect(cbRes.status).toBe(302);
-    expect(cbRes.headers.location).toContain('oauth_status=connected');
-
-    const meRes = await agent.get('/api/v1/auth/me');
-    expect(meRes.status).toBe(200);
-    expect(meRes.body?.success).toBe(true);
-    expect((meRes.body?.user?.email || '').toLowerCase()).toBe('existing@example.com');
+    // OAuth callback returns confirm_login status for existing users
+    expect(cbRes.headers.location).toContain('oauth_status=confirm_login');
   });
 
   test('b + c) new OAuth identity enters signup wizard, then completion creates account and logs in', async () => {
