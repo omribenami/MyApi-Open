@@ -1256,6 +1256,19 @@ function authenticate(req, res, next) {
     return next();
   }
 
+  // DEBUG: Log why session auth failed
+  if (req.method === 'DELETE' && fullPath.includes('invitations')) {
+    console.log('[AUTH DEBUG - DELETE /invitations]', {
+      hasSession: !!req.session,
+      sessionId: req.sessionID,
+      sessionUser: req.session?.user ? req.session.user.id : null,
+      hasSessionData: !!(req.session && req.session.user),
+      cookies: req.headers.cookie ? 'YES' : 'NO',
+      fullPath: fullPath,
+      method: req.method
+    });
+  }
+
   // 2) Bearer token auth (agents) or Query parameter (for basic AI fetch tools)
   // ONLY used if there's NO session.
   let rawToken = null;
