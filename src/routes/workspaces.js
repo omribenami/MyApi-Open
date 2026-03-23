@@ -507,10 +507,10 @@ router.post('/:id/invitations', (req, res) => {
 });
 
 /**
- * GET /api/v1/invitations/:id
- * Get a specific invitation by ID
+ * GET /api/v1/invitations/detail/:id
+ * Get a specific invitation by ID (renamed route to avoid conflict with workspace delete)
  */
-router.get('/:id', (req, res) => {
+router.get('/detail/:id', (req, res) => {
   try {
     const invitation = getInvitationById(req.params.id);
     if (!invitation) {
@@ -580,7 +580,7 @@ router.post('/:id/accept', (req, res) => {
 
 /**
  * DELETE /api/v1/invitations/:id
- * Decline/delete an invitation
+ * Decline/delete an invitation (revoke by admin)
  * Auth: Optional (can be deleted by admin or self)
  */
 router.delete('/:id', (req, res) => {
@@ -607,21 +607,21 @@ router.delete('/:id', (req, res) => {
     }
 
     if (!canDelete) {
-      return res.status(403).json({ error: 'Not authorized to decline this invitation' });
+      return res.status(403).json({ error: 'Not authorized to revoke this invitation' });
     }
 
     const success = declineWorkspaceInvitation(req.params.id);
     if (!success) {
-      return res.status(400).json({ error: 'Failed to decline invitation' });
+      return res.status(400).json({ error: 'Failed to revoke invitation' });
     }
 
     res.json({
       success: true,
-      message: 'Invitation declined successfully'
+      message: 'Invitation revoked successfully'
     });
   } catch (error) {
-    console.error('Decline invitation error:', error);
-    res.status(500).json({ error: 'Failed to decline invitation' });
+    console.error('Revoke invitation error:', error);
+    res.status(500).json({ error: 'Failed to revoke invitation' });
   }
 });
 
