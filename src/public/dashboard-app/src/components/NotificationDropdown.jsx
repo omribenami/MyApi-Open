@@ -79,6 +79,7 @@ function NotificationDropdown({ open, onClose }) {
       token_revoked: '⛔',
       service_connected: '🔗',
       service_disconnected: '🔌',
+      team_invitation: '✉️',
       error: '⚠️',
     };
     return icons[type] || '📢';
