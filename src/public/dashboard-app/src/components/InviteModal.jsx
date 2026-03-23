@@ -40,6 +40,7 @@ const InviteModal = ({ workspaceId, onInvitationSent, onClose }) => {
             'Content-Type': 'application/json',
             'X-Workspace-ID': workspaceId
           },
+          credentials: 'include',
           body: JSON.stringify({
             email: email.trim(),
             role
@@ -48,10 +49,18 @@ const InviteModal = ({ workspaceId, onInvitationSent, onClose }) => {
       );
 
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to send invitation');
+        let errorMsg = 'Failed to send invitation';
+        try {
+          const data = await response.json();
+          errorMsg = data.error || errorMsg;
+        } catch (e) {
+          // If response is not JSON, use status text
+          errorMsg = response.statusText || errorMsg;
+        }
+        throw new Error(errorMsg);
       }
 
+      const data = await response.json();
       setSuccess(true);
       setEmail('');
       setRole('member');
@@ -60,7 +69,8 @@ const InviteModal = ({ workspaceId, onInvitationSent, onClose }) => {
         onInvitationSent();
       }, 1000);
     } catch (err) {
-      setError(err.message);
+      console.error('Invitation error:', err);
+      setError(err.message || 'Failed to send invitation');
     } finally {
       setLoading(false);
     }
