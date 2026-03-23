@@ -5,11 +5,13 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useAuthStore } from '../stores/authStore';
 import './WorkspaceSwitcher.css';
 
 const WorkspaceSwitcher = () => {
-  const { currentWorkspace, workspaces, switchWorkspace } = useAuth();
+  const currentWorkspace = useAuthStore((state) => state.currentWorkspace);
+  const workspaces = useAuthStore((state) => state.workspaces);
+  const switchWorkspace = useAuthStore((state) => state.switchWorkspace);
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
 
