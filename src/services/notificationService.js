@@ -17,8 +17,7 @@ class NotificationService {
       const settings = db.getOrCreateNotificationSettings(null, userId);
       
       // Resolve the workspace ID from the returned preferences
-      const workspaceId = settings.inApp?.workspace_id || settings.email?.workspace_id
-        || db.getOrEnsureUserWorkspace(userId);
+      const workspaceId = settings.inApp?.workspace_id || settings.email?.workspace_id || db.getOrEnsureUserWorkspace(userId);
       
       // Check channel-level preferences
       const webEnabled = settings.inApp?.enabled === 1;

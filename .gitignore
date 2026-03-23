@@ -36,4 +36,3 @@ src/uploads/
 src/.env*
 !src/.env.example
 logs/
-node_modules
