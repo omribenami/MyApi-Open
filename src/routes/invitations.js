@@ -90,26 +90,16 @@ router.post('/:id/accept', (req, res) => {
 /**
  * DELETE /api/v1/invitations/:id
  * Decline/delete an invitation (revoke by admin or self-decline)
- * Auth: Optional (can be deleted by admin or self)
+ * Auth: Optional - can be deleted by:
+ * 1. Authenticated admin/owner of the workspace
+ * 2. Unauthenticated with matching email (?email= query param)
  */
 router.delete('/:id', (req, res) => {
   try {
-    // DEBUG
-    console.log('[DELETE /invitations/:id]', {
-      invitationId: req.params.id,
-      hasUser: !!req.user,
-      user: req.user ? { id: req.user.id, email: req.user.email } : null,
-      authType: req.authType,
-      hasSession: !!(req.session && req.session.user),
-      headers: { auth: req.headers.authorization ? 'Bearer...' : 'NONE', workspace: req.headers['x-workspace-id'] }
-    });
-
     const invitation = getInvitationById(req.params.id);
     if (!invitation) {
-      console.log('  → Invitation NOT found');
       return res.status(404).json({ error: 'Invitation not found' });
     }
-    console.log('  ✓ Invitation found:', { email: invitation.email, workspaceId: invitation.workspaceId });
 
     // Can delete if:
     // 1. User is admin/owner of workspace
@@ -119,29 +109,23 @@ router.delete('/:id', (req, res) => {
 
     if (req.user) {
       const member = getWorkspaceMember(workspace.id, req.user.id);
-      console.log('  → Auth check:', { isOwner: workspace.ownerId === req.user.id, memberRole: member?.role, emailMatch: req.user.email?.toLowerCase() === invitation.email.toLowerCase() });
       canDelete = (member && (member.role === 'admin' || member.role === 'owner')) || 
                   workspace.ownerId === req.user.id ||
                   req.user.email?.toLowerCase() === invitation.email.toLowerCase();
     } else {
       // Allow deletion if email matches (self decline without auth)
       canDelete = req.query.email && req.query.email.toLowerCase() === invitation.email.toLowerCase();
-      console.log('  → No user, checking query email match:', canDelete);
     }
 
     if (!canDelete) {
-      console.log('  ✗ NOT authorized');
       return res.status(403).json({ error: 'Not authorized to revoke this invitation' });
     }
 
-    console.log('  ✓ Authorized, deleting...');
     const success = declineWorkspaceInvitation(req.params.id);
     if (!success) {
-      console.log('  ✗ Delete failed');
       return res.status(400).json({ error: 'Failed to revoke invitation' });
     }
 
-    console.log('  ✓ Delete succeeded');
     res.json({
       success: true,
       message: 'Invitation revoked successfully'

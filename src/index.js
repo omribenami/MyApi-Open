@@ -1234,6 +1234,11 @@ function authenticate(req, res, next) {
     /^\/oauth\//,
   ];
 
+  // Allow DELETE on invitations if email query param is provided (for email-based revocation without login)
+  if (req.method === 'DELETE' && fullPath.includes('/invitations/') && req.query.email) {
+    return next();
+  }
+
   const isPublicPath = publicPaths.some(pattern => pattern.test(fullPath));
   if (isPublicPath) {
     return next();
@@ -1254,19 +1259,6 @@ function authenticate(req, res, next) {
     // Device approval is only for API token/agent access.
     // Session auth is complete and secure - return immediately.
     return next();
-  }
-
-  // DEBUG: Log why session auth failed
-  if (req.method === 'DELETE' && fullPath.includes('invitations')) {
-    console.log('[AUTH DEBUG - DELETE /invitations]', {
-      hasSession: !!req.session,
-      sessionId: req.sessionID,
-      sessionUser: req.session?.user ? req.session.user.id : null,
-      hasSessionData: !!(req.session && req.session.user),
-      cookies: req.headers.cookie ? 'YES' : 'NO',
-      fullPath: fullPath,
-      method: req.method
-    });
   }
 
   // 2) Bearer token auth (agents) or Query parameter (for basic AI fetch tools)

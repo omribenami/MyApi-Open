@@ -191,8 +191,11 @@ const TeamSettings = () => {
                                 'X-Workspace-ID': currentWorkspace.id,
                                 ...(masterToken ? { Authorization: `Bearer ${masterToken}` } : {})
                               };
+                              // Include email as query param to allow revocation without login
+                              // (for email-based revocation flow)
+                              const revokeUrl = `/api/v1/invitations/${invitation.id}?email=${encodeURIComponent(invitation.email)}`;
                               const response = await fetch(
-                                `/api/v1/invitations/${invitation.id}`,
+                                revokeUrl,
                                 {
                                   method: 'DELETE',
                                   headers,
@@ -201,6 +204,9 @@ const TeamSettings = () => {
                               );
                               if (response.ok) {
                                 handleInvitationRemoved(invitation.id);
+                              } else {
+                                const error = await response.json();
+                                console.error('Error removing invitation:', error);
                               }
                             } catch (err) {
                               console.error('Error removing invitation:', err);
