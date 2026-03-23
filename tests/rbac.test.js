@@ -19,13 +19,14 @@ let testPermissions = {};
  * Test Suite: RBAC Middleware
  */
 describe('RBAC Middleware', () => {
+  const timestamp = Date.now();
   
   beforeEach(async () => {
-    // Setup test data
+    // Setup test data with unique names to avoid UNIQUE constraint failures
     testUsers = {
-      admin: { id: uuid(), username: 'admin-test', email: 'admin@test.com' },
-      developer: { id: uuid(), username: 'dev-test', email: 'dev@test.com' },
-      viewer: { id: uuid(), username: 'viewer-test', email: 'viewer@test.com' }
+      admin: { id: uuid(), username: `admin-test-${timestamp}`, email: `admin-${timestamp}@test.com` },
+      developer: { id: uuid(), username: `dev-test-${timestamp}`, email: `dev-${timestamp}@test.com` },
+      viewer: { id: uuid(), username: `viewer-test-${timestamp}`, email: `viewer-${timestamp}@test.com` }
     };
 
     testRoles = {

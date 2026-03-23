@@ -24,20 +24,21 @@ const {
 
 describe('Phase 1: Workspaces & Multi-Tenancy', () => {
   let user1, user2, workspace, workspace2;
+  const timestamp = Date.now();
 
   beforeAll(() => {
-    // Create test users
-    user1 = createUser('testuser1', 'Test User 1', 'test1@example.com', 'UTC', 'password123');
-    user2 = createUser('testuser2', 'Test User 2', 'test2@example.com', 'UTC', 'password123');
+    // Create test users with unique names to avoid UNIQUE constraint failures
+    user1 = createUser(`testuser1_${timestamp}`, 'Test User 1', `test1_${timestamp}@example.com`, 'UTC', 'password123');
+    user2 = createUser(`testuser2_${timestamp}`, 'Test User 2', `test2_${timestamp}@example.com`, 'UTC', 'password123');
   });
 
   describe('Workspace CRUD Operations', () => {
     test('should create a workspace', () => {
-      workspace = createWorkspace('Test Workspace', user1.id, 'test-workspace');
+      workspace = createWorkspace('Test Workspace', user1.id, `test-workspace-${timestamp}`);
       expect(workspace).toBeDefined();
       expect(workspace.name).toBe('Test Workspace');
       expect(workspace.ownerId).toBe(user1.id);
-      expect(workspace.slug).toBe('test-workspace');
+      expect(workspace.slug).toBe(`test-workspace-${timestamp}`);
     });
 
     test('should generate slug if not provided', () => {

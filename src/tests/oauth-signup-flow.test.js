@@ -24,6 +24,7 @@ jest.mock('../services/google-adapter', () => {
 describe('OAuth-first signup/login flow', () => {
   let app;
   let dbApi;
+  const timestamp = Date.now();
 
   beforeAll(() => {
     process.env.NODE_ENV = 'test';
@@ -55,8 +56,8 @@ describe('OAuth-first signup/login flow', () => {
   }
 
   test('a) existing OAuth user logs in directly', async () => {
-    dbApi.createUser('existing_user', 'Existing User', 'existing@example.com', 'UTC', 'Password#123');
-    global.__oauthProfile = { email: 'existing@example.com', name: 'Existing User', sub: 'google-existing' };
+    dbApi.createUser(`existing_user_${timestamp}`, 'Existing User', `existing_${timestamp}@example.com`, 'UTC', 'Password#123');
+    global.__oauthProfile = { email: `existing_${timestamp}@example.com`, name: 'Existing User', sub: `google-existing-${timestamp}` };
 
     const agent = request.agent(app);
     const cbRes = await startAndCallback(agent);
@@ -70,7 +71,7 @@ describe('OAuth-first signup/login flow', () => {
   });
 
   test('b + c) new OAuth identity enters signup wizard, then completion creates account and logs in', async () => {
-    global.__oauthProfile = { email: 'brandnew@example.com', name: 'Brand New', sub: 'google-brand-new' };
+    global.__oauthProfile = { email: `brandnew_${timestamp}@example.com`, name: 'Brand New', sub: `google-brand-new-${timestamp}` };
 
     const agent = request.agent(app);
     const cbRes = await startAndCallback(agent);
@@ -82,7 +83,7 @@ describe('OAuth-first signup/login flow', () => {
 
     const pending = await agent.get('/api/v1/auth/oauth-signup/pending');
     expect(pending.status).toBe(200);
-    expect((pending.body?.data?.email || '').toLowerCase()).toBe('brandnew@example.com');
+    expect((pending.body?.data?.email || '').toLowerCase()).toBe(`brandnew_${timestamp}@example.com`.toLowerCase());
 
     const completeRes = await agent
       .post('/api/v1/auth/oauth-signup/complete')
@@ -90,8 +91,8 @@ describe('OAuth-first signup/login flow', () => {
         oauthSignupConfirm: true,
         oauthSignupNonce: pending.body?.data?.nonce,
         displayName: 'Brand New',
-        username: 'brandnew',
-        email: 'brandnew@example.com',
+        username: `brandnew_${timestamp}`,
+        email: `brandnew_${timestamp}@example.com`,
         timezone: 'UTC',
         userMd: 'I build APIs.',
         soulMd: 'I value clarity.',
@@ -102,11 +103,11 @@ describe('OAuth-first signup/login flow', () => {
 
     const meAfter = await agent.get('/api/v1/auth/me');
     expect(meAfter.status).toBe(200);
-    expect((meAfter.body?.user?.email || '').toLowerCase()).toBe('brandnew@example.com');
+    expect((meAfter.body?.user?.email || '').toLowerCase()).toBe(`brandnew_${timestamp}@example.com`.toLowerCase());
   });
 
   test('d) skip USER.md and SOUL.md still completes signup', async () => {
-    global.__oauthProfile = { email: 'skipflow@example.com', name: 'Skip Flow', sub: 'google-skip-flow' };
+    global.__oauthProfile = { email: `skipflow_${timestamp}@example.com`, name: 'Skip Flow', sub: `google-skip-flow-${timestamp}` };
 
     const agent = request.agent(app);
     const cbRes = await startAndCallback(agent);
