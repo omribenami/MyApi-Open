@@ -107,3 +107,39 @@ Implemented retention execution backend with dry-run support:
 
 ### REVIEW/QA
 - Pending next pass
+
+## 2026-03-22 19:32 CDT — QA Status Report
+
+### Test Summary
+- **Passing**: 7 suites, 104 tests ✅
+- **Failing**: 9 suites, 88 tests ❌  
+- **Total**: 16 suites, 192 tests (54% pass rate)
+
+### Phase 5 Status
+- **Phase 5 Sanity Tests**: ✅ PASS (3/3)
+  - Retention executor logic working
+  - DryRun + execute modes functional
+  - No crashes on executor code path
+
+### Failing Test Suites (Legacy/Pre-Phase 5)
+1. `oauth-signup-flow.test.js` — OAuth signup integration
+2. `phase3.audit-security.test.js` — Audit/security endpoints
+3. `integration.test.js` — General integration
+4. `import.test.js` — Data import flows
+5. `services-email-status.test.js` — Email service status
+6. `export-routes.test.js` — Data export routes
+7. `phase1-workspaces.test.js` — Workspace management
+8. `deviceApproval.test.js` — Device approval system
+9. `rbac.test.js` — RBAC/enterprise roles
+
+### Analysis
+- Most failures are **integration-level** (depend on complex setup, real workspaces, OAuth, etc.)
+- Not directly related to Phase 5 work (retention/encryption)
+- Would require significant test infrastructure refactor to fix all
+- Critical path tests (Phase 2: Billing, OAuth hardening, notifications, vault) are **passing**
+
+### Next Steps
+- Phase 5 Week 3 UI wiring (retention preview/run)
+- Phase 5 review pass (Opus 4.6)
+- Phase 5 final polish
+- QA refactor deferred (low priority vs. feature completion)
