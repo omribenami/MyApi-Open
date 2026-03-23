@@ -1157,6 +1157,8 @@ function PrivacySection() {
   const [retentionEntityType, setRetentionEntityType] = useState('compliance_audit_logs');
   const [retentionDays, setRetentionDays] = useState(365);
   const [retentionSaving, setRetentionSaving] = useState(false);
+  const [retentionRunning, setRetentionRunning] = useState(false);
+  const [retentionPreview, setRetentionPreview] = useState(null);
 
   useEffect(() => {
     if (privacySuccess) {
@@ -1281,6 +1283,60 @@ function PrivacySection() {
     }
   };
 
+  const handleRetentionPreview = async () => {
+    clearPrivacyError();
+    setRetentionRunning(true);
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(masterToken ? { Authorization: `Bearer ${masterToken}` } : {}),
+      };
+      const res = await fetch('/api/v1/admin/privacy/retention/run', {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: JSON.stringify({ dryRun: true }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Failed to preview retention cleanup');
+      setRetentionPreview(data?.data);
+      setPrivacySuccess(`Preview: Would delete ${data?.data?.totalDeleted || 0} items across ${data?.data?.scannedPolicies || 0} policies`);
+    } catch (e) {
+      setPrivacyError(e.message || 'Failed to preview retention cleanup');
+    } finally {
+      setRetentionRunning(false);
+    }
+  };
+
+  const handleRetentionExecute = async () => {
+    if (!window.confirm('This will permanently delete expired data. This cannot be undone. Continue?')) {
+      return;
+    }
+    
+    clearPrivacyError();
+    setRetentionRunning(true);
+    try {
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(masterToken ? { Authorization: `Bearer ${masterToken}` } : {}),
+      };
+      const res = await fetch('/api/v1/admin/privacy/retention/run', {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: JSON.stringify({ dryRun: false }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Failed to execute retention cleanup');
+      setRetentionPreview(null);
+      setPrivacySuccess(`✓ Deleted ${data?.data?.totalDeleted || 0} expired items from ${data?.data?.scannedPolicies || 0} policies`);
+    } catch (e) {
+      setPrivacyError(e.message || 'Failed to execute retention cleanup');
+    } finally {
+      setRetentionRunning(false);
+    }
+  };
+
   return (
     <SectionCard title="Privacy Controls" description="Manage your privacy preferences, cookie mode, and data retention settings">
       <div className="space-y-4">
@@ -1382,6 +1438,36 @@ function PrivacySection() {
               </div>
             )}
           </div>
+
+          {retentionPolicies.length > 0 && (
+            <div className="mt-4 space-y-2">
+              <p className="text-xs text-slate-400 mb-2">Cleanup execution</p>
+              <button
+                onClick={handleRetentionPreview}
+                disabled={retentionRunning}
+                className="w-full px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-md text-sm font-medium"
+              >
+                {retentionRunning ? 'Running...' : '📊 Preview Cleanup (Dry Run)'}
+              </button>
+              {retentionPreview && (
+                <button
+                  onClick={handleRetentionExecute}
+                  disabled={retentionRunning}
+                  className="w-full px-4 py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-md text-sm font-medium"
+                >
+                  {retentionRunning ? 'Deleting...' : '🗑️ Execute Cleanup (Permanent)'}
+                </button>
+              )}
+              {retentionPreview && (
+                <div className="text-xs bg-slate-800 border border-slate-700 rounded p-3 text-slate-200">
+                  <p className="font-semibold mb-1">Preview Results:</p>
+                  <p>Scanned: {retentionPreview.scannedPolicies} policies</p>
+                  <p>To Delete: {retentionPreview.totalDeleted} items</p>
+                  <p className="text-amber-400 mt-1 text-[11px]">Run cleanup to permanently delete these items</p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <button
