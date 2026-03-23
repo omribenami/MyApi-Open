@@ -20,6 +20,9 @@ const TeamSettings = () => {
   const [error, setError] = useState(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [activeTab, setActiveTab] = useState('members');
+  const [editingName, setEditingName] = useState(false);
+  const [newWorkspaceName, setNewWorkspaceName] = useState('');
+  const [updatingName, setUpdatingName] = useState(false);
 
   useEffect(() => {
     fetchWorkspaces();
@@ -102,6 +105,41 @@ const TeamSettings = () => {
     setInvitations(invitations.filter(inv => inv.id !== invitationId));
   };
 
+  const handleUpdateWorkspaceName = async () => {
+    if (!newWorkspaceName.trim() || newWorkspaceName === currentWorkspace.name) {
+      setEditingName(false);
+      return;
+    }
+
+    setUpdatingName(true);
+    try {
+      const headers = masterToken ? { 'Authorization': `Bearer ${masterToken}` } : {};
+      const response = await fetch(`/api/v1/workspaces/${currentWorkspace.id}`, {
+        method: 'PUT',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify({ name: newWorkspaceName })
+      });
+
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Failed to update workspace name');
+      }
+
+      const data = await response.json();
+      setCurrentWorkspace(data.workspace);
+      setEditingName(false);
+      setError(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setUpdatingName(false);
+    }
+  };
+
   const isOwner = currentWorkspace?.ownerId === user?.id;
   const canManageMembers = isOwner || members.some(
     m => m.user_id === user?.id && (m.role === 'admin' || m.role === 'owner')
@@ -137,6 +175,14 @@ const TeamSettings = () => {
         >
           Pending Invitations ({invitations.length})
         </button>
+        {isOwner && (
+          <button
+            className={`tab-button ${activeTab === 'settings' ? 'active' : ''}`}
+            onClick={() => setActiveTab('settings')}
+          >
+            ⚙️ Workspace Settings
+          </button>
+        )}
       </div>
 
       {loading ? (
@@ -220,6 +266,65 @@ const TeamSettings = () => {
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {activeTab === 'settings' && isOwner && (
+            <div className="tab-content workspace-settings-tab">
+              <div className="settings-section">
+                <h3>Workspace Name</h3>
+                <p className="section-description">Give your workspace a memorable name that describes your team or project.</p>
+                
+                {editingName ? (
+                  <div className="edit-name-form">
+                    <input
+                      type="text"
+                      value={newWorkspaceName}
+                      onChange={(e) => setNewWorkspaceName(e.target.value)}
+                      placeholder="Enter workspace name"
+                      className="name-input"
+                      autoFocus
+                    />
+                    <div className="button-group">
+                      <button
+                        className="btn-save"
+                        onClick={handleUpdateWorkspaceName}
+                        disabled={updatingName}
+                      >
+                        {updatingName ? 'Saving...' : 'Save'}
+                      </button>
+                      <button
+                        className="btn-cancel"
+                        onClick={() => setEditingName(false)}
+                        disabled={updatingName}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="name-display">
+                    <p className="current-name">{currentWorkspace.name}</p>
+                    <button
+                      className="btn-edit"
+                      onClick={() => {
+                        setNewWorkspaceName(currentWorkspace.name);
+                        setEditingName(true);
+                      }}
+                    >
+                      Edit Name
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="settings-section">
+                <h3>Workspace ID</h3>
+                <p className="section-description">Used for API requests and workspace switching.</p>
+                <div className="workspace-id-display">
+                  <code>{currentWorkspace.id}</code>
+                </div>
+              </div>
             </div>
           )}
         </>

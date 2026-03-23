@@ -159,3 +159,134 @@
 .delete-button:hover {
   background-color: rgba(127, 29, 29, 0.4);
 }
+
+/* Workspace Settings Tab */
+.workspace-settings-tab {
+  max-width: 500px;
+}
+
+.settings-section {
+  padding: 20px;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.settings-section h3 {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.section-description {
+  margin: 0 0 12px 0;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.edit-name-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.name-input {
+  padding: 10px 12px;
+  background: #1e293b;
+  border: 1px solid #475569;
+  border-radius: 6px;
+  color: #e2e8f0;
+  font-size: 14px;
+  font-family: inherit;
+  transition: border-color 0.2s ease;
+}
+
+.name-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.button-group {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-save,
+.btn-cancel,
+.btn-edit {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-save {
+  background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+  color: white;
+}
+
+.btn-save:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.35);
+}
+
+.btn-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-cancel {
+  background: #334155;
+  color: #e2e8f0;
+}
+
+.btn-cancel:hover:not(:disabled) {
+  background: #475569;
+}
+
+.btn-cancel:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.name-display {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.current-name {
+  margin: 0;
+  font-size: 16px;
+  color: #e2e8f0;
+  font-weight: 500;
+}
+
+.btn-edit {
+  background: #475569;
+  color: #e2e8f0;
+  padding: 8px 12px;
+  white-space: nowrap;
+}
+
+.btn-edit:hover {
+  background: #64748b;
+}
+
+.workspace-id-display {
+  padding: 10px 12px;
+  background: #1e293b;
+  border: 1px solid #475569;
+  border-radius: 6px;
+  font-family: 'Monaco', 'Courier New', monospace;
+  font-size: 13px;
+  color: #93c5fd;
+  word-break: break-all;
+}
