@@ -328,6 +328,7 @@ function SecuritySection() {
   const [deviceLoading, setDeviceLoading] = useState(false);
   const [deviceLoadError, setDeviceLoadError] = useState('');
   const [deviceError, setDeviceError] = useState('');
+  const [deviceSuccess, setDeviceSuccess] = useState('');
   const [activeSessions, setActiveSessions] = useState([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
@@ -822,6 +823,9 @@ function SecuritySection() {
           )}
           {deviceError && (
             <ErrorBanner message={deviceError} onClose={() => setDeviceError('')} />
+          )}
+          {deviceSuccess && (
+            <SuccessBanner message={deviceSuccess} onClose={() => setDeviceSuccess('')} />
           )}
           
           {/* Pending Approvals Section */}
