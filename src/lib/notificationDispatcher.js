@@ -341,6 +341,36 @@ class NotificationDispatcher {
       console.error('Error creating security_device_revoked notification:', err);
     }
   }
+
+  /**
+   * Team invitation received event
+   */
+  static async onTeamInvitationReceived(workspaceId, userId, invitedByUserId, workspaceName, role, invitationId) {
+    try {
+      if (!this.isInAppEnabled(workspaceId, userId)) return;
+      const title = `Team Invitation: ${workspaceName}`;
+      const message = `You've been invited to join "${workspaceName}" as a ${role}`;
+      const notificationId = createNotification(
+        workspaceId,
+        userId,
+        'team_invitation',
+        title,
+        message,
+        { 
+          workspaceName, 
+          role, 
+          invitationId,
+          invitedByUserId,
+          actionUrl: `/accept-invite/${invitationId}`,
+          timestamp: Date.now() 
+        }
+      );
+      queueNotificationForDelivery(notificationId, ['in-app']);
+      console.log(`[Notification] Team invitation: ${workspaceName} (${role}) for user ${userId}`);
+    } catch (err) {
+      console.error('Error creating team_invitation notification:', err);
+    }
+  }
 }
 
 module.exports = NotificationDispatcher;

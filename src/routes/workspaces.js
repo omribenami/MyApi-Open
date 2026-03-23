@@ -26,6 +26,7 @@ const {
   getUserWorkspaceInvitations,
   cleanupExpiredInvitations,
   getUserById,
+  getUserByEmail,
 } = require('../database');
 
 // ========== WORKSPACE OPERATIONS ==========
@@ -473,6 +474,26 @@ router.post('/:id/invitations', (req, res) => {
       req.user.id,
       role
     );
+
+    // Trigger notification for the invitee (when they log in, they'll see it)
+    const NotificationDispatcher = require('../lib/notificationDispatcher');
+    try {
+      // Queue notification (will be shown to invitee once they accept and login)
+      const inviteeUser = getUserByEmail(email);
+      if (inviteeUser) {
+        NotificationDispatcher.onTeamInvitationReceived(
+          workspace.id,
+          inviteeUser.id,
+          req.user.id,
+          workspace.name,
+          role,
+          invitation.id
+        );
+      }
+    } catch (err) {
+      console.error('Failed to send invitation notification:', err.message);
+      // Don't fail the API call if notification fails
+    }
 
     res.status(201).json({
       success: true,
