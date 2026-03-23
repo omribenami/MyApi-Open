@@ -535,10 +535,19 @@ router.post('/:id/invitations', (req, res) => {
       return res.status(400).json({ error: 'Email is required' });
     }
 
-    // Check if already invited
+    // Check if already invited (pending invitation)
     const existing = getWorkspaceInvitations(workspace.id).find(inv => inv.email === email);
     if (existing) {
-      return res.status(400).json({ error: 'This email has already been invited' });
+      return res.status(400).json({ error: 'This email has already been invited. They can accept the pending invitation.' });
+    }
+
+    // Check if already a member
+    const inviteeUser = getUserByEmail(email);
+    if (inviteeUser) {
+      const isMember = getWorkspaceMember(workspace.id, inviteeUser.id);
+      if (isMember) {
+        return res.status(400).json({ error: 'This person is already a member of this workspace' });
+      }
     }
 
     const invitation = createWorkspaceInvitation(
