@@ -1009,7 +1009,7 @@ app.get('/api/v1/privacy/cookies', (req, res) => {
   res.json({ data: pref });
 });
 
-app.put('/api/v1/privacy/cookies', rateLimit(60000, 20, 'cookies-write'), (req, res) => {
+app.put('/api/v1/privacy/cookies', authenticate, rateLimit(60000, 20, 'cookies-write'), (req, res) => {
   const ownerId = getRequestOwnerId(req);
   const mode = String(req.body?.mode || '').toLowerCase();
   if (!['all', 'essential', 'none'].includes(mode)) {
