@@ -34,7 +34,7 @@ const TeamMembers = ({
         ...(masterToken ? { Authorization: `Bearer ${masterToken}` } : {})
       };
       const response = await fetch(
-        `/api/v1/workspaces/${workspaceId}/members/${member.user_id}`,
+        `/api/v1/workspaces/${workspaceId}/members/${member.userId}`,
         {
           method: 'PUT',
           headers,
@@ -62,12 +62,16 @@ const TeamMembers = ({
 
     try {
       const member = members.find(m => m.id === memberId);
+      if (!member) {
+        throw new Error('Member not found');
+      }
+      
       const headers = {
         'X-Workspace-ID': workspaceId,
         ...(masterToken ? { Authorization: `Bearer ${masterToken}` } : {})
       };
       const response = await fetch(
-        `/api/v1/workspaces/${workspaceId}/members/${member.user_id}`,
+        `/api/v1/workspaces/${workspaceId}/members/${member.userId}`,
         {
           method: 'DELETE',
           headers,
@@ -76,13 +80,14 @@ const TeamMembers = ({
       );
 
       if (!response.ok) {
-        throw new Error('Failed to remove member');
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to remove member');
       }
 
       onMemberRemoved(memberId);
     } catch (error) {
       console.error('Error removing member:', error);
-      alert('Failed to remove member');
+      alert(error.message || 'Failed to remove member');
     }
   };
 
@@ -108,9 +113,9 @@ const TeamMembers = ({
           {members.map(member => (
             <tr key={member.id} className={`member-row ${member.user_id === currentUserId ? 'current' : ''}`}>
               <td className="member-name">
-                <span className="avatar">{member.display_name?.[0] || member.username?.[0] || 'U'}</span>
-                <span>{member.display_name || member.username || 'Unknown'}</span>
-                {member.user_id === currentUserId && <span className="badge">You</span>}
+                <span className="avatar">{member.displayName?.[0] || member.username?.[0] || 'U'}</span>
+                <span>{member.displayName || member.username || 'Unknown'}</span>
+                {member.userId === currentUserId && <span className="badge">You</span>}
               </td>
               <td className="member-email">{member.email || '-'}</td>
               <td className="member-role">
@@ -134,7 +139,7 @@ const TeamMembers = ({
                 )}
               </td>
               <td className="member-joined">
-                {new Date(member.joined_at).toLocaleDateString()}
+                {member.joinedAt ? new Date(member.joinedAt).toLocaleDateString() : 'Unknown'}
               </td>
               <td className="member-actions">
                 {canManage && member.role !== 'owner' && (
