@@ -1133,15 +1133,25 @@ function createVaultToken(label, description, token, service, websiteUrl = null,
   };
 }
 
-function getVaultTokens(ownerId = 'owner') {
-  // BUG-14: Enforce workspace scoping by filtering vault tokens by owner_id
-  const stmt = db.prepare(`
-    SELECT id, label, description, token_preview, service, website_url, discovered_api_url, discovered_auth_scheme, created_at, updated_at
+function getVaultTokens(ownerId = 'owner', workspaceId = null) {
+  // BUG-14 FIX: Enforce workspace scoping by filtering vault tokens by owner_id + workspace_id
+  let query = `
+    SELECT id, label, description, token_preview, service, website_url, discovered_api_url, discovered_auth_scheme, created_at, updated_at, workspace_id
     FROM vault_tokens
     WHERE owner_id = ?
-    ORDER BY created_at DESC
-  `);
-  return stmt.all(ownerId).map(row => ({
+  `;
+  const params = [ownerId];
+  
+  // Multi-tenancy: Filter by workspace if provided
+  if (workspaceId) {
+    query += ' AND workspace_id = ?';
+    params.push(workspaceId);
+  }
+  
+  query += ' ORDER BY created_at DESC';
+  
+  const stmt = db.prepare(query);
+  return stmt.all(...params).map(row => ({
     id: row.id,
     name: row.label,
     label: row.label,
@@ -1153,6 +1163,7 @@ function getVaultTokens(ownerId = 'owner') {
     tokenPreview: row.token_preview,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    workspaceId: row.workspace_id
   }));
 }
 
@@ -1239,15 +1250,25 @@ function createAccessToken(hash, ownerId, scope, label, expiresAt = null, allowe
   return id;
 }
 
-function getAccessTokens(ownerId = null) {
-  let query = 'SELECT * FROM access_tokens';
+function getAccessTokens(ownerId = null, workspaceId = null) {
+  let query = 'SELECT * FROM access_tokens WHERE 1=1';
+  const params = [];
+
   if (ownerId) {
-    query += ' WHERE owner_id = ?';
+    query += ' AND owner_id = ?';
+    params.push(ownerId);
   }
+  
+  // Multi-tenancy: Filter by workspace if provided
+  if (workspaceId) {
+    query += ' AND workspace_id = ?';
+    params.push(workspaceId);
+  }
+
   query += ' ORDER BY created_at DESC';
 
   const stmt = db.prepare(query);
-  const rows = ownerId ? stmt.all(ownerId) : stmt.all();
+  const rows = params.length > 0 ? stmt.all(...params) : stmt.all();
   return rows.map(row => ({
     tokenId: row.id,
     hash: row.hash,
@@ -1258,7 +1279,8 @@ function getAccessTokens(ownerId = null) {
     revokedAt: row.revoked_at,
     expiresAt: row.expires_at,
     active: !row.revoked_at,
-    allowedPersonas: row.allowed_personas ? JSON.parse(row.allowed_personas) : null
+    allowedPersonas: row.allowed_personas ? JSON.parse(row.allowed_personas) : null,
+    workspaceId: row.workspace_id
   }));
 }
 
@@ -1767,15 +1789,25 @@ function createPersona(name, soulContent, description, templateData = null, owne
   };
 }
 
-function getPersonas(ownerId = 'owner') {
+function getPersonas(ownerId = 'owner', workspaceId = null) {
   const owner = normalizeOwnerId(ownerId);
-  const stmt = db.prepare(`
+  let query = `
     SELECT id, name, soul_content, description, active, created_at, updated_at, template_data
     FROM personas
     WHERE owner_id = ?
-    ORDER BY created_at DESC
-  `);
-  return stmt.all(owner).map(row => ({
+  `;
+  const params = [owner];
+  
+  // Multi-tenancy: Filter by workspace if provided
+  if (workspaceId) {
+    query += ' AND workspace_id = ?';
+    params.push(workspaceId);
+  }
+  
+  query += ' ORDER BY created_at DESC';
+  
+  const stmt = db.prepare(query);
+  return stmt.all(...params).map(row => ({
     id: row.id,
     name: row.name,
     soul_content: row.soul_content,
@@ -1783,7 +1815,8 @@ function getPersonas(ownerId = 'owner') {
     active: Boolean(row.active),
     created_at: row.created_at,
     updated_at: row.updated_at,
-    template_data: row.template_data ? JSON.parse(row.template_data) : null
+    template_data: row.template_data ? JSON.parse(row.template_data) : null,
+    workspaceId: row.workspace_id
   }));
 }
 
@@ -2892,9 +2925,20 @@ function createSkill(name, description, version, author, category, scriptContent
   return getSkillById(result.lastInsertRowid, owner);
 }
 
-function getSkills(ownerId = 'owner') {
+function getSkills(ownerId = 'owner', workspaceId = null) {
   const owner = normalizeOwnerId(ownerId);
-  return db.prepare('SELECT * FROM skills WHERE owner_id = ? ORDER BY created_at DESC').all(owner).map(row => ({
+  let query = 'SELECT * FROM skills WHERE owner_id = ?';
+  const params = [owner];
+  
+  // Multi-tenancy: Filter by workspace if provided
+  if (workspaceId) {
+    query += ' AND workspace_id = ?';
+    params.push(workspaceId);
+  }
+  
+  query += ' ORDER BY created_at DESC';
+  
+  return db.prepare(query).all(...params).map(row => ({
     ...row, active: Boolean(row.active),
     config_json: row.config_json ? (() => { try { return JSON.parse(row.config_json); } catch { return row.config_json; } })() : null,
   }));

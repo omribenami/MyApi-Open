@@ -2460,10 +2460,21 @@ app.post('/api/v1/vault/discover-api', authenticate, async (req, res) => {
 
 app.get("/api/v1/vault/tokens", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can view vault tokens" });
-  createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "list_vault_tokens", resource: "/vault/tokens", scope: req.tokenMeta.scope, ip: req.ip });
-  // BUG-14: Enforce workspace scoping by passing ownerId
+  
+  // Multi-tenancy: Filter vault tokens by workspace
   const ownerId = getRequestOwnerId(req);
-  const tokens = getVaultTokens(ownerId);
+  const workspaceId = req.workspaceId || req.session?.currentWorkspace;
+  const tokens = getVaultTokens(ownerId, workspaceId);
+  
+  createAuditLog({ 
+    requesterId: req.tokenMeta.tokenId, 
+    action: "list_vault_tokens", 
+    resource: "/vault/tokens", 
+    workspaceId: workspaceId,
+    scope: req.tokenMeta.scope, 
+    ip: req.ip 
+  });
+  
   res.json({ data: tokens, tokens });
 });
 
@@ -2868,7 +2879,11 @@ app.delete("/api/v1/tokens/:id", authenticate, (req, res) => {
 app.get("/api/v1/tokens", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can list tokens" });
 
-  const tokens = getAccessTokens();
+  // Multi-tenancy: Filter tokens by workspace
+  const workspaceId = req.workspaceId || req.session?.currentWorkspace;
+  const userId = getOAuthUserId(req);
+  
+  const tokens = getAccessTokens(userId, workspaceId);
   const tokensWithScopes = tokens.map(t => ({
     ...t,
     scopes: getTokenScopes(t.tokenId),
@@ -2880,6 +2895,7 @@ app.get("/api/v1/tokens", authenticate, (req, res) => {
     action: "list_tokens",
     resource: "/tokens",
     scope: req.tokenMeta.scope,
+    workspaceId: workspaceId,
     ip: req.ip
   });
 
@@ -4410,12 +4426,17 @@ app.post("/api/v1/personas", authenticate, (req, res) => {
 app.get("/api/v1/personas", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can list personas" });
   const ownerId = getRequestOwnerId(req);
-  const personas = getPersonas(ownerId);
+  
+  // Multi-tenancy: Filter personas by workspace
+  const workspaceId = req.workspaceId || req.session?.currentWorkspace;
+  const personas = getPersonas(ownerId, workspaceId);
+  
   createAuditLog({
     requesterId: req.tokenMeta.tokenId,
     action: "list_personas",
     resource: "/personas",
     scope: req.tokenMeta.scope,
+    workspaceId: workspaceId,
     ip: req.ip
   });
 
@@ -4427,7 +4448,8 @@ app.get("/api/v1/personas", authenticate, (req, res) => {
       description: p.description,
       soul_content: p.soul_content,
       template_data: p.template_data,
-      created_at: p.created_at
+      created_at: p.created_at,
+      workspace_id: p.workspaceId
     }))
   });
 });
@@ -6943,7 +6965,11 @@ function runSkillScanner({ readme = '', skillDoc = '', pkg = null, repo = null }
 app.get('/api/v1/skills', authenticate, (req, res) => {
   try {
     const ownerId = getRequestOwnerId(req);
-    const skills = getSkills(ownerId);
+    
+    // Multi-tenancy: Filter skills by workspace
+    const workspaceId = req.workspaceId || req.session?.currentWorkspace;
+    const skills = getSkills(ownerId, workspaceId);
+    
     res.json({ data: skills });
   } catch (err) {
     console.error('Skills list error:', err);

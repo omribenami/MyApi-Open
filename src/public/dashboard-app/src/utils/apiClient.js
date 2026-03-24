@@ -54,6 +54,20 @@ apiClient.interceptors.request.use((config) => {
     config.headers.Authorization = `Bearer ${masterToken}`;
   }
 
+  // Multi-tenancy: Add X-Workspace-ID header for workspace-scoped API calls
+  try {
+    const authStore = localStorage.getItem('authStore');
+    if (authStore) {
+      const parsed = JSON.parse(authStore);
+      const currentWorkspaceId = parsed?.state?.currentWorkspace?.id;
+      if (currentWorkspaceId) {
+        config.headers['X-Workspace-ID'] = currentWorkspaceId;
+      }
+    }
+  } catch {
+    // Silently ignore parsing errors
+  }
+
   return config;
 });
 
