@@ -2394,7 +2394,7 @@ app.post("/api/v1/vault/tokens", authenticate, async (req, res) => {
       }
     })();
 
-    const vaultCount = getVaultTokens().length;
+    const vaultCount = getVaultTokens(getRequestOwnerId(req), req.workspaceId || req.session?.currentWorkspace || null).length;
     const vaultLimitErr = enforcePlanLimit(req, 'vaultTokens', vaultCount, 1);
     if (vaultLimitErr) {
       return res.status(403).json(vaultLimitErr);
@@ -2413,7 +2413,7 @@ app.post("/api/v1/vault/tokens", authenticate, async (req, res) => {
       }
     }
 
-    const vaultToken = createVaultToken(tokenLabel, description, normalizedToken, normalizedService, normalizedWebsiteUrl, discovery);
+    const vaultToken = createVaultToken(tokenLabel, description, normalizedToken, normalizedService, normalizedWebsiteUrl, discovery, getRequestOwnerId(req), req.workspaceId || req.session?.currentWorkspace || null);
     createAuditLog({
       requesterId: req.tokenMeta.tokenId,
       action: "create_vault_token",
@@ -2464,6 +2464,15 @@ app.get("/api/v1/vault/tokens", authenticate, (req, res) => {
   // Multi-tenancy: Filter vault tokens by workspace
   const ownerId = getRequestOwnerId(req);
   const workspaceId = req.workspaceId || req.session?.currentWorkspace;
+  if (!workspaceId) {
+    return res.status(400).json({ error: "Workspace context required" });
+  }
+  
+  // Validate user is member of workspace
+  if (!req.workspaceMember && (!req.workspace || req.workspace.ownerId !== getOAuthUserId(req))) {
+    return res.status(403).json({ error: "Not a member of this workspace" });
+  }
+  
   const tokens = getVaultTokens(ownerId, workspaceId);
   
   createAuditLog({ 
@@ -2480,9 +2489,10 @@ app.get("/api/v1/vault/tokens", authenticate, (req, res) => {
 
 app.get("/api/v1/vault/tokens/:id/reveal", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can decrypt vault tokens" });
-  // BUG-14: Enforce workspace scoping by passing ownerId
+  // BUG-14: Enforce workspace scoping by passing ownerId and workspaceId
   const ownerId = getRequestOwnerId(req);
-  const vaultToken = decryptVaultToken(req.params.id, ownerId);
+  const workspaceId = req.workspaceId || req.session?.currentWorkspace || null;
+  const vaultToken = decryptVaultToken(req.params.id, ownerId, workspaceId);
   if (!vaultToken) return res.status(404).json({ error: "Token not found" });
   createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "reveal_vault_token", resource: `/vault/tokens/${req.params.id}`, scope: req.tokenMeta.scope, ip: req.ip });
   res.json({ data: vaultToken });
@@ -2490,9 +2500,10 @@ app.get("/api/v1/vault/tokens/:id/reveal", authenticate, (req, res) => {
 
 app.delete("/api/v1/vault/tokens/:id", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can delete vault tokens" });
-  // BUG-14: Enforce workspace scoping by passing ownerId
+  // BUG-14: Enforce workspace scoping by passing ownerId and workspaceId
   const ownerId = getRequestOwnerId(req);
-  const deleted = deleteVaultToken(req.params.id, ownerId);
+  const workspaceId = req.workspaceId || req.session?.currentWorkspace || null;
+  const deleted = deleteVaultToken(req.params.id, ownerId, workspaceId);
   if (!deleted) return res.status(404).json({ error: "Token not found" });
   createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "delete_vault_token", resource: `/vault/tokens/${req.params.id}`, scope: req.tokenMeta.scope, ip: req.ip });
   res.json({ data: { deleted: true } });
@@ -2558,7 +2569,7 @@ app.post("/api/v1/tokens", authenticate, (req, res) => {
     ? allowedPersonas.map(Number).filter(n => !isNaN(n))
     : null;
 
-  const tokenId = createAccessToken(hash, "owner", JSON.stringify(finalScopes), label, expiresAt, personaIds);
+  const tokenId = createAccessToken(hash, getRequestOwnerId(req), JSON.stringify(finalScopes), label, expiresAt, personaIds, req.workspaceId || req.session?.currentWorkspace || null);
 
   // Grant the scopes to the token
   grantScopes(tokenId, finalScopes);
@@ -2596,7 +2607,9 @@ app.post("/api/v1/tokens", authenticate, (req, res) => {
 app.get("/api/v1/tokens/:id", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can view token details" });
 
-  const tokens = getAccessTokens();
+  const userId = getOAuthUserId(req);
+  const workspaceId = req.workspaceId || req.session?.currentWorkspace || null;
+  const tokens = getAccessTokens(userId, workspaceId);
   const token = tokens.find(t => t.tokenId === req.params.id);
 
   if (!token) return res.status(404).json({ error: "Token not found" });
@@ -6985,6 +6998,15 @@ app.get('/api/v1/skills', authenticate, (req, res) => {
     
     // Multi-tenancy: Filter skills by workspace
     const workspaceId = req.workspaceId || req.session?.currentWorkspace;
+    if (!workspaceId) {
+      return res.status(400).json({ error: "Workspace context required" });
+    }
+    
+    // Validate user is member of workspace
+    if (!req.workspaceMember && (!req.workspace || req.workspace.ownerId !== getOAuthUserId(req))) {
+      return res.status(403).json({ error: "Not a member of this workspace" });
+    }
+    
     const skills = getSkills(ownerId, workspaceId);
     
     res.json({ data: skills });

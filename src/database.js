@@ -1070,7 +1070,7 @@ function initDatabase() {
 }
 
 // Vault Tokens
-function createVaultToken(label, description, token, service, websiteUrl = null, discovery = null, ownerId = 'owner') {
+function createVaultToken(label, description, token, service, websiteUrl = null, discovery = null, ownerId = 'owner', workspaceId = null) {
   const id = 'vt_' + crypto.randomBytes(16).toString('hex');
 
   // Phase 5: versioned AES-256-GCM encryption for vault tokens
@@ -1096,9 +1096,9 @@ function createVaultToken(label, description, token, service, websiteUrl = null,
     INSERT INTO vault_tokens (
       id, label, description, encrypted_token, token_preview,
       service, website_url, discovered_api_url, discovered_auth_scheme, discovered_metadata, last_discovered_at,
-      created_at, updated_at, owner_id, encryption_version
+      created_at, updated_at, owner_id, encryption_version, workspace_id
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   stmt.run(
@@ -1116,7 +1116,8 @@ function createVaultToken(label, description, token, service, websiteUrl = null,
     now,
     now,
     ownerId,
-    ENCRYPTION_VERSION
+    ENCRYPTION_VERSION,
+    workspaceId
   );
 
   return {
@@ -1167,9 +1168,15 @@ function getVaultTokens(ownerId = 'owner', workspaceId = null) {
   }));
 }
 
-function decryptVaultToken(id, ownerId = 'owner') {
-  // BUG-14: Enforce owner_id check to prevent cross-workspace token access
-  const row = db.prepare('SELECT * FROM vault_tokens WHERE id = ? AND owner_id = ?').get(id, ownerId);
+function decryptVaultToken(id, ownerId = 'owner', workspaceId = null) {
+  // BUG-14: Enforce owner_id and workspace_id check to prevent cross-workspace token access
+  let query = 'SELECT * FROM vault_tokens WHERE id = ? AND owner_id = ?';
+  const params = [id, ownerId];
+  if (workspaceId) {
+    query += ' AND workspace_id = ?';
+    params.push(workspaceId);
+  }
+  const row = db.prepare(query).get(...params);
   if (!row) return null;
   try {
     const vaultKey = String(process.env.VAULT_KEY || '').trim();
@@ -1226,15 +1233,21 @@ function decryptVaultToken(id, ownerId = 'owner') {
   }
 }
 
-function deleteVaultToken(id, ownerId = 'owner') {
-  // BUG-14: Enforce owner_id check to prevent cross-workspace token deletion
-  const stmt = db.prepare('DELETE FROM vault_tokens WHERE id = ? AND owner_id = ?');
-  const result = stmt.run(id, ownerId);
+function deleteVaultToken(id, ownerId = 'owner', workspaceId = null) {
+  // BUG-14: Enforce owner_id and workspace_id check to prevent cross-workspace token deletion
+  let query = 'DELETE FROM vault_tokens WHERE id = ? AND owner_id = ?';
+  const params = [id, ownerId];
+  if (workspaceId) {
+    query += ' AND workspace_id = ?';
+    params.push(workspaceId);
+  }
+  const stmt = db.prepare(query);
+  const result = stmt.run(...params);
   return result.changes > 0;
 }
 
 // Access Tokens
-function createAccessToken(hash, ownerId, scope, label, expiresAt = null, allowedPersonas = null) {
+function createAccessToken(hash, ownerId, scope, label, expiresAt = null, allowedPersonas = null, workspaceId = null) {
   const id = 'tok_' + crypto.randomBytes(16).toString('hex');
   const now = new Date().toISOString();
   const allowedPersonasJson = allowedPersonas && allowedPersonas.length > 0
@@ -1242,11 +1255,11 @@ function createAccessToken(hash, ownerId, scope, label, expiresAt = null, allowe
     : null;
 
   const stmt = db.prepare(`
-    INSERT INTO access_tokens (id, hash, owner_id, scope, label, created_at, revoked_at, expires_at, allowed_personas)
-    VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)
+    INSERT INTO access_tokens (id, hash, owner_id, scope, label, created_at, revoked_at, expires_at, allowed_personas, workspace_id)
+    VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
   `);
 
-  stmt.run(id, hash, ownerId, scope, label, now, expiresAt, allowedPersonasJson);
+  stmt.run(id, hash, ownerId, scope, label, now, expiresAt, allowedPersonasJson, workspaceId);
   return id;
 }
 
