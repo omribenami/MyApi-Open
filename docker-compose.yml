@@ -1,0 +1,207 @@
+# ============================================================================
+# MyApi - Self-Hosted Docker Compose Setup
+# ============================================================================
+# Production-ready stack for running MyApi locally with persistence
+#
+# QUICK START:
+#   1. cp .env.docker .env.local
+#   2. Edit .env.local with your secrets
+#   3. docker-compose up -d
+#   4. Access: http://localhost:4500 (backend) or http://localhost:5173 (frontend)
+#
+# PORTS:
+#   - 4500  → MyApi Backend (Node.js)
+#   - 5173  → MyApi Frontend (React Vite)
+#   - 5432  → PostgreSQL Database (Postgres 17)
+#
+# VOLUMES:
+#   - pgdata/     → Database files (persistent)
+#   - ./src/data  → Backend local data (if using SQLite fallback)
+#
+# NETWORKS:
+#   - myapi-network (internal, for service-to-service communication)
+#
+# ============================================================================
+
+version: '3.9'
+
+services:
+  # ============================================================================
+  # PostgreSQL Database (Postgres 17 Alpine)
+  # ============================================================================
+  postgres:
+    image: postgres:17-alpine
+    container_name: myapi-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-myapi}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_DB: ${DB_NAME:-myapi}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      # Persistent database storage
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - myapi-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-myapi}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    labels:
+      description: "PostgreSQL database for MyApi"
+
+  # ============================================================================
+  # MyApi Backend (Node.js)
+  # ============================================================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: myapi-backend:latest
+    container_name: myapi-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Database
+      DATABASE_URL: postgresql://${DB_USER:-myapi}:${DB_PASSWORD:-changeme}@postgres:5432/${DB_NAME:-myapi}
+      NODE_ENV: ${NODE_ENV:-production}
+      
+      # Server
+      PORT: ${BACKEND_PORT:-4500}
+      HOST: 0.0.0.0
+      
+      # Authentication & Secrets
+      JWT_SECRET: ${JWT_SECRET:-your-jwt-secret-change-me-in-production}
+      SESSION_SECRET: ${SESSION_SECRET:-your-session-secret-change-me-in-production}
+      
+      # OAuth Providers (placeholders - set in .env.local)
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      FACEBOOK_CLIENT_ID: ${FACEBOOK_CLIENT_ID:-}
+      FACEBOOK_CLIENT_SECRET: ${FACEBOOK_CLIENT_SECRET:-}
+      SLACK_CLIENT_ID: ${SLACK_CLIENT_ID:-}
+      SLACK_CLIENT_SECRET: ${SLACK_CLIENT_SECRET:-}
+      
+      # External Services
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      
+      # Cloudflare (optional)
+      CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID:-}
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
+      CLOUDFLARE_TUNNEL_NAME: ${CLOUDFLARE_TUNNEL_NAME:-myapi-local}
+      
+      # Feature Flags
+      ENABLE_AUDIT_LOGS: ${ENABLE_AUDIT_LOGS:-true}
+      ENABLE_EMAIL_NOTIFICATIONS: ${ENABLE_EMAIL_NOTIFICATIONS:-false}
+      
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    
+    ports:
+      - "${BACKEND_PORT:-4500}:${BACKEND_PORT:-4500}"
+    
+    volumes:
+      # Local development: mount source code (if needed)
+      # - ./backend/src:/app/src:cached
+      
+      # Persistent local data (for SQLite fallback or file uploads)
+      - ./backend/data:/app/data:rw
+    
+    networks:
+      - myapi-network
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${BACKEND_PORT:-4500}/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    
+    labels:
+      description: "MyApi Backend Server"
+
+  # ============================================================================
+  # MyApi Frontend (React + Vite)
+  # ============================================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: myapi-frontend:latest
+    container_name: myapi-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      # API Backend URL (as seen from browser)
+      VITE_API_URL: ${FRONTEND_API_URL:-http://localhost:4500}
+      VITE_API_BASE_PATH: ${FRONTEND_API_BASE_PATH:-/api}
+      
+      # Environment
+      VITE_ENV: ${NODE_ENV:-production}
+      NODE_ENV: ${NODE_ENV:-production}
+    
+    ports:
+      - "${FRONTEND_PORT:-5173}:${FRONTEND_PORT:-5173}"
+    
+    volumes:
+      # Local development: mount source code (if needed)
+      # - ./frontend/src:/app/src:cached
+    
+    networks:
+      - myapi-network
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${FRONTEND_PORT:-5173}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    
+    labels:
+      description: "MyApi Frontend UI"
+
+  # ============================================================================
+  # Optional: Cloudflare Tunnel (for public HTTPS access)
+  # ============================================================================
+  # Uncomment to enable public access via Cloudflare Tunnel
+  # Requires: cloudflared binary & Cloudflare account
+  # 
+  # cloudflare:
+  #   image: cloudflare/cloudflared:latest
+  #   container_name: myapi-tunnel
+  #   restart: unless-stopped
+  #   command:
+  #     - tunnel
+  #     - --no-autoupdate
+  #     - --loglevel
+  #     - info
+  #     - run
+  #     - --token=${CLOUDFLARE_TUNNEL_TOKEN}
+  #   networks:
+  #     - myapi-network
+  #   depends_on:
+  #     - backend
+  #   labels:
+  #     description: "Cloudflare Tunnel for public HTTPS access"
+
+volumes:
+  pgdata:
+    driver: local
+    labels:
+      description: "PostgreSQL database storage (persistent)"
+
+networks:
+  myapi-network:
+    driver: bridge
+    labels:
+      description: "MyApi internal service network"
