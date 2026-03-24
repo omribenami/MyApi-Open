@@ -58,14 +58,20 @@ apiClient.interceptors.request.use((config) => {
   try {
     const authStore = localStorage.getItem('authStore');
     if (authStore) {
-      const parsed = JSON.parse(authStore);
-      const currentWorkspaceId = parsed?.state?.currentWorkspace?.id;
-      if (currentWorkspaceId) {
-        config.headers['X-Workspace-ID'] = currentWorkspaceId;
+      try {
+        const parsed = JSON.parse(authStore);
+        const currentWorkspaceId = parsed?.state?.currentWorkspace?.id;
+        if (currentWorkspaceId) {
+          config.headers['X-Workspace-ID'] = currentWorkspaceId;
+        } else {
+          console.warn('[API] No workspace context available for request to', config.url);
+        }
+      } catch (parseErr) {
+        console.error('[API] Failed to parse authStore from localStorage:', parseErr.message);
       }
     }
-  } catch {
-    // Silently ignore parsing errors
+  } catch (storageErr) {
+    console.error('[API] Failed to access localStorage:', storageErr.message);
   }
 
   return config;

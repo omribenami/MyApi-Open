@@ -2881,8 +2881,16 @@ app.get("/api/v1/tokens", authenticate, (req, res) => {
 
   // Multi-tenancy: Filter tokens by workspace
   const workspaceId = req.workspaceId || req.session?.currentWorkspace;
-  const userId = getOAuthUserId(req);
+  if (!workspaceId) {
+    return res.status(400).json({ error: "Workspace context required" });
+  }
   
+  // Validate user is member of workspace
+  if (!req.workspaceMember && (!req.workspace || req.workspace.ownerId !== getOAuthUserId(req))) {
+    return res.status(403).json({ error: "Not a member of this workspace" });
+  }
+  
+  const userId = getOAuthUserId(req);
   const tokens = getAccessTokens(userId, workspaceId);
   const tokensWithScopes = tokens.map(t => ({
     ...t,
@@ -4425,10 +4433,19 @@ app.post("/api/v1/personas", authenticate, (req, res) => {
 // GET /api/v1/personas - List all personas
 app.get("/api/v1/personas", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can list personas" });
-  const ownerId = getRequestOwnerId(req);
   
   // Multi-tenancy: Filter personas by workspace
   const workspaceId = req.workspaceId || req.session?.currentWorkspace;
+  if (!workspaceId) {
+    return res.status(400).json({ error: "Workspace context required" });
+  }
+  
+  // Validate user is member of workspace
+  if (!req.workspaceMember && (!req.workspace || req.workspace.ownerId !== getOAuthUserId(req))) {
+    return res.status(403).json({ error: "Not a member of this workspace" });
+  }
+  
+  const ownerId = getRequestOwnerId(req);
   const personas = getPersonas(ownerId, workspaceId);
   
   createAuditLog({
