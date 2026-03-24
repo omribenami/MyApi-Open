@@ -196,6 +196,8 @@ Next: Merge to main, tag release
 
 ## 🎯 Success Criteria (Phase 6 Complete)
 
+**DECISION LOCKED:** All 6 tasks must be complete before open source launch.
+
 All of the following must be true:
 
 - ✅ All 6 tasks marked as `done` in Paperclip
@@ -206,6 +208,8 @@ All of the following must be true:
 - ✅ Team trained on deployment procedures
 - ✅ Monitoring & alerting live
 - ✅ Backup/recovery tested end-to-end
+- ✅ Open source README with deployment guide
+- ✅ GitHub repo ready for public launch
 
 ---
 
@@ -224,13 +228,13 @@ All of the following must be true:
 
 ---
 
-## 📅 Timeline
+## 📅 Timeline (LOCKED - All 6 Tasks Required for Launch)
 
 | Week | Tasks | Milestones |
 |------|-------|-----------|
-| **Week 1 (Mar 24-30)** | MYA-1 ✅, MYA-2, MYA-3 | Docker + HTTPS ready, DB migrations in review |
-| **Week 2 (Mar 31-Apr 7)** | MYA-4, MYA-5, MYA-6 | CI/CD live, monitoring active, security hardened |
-| **Week 3 (Apr 7+)** | **Phase 6 COMPLETE** | 🚀 Production deployment ready |
+| **Week 1 (Mar 24-30)** | MYA-2, MYA-3 | HTTPS/SSL live, DB migrations complete, backups automated |
+| **Week 2 (Mar 31-Apr 7)** | MYA-4, MYA-5, MYA-6 | CI/CD pipeline working, monitoring dashboard live, security hardened |
+| **Apr 7+** | **🚀 OPEN SOURCE LAUNCH** | All Phase 6 complete, ready for public repo |
 
 ---
 
