@@ -98,7 +98,11 @@ function requireRole(minRole) {
  * 5. Default to user's primary workspace
  */
 function extractWorkspaceContext(req, res, next) {
-  if (!req.user) {
+  // Resolve the effective user ID — works for both session auth (req.user.id)
+  // and Bearer token auth (req.tokenMeta.ownerId).
+  const userId = req.user?.id || req.tokenMeta?.ownerId;
+
+  if (!userId) {
     return next();
   }
 
@@ -116,18 +120,22 @@ function extractWorkspaceContext(req, res, next) {
   }
 
   if (!workspaceId) {
-    // Get user's workspaces and use the first one (owner workspace)
-    const userWorkspaces = getWorkspaces(req.user.id);
-    if (userWorkspaces && userWorkspaces.length > 0) {
-      workspaceId = userWorkspaces[0].id;
+    // Get user's workspaces and use the first one (owner workspace).
+    // For legacy 'owner' tokens (bootstrap), skip the DB lookup to avoid
+    // spurious "user not found" errors.
+    if (userId !== 'owner') {
+      const userWorkspaces = getWorkspaces(String(userId));
+      if (userWorkspaces && userWorkspaces.length > 0) {
+        workspaceId = userWorkspaces[0].id;
+      }
     }
   }
 
   if (workspaceId) {
     const workspace = getWorkspaces(null, workspaceId);
     if (workspace) {
-      const member = getWorkspaceMember(workspaceId, req.user.id);
-      const isOwner = workspace.ownerId === req.user.id;
+      const member = getWorkspaceMember(workspaceId, String(userId));
+      const isOwner = String(workspace.ownerId) === String(userId);
 
       if (isOwner || member) {
         req.workspace = workspace;

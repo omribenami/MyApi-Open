@@ -1,5 +1,23 @@
 import { create } from 'zustand';
 
+/** Build auth headers, always including the active workspace so the backend
+ *  can scope token queries correctly for both session and Bearer-token auth. */
+function getAuthHeaders(masterToken, extra = {}) {
+  const headers = { ...extra };
+  if (masterToken) {
+    headers['Authorization'] = `Bearer ${masterToken}`;
+  }
+  try {
+    const workspaceId = localStorage.getItem('currentWorkspace');
+    if (workspaceId) {
+      headers['X-Workspace-ID'] = workspaceId;
+    }
+  } catch {
+    // localStorage may be unavailable (e.g. private browsing with strict settings)
+  }
+  return headers;
+}
+
 export const useTokenStore = create((set, get) => ({
   // State
   tokens: [],
@@ -18,7 +36,7 @@ export const useTokenStore = create((set, get) => ({
 
     try {
       const response = await fetch('/api/v1/tokens', {
-        headers: { 'Authorization': `Bearer ${masterToken}` },
+        headers: getAuthHeaders(masterToken),
       });
 
       if (!response.ok) {
@@ -51,7 +69,7 @@ export const useTokenStore = create((set, get) => ({
 
     try {
       const response = await fetch('/api/v1/scopes', {
-        headers: { 'Authorization': `Bearer ${masterToken}` },
+        headers: getAuthHeaders(masterToken),
       });
 
       if (!response.ok) {
@@ -83,10 +101,7 @@ export const useTokenStore = create((set, get) => ({
     try {
       const response = await fetch('/api/v1/tokens', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${masterToken}`,
-          'Content-Type': 'application/json',
-        },
+        headers: getAuthHeaders(masterToken, { 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           label,
           description,
@@ -134,10 +149,7 @@ export const useTokenStore = create((set, get) => ({
     try {
       const response = await fetch(`/api/v1/tokens/${tokenId}`, {
         method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${masterToken}`,
-          'Content-Type': 'application/json',
-        },
+        headers: getAuthHeaders(masterToken, { 'Content-Type': 'application/json' }),
         body: JSON.stringify({ scopes }),
       });
 
@@ -182,7 +194,7 @@ export const useTokenStore = create((set, get) => ({
     try {
       const response = await fetch(`/api/v1/tokens/${tokenId}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${masterToken}` },
+        headers: getAuthHeaders(masterToken),
       });
 
       if (!response.ok) {
