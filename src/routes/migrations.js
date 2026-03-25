@@ -316,6 +316,86 @@ function createMigrationsRoutes(db, codeReviewGate) {
   });
 
   /**
+   * POST /migrations/rollback
+   * Rollback the last batch of file-based migrations
+   * Requires: admin role
+   */
+  router.post('/rollback', async (req, res) => {
+    try {
+      const MigrationRunner = require('../lib/migrationRunner');
+
+      if (!db.db) {
+        return res.status(500).json({
+          error: 'Internal server error',
+          message: 'Database not available for migration rollback'
+        });
+      }
+
+      const runner = new MigrationRunner(db.db);
+      runner.initMigrationTable();
+
+      const result = runner.rollbackLastBatch();
+
+      logger.info('Migration rollback executed', {
+        batch: result.batch,
+        rolledBack: result.rolledBack,
+        success: result.success
+      });
+
+      res.json({
+        status: result.success ? 'success' : 'partial',
+        message: result.message,
+        batch: result.batch,
+        rolledBack: result.rolledBack || [],
+        failed: result.failed || []
+      });
+    } catch (error) {
+      logger.error('Failed to rollback migrations:', error);
+      res.status(500).json({
+        error: 'Internal server error',
+        message: 'Failed to rollback migrations'
+      });
+    }
+  });
+
+  /**
+   * GET /migrations/file-status
+   * Get file-based migration status (applied, pending, checksums)
+   */
+  router.get('/file-status', async (req, res) => {
+    try {
+      const MigrationRunner = require('../lib/migrationRunner');
+
+      if (!db.db) {
+        return res.status(500).json({
+          error: 'Internal server error',
+          message: 'Database not available'
+        });
+      }
+
+      const runner = new MigrationRunner(db.db);
+      runner.initMigrationTable();
+
+      const status = runner.getStatus();
+      const checksums = runner.verifyChecksums();
+
+      res.json({
+        status: 'success',
+        currentBatch: status.currentBatch,
+        applied: status.applied,
+        pending: status.pending,
+        checksumVerification: checksums
+      });
+    } catch (error) {
+      logger.error('Failed to get migration status:', error);
+      res.status(500).json({
+        error: 'Internal server error',
+        message: 'Failed to get migration status'
+      });
+    }
+  });
+
+  /**
    * GET /migrations/:reviewId/status
    * Get migration status
    */
