@@ -2754,10 +2754,10 @@ app.post("/api/v1/tokens", authenticate, (req, res) => {
 app.get("/api/v1/tokens/:id", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can view token details" });
 
-  const workspaceId = req.workspaceId || req.session?.currentWorkspace || null;
-  // Do not filter by userId here — the bootstrap master token has owner_id='owner',
-  // not the session user's real ID. Scope check above already enforces full access.
-  const tokens = getAccessTokens(null, workspaceId);
+  // Do not filter by userId or workspaceId here — the bootstrap master token has
+  // owner_id='owner' and workspace_id=NULL, which wouldn't match session filters.
+  // The scope === 'full' check above already enforces access control.
+  const tokens = getAccessTokens(null, null);
   const token = tokens.find(t => t.tokenId === req.params.id);
 
   if (!token) return res.status(404).json({ error: "Token not found" });
