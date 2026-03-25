@@ -1270,11 +1270,19 @@ function deleteVaultToken(id, ownerId = 'owner', workspaceId = null) {
 
 /**
  * Return the best available key for master-token encryption.
- * Prefers VAULT_KEY, falls back to ENCRYPTION_KEY or JWT_SECRET so that
- * token persistence works even when VAULT_KEY is not explicitly configured.
+ * Prefers VAULT_KEY, then ENCRYPTION_KEY.  JWT_SECRET is accepted as a
+ * last-resort fallback so token persistence works in development setups
+ * that omit the other keys — but it is NOT recommended for production.
  */
 function getMasterTokenEncryptionKey() {
-  return String(process.env.VAULT_KEY || process.env.ENCRYPTION_KEY || process.env.JWT_SECRET || '').trim() || null;
+  const key = String(process.env.VAULT_KEY || process.env.ENCRYPTION_KEY || '').trim();
+  if (key) return key;
+  const fallback = String(process.env.JWT_SECRET || '').trim();
+  if (fallback) {
+    console.warn('[Database] VAULT_KEY and ENCRYPTION_KEY are unset — falling back to JWT_SECRET for master-token encryption. Set VAULT_KEY or ENCRYPTION_KEY for production.');
+    return fallback;
+  }
+  return null;
 }
 
 /**

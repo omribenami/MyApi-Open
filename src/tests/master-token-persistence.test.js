@@ -21,17 +21,18 @@ describe('Master Token Persistence', () => {
   });
 
   afterAll(() => {
-    try { dbModule.db.close(); } catch (_) {}
+    try { dbModule.db.close(); } catch (e) { console.error('Test cleanup error:', e.message); }
   });
 
   // ---------------------------------------------------------------
   // Helper: create a user so we have a valid owner_id for tokens
   // ---------------------------------------------------------------
   function createTestUser(suffix = '') {
+    const unique = crypto.randomBytes(8).toString('hex');
     return dbModule.createUser(
-      `testuser${suffix}_${Date.now()}`,
+      `testuser${suffix}_${unique}`,
       'Test User',
-      `test${suffix}_${Date.now()}@example.com`,
+      `test${suffix}_${unique}@example.com`,
       'UTC',
       'hashedpassword'
     );
@@ -118,7 +119,7 @@ describe('Master Token Persistence', () => {
       const user = createTestUser('login');
       const raw = 'myapi_' + crypto.randomBytes(32).toString('hex');
       const bcrypt = require('bcrypt');
-      const hash = bcrypt.hashSync(raw, 4);
+      const hash = bcrypt.hashSync(raw, 4); // low cost for test speed (production uses 10)
       const tokenId = dbModule.createAccessToken(hash, user.id, 'full', 'Master Token', null, null, null, raw);
 
       // Snapshot tokens before login
