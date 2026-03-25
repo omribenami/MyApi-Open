@@ -33,6 +33,9 @@ function handleDashboardMetrics(req, res) {
   try {
     const userId = req.userId;
 
+    // Multi-tenancy: Extract workspace context from request
+    const workspaceId = req.workspaceId || req.session?.currentWorkspace || req.headers['x-workspace-id'] || null;
+
     const approvedDevices = getApprovedDevices(userId)?.length || 0;
     const pendingApprovals = getPendingApprovals(userId)?.length || 0;
 
@@ -56,9 +59,9 @@ function handleDashboardMetrics(req, res) {
 
     const totalServices = oauthServices.length;
 
-    const activeTokens = (getAccessTokens(userId) || []).filter((t) => !t.revokedAt).length;
-    const personas = (getPersonas(userId) || []).length;
-    const skills = (getSkills(userId) || []).length;
+    const activeTokens = (getAccessTokens(userId, workspaceId) || []).filter((t) => !t.revokedAt).length;
+    const personas = (getPersonas(userId, workspaceId) || []).length;
+    const skills = (getSkills(userId, workspaceId) || []).length;
     // Use public marketplace total so dashboard matches what users see in Marketplace browse.
     const marketplace = (getMarketplaceListings({}) || []).length;
     const knowledge = (getKBDocuments(userId) || []).length;
