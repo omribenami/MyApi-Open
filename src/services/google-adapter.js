@@ -32,6 +32,7 @@ class GoogleAdapter {
       scope: 'https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly',
       state: state,
       access_type: 'offline',
+      prompt: 'consent', // always force consent screen so Google returns a fresh refresh_token
       ...(runtimeAuthParams || {}),
     };
     return `${GOOGLE_AUTH_URL}?${querystring.stringify(params)}`;

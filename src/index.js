@@ -2614,19 +2614,16 @@ app.get("/api/v1/vault/tokens", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can view vault tokens" });
 
   const ownerId = getRequestOwnerId(req);
-  const workspaceId = req.workspaceId || req.session?.currentWorkspace || null;
-
-  // getVaultTokens handles null workspaceId (returns all owner tokens) and non-null
-  // (returns workspace tokens + legacy tokens with workspace_id IS NULL)
-  const tokens = getVaultTokens(ownerId, workspaceId);
+  // Always show all tokens for the owner regardless of active workspace.
+  // Workspace scoping on vault tokens is a storage label, not an access barrier for the owner.
+  const tokens = getVaultTokens(ownerId, null);
   
-  createAuditLog({ 
-    requesterId: req.tokenMeta.tokenId, 
-    action: "list_vault_tokens", 
-    resource: "/vault/tokens", 
-    workspaceId: workspaceId,
-    scope: req.tokenMeta.scope, 
-    ip: req.ip 
+  createAuditLog({
+    requesterId: req.tokenMeta.tokenId,
+    action: "list_vault_tokens",
+    resource: "/vault/tokens",
+    scope: req.tokenMeta.scope,
+    ip: req.ip
   });
   
   res.json({ data: tokens, tokens });
@@ -5212,6 +5209,25 @@ app.get([
       // BUG-6: EXISTING USER: Store credentials in session and require explicit user confirmation
       // Do NOT auto-login without user consent, even for existing accounts
       appUser = updateUserOAuthProfile(appUser.id, { displayName: name, email, avatarUrl }) || appUser;
+
+      // SECURITY FIX: If 2FA is enabled, require TOTP before completing OAuth login.
+      // Route through the 2FA challenge flow (same as password login).
+      if (appUser.twoFactorEnabled) {
+        req.session.pending_2fa_user = {
+          id: appUser.id,
+          username: appUser.username,
+          email: appUser.email || email,
+          displayName: appUser.displayName || name,
+          avatarUrl: appUser.avatarUrl || avatarUrl || null,
+          twoFactorEnabled: true,
+          createdAt: new Date().toISOString(),
+        };
+        console.log(`[OAuth Callback] 2FA required for user: ${appUser.id}, routing to 2FA challenge`);
+        return req.session.save((err) => {
+          if (err) console.error('[OAuth Callback] Session save error before 2FA redirect:', err);
+          res.redirect(`/dashboard/?oauth_service=${encodeURIComponent(service)}&oauth_status=pending_2fa`);
+        });
+      }
 
       // Store OAuth credentials in session pending user confirmation
       req.session.oauth_login_pending = {

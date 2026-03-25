@@ -3,6 +3,7 @@ import { useAuthStore } from '../stores/authStore';
 
 function TokenVault() {
   const masterToken = useAuthStore((state) => state.masterToken);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const currentWorkspace = useAuthStore((state) => state.currentWorkspace);
   const [tokens, setTokens] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -28,16 +29,19 @@ function TokenVault() {
   ];
 
   useEffect(() => {
-    if (masterToken) {
+    if (isAuthenticated) {
       fetchTokens();
     }
-  }, [masterToken, currentWorkspace?.id]);
+  }, [isAuthenticated, masterToken, currentWorkspace?.id]);
 
   const fetchTokens = async () => {
     setIsLoading(true);
     try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (masterToken) headers['Authorization'] = `Bearer ${masterToken}`;
       const response = await fetch('/api/v1/vault/tokens', {
-        headers: { 'Authorization': `Bearer ${masterToken}` },
+        headers,
+        credentials: 'include',
       });
       if (response.ok) {
         const data = await response.json();
