@@ -32,15 +32,27 @@
     "ssl:self-signed": "bash scripts/setup-ssl.sh self-signed"
   },
   "dependencies": {
+    "axios": "^1.13.6",
     "bcrypt": "^6.0.0",
     "better-sqlite3": "^12.6.2",
     "better-sqlite3-session-store": "^0.1.0",
+    "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.3.1",
+    "express-session": "^1.19.0",
+    "express-validator": "^7.3.1",
+    "helmet": "^8.1.0",
     "jszip": "^3.10.1",
+    "marked": "^14.1.4",
     "multer": "^2.1.1",
     "node-cache": "^5.1.2",
-    "nodemailer": "^8.0.3"
+    "nodemailer": "^8.0.3",
+    "pdf-parse": "^2.4.5",
+    "qrcode": "^1.5.4",
+    "speakeasy": "^2.0.0",
+    "stripe": "^20.4.1",
+    "uuid": "^9.0.1"
   },
   "devDependencies": {
     "@babel/preset-env": "^7.29.2",
