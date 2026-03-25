@@ -35,6 +35,7 @@ src/uploads/
 # Environment files - NEVER commit real secrets!
 src/.env*
 !src/.env.example
+.env.local
 logs/
 
 # Backups (may contain sensitive data)
@@ -43,3 +44,27 @@ backups/
 # SSL certificates (sensitive)
 certs/
 certbot/
+
+# Docker-managed data volumes (when using bind mounts)
+data/
+backend/data/
+
+# Stray database files
+backend/*.db
+backend/*.db-shm
+backend/*.db-wal
+
+# AI session tracking / dev notes
+# These files stay on disk for local reference but are never committed.
+# Pattern matches root-level files whose names contain an underscore
+# (e.g. PHASE5_SUMMARY.md, QA_REPORT.md) while leaving README.md and CLAUDE.md alone.
+/*_*.md
+/GAMEPLAN.md
+/STATE.md
+/final_test_summary.md
+/*_*.txt
+/PUSH_TEST.txt
+src/QA_REPORT.md
+src/README.md
+src/patch_instructions.txt
+docs/SUBAGENT_COMPLETION_SUMMARY.md

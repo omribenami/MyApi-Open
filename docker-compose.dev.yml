@@ -1,87 +1,75 @@
 # ============================================================================
-# MyApi - Local Development Docker Compose Setup
+# MyApi - Development Docker Compose
 # ============================================================================
-# Stack for running MyApi locally with hot-reloading
+# Runs the backend with hot-reload (nodemon) and mounts the source directory.
+# The Vite dev server for the frontend is NOT included here — run it locally:
 #
-# QUICK START:
-#   1. cp .env.dev.example .env
-#   2. docker-compose -f docker-compose.dev.yml up --build
+#   cd src/public/dashboard-app && npm run dev   (port 5173)
+#
+# USAGE:
+#   docker-compose -f docker-compose.dev.yml up
+#
+# The backend will live-reload on any change inside src/.
+# Frontend assets at /dashboard/ are served from the mounted source tree,
+# but for rapid UI iteration use the Vite dev server on port 5173 directly.
 #
 # PORTS:
-#   - 4500  → MyApi Backend (Node.js API)
-#   - 5173  → MyApi Frontend (React Vite - Hot Reloading)
-#   - 5432  → PostgreSQL Database
+#   - 4500  → MyApi backend (API + dashboard in dev mode)
 #
 # ============================================================================
 
-version: '3.9'
-
 services:
-  postgres:
-    image: postgres:17-alpine
-    container_name: myapi-db-dev
-    environment:
-      POSTGRES_USER: myapi_dev
-      POSTGRES_PASSWORD: myapi_password
-      POSTGRES_DB: myapi_dev
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata_dev:/var/lib/postgresql/data
-    networks:
-      - myapi-network-dev
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U myapi_dev"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  backend:
+  myapi-dev:
     build:
       context: ./src
-      dockerfile: ../backend/Dockerfile.dev
-    container_name: myapi-backend-dev
-    command: npm run dev
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      NODE_ENV: development
-      DATABASE_URL: postgresql://myapi_dev:myapi_password@postgres:5432/myapi_dev
-      PORT: 4500
-      JWT_SECRET: dev-secret-do-not-use-in-prod
-      SESSION_SECRET: dev-session-secret-do-not-use
-    ports:
-      - "4500:4500"
-    volumes:
-      - ./src:/app
-      - /app/node_modules
-    networks:
-      - myapi-network-dev
+      dockerfile: Dockerfile
+      target: builder          # stop at the builder stage (has nodemon + devDeps)
+    image: myapi:dev
+    container_name: myapi-dev
+    restart: unless-stopped
 
-  frontend:
-    build:
-      context: ./src/public/dashboard-app
-      dockerfile: ../../../frontend/Dockerfile.dev
-    container_name: myapi-frontend-dev
-    command: npm run dev -- --host
-    depends_on:
-      - backend
+    env_file:
+      - .env.local             # copy from .env.docker and set your secrets
+
     environment:
-      VITE_API_URL: http://localhost:4500
-      VITE_ENV: development
       NODE_ENV: development
+      PORT: ${PORT:-4500}
+      SESSION_COOKIE_SECURE: "false"
+      LOG_LEVEL: debug
+
     ports:
-      - "5173:5173"
+      - "${PORT:-4500}:${PORT:-4500}"
+
     volumes:
-      - ./src/public/dashboard-app:/app
+      # Live-mount the entire src/ directory so nodemon picks up every change.
+      # node_modules stay inside the container (anonymous volume wins over bind).
+      - ./src:/app:cached
       - /app/node_modules
+
+      # Persist the SQLite database between container restarts
+      - myapi-dev-data:/app/data
+      - myapi-dev-logs:/app/logs
+
     networks:
-      - myapi-network-dev
+      - myapi-dev-network
+
+    # Override CMD to start with nodemon instead of node
+    command: ["./node_modules/.bin/nodemon", "--watch", ".", "--ignore", "node_modules", "--ignore", "public/dist", "index.js"]
+
+    healthcheck:
+      test: ["CMD", "node", "-e",
+             "require('http').get('http://localhost:${PORT:-4500}/health', r => { if (r.statusCode !== 200) throw new Error(r.statusCode) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
 volumes:
-  pgdata_dev:
+  myapi-dev-data:
+    driver: local
+  myapi-dev-logs:
+    driver: local
 
 networks:
-  myapi-network-dev:
+  myapi-dev-network:
     driver: bridge
