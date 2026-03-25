@@ -3069,17 +3069,10 @@ app.delete("/api/v1/tokens/:id", authenticate, (req, res) => {
 app.get("/api/v1/tokens", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can list tokens" });
 
-  // Multi-tenancy: Filter tokens by workspace
-  const workspaceId = req.workspaceId || req.session?.currentWorkspace;
-  if (!workspaceId) {
-    return res.status(400).json({ error: "Workspace context required" });
-  }
-  
-  // Validate user is member of workspace
-  if (!req.workspaceMember && (!req.workspace || req.workspace.ownerId !== getOAuthUserId(req))) {
-    return res.status(403).json({ error: "Not a member of this workspace" });
-  }
-  
+  // Resolve workspace from middleware context (set for both session and Bearer token
+  // auth after the extractWorkspaceContext fix) or fall back to any explicit source.
+  const workspaceId = getRequestWorkspaceId(req);
+
   const userId = getOAuthUserId(req);
   const tokens = getAccessTokens(userId, workspaceId);
   const tokensWithScopes = tokens.map(t => ({

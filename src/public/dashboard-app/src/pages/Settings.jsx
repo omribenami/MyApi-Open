@@ -398,7 +398,10 @@ function SecuritySection() {
           throw new Error(`Failed to load pending approvals (${pendingRes.status})`);
         }
       } catch (err) {
-        console.error('Error loading device data:', err);
+        // Network failures during the polling interval are expected when connectivity
+        // is temporarily lost. Only log to warn (not error) and only surface the
+        // message in the UI so the console isn't flooded every 5 seconds.
+        console.warn('Device data poll failed:', err.message);
         if (active) {
           setDeviceLoadError(err.message || 'Failed to load device data. Try refreshing.');
         }
