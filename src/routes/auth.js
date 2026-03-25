@@ -99,6 +99,7 @@ router.post('/login', async (req, res) => {
       user = getUserByEmail(email);
     } catch (e) {
       console.error('Error fetching user:', e);
+      return res.status(500).json({ error: 'Internal server error', message: 'Service temporarily unavailable' });
     }
     
     if (!user) {

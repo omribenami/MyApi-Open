@@ -24,6 +24,7 @@ const emailService = require('./services/emailService');
 const {
   db,
   initDatabase,
+  checkDatabaseHealth,
   runMigrations,
   createVaultToken,
   getVaultTokens,
@@ -280,6 +281,16 @@ initDatabase();
 
 // Run database migrations
 runMigrations();
+
+// Startup database integrity check
+const startupHealth = checkDatabaseHealth();
+if (!startupHealth.healthy) {
+  console.error('[Database] INTEGRITY CHECK FAILED:', startupHealth.error);
+  console.error('[Database] The database may be corrupted. Consider restoring from backup.');
+  process.exit(1);
+} else {
+  console.log('[Database] Integrity check passed');
+}
 
 // --- OAuth Configuration ---
 // Load OAuth config with environment variable support
@@ -1334,7 +1345,13 @@ function authenticate(req, res, next) {
     console.warn('[AUTH 401] missing token/session', { method: req.method, fullPath, baseUrl: req.baseUrl, path: req.path, isPublicPath });
     return res.status(401).json({ error: "Missing session, Authorization: Bearer token, or ?token= query parameter" });
   }
-  const tokens = getAccessTokens();
+  let tokens;
+  try {
+    tokens = getAccessTokens();
+  } catch (dbError) {
+    console.error('[AUTH] Database error while fetching tokens:', dbError.message);
+    return res.status(500).json({ error: "Internal server error", message: "Service temporarily unavailable" });
+  }
   let matched = null;
   for (const tokenMeta of tokens) {
     // Check that token is not revoked, not expired, and hash matches
@@ -1806,9 +1823,20 @@ function bootstrap() {
 // ROUTES
 // ============================
 
+// Health check helper
+function buildHealthResponse() {
+  const dbHealth = checkDatabaseHealth();
+  return {
+    status: dbHealth.healthy ? "ok" : "degraded",
+    statusCode: dbHealth.healthy ? 200 : 503,
+    database: dbHealth,
+  };
+}
+
 // Health
 app.get("/health", (req, res) => {
-  res.json({ status: "ok", uptime: process.uptime() });
+  const health = buildHealthResponse();
+  res.status(health.statusCode).json({ status: health.status, uptime: process.uptime(), database: health.database });
 });
 
 function parseAndValidateHttpUrl(value) {
@@ -2225,7 +2253,8 @@ ${urls.map(u => `  <url><loc>https://${host}${u}</loc></url>`).join('\n')}
 
 // /health - useful for monitoring + AI discovery
 app.get('/api/v1/health', (req, res) => {
-  res.json({ status: 'ok', api: '/api/v1/', docs: '/openapi.json' });
+  const health = buildHealthResponse();
+  res.status(health.statusCode).json({ status: health.status, api: '/api/v1/', docs: '/openapi.json', database: health.database });
 });
 
 app.get('/openapi.json', (req, res) => {
