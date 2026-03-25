@@ -2,6 +2,7 @@
  * Multi-Tenancy Middleware
  * Phase 1: Teams & Multi-Tenancy
  * Ensures all requests are scoped to the user's current workspace
+ * Enhanced with tenant-level isolation and API key support
  */
 
 const { getWorkspaceMember, getWorkspaces } = require('../database');
@@ -160,6 +161,132 @@ function enforceMultiTenancy(req, res, next) {
 }
 
 /**
+ * Extract tenant context from API key or header
+ * Supports tenant identification via:
+ * 1. X-Tenant-ID header
+ * 2. Tenant API key (myapi_xxx prefix)
+ * 3. Subdomain parsing (tenant-slug.api.example.com)
+ */
+function extractTenantContext(tenantManager) {
+  return (req, res, next) => {
+    let tenantId = null;
+
+    // 1. Check X-Tenant-ID header
+    if (req.headers['x-tenant-id']) {
+      tenantId = req.headers['x-tenant-id'];
+    }
+
+    // 2. Check for tenant API key in Authorization header
+    const authHeader = req.headers.authorization;
+    if (!tenantId && authHeader && authHeader.startsWith('Bearer myapi_')) {
+      const apiKey = authHeader.substring(7);
+      try {
+        const tenantContext = tenantManager.validateApiKey(apiKey);
+        if (tenantContext) {
+          req.tenantContext = tenantContext;
+          req.tenantId = tenantContext.tenantId;
+          return next();
+        }
+      } catch {
+        // Invalid key — continue without tenant context
+      }
+    }
+
+    // 3. Check subdomain
+    if (!tenantId) {
+      const host = req.hostname || req.headers.host || '';
+      const parts = host.split('.');
+      if (parts.length >= 3) {
+        const subdomain = parts[0];
+        // Only treat as tenant slug if not common subdomains
+        if (!['www', 'api', 'app', 'admin', 'mail'].includes(subdomain)) {
+          try {
+            const tenant = tenantManager.getTenantBySlug(subdomain);
+            if (tenant) {
+              tenantId = tenant.id;
+            }
+          } catch {
+            // Tenant lookup failed — continue
+          }
+        }
+      }
+    }
+
+    // Set tenant context if found
+    if (tenantId) {
+      try {
+        const tenant = tenantManager.getTenant(tenantId);
+        if (tenant && tenant.status === 'active') {
+          req.tenantId = tenant.id;
+          req.tenantContext = {
+            tenantId: tenant.id,
+            tenantName: tenant.name,
+            tenantSlug: tenant.slug,
+            plan: tenant.plan
+          };
+        }
+      } catch {
+        // Tenant lookup failed — continue without tenant context
+      }
+    }
+
+    next();
+  };
+}
+
+/**
+ * Require tenant context
+ * Rejects requests that don't have a valid tenant context
+ */
+function requireTenantContext(req, res, next) {
+  if (!req.tenantId && !req.tenantContext) {
+    return res.status(400).json({
+      error: 'Tenant context required',
+      message: 'Provide X-Tenant-ID header, tenant API key, or use a tenant subdomain'
+    });
+  }
+
+  next();
+}
+
+/**
+ * Check tenant plan limits
+ * Verifies the tenant hasn't exceeded their plan limits
+ */
+function checkTenantLimits(tenantManager, resource) {
+  return (req, res, next) => {
+    if (!req.tenantId) {
+      return next();
+    }
+
+    try {
+      const stats = tenantManager.getTenantStats(req.tenantId);
+      if (!stats) return next();
+
+      if (resource === 'users' && stats.users.max !== -1 && stats.users.current >= stats.users.max) {
+        return res.status(403).json({
+          error: 'Plan limit reached',
+          message: `User limit (${stats.users.max}) reached for your plan. Upgrade to add more users.`,
+          currentPlan: stats.plan
+        });
+      }
+
+      if (resource === 'workspaces' && stats.workspaces.max !== -1 && stats.workspaces.current >= stats.workspaces.max) {
+        return res.status(403).json({
+          error: 'Plan limit reached',
+          message: `Workspace limit (${stats.workspaces.max}) reached for your plan. Upgrade to add more workspaces.`,
+          currentPlan: stats.plan
+        });
+      }
+    } catch {
+      // Non-fatal — allow request to proceed
+    }
+
+    next();
+  };
+}
+
+/**
  * Switch workspace
  * POST /api/v1/workspace-switch/:workspaceId
  * Allows user to switch their current workspace
@@ -210,5 +337,8 @@ module.exports = {
   requireRole,
   extractWorkspaceContext,
   enforceMultiTenancy,
+  extractTenantContext,
+  requireTenantContext,
+  checkTenantLimits,
   switchWorkspaceHandler
 };

@@ -36,3 +36,10 @@ src/uploads/
 src/.env*
 !src/.env.example
 logs/
+
+# Backups (may contain sensitive data)
+backups/
+
+# SSL certificates (sensitive)
+certs/
+certbot/
