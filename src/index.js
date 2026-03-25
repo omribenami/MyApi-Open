@@ -2898,7 +2898,7 @@ app.get("/api/v1/scopes", authenticate, (req, res) => {
 
 // Regenerate master token (creates a new full-scope master token).
 // NOTE: must be registered before /:id/regenerate so "master" is not captured as a token id.
-app.post('/api/v1/tokens/master/regenerate', authenticate, (req, res) => {
+app.post('/api/v1/tokens/master/regenerate', authRateLimit, authenticate, (req, res) => {
   if (req.tokenMeta.scope !== 'full') return res.status(403).json({ error: 'Only master token can regenerate master token' });
 
   try {
