@@ -32,6 +32,7 @@ const {
   decryptVaultToken,
   createAccessToken,
   getAccessTokens,
+  getExistingMasterToken,
   revokeAccessToken,
   // Scope functions
   validateScope,
@@ -1787,12 +1788,20 @@ function bootstrap() {
   if (!masterExists) {
     rawMaster = 'myapi_' + crypto.randomBytes(32).toString("hex");
     const hash = bcrypt.hashSync(rawMaster, 10);
-    createAccessToken(hash, "owner", "full", "Master Token");
+    createAccessToken(hash, "owner", "full", "Master Token", null, null, null, rawMaster);
     console.log("=== MyApi Platform Started ===");
     console.log("Master token created for bootstrap (hidden in logs for security)");
   } else {
-    console.log("=== MyApi Platform Started ===");
-    console.log("Master token already exists");
+    // Try to retrieve the existing master token so it stays constant across restarts
+    const existing = getExistingMasterToken('owner');
+    if (existing) {
+      rawMaster = existing.rawToken;
+      console.log("=== MyApi Platform Started ===");
+      console.log("Master token already exists (retrieved from database)");
+    } else {
+      console.log("=== MyApi Platform Started ===");
+      console.log("Master token already exists");
+    }
   }
 
   // Initialize Personas: Create default persona from SOUL.md if none exist
@@ -2934,7 +2943,7 @@ app.post('/api/v1/tokens/master/regenerate', authenticate, (req, res) => {
     revokeExistingMasterTokens(ownerId);
     const rawToken = 'myapi_' + crypto.randomBytes(32).toString("hex");
     const hash = bcrypt.hashSync(rawToken, 10);
-    const tokenId = createAccessToken(hash, ownerId, 'full', 'Master Token', null, null);
+    const tokenId = createAccessToken(hash, ownerId, 'full', 'Master Token', null, null, null, rawToken);
 
     createAuditLog({
       requesterId: req.tokenMeta.tokenId,
@@ -2967,9 +2976,28 @@ app.post('/api/v1/tokens/master/bootstrap', authenticate, (req, res) => {
       return res.json({ data: { id: req.session.masterTokenId, token: req.session.masterTokenRaw, scope: 'full' } });
     }
 
+    // Try to retrieve an existing master token from the database before creating a new one
+    const existing = getExistingMasterToken(ownerId);
+    if (existing) {
+      if (req.session) {
+        req.session.masterTokenRaw = existing.rawToken;
+        req.session.masterTokenId = existing.tokenId;
+        req.session.save?.();
+      }
+      const authHeader = req.headers.authorization;
+      if (authHeader && global.sessions) {
+        const bearerToken = authHeader.replace('Bearer ', '');
+        if (global.sessions[bearerToken]) {
+          global.sessions[bearerToken].masterTokenRaw = existing.rawToken;
+          global.sessions[bearerToken].masterTokenId = existing.tokenId;
+        }
+      }
+      return res.json({ data: { id: existing.tokenId, token: existing.rawToken, scope: 'full' } });
+    }
+
     const rawToken = 'myapi_' + crypto.randomBytes(32).toString("hex");
     const hash = bcrypt.hashSync(rawToken, 10);
-    const tokenId = createAccessToken(hash, ownerId, 'full', 'Master Token (Dashboard Session)', null, null);
+    const tokenId = createAccessToken(hash, ownerId, 'full', 'Master Token (Dashboard Session)', null, null, null, rawToken);
 
     if (req.session) {
       req.session.masterTokenRaw = rawToken;
@@ -3953,7 +3981,7 @@ app.post('/api/v1/auth/oauth-signup/complete', async (req, res) => {
 
   const rawMasterToken = 'myapi_' + crypto.randomBytes(32).toString('hex');
   const hash = bcrypt.hashSync(rawMasterToken, 10);
-  const tokenId = createAccessToken(hash, createdUser.id, 'full', 'Master Token (OAuth Signup Session)', null, null);
+  const tokenId = createAccessToken(hash, createdUser.id, 'full', 'Master Token (OAuth Signup Session)', null, null, null, rawMasterToken);
 
   await regenerateSession(req);
 
@@ -4226,17 +4254,24 @@ app.post('/api/v1/auth/2fa/challenge', twoFactorRateLimit, (req, res) => {
     delete req.session.pending_2fa_user;
 
     if (!req.session.masterTokenRaw) {
-      const existingTokens = getAccessTokens();
-      const hasValidMaster = existingTokens.some(t =>
-        t.scope === 'full' && !t.revokedAt && t.ownerId === String(pendingUser.id)
-      );
+      // Try to retrieve existing master token from the database first
+      const existing = getExistingMasterToken(String(pendingUser.id));
+      if (existing) {
+        req.session.masterTokenRaw = existing.rawToken;
+        req.session.masterTokenId = existing.tokenId;
+      } else {
+        const existingTokens = getAccessTokens();
+        const hasValidMaster = existingTokens.some(t =>
+          t.scope === 'full' && !t.revokedAt && t.ownerId === String(pendingUser.id)
+        );
 
-      if (!hasValidMaster) {
-        const rawMasterToken = 'myapi_' + crypto.randomBytes(32).toString("hex");
-        const hash = bcrypt.hashSync(rawMasterToken, 10);
-        const tokenId = createAccessToken(hash, pendingUser.id, 'full', 'Master Token (OAuth 2FA)', null, null);
-        req.session.masterTokenRaw = rawMasterToken;
-        req.session.masterTokenId = tokenId;
+        if (!hasValidMaster) {
+          const rawMasterToken = 'myapi_' + crypto.randomBytes(32).toString("hex");
+          const hash = bcrypt.hashSync(rawMasterToken, 10);
+          const tokenId = createAccessToken(hash, pendingUser.id, 'full', 'Master Token (OAuth 2FA)', null, null, null, rawMasterToken);
+          req.session.masterTokenRaw = rawMasterToken;
+          req.session.masterTokenId = tokenId;
+        }
       }
     }
 
@@ -5396,7 +5431,19 @@ app.get([
     });
 
     const next = encodeURIComponent(safeReturnTo);
-    const masterToken = req.session.masterTokenRaw || 'myapi_' + crypto.randomBytes(32).toString("hex");
+
+    // Try to retrieve existing master token from the database before generating a new one
+    let masterToken = req.session.masterTokenRaw;
+    if (!masterToken && oauthOwnerId) {
+      const existing = getExistingMasterToken(oauthOwnerId);
+      if (existing) {
+        masterToken = existing.rawToken;
+        req.session.masterTokenId = existing.tokenId;
+      }
+    }
+    if (!masterToken) {
+      masterToken = 'myapi_' + crypto.randomBytes(32).toString("hex");
+    }
 
     // CRITICAL: Store masterToken in session so /api/v1/auth/me can return it to the frontend
     // This allows the frontend to store it in localStorage and use it for future API calls
@@ -5408,7 +5455,7 @@ app.get([
     if (oauthOwnerId && !req.session.masterTokenId) {
       try {
         const hash = bcrypt.hashSync(masterToken, 10);
-        const tokenId = createAccessToken(hash, oauthOwnerId, 'full', 'Master Token (OAuth Connect)', null, null);
+        const tokenId = createAccessToken(hash, oauthOwnerId, 'full', 'Master Token (OAuth Connect)', null, null, null, masterToken);
         req.session.masterTokenId = tokenId;
         const prune = pruneRedundantMasterTokens(oauthOwnerId, 3);
         console.log(`[OAuth Callback] ✅ Created access token for OAuth connect: ${tokenId} (pruned ${prune.pruned || 0})`);

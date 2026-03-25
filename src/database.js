@@ -804,6 +804,9 @@ function initDatabase() {
   db.exec('CREATE INDEX IF NOT EXISTS idx_skills_owner ON skills(owner_id)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_kb_documents_owner ON kb_documents(owner_id)');
 
+  // Master token persistence: Store encrypted raw token for retrieval across sessions
+  safeMigration("ALTER TABLE access_tokens ADD COLUMN encrypted_token TEXT");
+
   // Phase 1: Teams & Multi-Tenancy - Add workspace_id to relevant tables
   const phase1MultiTenancyMigrations = [
     "ALTER TABLE access_tokens ADD COLUMN workspace_id TEXT",
@@ -1264,20 +1267,91 @@ function deleteVaultToken(id, ownerId = 'owner', workspaceId = null) {
 }
 
 // Access Tokens
-function createAccessToken(hash, ownerId, scope, label, expiresAt = null, allowedPersonas = null, workspaceId = null) {
+
+/**
+ * Encrypt a raw token for persistent storage using AES-256-GCM (same pattern as vault tokens).
+ * Returns the encrypted JSON string, or null if VAULT_KEY is not set.
+ */
+function encryptRawToken(rawToken) {
+  const vaultKey = String(process.env.VAULT_KEY || '').trim();
+  if (!vaultKey || !rawToken) return null;
+  try {
+    const masterHex = crypto.createHash('sha256').update(vaultKey).digest('hex');
+    const salt = generateSalt();
+    const key = deriveKey(masterHex, salt);
+    const payload = encrypt(String(rawToken), key);
+    return JSON.stringify({ ...payload, salt: salt.toString('hex') });
+  } catch (e) {
+    console.warn('[Database] Failed to encrypt raw token:', e.message);
+    return null;
+  }
+}
+
+/**
+ * Decrypt a stored encrypted token. Returns the raw token string or null.
+ */
+function decryptRawToken(encryptedJson) {
+  const vaultKey = String(process.env.VAULT_KEY || '').trim();
+  if (!vaultKey || !encryptedJson) return null;
+  try {
+    const p = JSON.parse(encryptedJson);
+    if (p && p.ciphertext && (p.nonce || p.iv) && p.authTag && p.salt) {
+      const masterHex = crypto.createHash('sha256').update(vaultKey).digest('hex');
+      const key = deriveKey(masterHex, Buffer.from(p.salt, 'hex'));
+      return decrypt(p, key);
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function createAccessToken(hash, ownerId, scope, label, expiresAt = null, allowedPersonas = null, workspaceId = null, rawToken = null) {
   const id = 'tok_' + crypto.randomBytes(16).toString('hex');
   const now = new Date().toISOString();
   const allowedPersonasJson = allowedPersonas && allowedPersonas.length > 0
     ? JSON.stringify(allowedPersonas)
     : null;
 
+  // Encrypt raw token for persistent retrieval (master tokens only)
+  const encryptedToken = rawToken ? encryptRawToken(rawToken) : null;
+
   const stmt = db.prepare(`
-    INSERT INTO access_tokens (id, hash, owner_id, scope, label, created_at, revoked_at, expires_at, allowed_personas, workspace_id)
-    VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
+    INSERT INTO access_tokens (id, hash, owner_id, scope, label, created_at, revoked_at, expires_at, allowed_personas, workspace_id, encrypted_token)
+    VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)
   `);
 
-  stmt.run(id, hash, ownerId, scope, label, now, expiresAt, allowedPersonasJson, workspaceId);
+  stmt.run(id, hash, ownerId, scope, label, now, expiresAt, allowedPersonasJson, workspaceId, encryptedToken);
   return id;
+}
+
+/**
+ * Retrieve the existing decrypted master token for a given owner.
+ * Returns { tokenId, rawToken } if a valid encrypted master token exists, or null otherwise.
+ */
+function getExistingMasterToken(ownerId) {
+  if (!ownerId) return null;
+  try {
+    // Look for active full-scope tokens with an encrypted_token, trying owner-specific first, then legacy 'owner'
+    const ownerIds = [String(ownerId)];
+    if (ownerId !== 'owner') ownerIds.push('owner');
+
+    for (const oid of ownerIds) {
+      const row = db.prepare(
+        "SELECT id, encrypted_token FROM access_tokens WHERE owner_id = ? AND scope = 'full' AND revoked_at IS NULL AND encrypted_token IS NOT NULL ORDER BY created_at DESC LIMIT 1"
+      ).get(oid);
+      if (row && row.encrypted_token) {
+        const rawToken = decryptRawToken(row.encrypted_token);
+        if (rawToken) {
+          return { tokenId: row.id, rawToken };
+        }
+      }
+    }
+    return null;
+  } catch (e) {
+    console.warn('[Database] Failed to retrieve existing master token:', e.message);
+    return null;
+  }
 }
 
 function getAccessTokens(ownerId = null, workspaceId = null) {
@@ -5965,6 +6039,7 @@ module.exports = {
   decryptVaultToken,
   createAccessToken,
   getAccessTokens,
+  getExistingMasterToken,
   revokeAccessToken,
   // Scopes
   seedDefaultScopes,
