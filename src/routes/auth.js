@@ -6,7 +6,7 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
-const { getAccessTokens, getExistingMasterToken, createAccessToken } = require('../database');
+const { getAccessTokens, getExistingMasterToken, createAccessToken, db } = require('../database');
 
 const router = express.Router();
 
@@ -119,6 +119,9 @@ router.post('/login', async (req, res) => {
       masterTokenRaw = existing.rawToken;
       masterTokenId = existing.tokenId;
     } else {
+      // Revoke all existing master tokens for this user before creating a new one.
+      // This prevents token proliferation from repeated logins when encrypted_token is unavailable.
+      db.prepare("UPDATE access_tokens SET revoked_at = ? WHERE owner_id = ? AND scope = 'full' AND revoked_at IS NULL").run(new Date().toISOString(), user.id);
       masterTokenRaw = 'myapi_' + crypto.randomBytes(32).toString('hex');
       const hash = await bcrypt.hash(masterTokenRaw, 10);
       masterTokenId = createAccessToken(hash, user.id, 'full', 'Master Token', null, null, null, masterTokenRaw);

@@ -2921,6 +2921,7 @@ app.post('/api/v1/tokens/master/regenerate', authRateLimit, authenticate, (req, 
     if (req.session) {
       req.session.masterTokenRaw = rawToken;
       req.session.masterTokenId  = tokenId;
+      req.session.save?.((err) => { if (err) console.error('[Regenerate] Session save error:', err); });
     }
 
     // Security: update integrity hash and alert
