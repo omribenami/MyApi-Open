@@ -324,6 +324,24 @@ router.get('/me', (req, res) => {
     // Prefer a token already cached in the session; fall back to the DB lookup.
     let masterTokenRaw = req.session?.masterTokenRaw || null;
     let masterTokenId  = req.session?.masterTokenId  || null;
+
+    // Verify the session's cached token is still active in the DB (not revoked).
+    // If it was revoked (e.g. by a regenerate call), clear it from the session
+    // so we don't hand out a dead token as the bootstrap value.
+    if (masterTokenId) {
+      const { db } = require('../database');
+      const tokenRow = db.prepare('SELECT revoked_at FROM access_tokens WHERE id = ?').get(masterTokenId);
+      if (!tokenRow || tokenRow.revoked_at) {
+        masterTokenRaw = null;
+        masterTokenId  = null;
+        if (req.session) {
+          delete req.session.masterTokenRaw;
+          delete req.session.masterTokenId;
+          req.session.save?.((err) => { if (err) console.error('[Auth/Me] Session clear error:', err); });
+        }
+      }
+    }
+
     if (!masterTokenRaw) {
       const existing = getExistingMasterToken(userId);
       if (existing) {
