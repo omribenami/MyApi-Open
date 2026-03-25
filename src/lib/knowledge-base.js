@@ -53,32 +53,18 @@ class KnowledgeBase {
    */
   async addDocument(source, title, content, ownerId = 'owner') {
     try {
-      // Parse markdown into chunks
-      const chunks = this._parseMarkdown(content);
+      const embedding = this._generateEmbedding(content);
 
-      const results = [];
+      const doc = addKBDocument(
+        source,
+        title,
+        content,
+        embedding,
+        { wordCount: content.split(/\s+/).length },
+        ownerId
+      );
 
-      for (const chunk of chunks) {
-        // Generate embedding (simple hash-based for now)
-        const embedding = this._generateEmbedding(chunk.text);
-
-        const doc = addKBDocument(
-          source,
-          `${title} - ${chunk.section}`,
-          chunk.text,
-          embedding,
-          {
-            chunkIndex: chunk.index,
-            section: chunk.section,
-            wordCount: chunk.text.split(/\s+/).length
-          },
-          ownerId
-        );
-
-        results.push(doc);
-      }
-
-      return results;
+      return [doc];
     } catch (error) {
       console.error('Error adding document:', error);
       throw error;
