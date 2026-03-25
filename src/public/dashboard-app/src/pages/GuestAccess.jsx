@@ -3,6 +3,7 @@ import { useAuthStore } from '../stores/authStore';
 
 function GuestAccess() {
   const token = useAuthStore((state) => state.masterToken);
+  const currentWorkspace = useAuthStore((state) => state.currentWorkspace);
   const [tokens, setTokens] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showGenerator, setShowGenerator] = useState(false);
@@ -22,7 +23,7 @@ function GuestAccess() {
 
   useEffect(() => {
     fetchTokens();
-  }, [token]);
+  }, [token, currentWorkspace?.id]);
 
   const fetchTokens = async () => {
     try {

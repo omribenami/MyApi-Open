@@ -36,6 +36,7 @@ function formatError(err, fallback) {
 
 function UserManagement() {
   const masterToken = useAuthStore((s) => s.masterToken);
+  const currentWorkspace = useAuthStore((s) => s.currentWorkspace);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -78,7 +79,7 @@ function UserManagement() {
     // Use session cookies as fallback if no masterToken
     fetchUsers();
     loadPlans();
-  }, [masterToken]);
+  }, [masterToken, currentWorkspace?.id]);
 
   const updatePlan = async (userId, plan) => {
     setSavingUserId(userId);

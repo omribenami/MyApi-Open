@@ -5,6 +5,7 @@ import apiClient from '../utils/apiClient';
 
 function NotificationSettings() {
   const masterToken = useAuthStore((state) => state.masterToken);
+  const currentWorkspace = useAuthStore((state) => state.currentWorkspace);
   const addToast = useNotificationStore((state) => state.addToast);
 
   const [settings, setSettings] = useState({});
@@ -27,7 +28,7 @@ function NotificationSettings() {
   // Fetch settings on mount
   useEffect(() => {
     fetchSettings();
-  }, [masterToken]);
+  }, [masterToken, currentWorkspace?.id]);
 
   const fetchSettings = async () => {
     setLoading(true);

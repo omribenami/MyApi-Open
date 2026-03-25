@@ -4,6 +4,7 @@ import { useNotificationStore } from '../stores/notificationStore';
 
 function NotificationDropdown({ open, onClose }) {
   const masterToken = useAuthStore((state) => state.masterToken);
+  const currentWorkspace = useAuthStore((state) => state.currentWorkspace);
   const dropdownRef = useRef(null);
   const {
     notifications,
@@ -26,7 +27,7 @@ function NotificationDropdown({ open, onClose }) {
       fetchNotifications(masterToken, displayLimit, 0);
       setOffset(0);
     }
-  }, [open, masterToken, fetchNotifications, displayLimit]);
+  }, [open, masterToken, fetchNotifications, displayLimit, currentWorkspace?.id]);
 
   useEffect(() => {
     const handleResize = () => {

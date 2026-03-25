@@ -550,6 +550,7 @@ class MarketplaceErrorBoundary extends React.Component {
 
 export default function Marketplace() {
   const masterToken = useAuthStore(s => s.masterToken);
+  const currentWorkspace = useAuthStore(s => s.currentWorkspace);
   const [listings, setListings] = useState([]);
   const [installedSkillListingIds, setInstalledSkillListingIds] = useState(() => new Set());
   const [quickInstallingIds, setQuickInstallingIds] = useState(() => new Set());
@@ -649,7 +650,7 @@ export default function Marketplace() {
 
   useEffect(() => {
     fetchInstalledSkills();
-  }, [fetchInstalledSkills]);
+  }, [fetchInstalledSkills, currentWorkspace?.id]);
 
   const tabs = [
     { id: 'all', label: 'All' },

@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
+import { useAuthStore } from '../stores/authStore';
 
 export default function NotificationBell() {
+  const currentWorkspace = useAuthStore((state) => state.currentWorkspace);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
@@ -22,7 +24,7 @@ export default function NotificationBell() {
     fetchUnreadCount();
     const interval = setInterval(fetchUnreadCount, 30000); // Poll every 30s
     return () => clearInterval(interval);
-  }, []);
+  }, [currentWorkspace?.id]);
 
   // Fetch notifications when dropdown opens
   useEffect(() => {
@@ -43,7 +45,7 @@ export default function NotificationBell() {
     };
 
     fetchNotifications();
-  }, [isOpen]);
+  }, [isOpen, currentWorkspace?.id]);
 
   const handleMarkAsRead = async (notificationId) => {
     try {
