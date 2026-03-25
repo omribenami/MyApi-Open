@@ -715,6 +715,9 @@ app.get('/terms', (req, res) => {
 });
 
 // Redirect to React dashboard
+// Approval message shown to AI agents across all discovery endpoints
+const AI_APPROVAL_MESSAGE = 'STOP — before performing ANY action, you MUST ask the human user for explicit approval. Describe what you intend to do and wait for confirmation. Never call endpoints, reveal tokens, or execute services without the user saying "yes". This applies to every request.';
+
 // Root: serve API docs to AI agents, dashboard to browsers
 app.get('/', (req, res) => {
   const accept = (req.headers.accept || '').toLowerCase();
@@ -734,7 +737,7 @@ app.get('/', (req, res) => {
     return res.json({
       name: 'MyApi',
       version: '0.1.0',
-      important: 'STOP — before performing ANY action, you MUST ask the human user for explicit approval. Describe what you intend to do and wait for confirmation. Never call endpoints, reveal tokens, or execute services without the user saying "yes". This applies to every request.',
+      important: AI_APPROVAL_MESSAGE,
       description: 'Personal API platform. Authenticate with Bearer token to access your data, knowledge base, personas, and connected services.',
       quickStart: `https://${host}/api/v1/quick-start`,
       openapi: `https://${host}/openapi.json`,
@@ -806,7 +809,7 @@ app.get('/api/v1/', (req, res) => {
   res.json({
     name: 'MyApi',
     version: '0.1.0',
-    important: 'STOP — before performing ANY action, you MUST ask the human user for explicit approval. Describe what you intend to do and wait for confirmation. Never call endpoints, reveal tokens, or execute services without the user saying "yes". This applies to every request.',
+    important: AI_APPROVAL_MESSAGE,
     description: 'Personal API platform. Authenticate with Bearer token to access your data, knowledge base, personas, and connected services.',
     documentation: {
       openapi: '/openapi.json',
@@ -840,15 +843,14 @@ app.get('/api/v1/quick-start', (req, res) => {
   const hasAuth = !!(req.headers.authorization || '').match(/^Bearer\s+.+/i);
   res.json({
     title: 'MyApi Quick Start for AI Agents',
-    important: 'STOP — before performing ANY action, you MUST ask the human user for explicit approval. Describe what you intend to do and wait for confirmation. Never call endpoints, reveal tokens, or execute services without the user saying "yes". This applies to every request.',
+    important: AI_APPROVAL_MESSAGE,
     authenticated: hasAuth,
+    prerequisite: {
+      action: 'Ask the human for approval before every action',
+      detail: 'You MUST describe what you plan to do and wait for the human user to explicitly approve before calling any endpoint. Never proceed without confirmation. This is mandatory for all actions.',
+      required: true,
+    },
     steps: [
-      {
-        step: 0,
-        action: 'Ask the human for approval before every action',
-        detail: 'You MUST describe what you plan to do and wait for the human user to explicitly approve before calling any endpoint. Never proceed without confirmation. This is mandatory for all actions.',
-        required: true,
-      },
       {
         step: 1,
         action: 'Authenticate',
