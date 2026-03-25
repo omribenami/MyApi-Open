@@ -15,6 +15,7 @@ import { getOAuthProvider } from '../utils/oauthProviderMap';
 function ServiceConnectors() {
   const navigate = useNavigate();
   const masterToken = useAuthStore((state) => state.masterToken);
+  const currentWorkspace = useAuthStore((state) => state.currentWorkspace);
   const {
     services,
     setServices,
@@ -69,7 +70,7 @@ function ServiceConnectors() {
     if (oauthStatus === 'signup_required' || oauthStatus === 'confirm_login') {
       showInfoToast(`Completing ${oauthService} setup...`);
     }
-  }, [masterToken, navigate, showSuccessToast, showInfoToast]);
+  }, [masterToken, navigate, showSuccessToast, showInfoToast, currentWorkspace?.id]);
 
 
   const fetchCategories = async () => {

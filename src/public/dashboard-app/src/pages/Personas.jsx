@@ -5,6 +5,7 @@ import EnhancedPersonaBuilder from '../components/EnhancedPersonaBuilder';
 
 function Personas() {
   const token = useAuthStore((state) => state.masterToken);
+  const currentWorkspace = useAuthStore((state) => state.currentWorkspace);
   const [personas, setPersonas] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -18,7 +19,7 @@ function Personas() {
 
   useEffect(() => {
     fetchPersonas();
-  }, [token]);
+  }, [token, currentWorkspace?.id]);
 
   const handleSelectPersona = async (persona) => {
     setLoadingDetail(true);

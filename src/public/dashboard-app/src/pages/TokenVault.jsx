@@ -3,6 +3,7 @@ import { useAuthStore } from '../stores/authStore';
 
 function TokenVault() {
   const masterToken = useAuthStore((state) => state.masterToken);
+  const currentWorkspace = useAuthStore((state) => state.currentWorkspace);
   const [tokens, setTokens] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -30,7 +31,7 @@ function TokenVault() {
     if (masterToken) {
       fetchTokens();
     }
-  }, [masterToken]);
+  }, [masterToken, currentWorkspace?.id]);
 
   const fetchTokens = async () => {
     setIsLoading(true);

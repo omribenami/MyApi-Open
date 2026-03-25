@@ -22,6 +22,7 @@ import { useAuthStore } from '../stores/authStore';
 
 function DashboardHome() {
   const masterToken = useAuthStore((state) => state.masterToken);
+  const currentWorkspace = useAuthStore((state) => state.currentWorkspace);
   const [stats, setStats] = useState({
     tokens: 0,
     vaultTokens: 0,
@@ -129,7 +130,7 @@ function DashboardHome() {
       clearTimeout(guard);
       clearInterval(interval);
     };
-  }, [masterToken]);
+  }, [masterToken, currentWorkspace?.id]);
 
   const statCards = [
     {
