@@ -41,24 +41,25 @@ const WorkspaceSwitcher = ({ variant = 'menu' }) => {
 
   // Menu variant: simple text item in a dropdown menu
   if (variant === 'menu') {
-    if (displayWorkspaces.length <= 1) {
-      return null; // Don't show if only one workspace
-    }
+    const hasMultiple = displayWorkspaces.length > 1;
 
     return (
       <div className="relative" ref={dropdownRef}>
         <button
           className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-slate-800 hover:text-white transition-all flex items-center justify-between"
-          onClick={() => setIsOpen(!isOpen)}
-          title="Switch workspace"
+          onClick={() => hasMultiple && setIsOpen(!isOpen)}
+          title={hasMultiple ? 'Switch workspace' : displayName}
+          style={!hasMultiple ? { cursor: 'default' } : undefined}
         >
           <span>🏢 {displayName}</span>
-          <svg className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
+          {hasMultiple && (
+            <svg className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          )}
         </button>
 
-        {isOpen && (
+        {isOpen && hasMultiple && (
           <div className="absolute left-0 top-full w-56 mt-1 rounded-lg border border-slate-700 bg-slate-900 shadow-xl py-1 z-50">
             <div className="px-4 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">Workspaces</div>
             {displayWorkspaces.map((workspace) => (
