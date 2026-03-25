@@ -1717,6 +1717,11 @@ function requirePowerUser(req, res) {
 function revokeExistingMasterTokens(ownerId) {
   const now = new Date().toISOString();
   db.prepare("UPDATE access_tokens SET revoked_at = ? WHERE owner_id = ? AND scope = 'full' AND revoked_at IS NULL").run(now, ownerId);
+  // Also revoke bootstrap tokens created with the hardcoded 'owner' ownerId,
+  // so stale bootstrap tokens don't linger after a real user regenerates their master token.
+  if (ownerId !== 'owner') {
+    db.prepare("UPDATE access_tokens SET revoked_at = ? WHERE owner_id = 'owner' AND scope = 'full' AND revoked_at IS NULL").run(now);
+  }
 }
 
 function pruneRedundantMasterTokens(ownerId, keep = 3) {
@@ -2749,9 +2754,10 @@ app.post("/api/v1/tokens", authenticate, (req, res) => {
 app.get("/api/v1/tokens/:id", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can view token details" });
 
-  const userId = getOAuthUserId(req);
   const workspaceId = req.workspaceId || req.session?.currentWorkspace || null;
-  const tokens = getAccessTokens(userId, workspaceId);
+  // Do not filter by userId here — the bootstrap master token has owner_id='owner',
+  // not the session user's real ID. Scope check above already enforces full access.
+  const tokens = getAccessTokens(null, workspaceId);
   const token = tokens.find(t => t.tokenId === req.params.id);
 
   if (!token) return res.status(404).json({ error: "Token not found" });
