@@ -20,6 +20,9 @@ on:
           - production
           - staging
 
+permissions:
+  contents: read
+
 concurrency:
   group: deploy-${{ github.event.inputs.environment || 'production' }}
   cancel-in-progress: false
