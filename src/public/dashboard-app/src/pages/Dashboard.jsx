@@ -18,6 +18,7 @@ function Dashboard() {
   const navigate = useNavigate();
   const masterToken = useAuthStore((state) => state.masterToken);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const currentWorkspace = useAuthStore((state) => state.currentWorkspace);
   const wsRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
 
@@ -238,7 +239,7 @@ function Dashboard() {
         wsRef.current.close();
       }
     };
-  }, [masterToken, isAuthenticated]);
+  }, [masterToken, isAuthenticated, currentWorkspace?.id]);
 
   if (loading) {
     return (

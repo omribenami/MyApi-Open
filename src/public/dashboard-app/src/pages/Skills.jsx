@@ -191,6 +191,7 @@ function DeleteConfirmModal({ onConfirm, onClose, usage }) {
 
 function Skills() {
   const masterToken = useAuthStore((s) => s.masterToken);
+  const currentWorkspace = useAuthStore((s) => s.currentWorkspace);
   const {
     skills, isLoading, error, setSkills, setIsLoading, setError, clearError,
     showCreateModal, openCreateModal, closeCreateModal,
@@ -208,7 +209,7 @@ function Skills() {
 
   useEffect(() => {
     fetchSkills();
-  }, [masterToken]);
+  }, [masterToken, currentWorkspace?.id]);
 
   useEffect(() => {
     const loadDeleteUsage = async () => {
