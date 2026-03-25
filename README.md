@@ -119,7 +119,7 @@ curl -L -H "Authorization: Bearer <token>" \
   -o myapi-export.zip
 ```
 
-### Local Development
+### Local Development (Docker)
 
 1. **Clone the repository:**
    ```bash
@@ -127,45 +127,59 @@ curl -L -H "Authorization: Bearer <token>" \
    cd MyApi
    ```
 
-2. **Install dependencies:**
+2. **Setup Environment Variables:**
    ```bash
-   cd src
-   npm install
-   cd ../public/dashboard-app
-   npm install
-   cd ../..
+   cp .env.dev.example .env
+   # Edit .env with your local credentials if needed
    ```
 
-3. **Start the Backend:**
+3. **Start the Stack:**
    ```bash
-   cd src
-   npm run dev
-   # API available at http://localhost:4500
+   docker-compose -f docker-compose.dev.yml up --build
+   ```
+   - API available at `http://localhost:4500`
+   - Dashboard available at `http://localhost:5173` (with hot-reloading)
+
+### Production Deployment (Docker)
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/omribenami/MyApi.git
+   cd MyApi
    ```
 
-4. **Start the Frontend (in separate terminal):**
+2. **Setup Environment Variables:**
+   ```bash
+   cp .env.prod.example .env.local
+   # MUST Edit .env.local with secure production secrets
+   ```
+
+3. **Start the Production Stack:**
+   ```bash
+   docker-compose -f docker-compose.prod.yml up -d --build
+   ```
+
+4. **Configure SSL / HTTPS:**
+   ```bash
+   ./scripts/setup-ssl.sh yourdomain.com
+   ```
+   The backend serves the React dashboard and handles API endpoints natively behind Nginx with Let's Encrypt certificates.
+
+#### Manual Production Deployment (Without Docker)
+
+If you prefer to run bare-metal without Docker:
+
+1. **Build the Frontend:**
    ```bash
    cd src/public/dashboard-app
-   npm run dev
-   # Dashboard available at http://localhost:5173
+   npm run build
    ```
 
-### Production Deployment
-
-#### 1. Build the Frontend
-
-```bash
-cd src/public/dashboard-app
-npm run build
-# Output: dist/ folder ready for static serving
-```
-
-#### 2. Start the Backend Service
-
-```bash
-cd src
-NODE_ENV=production npm start
-```
+2. **Start the Backend Service:**
+   ```bash
+   cd src
+   NODE_ENV=production npm start
+   ```
 
 The backend will:
 - Serve the React dashboard from `/src/public/dist`

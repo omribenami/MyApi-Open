@@ -1,0 +1,87 @@
+# ============================================================================
+# MyApi - Local Development Docker Compose Setup
+# ============================================================================
+# Stack for running MyApi locally with hot-reloading
+#
+# QUICK START:
+#   1. cp .env.dev.example .env
+#   2. docker-compose -f docker-compose.dev.yml up --build
+#
+# PORTS:
+#   - 4500  → MyApi Backend (Node.js API)
+#   - 5173  → MyApi Frontend (React Vite - Hot Reloading)
+#   - 5432  → PostgreSQL Database
+#
+# ============================================================================
+
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: myapi-db-dev
+    environment:
+      POSTGRES_USER: myapi_dev
+      POSTGRES_PASSWORD: myapi_password
+      POSTGRES_DB: myapi_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata_dev:/var/lib/postgresql/data
+    networks:
+      - myapi-network-dev
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myapi_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./src
+      dockerfile: ../backend/Dockerfile.dev
+    container_name: myapi-backend-dev
+    command: npm run dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://myapi_dev:myapi_password@postgres:5432/myapi_dev
+      PORT: 4500
+      JWT_SECRET: dev-secret-do-not-use-in-prod
+      SESSION_SECRET: dev-session-secret-do-not-use
+    ports:
+      - "4500:4500"
+    volumes:
+      - ./src:/app
+      - /app/node_modules
+    networks:
+      - myapi-network-dev
+
+  frontend:
+    build:
+      context: ./src/public/dashboard-app
+      dockerfile: ../../../frontend/Dockerfile.dev
+    container_name: myapi-frontend-dev
+    command: npm run dev -- --host
+    depends_on:
+      - backend
+    environment:
+      VITE_API_URL: http://localhost:4500
+      VITE_ENV: development
+      NODE_ENV: development
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./src/public/dashboard-app:/app
+      - /app/node_modules
+    networks:
+      - myapi-network-dev
+
+volumes:
+  pgdata_dev:
+
+networks:
+  myapi-network-dev:
+    driver: bridge
