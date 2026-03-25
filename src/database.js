@@ -1135,20 +1135,20 @@ function createVaultToken(label, description, token, service, websiteUrl = null,
 }
 
 function getVaultTokens(ownerId = 'owner', workspaceId = null) {
-  // BUG-14 FIX: Enforce workspace scoping by filtering vault tokens by owner_id + workspace_id
+  // Multi-tenancy: tokens belong to a workspace OR were created before workspaces (workspace_id IS NULL).
+  // NULL workspace_id tokens are owner-level and visible from any workspace.
   let query = `
     SELECT id, label, description, token_preview, service, website_url, discovered_api_url, discovered_auth_scheme, created_at, updated_at, workspace_id
     FROM vault_tokens
     WHERE owner_id = ?
   `;
   const params = [ownerId];
-  
-  // Multi-tenancy: Filter by workspace if provided
+
   if (workspaceId) {
-    query += ' AND workspace_id = ?';
+    query += ' AND (workspace_id = ? OR workspace_id IS NULL)';
     params.push(workspaceId);
   }
-  
+
   query += ' ORDER BY created_at DESC';
   
   const stmt = db.prepare(query);
@@ -1169,11 +1169,12 @@ function getVaultTokens(ownerId = 'owner', workspaceId = null) {
 }
 
 function decryptVaultToken(id, ownerId = 'owner', workspaceId = null) {
-  // BUG-14: Enforce owner_id and workspace_id check to prevent cross-workspace token access
+  // Workspace scoping: tokens belong to a workspace OR were created before workspaces (workspace_id IS NULL).
+  // NULL workspace_id tokens are owner-level and accessible from any workspace.
   let query = 'SELECT * FROM vault_tokens WHERE id = ? AND owner_id = ?';
   const params = [id, ownerId];
   if (workspaceId) {
-    query += ' AND workspace_id = ?';
+    query += ' AND (workspace_id = ? OR workspace_id IS NULL)';
     params.push(workspaceId);
   }
   const row = db.prepare(query).get(...params);

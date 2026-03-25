@@ -2583,19 +2583,12 @@ app.post('/api/v1/vault/discover-api', authenticate, async (req, res) => {
 
 app.get("/api/v1/vault/tokens", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can view vault tokens" });
-  
-  // Multi-tenancy: Filter vault tokens by workspace
+
   const ownerId = getRequestOwnerId(req);
-  const workspaceId = req.workspaceId || req.session?.currentWorkspace;
-  if (!workspaceId) {
-    return res.status(400).json({ error: "Workspace context required" });
-  }
-  
-  // Validate user is member of workspace
-  if (!req.workspaceMember && (!req.workspace || req.workspace.ownerId !== getOAuthUserId(req))) {
-    return res.status(403).json({ error: "Not a member of this workspace" });
-  }
-  
+  const workspaceId = req.workspaceId || req.session?.currentWorkspace || null;
+
+  // getVaultTokens handles null workspaceId (returns all owner tokens) and non-null
+  // (returns workspace tokens + legacy tokens with workspace_id IS NULL)
   const tokens = getVaultTokens(ownerId, workspaceId);
   
   createAuditLog({ 
