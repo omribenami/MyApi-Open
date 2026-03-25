@@ -1389,10 +1389,10 @@ function getAccessTokens(ownerId = null, workspaceId = null) {
     query += ' AND owner_id = ?';
     params.push(ownerId);
   }
-  
-  // Multi-tenancy: Filter by workspace if provided
+
+  // Multi-tenancy: include tokens with no workspace_id (created before multi-tenancy).
   if (workspaceId) {
-    query += ' AND workspace_id = ?';
+    query += ' AND (workspace_id = ? OR workspace_id IS NULL)';
     params.push(workspaceId);
   }
 
@@ -3061,13 +3061,13 @@ function getSkills(ownerId = 'owner', workspaceId = null) {
   const owner = normalizeOwnerId(ownerId);
   let query = 'SELECT * FROM skills WHERE owner_id = ?';
   const params = [owner];
-  
-  // Multi-tenancy: Filter by workspace if provided
+
+  // Multi-tenancy: include skills with no workspace_id (created before multi-tenancy).
   if (workspaceId) {
-    query += ' AND workspace_id = ?';
+    query += ' AND (workspace_id = ? OR workspace_id IS NULL)';
     params.push(workspaceId);
   }
-  
+
   query += ' ORDER BY created_at DESC';
   
   return db.prepare(query).all(...params).map(row => ({
