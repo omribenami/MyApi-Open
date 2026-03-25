@@ -7,7 +7,22 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "dev": "node src/index.js",
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "db:init": "node src/scripts/init-db.js",
+    "db:migrate": "node src/scripts/migrate.js run",
+    "db:migrate:status": "node src/scripts/migrate.js status",
+    "db:migrate:rollback": "node src/scripts/migrate.js rollback",
+    "db:migrate:create": "node src/scripts/migrate.js create",
+    "backup:create": "node src/scripts/backup.js create",
+    "backup:restore": "node src/scripts/backup.js restore",
+    "backup:list": "node src/scripts/backup.js list",
+    "backup:status": "node src/scripts/backup.js status",
+    "tenant:create": "node src/scripts/tenant.js create",
+    "tenant:list": "node src/scripts/tenant.js list",
+    "ssl:setup": "bash scripts/setup-ssl.sh setup",
+    "ssl:status": "bash scripts/setup-ssl.sh status",
+    "ssl:renew": "bash scripts/setup-ssl.sh renew",
+    "ssl:self-signed": "bash scripts/setup-ssl.sh self-signed"
   },
   "dependencies": {
     "better-sqlite3": "^12.6.2",
