@@ -155,6 +155,7 @@ cmd_cloudflare() {
     # Create Cloudflare credentials file
     local cf_creds
     cf_creds=$(mktemp)
+    trap "rm -f '$cf_creds'" EXIT INT TERM
     echo "dns_cloudflare_api_token = $CLOUDFLARE_API_TOKEN" > "$cf_creds"
     chmod 600 "$cf_creds"
 

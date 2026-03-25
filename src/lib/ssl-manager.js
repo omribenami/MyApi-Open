@@ -134,11 +134,14 @@ class SSLManager {
 
   /**
    * Generate a self-signed certificate for development/testing
+   * Note: For proper self-signed certificates, use the setup-ssl.sh script
+   * which calls openssl directly. This method creates placeholder files only.
    */
   generateSelfSigned() {
     this.init();
 
-    console.log(`[SSL] Generating self-signed certificate for ${this.domain}`);
+    console.log(`[SSL] For proper self-signed certificates, run: npm run ssl:self-signed -- -d ${this.domain}`);
+    console.log(`[SSL] Creating placeholder key pair for ${this.domain}`);
 
     try {
       const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', {
@@ -149,22 +152,23 @@ class SSLManager {
 
       // Write the key
       fs.writeFileSync(this.getKeyPath(), privateKey, { mode: 0o600 });
-      // Write a placeholder cert (actual self-signed cert requires ASN.1/X.509 encoding)
-      // For real self-signed certs, use: openssl req -x509 -nodes -days 365 ...
+      // Note: This writes a public key, not an X.509 certificate.
+      // Use `npm run ssl:self-signed` (scripts/setup-ssl.sh) for a proper
+      // self-signed X.509 certificate generated via openssl.
       fs.writeFileSync(this.getCertPath(), publicKey, { mode: 0o644 });
 
-      console.log(`[SSL] Self-signed certificate generated (use openssl for production-ready self-signed certs)`);
       console.log(`[SSL] Key:  ${this.getKeyPath()}`);
       console.log(`[SSL] Cert: ${this.getCertPath()}`);
+      console.log(`[SSL] ⚠️  Run 'npm run ssl:self-signed -- -d ${this.domain}' for a valid X.509 certificate`);
 
       return {
         success: true,
         keyPath: this.getKeyPath(),
         certPath: this.getCertPath(),
-        note: 'For proper self-signed certificates, run: npm run ssl:self-signed'
+        note: 'Placeholder only. Run npm run ssl:self-signed for a proper X.509 certificate.'
       };
     } catch (error) {
-      console.error('[SSL] Failed to generate self-signed certificate:', error.message);
+      console.error('[SSL] Failed to generate key pair:', error.message);
       return { success: false, error: error.message };
     }
   }

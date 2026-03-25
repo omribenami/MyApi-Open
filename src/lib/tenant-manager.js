@@ -378,8 +378,11 @@ class TenantManager {
         'SELECT COUNT(*) as count FROM workspaces WHERE tenant_id = ?'
       ).get(tenantId);
       workspaceCount = ws ? ws.count : 0;
-    } catch {
-      // Table may not have tenant_id column yet
+    } catch (err) {
+      // Silently handle missing tenant_id column or missing table
+      if (!err.message || (!err.message.includes('no such column') && !err.message.includes('no such table'))) {
+        console.warn('[TenantManager] Unexpected error counting workspaces:', err.message);
+      }
     }
 
     try {
@@ -387,8 +390,11 @@ class TenantManager {
         'SELECT COUNT(DISTINCT user_id) as count FROM workspace_members WHERE workspace_id IN (SELECT id FROM workspaces WHERE tenant_id = ?)'
       ).get(tenantId);
       memberCount = members ? members.count : 0;
-    } catch {
-      // Table may not exist
+    } catch (err) {
+      // Silently handle missing tables or columns
+      if (!err.message || (!err.message.includes('no such column') && !err.message.includes('no such table'))) {
+        console.warn('[TenantManager] Unexpected error counting members:', err.message);
+      }
     }
 
     const apiKeys = this.db.prepare(

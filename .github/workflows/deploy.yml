@@ -88,10 +88,11 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script: |
+            set -e
             cd ${{ vars.DEPLOY_PATH || '/opt/myapi' }}
 
             echo "=== Pre-deploy backup ==="
-            node src/scripts/backup.js create --type pre-deploy --label "deploy-${{ github.sha }}"
+            node src/scripts/backup.js create --type pre-deploy --label "deploy-${{ github.sha }}" || echo "Warning: backup failed, continuing..."
 
             echo "=== Pull latest changes ==="
             git fetch origin main

@@ -72,11 +72,14 @@ class BackupManager {
         };
       }
 
-      // Use better-sqlite3's backup API if DB instance is available
+      // Preferred: Use better-sqlite3's native backup API for a consistent
+      // point-in-time snapshot that handles WAL properly.
       if (this.db && typeof this.db.backup === 'function') {
         this.db.backup(backupPath);
       } else {
-        // Fallback: WAL checkpoint then file copy
+        // Fallback: Force a WAL checkpoint then file copy.
+        // This is less safe under concurrent writes but works when the
+        // native backup API is unavailable (e.g., DB instance not provided).
         if (this.db) {
           try {
             this.db.pragma('wal_checkpoint(TRUNCATE)');

@@ -192,14 +192,18 @@ function extractTenantContext(tenantManager) {
       }
     }
 
-    // 3. Check subdomain
+    // 3. Check subdomain (only for expected domain patterns)
     if (!tenantId) {
       const host = req.hostname || req.headers.host || '';
-      const parts = host.split('.');
-      if (parts.length >= 3) {
+      // Strip port if present
+      const hostWithoutPort = host.split(':')[0];
+      const parts = hostWithoutPort.split('.');
+      // Only parse subdomains from hosts with 3+ parts (sub.domain.tld)
+      // and validate the host looks like a real domain (not IP addresses)
+      if (parts.length >= 3 && !/^\d+\.\d+\.\d+\.\d+$/.test(hostWithoutPort)) {
         const subdomain = parts[0];
         // Only treat as tenant slug if not common subdomains
-        if (!['www', 'api', 'app', 'admin', 'mail'].includes(subdomain)) {
+        if (!['www', 'api', 'app', 'admin', 'mail', 'localhost'].includes(subdomain)) {
           try {
             const tenant = tenantManager.getTenantBySlug(subdomain);
             if (tenant) {
