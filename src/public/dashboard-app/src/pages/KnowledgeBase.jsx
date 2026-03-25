@@ -119,6 +119,7 @@ function DocumentRow({ doc, onDelete, onEdit }) {
 
 function KnowledgeBase() {
   const masterToken = useAuthStore((state) => state.masterToken);
+  const currentWorkspace = useAuthStore((state) => state.currentWorkspace);
   const {
     documents,
     isLoading,
@@ -152,7 +153,7 @@ function KnowledgeBase() {
     if (masterToken) {
       fetchDocuments();
     }
-  }, [masterToken]);
+  }, [masterToken, currentWorkspace?.id]);
 
   // Auto-clear messages
   useEffect(() => {

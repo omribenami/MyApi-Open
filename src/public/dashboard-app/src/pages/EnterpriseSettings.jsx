@@ -4,6 +4,7 @@ import { useAuthStore } from '../stores/authStore';
 function EnterpriseSettings() {
   const masterToken = useAuthStore((state) => state.masterToken);
   const user = useAuthStore((state) => state.user);
+  const currentWorkspace = useAuthStore((state) => state.currentWorkspace);
   const [activeTab, setActiveTab] = useState('sso');
   const [ssoConfig, setSsoConfig] = useState({
     enabled: false,
@@ -28,7 +29,7 @@ function EnterpriseSettings() {
 
   useEffect(() => {
     fetchEnterpriseConfig();
-  }, [masterToken]);
+  }, [masterToken, currentWorkspace?.id]);
 
   const fetchEnterpriseConfig = async () => {
     setLoading(true);

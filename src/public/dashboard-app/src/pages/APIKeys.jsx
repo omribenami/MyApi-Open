@@ -7,6 +7,7 @@ import RevokeConfirmationModal from '../components/RevokeConfirmationModal';
 
 function APIKeys() {
   const masterToken = useAuthStore((state) => state.masterToken);
+  const currentWorkspace = useAuthStore((state) => state.currentWorkspace);
   const {
     tokens,
     isLoading,
@@ -32,7 +33,7 @@ function APIKeys() {
     if (masterToken) {
       fetchTokens(masterToken);
     }
-  }, [masterToken, fetchTokens]);
+  }, [masterToken, fetchTokens, currentWorkspace?.id]);
 
   // Auto-clear messages
   useEffect(() => {

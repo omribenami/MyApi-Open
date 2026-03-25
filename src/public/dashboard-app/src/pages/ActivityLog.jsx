@@ -5,6 +5,7 @@ import apiClient from '../utils/apiClient';
 function ActivityLog() {
   const masterToken = useAuthStore((state) => state.masterToken);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const currentWorkspace = useAuthStore((state) => state.currentWorkspace);
   const [activity, setActivity] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -104,7 +105,7 @@ function ActivityLog() {
     if (isAuthenticated) {
       fetchActivityLog(true);
     }
-  }, [isAuthenticated, actionType, resourceType, result, dateRange]);
+  }, [isAuthenticated, actionType, resourceType, result, dateRange, currentWorkspace?.id]);
 
   // WebSocket for real-time updates
   const setupWebSocket = () => {

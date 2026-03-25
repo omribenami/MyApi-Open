@@ -47,6 +47,7 @@ function getReadableError(err, fallback) {
 
 function ProfileTab() {
   const masterToken = useAuthStore((state) => state.masterToken);
+  const currentWorkspace = useAuthStore((state) => state.currentWorkspace);
   const {
     profile,
     profileDraft,
@@ -84,7 +85,7 @@ function ProfileTab() {
 
   useEffect(() => {
     if (masterToken) fetchProfile();
-  }, [masterToken]);
+  }, [masterToken, currentWorkspace?.id]);
 
   // Auto-clear success
   useEffect(() => {
@@ -261,6 +262,7 @@ function ProfileTab() {
 
 function PersonaTab() {
   const masterToken = useAuthStore((state) => state.masterToken);
+  const currentWorkspace = useAuthStore((state) => state.currentWorkspace);
   const {
     personas,
     selectedPersonaId,
@@ -322,7 +324,7 @@ function PersonaTab() {
 
   useEffect(() => {
     fetchPersonas();
-  }, [masterToken]);
+  }, [masterToken, currentWorkspace?.id]);
 
   useEffect(() => {
     if (selectedPersonaId) {

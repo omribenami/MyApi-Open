@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { useAuthStore } from '../stores/authStore';
 import apiClient from '../utils/apiClient';
 
 const DeviceManagement = () => {
+  const currentWorkspace = useAuthStore((state) => state.currentWorkspace);
   const [activeTab, setActiveTab] = useState('approved');
   const [approvedDevices, setApprovedDevices] = useState([]);
   const [pendingApprovals, setPendingApprovals] = useState([]);
@@ -16,12 +18,12 @@ const DeviceManagement = () => {
   // Load ALL device data on mount AND when tab changes
   useEffect(() => {
     loadAllDeviceData();
-  }, []);
+  }, [currentWorkspace?.id]);
 
   // Reload current tab data when tab changes
   useEffect(() => {
     loadCurrentTabData();
-  }, [activeTab]);
+  }, [activeTab, currentWorkspace?.id]);
 
   // Load all data on component mount (shows counts in tab labels)
   const loadAllDeviceData = async () => {
