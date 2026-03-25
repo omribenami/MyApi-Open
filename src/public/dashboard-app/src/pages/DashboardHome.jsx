@@ -45,6 +45,12 @@ function DashboardHome() {
       try {
         const headers = masterToken ? { 'Authorization': `Bearer ${masterToken}` } : {};
 
+        // Multi-tenancy: Include workspace context in API calls
+        const workspaceId = currentWorkspace?.id;
+        if (workspaceId) {
+          headers['X-Workspace-ID'] = workspaceId;
+        }
+
         const [healthRes, tokensRes, vaultRes, connectorsRes, myListingsRes, personasRes, skillsRes, kbRes, billingRes] = await Promise.all([
           fetch('/health'),
           fetch('/api/v1/tokens', { headers }).catch(() => ({ ok: false })),

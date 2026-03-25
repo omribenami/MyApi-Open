@@ -426,6 +426,7 @@ function ReviewsModal({ listing, onClose }) {
 
 export default function MyListings() {
   const masterToken = useAuthStore(s => s.masterToken);
+  const currentWorkspace = useAuthStore(s => s.currentWorkspace);
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -448,7 +449,7 @@ export default function MyListings() {
     finally { setLoading(false); }
   }, [masterToken]);
 
-  useEffect(() => { fetchListings(); }, [fetchListings]);
+  useEffect(() => { fetchListings(); }, [fetchListings, currentWorkspace?.id]);
 
   async function handleCreate(formData) {
     setSaving(true);

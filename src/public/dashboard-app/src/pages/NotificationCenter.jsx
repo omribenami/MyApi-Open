@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
+import { useAuthStore } from '../stores/authStore';
 
 export default function NotificationCenter() {
+  const currentWorkspace = useAuthStore((state) => state.currentWorkspace);
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all'); // 'all', 'unread', 'read'
@@ -9,7 +11,7 @@ export default function NotificationCenter() {
 
   useEffect(() => {
     fetchNotifications();
-  }, [filter, typeFilter]);
+  }, [filter, typeFilter, currentWorkspace?.id]);
 
   const fetchNotifications = async () => {
     setLoading(true);
