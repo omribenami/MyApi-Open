@@ -49,6 +49,22 @@ db.pragma('busy_timeout = 10000'); // 10 second timeout for locked database
 db.pragma('synchronous = NORMAL'); // Balance safety and performance
 db.pragma('wal_autocheckpoint = 1000'); // Checkpoint every 1000 pages
 
+/**
+ * Check database health by running a simple query.
+ * Returns { healthy: true } or { healthy: false, error: '...' }.
+ */
+function checkDatabaseHealth() {
+  try {
+    const result = db.pragma('quick_check', { simple: true });
+    if (result === 'ok') {
+      return { healthy: true };
+    }
+    return { healthy: false, error: `quick_check returned: ${result}` };
+  } catch (error) {
+    return { healthy: false, error: error.message };
+  }
+}
+
 // BUG-5: Helper function for safe migrations with logging
 function safeMigration(sql, ignoreColumnExists = true) {
   try {
@@ -5942,6 +5958,7 @@ function updateSSOConfiguration(id, updates) {
 module.exports = {
   db,
   initDatabase,
+  checkDatabaseHealth,
   createVaultToken,
   getVaultTokens,
   deleteVaultToken,
