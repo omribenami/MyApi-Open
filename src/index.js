@@ -4632,11 +4632,12 @@ app.post("/api/v1/personas", authenticate, (req, res) => {
   }
 
   const ownerId = getRequestOwnerId(req);
+  const workspaceId = getRequestWorkspaceId(req);
   const personaCount = getPersonas(ownerId).length;
   const personaLimitErr = enforcePlanLimit(req, 'personas', personaCount, 1);
   if (personaLimitErr) return res.status(403).json(personaLimitErr);
 
-  const persona = createPersona(name, soul_content, description, templateData, ownerId);
+  const persona = createPersona(name, soul_content, description, templateData, ownerId, workspaceId);
   createAuditLog({
     requesterId: req.tokenMeta.tokenId,
     action: "create_persona",

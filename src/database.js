@@ -1900,14 +1900,14 @@ function revokeHandshake(handshakeId) {
 }
 
 // Personas
-function createPersona(name, soulContent, description, templateData = null, ownerId = 'owner') {
+function createPersona(name, soulContent, description, templateData = null, ownerId = 'owner', workspaceId = null) {
   const now = new Date().toISOString();
   const owner = normalizeOwnerId(ownerId);
   const stmt = db.prepare(`
-    INSERT INTO personas (name, soul_content, description, active, created_at, updated_at, template_data, owner_id)
-    VALUES (?, ?, ?, 0, ?, ?, ?, ?)
+    INSERT INTO personas (name, soul_content, description, active, created_at, updated_at, template_data, owner_id, workspace_id)
+    VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?)
   `);
-  const result = stmt.run(name, soulContent, description || null, now, now, templateData ? JSON.stringify(templateData) : null, owner);
+  const result = stmt.run(name, soulContent, description || null, now, now, templateData ? JSON.stringify(templateData) : null, owner, workspaceId || null);
   return {
     id: result.lastInsertRowid,
     name,
@@ -1928,13 +1928,14 @@ function getPersonas(ownerId = 'owner', workspaceId = null) {
     WHERE owner_id = ?
   `;
   const params = [owner];
-  
-  // Multi-tenancy: Filter by workspace if provided
+
+  // Multi-tenancy: filter by workspace if provided, but also include
+  // legacy personas with no workspace_id (created before multi-tenancy).
   if (workspaceId) {
-    query += ' AND workspace_id = ?';
+    query += ' AND (workspace_id = ? OR workspace_id IS NULL)';
     params.push(workspaceId);
   }
-  
+
   query += ' ORDER BY created_at DESC';
   
   const stmt = db.prepare(query);
