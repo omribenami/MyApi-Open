@@ -17,12 +17,13 @@ const router = express.Router();
   // GET /api/v1/notifications - List user notifications with filtering
   router.get('/', (req, res) => {
     try {
-      const workspaceId = req.workspaceId || 'default';
       const userId = req.user?.id || req.tokenMeta?.userId || req.tokenMeta?.ownerId;
       
       if (!userId) {
         return res.status(401).json({ error: 'Authentication required' });
       }
+
+      const workspaceId = req.workspaceId || req.session?.currentWorkspace || getOrEnsureUserWorkspace(userId);
 
       // Parse filters
       const limit = Math.min(Number(req.query.limit) || 20, 100);
@@ -76,12 +77,13 @@ const router = express.Router();
   // GET /api/v1/notifications/unread-count - Get unread count
   const unreadCountHandler = (req, res) => {
     try {
-      const workspaceId = req.workspaceId || 'default';
       const userId = req.user?.id || req.tokenMeta?.userId || req.tokenMeta?.ownerId;
       
       if (!userId) {
         return res.status(401).json({ error: 'Authentication required' });
       }
+
+      const workspaceId = req.workspaceId || req.session?.currentWorkspace || getOrEnsureUserWorkspace(userId);
 
       const count = getUnreadNotificationCount(workspaceId, userId);
 
@@ -103,13 +105,14 @@ const router = express.Router();
   // POST /api/v1/notifications/:id/read - Mark notification as read
   router.post('/:id/read', (req, res) => {
     try {
-      const workspaceId = req.workspaceId || 'default';
       const userId = req.user?.id || req.tokenMeta?.userId || req.tokenMeta?.ownerId;
       const notificationId = req.params.id;
 
       if (!userId) {
         return res.status(401).json({ error: 'Authentication required' });
       }
+
+      const workspaceId = req.workspaceId || req.session?.currentWorkspace || getOrEnsureUserWorkspace(userId);
 
       const success = markNotificationAsRead(notificationId, workspaceId, userId);
 
@@ -130,12 +133,13 @@ const router = express.Router();
   // POST /api/v1/notifications/read-all - Mark all as read
   router.post('/read-all', (req, res) => {
     try {
-      const workspaceId = req.workspaceId || 'default';
       const userId = req.user?.id || req.tokenMeta?.userId || req.tokenMeta?.ownerId;
 
       if (!userId) {
         return res.status(401).json({ error: 'Authentication required' });
       }
+
+      const workspaceId = req.workspaceId || req.session?.currentWorkspace || getOrEnsureUserWorkspace(userId);
 
       // Get all unread notifications and mark them
       const notifications = getNotifications(workspaceId, userId, { read: false });
@@ -160,13 +164,14 @@ const router = express.Router();
   // DELETE /api/v1/notifications/:id - Delete notification
   router.delete('/:id', (req, res) => {
     try {
-      const workspaceId = req.workspaceId || 'default';
       const userId = req.user?.id || req.tokenMeta?.userId || req.tokenMeta?.ownerId;
       const notificationId = req.params.id;
 
       if (!userId) {
         return res.status(401).json({ error: 'Authentication required' });
       }
+
+      const workspaceId = req.workspaceId || req.session?.currentWorkspace || getOrEnsureUserWorkspace(userId);
 
       const success = deleteNotification(notificationId, workspaceId, userId);
 
@@ -218,12 +223,13 @@ const router = express.Router();
   // GET /api/v1/notifications/settings
   router.get('/settings', (req, res) => {
     try {
-      const workspaceId = req.workspaceId || 'default';
       const userId = req.user?.id || req.tokenMeta?.userId || req.tokenMeta?.ownerId;
 
       if (!userId) {
         return res.status(401).json({ error: 'Authentication required' });
       }
+
+      const workspaceId = req.workspaceId || req.session?.currentWorkspace || getOrEnsureUserWorkspace(userId);
 
       const settings = getOrCreateNotificationSettings(workspaceId, userId);
       res.json({
@@ -242,13 +248,14 @@ const router = express.Router();
   // PUT /api/v1/notifications/settings
   router.put('/settings', (req, res) => {
     try {
-      const workspaceId = req.workspaceId || 'default';
       const userId = req.user?.id || req.tokenMeta?.userId || req.tokenMeta?.ownerId;
       const payload = req.body || {};
 
       if (!userId) {
         return res.status(401).json({ error: 'Authentication required' });
       }
+
+      const workspaceId = req.workspaceId || req.session?.currentWorkspace || getOrEnsureUserWorkspace(userId);
 
       // Map legacy digest value to frequency
       if (payload.email_digest_type !== undefined) {
@@ -297,12 +304,13 @@ const router = express.Router();
   // GET /api/v1/notifications/preferences - Get notification preferences
   router.get('/preferences', (req, res) => {
     try {
-      const workspaceId = req.workspaceId || 'default';
       const userId = req.user?.id || req.tokenMeta?.userId || req.tokenMeta?.ownerId;
 
       if (!userId) {
         return res.status(401).json({ error: 'Authentication required' });
       }
+
+      const workspaceId = req.workspaceId || req.session?.currentWorkspace || getOrEnsureUserWorkspace(userId);
 
       const settings = getOrCreateNotificationSettings(workspaceId, userId);
 
@@ -328,13 +336,14 @@ const router = express.Router();
   // POST /api/v1/notifications/preferences - Update notification preferences
   router.post('/preferences', (req, res) => {
     try {
-      const workspaceId = req.workspaceId || 'default';
       const userId = req.user?.id || req.tokenMeta?.userId || req.tokenMeta?.ownerId;
       const { channel, enabled, frequency } = req.body;
 
       if (!userId) {
         return res.status(401).json({ error: 'Authentication required' });
       }
+
+      const workspaceId = req.workspaceId || req.session?.currentWorkspace || getOrEnsureUserWorkspace(userId);
 
       // Validate channel
       if (!['in-app', 'email', 'whatsapp', 'slack'].includes(channel)) {
