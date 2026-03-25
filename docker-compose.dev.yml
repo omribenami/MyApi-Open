@@ -1,0 +1,75 @@
+# ============================================================================
+# MyApi - Development Docker Compose
+# ============================================================================
+# Runs the backend with hot-reload (nodemon) and mounts the source directory.
+# The Vite dev server for the frontend is NOT included here — run it locally:
+#
+#   cd src/public/dashboard-app && npm run dev   (port 5173)
+#
+# USAGE:
+#   docker-compose -f docker-compose.dev.yml up
+#
+# The backend will live-reload on any change inside src/.
+# Frontend assets at /dashboard/ are served from the mounted source tree,
+# but for rapid UI iteration use the Vite dev server on port 5173 directly.
+#
+# PORTS:
+#   - 4500  → MyApi backend (API + dashboard in dev mode)
+#
+# ============================================================================
+
+services:
+  myapi-dev:
+    build:
+      context: ./src
+      dockerfile: Dockerfile
+      target: builder          # stop at the builder stage (has nodemon + devDeps)
+    image: myapi:dev
+    container_name: myapi-dev
+    restart: unless-stopped
+
+    env_file:
+      - .env.local             # copy from .env.docker and set your secrets
+
+    environment:
+      NODE_ENV: development
+      PORT: ${PORT:-4500}
+      SESSION_COOKIE_SECURE: "false"
+      LOG_LEVEL: debug
+
+    ports:
+      - "${PORT:-4500}:${PORT:-4500}"
+
+    volumes:
+      # Live-mount the entire src/ directory so nodemon picks up every change.
+      # node_modules stay inside the container (anonymous volume wins over bind).
+      - ./src:/app:cached
+      - /app/node_modules
+
+      # Persist the SQLite database between container restarts
+      - myapi-dev-data:/app/data
+      - myapi-dev-logs:/app/logs
+
+    networks:
+      - myapi-dev-network
+
+    # Override CMD to start with nodemon instead of node
+    command: ["./node_modules/.bin/nodemon", "--watch", ".", "--ignore", "node_modules", "--ignore", "public/dist", "index.js"]
+
+    healthcheck:
+      test: ["CMD", "node", "-e",
+             "require('http').get('http://localhost:${PORT:-4500}/health', r => { if (r.statusCode !== 200) throw new Error(r.statusCode) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  myapi-dev-data:
+    driver: local
+  myapi-dev-logs:
+    driver: local
+
+networks:
+  myapi-dev-network:
+    driver: bridge

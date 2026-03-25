@@ -1,6 +1,0 @@
-Patch plan:
-- Patch 1: Add speakeasy to package.json dependencies
-- Patch 2: Create MFA schema in DB and update auth logic
-- Patch 3: Add MFA endpoints (/api/v1/auth/mfa/setup, /api/v1/auth/mfa/verify)
-- Patch 4: Frontend MFA hook in login flow (UI changes to login.html and app.js)
-- Patch 5: Onboarding triggers MFA enrollment

@@ -35,6 +35,7 @@ src/uploads/
 # Environment files - NEVER commit real secrets!
 src/.env*
 !src/.env.example
+.env.local
 logs/
 
 # Backups (may contain sensitive data)
@@ -43,3 +44,12 @@ backups/
 # SSL certificates (sensitive)
 certs/
 certbot/
+
+# Docker-managed data volumes (when using bind mounts)
+data/
+backend/data/
+
+# Stray database files
+backend/*.db
+backend/*.db-shm
+backend/*.db-wal
