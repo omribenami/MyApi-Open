@@ -1800,7 +1800,7 @@ function bootstrap() {
       console.log("Master token already exists (retrieved from database)");
     } else {
       console.log("=== MyApi Platform Started ===");
-      console.log("Master token already exists");
+      console.log("Master token already exists (encrypted token not available for retrieval)");
     }
   }
 

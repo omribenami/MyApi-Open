@@ -1282,7 +1282,7 @@ function encryptRawToken(rawToken) {
     const payload = encrypt(String(rawToken), key);
     return JSON.stringify({ ...payload, salt: salt.toString('hex') });
   } catch (e) {
-    console.warn('[Database] Failed to encrypt raw token:', e.message);
+    console.warn('[Database] Failed to encrypt raw token');
     return null;
   }
 }
@@ -1349,7 +1349,7 @@ function getExistingMasterToken(ownerId) {
     }
     return null;
   } catch (e) {
-    console.warn('[Database] Failed to retrieve existing master token:', e.message);
+    console.warn('[Database] Failed to retrieve existing master token');
     return null;
   }
 }
