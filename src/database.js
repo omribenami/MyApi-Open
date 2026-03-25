@@ -1269,14 +1269,31 @@ function deleteVaultToken(id, ownerId = 'owner', workspaceId = null) {
 // Access Tokens
 
 /**
+ * Return the best available key for master-token encryption.
+ * Prefers VAULT_KEY, then ENCRYPTION_KEY.  JWT_SECRET is accepted as a
+ * last-resort fallback so token persistence works in development setups
+ * that omit the other keys — but it is NOT recommended for production.
+ */
+function getMasterTokenEncryptionKey() {
+  const key = String(process.env.VAULT_KEY || process.env.ENCRYPTION_KEY || '').trim();
+  if (key) return key;
+  const fallback = String(process.env.JWT_SECRET || '').trim();
+  if (fallback) {
+    console.warn('[Database] VAULT_KEY and ENCRYPTION_KEY are unset — falling back to JWT_SECRET for master-token encryption. Set VAULT_KEY or ENCRYPTION_KEY for production.');
+    return fallback;
+  }
+  return null;
+}
+
+/**
  * Encrypt a raw token for persistent storage using AES-256-GCM (same pattern as vault tokens).
- * Returns the encrypted JSON string, or null if VAULT_KEY is not set.
+ * Returns the encrypted JSON string, or null if no encryption key is available.
  */
 function encryptRawToken(rawToken) {
-  const vaultKey = String(process.env.VAULT_KEY || '').trim();
-  if (!vaultKey || !rawToken) return null;
+  const encKey = getMasterTokenEncryptionKey();
+  if (!encKey || !rawToken) return null;
   try {
-    const masterHex = crypto.createHash('sha256').update(vaultKey).digest('hex');
+    const masterHex = crypto.createHash('sha256').update(encKey).digest('hex');
     const salt = generateSalt();
     const key = deriveKey(masterHex, salt);
     const payload = encrypt(String(rawToken), key);
@@ -1289,21 +1306,31 @@ function encryptRawToken(rawToken) {
 
 /**
  * Decrypt a stored encrypted token. Returns the raw token string or null.
+ * Tries all available keys (VAULT_KEY, ENCRYPTION_KEY, JWT_SECRET) in order,
+ * so tokens encrypted with any of these keys can be recovered.
  */
 function decryptRawToken(encryptedJson) {
-  const vaultKey = String(process.env.VAULT_KEY || '').trim();
-  if (!vaultKey || !encryptedJson) return null;
-  try {
-    const p = JSON.parse(encryptedJson);
-    if (p && p.ciphertext && (p.nonce || p.iv) && p.authTag && p.salt) {
-      const masterHex = crypto.createHash('sha256').update(vaultKey).digest('hex');
-      const key = deriveKey(masterHex, Buffer.from(p.salt, 'hex'));
-      return decrypt(p, key);
+  if (!encryptedJson) return null;
+  const keys = [process.env.VAULT_KEY, process.env.ENCRYPTION_KEY, process.env.JWT_SECRET]
+    .map(k => (k ? String(k).trim() : ''))
+    .filter(Boolean);
+  if (keys.length === 0) return null;
+  // De-duplicate so we don't retry the same key
+  const uniqueKeys = [...new Set(keys)];
+  for (const candidate of uniqueKeys) {
+    try {
+      const p = JSON.parse(encryptedJson);
+      if (p && p.ciphertext && (p.nonce || p.iv) && p.authTag && p.salt) {
+        const masterHex = crypto.createHash('sha256').update(candidate).digest('hex');
+        const key = deriveKey(masterHex, Buffer.from(p.salt, 'hex'));
+        const result = decrypt(p, key);
+        if (result) return result;
+      }
+    } catch (e) {
+      // Try next key
     }
-    return null;
-  } catch (e) {
-    return null;
   }
+  return null;
 }
 
 function createAccessToken(hash, ownerId, scope, label, expiresAt = null, allowedPersonas = null, workspaceId = null, rawToken = null) {
@@ -6040,6 +6067,8 @@ module.exports = {
   createAccessToken,
   getAccessTokens,
   getExistingMasterToken,
+  encryptRawToken,
+  decryptRawToken,
   revokeAccessToken,
   // Scopes
   seedDefaultScopes,

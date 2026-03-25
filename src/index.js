@@ -4263,24 +4263,11 @@ app.post('/api/v1/auth/2fa/challenge', twoFactorRateLimit, (req, res) => {
     delete req.session.pending_2fa_user;
 
     if (!req.session.masterTokenRaw) {
-      // Try to retrieve existing master token from the database first
+      // Try to retrieve existing master token — never create one during login flows.
       const existing = getExistingMasterToken(String(pendingUser.id));
       if (existing) {
         req.session.masterTokenRaw = existing.rawToken;
         req.session.masterTokenId = existing.tokenId;
-      } else {
-        const existingTokens = getAccessTokens();
-        const hasValidMaster = existingTokens.some(t =>
-          t.scope === 'full' && !t.revokedAt && t.ownerId === String(pendingUser.id)
-        );
-
-        if (!hasValidMaster) {
-          const rawMasterToken = 'myapi_' + crypto.randomBytes(32).toString("hex");
-          const hash = bcrypt.hashSync(rawMasterToken, 10);
-          const tokenId = createAccessToken(hash, pendingUser.id, 'full', 'Master Token (OAuth 2FA)', null, null, null, rawMasterToken);
-          req.session.masterTokenRaw = rawMasterToken;
-          req.session.masterTokenId = tokenId;
-        }
       }
     }
 
@@ -5441,14 +5428,14 @@ app.get([
 
     const next = encodeURIComponent(safeReturnTo);
 
-    // Try to retrieve existing master token from the database before generating a new one.
-    // Validate that the session's cached token is still active — it may have been revoked
-    // (e.g. by a master/regenerate call) while the session was still alive.
+    // Retrieve existing master token for the session — NEVER create a new one here.
+    // The master token is an API key for AI agent access; only the explicit
+    // /tokens/master/bootstrap or /tokens/master/regenerate endpoints may create one.
     let masterToken = req.session.masterTokenRaw;
     if (masterToken && req.session.masterTokenId) {
       const tokenRow = db.prepare('SELECT revoked_at FROM access_tokens WHERE id = ?').get(req.session.masterTokenId);
       if (!tokenRow || tokenRow.revoked_at) {
-        // Stale; discard so we create a fresh one below
+        // Stale; discard cached value
         masterToken = null;
         req.session.masterTokenRaw = null;
         req.session.masterTokenId  = null;
@@ -5461,36 +5448,24 @@ app.get([
         req.session.masterTokenId = existing.tokenId;
       }
     }
-    if (!masterToken) {
-      masterToken = 'myapi_' + crypto.randomBytes(32).toString("hex");
-    }
 
-    // CRITICAL: Store masterToken in session so /api/v1/auth/me can return it to the frontend
-    // This allows the frontend to store it in localStorage and use it for future API calls
-    req.session.masterTokenRaw = masterToken;
-    console.log(`[OAuth Callback] Set req.session.masterTokenRaw = ${masterToken.slice(0, 20)}...`);
-
-    // CRITICAL FIX (Expert identified): Persist masterToken to access_tokens database table
-    // This allows Bearer token validation to work on subsequent /api/v1/oauth/status calls
-    if (oauthOwnerId && !req.session.masterTokenId) {
-      try {
-        const hash = bcrypt.hashSync(masterToken, 10);
-        const tokenId = createAccessToken(hash, oauthOwnerId, 'full', 'Master Token (OAuth Connect)', null, null, null, masterToken);
-        req.session.masterTokenId = tokenId;
-        const prune = pruneRedundantMasterTokens(oauthOwnerId, 3);
-        console.log(`[OAuth Callback] ✅ Created access token for OAuth connect: ${tokenId} (pruned ${prune.pruned || 0})`);
-      } catch (err) {
-        console.error(`[OAuth Callback] ❌ Failed to create access token:`, err.message);
-      }
+    // Store in session if found so /api/v1/auth/me can return it to the frontend
+    if (masterToken) {
+      req.session.masterTokenRaw = masterToken;
+      console.log(`[OAuth Callback] Set req.session.masterTokenRaw = ${masterToken.slice(0, 20)}...`);
+    } else {
+      console.log(`[OAuth Callback] No existing master token found — frontend will bootstrap one if needed`);
     }
 
     // Set master token as a persistent cookie so the dashboard can use it
-    res.cookie('myapi_master_token', masterToken, {
-      httpOnly: false, // Allow JS to read it
-      path: '/',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      sameSite: 'lax'
-    });
+    if (masterToken) {
+      res.cookie('myapi_master_token', masterToken, {
+        httpOnly: false, // Allow JS to read it
+        path: '/',
+        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        sameSite: 'lax'
+      });
+    }
 
     // Also set user info for quick access (use session.user which is already set)
     if (req.session.user) {
