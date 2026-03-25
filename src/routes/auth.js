@@ -6,7 +6,7 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
-const { getAccessTokens } = require('../database');
+const { getAccessTokens, getExistingMasterToken, createAccessToken } = require('../database');
 
 const router = express.Router();
 
@@ -111,7 +111,19 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    const rawToken = 'myapi_' + crypto.randomBytes(32).toString('hex');
+    // Reuse the existing master token from DB so all devices share the same token.
+    // Only create a new one if none exists yet.
+    let masterTokenRaw, masterTokenId;
+    const existing = getExistingMasterToken(user.id);
+    if (existing) {
+      masterTokenRaw = existing.rawToken;
+      masterTokenId = existing.tokenId;
+    } else {
+      masterTokenRaw = 'myapi_' + crypto.randomBytes(32).toString('hex');
+      const hash = await bcrypt.hash(masterTokenRaw, 10);
+      masterTokenId = createAccessToken(hash, user.id, 'full', 'Master Token', null, null, null, masterTokenRaw);
+    }
+
     await regenerateSession(req);
     req.session.user = {
       id: user.id,
@@ -119,14 +131,15 @@ router.post('/login', async (req, res) => {
       username: user.username,
       displayName: user.displayName,
     };
-    req.session.masterToken = rawToken;
+    req.session.masterTokenRaw = masterTokenRaw;
+    req.session.masterTokenId = masterTokenId;
     
     req.session.save((err) => {
       if (err) return res.status(500).json({ error: 'Session error' });
       res.json({
         success: true,
         userId: user.id,
-        masterToken: rawToken,
+        masterToken: masterTokenRaw,
         user: {
           id: user.id,
           email: user.email,
@@ -307,6 +320,24 @@ router.get('/me', (req, res) => {
     // Check if this is the user's first login based on session state
     const isFirstLogin = req.session?.isFirstLogin || false;
 
+    // Look up the persistent master token from DB so every device gets the same one.
+    // Prefer a token already cached in the session; fall back to the DB lookup.
+    let masterTokenRaw = req.session?.masterTokenRaw || null;
+    let masterTokenId  = req.session?.masterTokenId  || null;
+    if (!masterTokenRaw) {
+      const existing = getExistingMasterToken(userId);
+      if (existing) {
+        masterTokenRaw = existing.rawToken;
+        masterTokenId  = existing.tokenId;
+        // Cache in session for subsequent requests within the same session
+        if (req.session) {
+          req.session.masterTokenRaw = masterTokenRaw;
+          req.session.masterTokenId  = masterTokenId;
+          req.session.save?.((err) => { if (err) console.error('[Auth/Me] Session save error:', err); });
+        }
+      }
+    }
+
     const userPayload = {
       id: user.id,
       email: user.email,
@@ -320,7 +351,8 @@ router.get('/me', (req, res) => {
     res.json({
       success: true,
       user: userPayload,
-      isFirstLogin
+      isFirstLogin,
+      bootstrap: masterTokenRaw ? { masterToken: masterTokenRaw, tokenId: masterTokenId } : null,
     });
   } catch (error) {
     console.error('Get user error:', error);

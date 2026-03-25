@@ -32,6 +32,7 @@
     "ssl:self-signed": "bash scripts/setup-ssl.sh self-signed"
   },
   "dependencies": {
+    "bcrypt": "^6.0.0",
     "better-sqlite3": "^12.6.2",
     "better-sqlite3-session-store": "^0.1.0",
     "dotenv": "^17.3.1",
