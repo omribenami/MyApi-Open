@@ -3262,21 +3262,23 @@ const PLAN_LIMITS = {
 
 function resolveRequesterPlan(req) {
   try {
-    const workspaceId = getRequestWorkspaceId(req);
-    if (workspaceId) {
-      const sub = getBillingSubscriptionByWorkspace(workspaceId);
-      return resolveWorkspaceCurrentPlan(sub).id;
-    }
-
+    // Check user's directly-assigned plan first (set via User Management UI)
     if (req?.user?.id) {
       const user = getUserById(req.user.id);
       if (user?.plan && BILLING_PLAN_LIMITS[String(user.plan).toLowerCase()]) return String(user.plan).toLowerCase();
     }
 
     const ownerId = req?.tokenMeta?.ownerId;
-    if (ownerId) {
+    if (ownerId && ownerId !== 'owner') {
       const owner = getUserById(ownerId);
       if (owner?.plan && BILLING_PLAN_LIMITS[String(owner.plan).toLowerCase()]) return String(owner.plan).toLowerCase();
+    }
+
+    // Fall back to workspace billing subscription
+    const workspaceId = getRequestWorkspaceId(req);
+    if (workspaceId) {
+      const sub = getBillingSubscriptionByWorkspace(workspaceId);
+      return resolveWorkspaceCurrentPlan(sub).id;
     }
 
     return 'free';
@@ -3384,10 +3386,22 @@ app.get('/api/v1/billing/current', (req, res) => {
   const subscription = getBillingSubscriptionByWorkspace(workspaceId);
   const plan = resolveWorkspaceCurrentPlan(subscription);
 
+  // When no workspace subscription exists, honour the user's directly-assigned plan
+  let effectivePlanId = plan.id;
+  if (!subscription) {
+    const userId = req?.user?.id || req?.tokenMeta?.ownerId;
+    if (userId && userId !== 'owner') {
+      const user = getUserById(userId);
+      if (user?.plan && BILLING_PLAN_LIMITS[String(user.plan).toLowerCase()]) {
+        effectivePlanId = String(user.plan).toLowerCase();
+      }
+    }
+  }
+
   res.json({
     data: {
       workspaceId,
-      plan: plan.id,
+      plan: effectivePlanId,
       status: subscription?.status || 'active',
       subscription: subscription ? {
         stripeSubscriptionId: subscription.stripe_subscription_id,
