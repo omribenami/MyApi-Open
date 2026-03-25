@@ -191,6 +191,7 @@ function AccessTokens() {
     try {
       const res = await fetch('/api/v1/tokens/master/regenerate', {
         method: 'POST',
+        credentials: 'include',  // send session cookie so this works even if bearer token is stale
         headers: { Authorization: `Bearer ${masterToken}` },
       });
       const data = await res.json().catch(() => ({}));

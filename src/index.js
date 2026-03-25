@@ -841,20 +841,50 @@ app.get('/api/v1/', (req, res) => {
 // GET /api/v1/quick-start - step-by-step guide for AI agents
 app.get('/api/v1/quick-start', (req, res) => {
   const hasAuth = !!(req.headers.authorization || '').match(/^Bearer\s+.+/i);
+  const host = req.headers.host || 'www.myapiai.com';
+  const canonicalBase = `https://${host}`;
   res.json({
     title: 'MyApi Quick Start for AI Agents',
     important: AI_APPROVAL_MESSAGE,
     authenticated: hasAuth,
+    canonicalBaseUrl: canonicalBase,
+    urlWarning: 'Always use this exact base URL for all API calls. Do NOT follow redirects — HTTP redirects strip Authorization headers and will result in auth failures.',
     prerequisite: {
       action: 'Ask the human for approval before every action',
       detail: 'You MUST describe what you plan to do and wait for the human user to explicitly approve before calling any endpoint. Never proceed without confirmation. This is mandatory for all actions.',
       required: true,
     },
+    noTokenFlow: hasAuth ? null : {
+      description: 'Your token is missing or was rejected. Request access in two steps — no username or extra info needed:',
+      steps: [
+        {
+          step: 1,
+          action: 'Submit a handshake request (no auth required)',
+          method: 'POST',
+          endpoint: '/api/v1/handshakes',
+          body: {
+            agentId: '<unique-id-for-your-agent>',
+            requestedScopes: ['read'],
+            message: '<briefly describe who you are>',
+          },
+          allowedScopes: ['read', 'professional', 'availability'],
+          returns: 'handshakeId — save this for step 2',
+        },
+        {
+          step: 2,
+          action: 'Poll until approved (no auth required)',
+          method: 'GET',
+          endpoint: '/api/v1/handshakes/:handshakeId/status',
+          returns: 'status: pending | approved | denied',
+          note: 'When approved, the owner will share a new token with you. Use it as your Bearer token.',
+        },
+      ],
+    },
     steps: [
       {
         step: 1,
         action: 'Authenticate',
-        detail: 'Add header: Authorization: Bearer <token>',
+        detail: `Add header: Authorization: Bearer <token>. Use ${canonicalBase} as the base URL directly — do not rely on redirects.`,
         done: hasAuth,
       },
       {
@@ -873,7 +903,7 @@ app.get('/api/v1/quick-start', (req, res) => {
         step: 4,
         action: 'Check connected services',
         endpoint: 'GET /api/v1/vault/tokens',
-        detail: 'See what external service tokens (e.g. PostQuee, GitHub) are stored.',
+        detail: 'See what external service tokens are stored.',
       },
       {
         step: 5,
@@ -905,7 +935,7 @@ app.get('/.well-known/ai-plugin.json', (req, res) => {
     name_for_human: 'MyApi',
     name_for_model: 'myapi',
     description_for_human: 'Personal API platform for managing your digital identity, knowledge, and connected services.',
-    description_for_model: 'MyApi is a personal API. IMPORTANT: Before performing ANY action you MUST ask the human user for explicit approval. Describe what you intend to do and wait for confirmation before calling any endpoint. Never reveal tokens, execute services, or modify data without the user saying "yes". Start by calling GET /api/v1/ for endpoint discovery, then GET /api/v1/quick-start for step-by-step usage.',
+    description_for_model: 'MyApi is a personal API. ALWAYS use https://www.myapiai.com as the base URL — do not follow redirects as they strip auth headers. If your token is missing or rejected: (1) POST /api/v1/handshakes with {agentId, requestedScopes:["read"], message} — no auth needed, (2) poll GET /api/v1/handshakes/:id/status until approved, (3) owner shares a new token with you. With a valid token: ALWAYS ask the human for explicit approval before every action. Start with GET /api/v1/quick-start for full guidance.',
     human_verification_required: true,
     auth: { type: 'service_http', authorization_type: 'bearer' },
     api: { type: 'openapi', url: `https://${host}/openapi.json` },
@@ -1251,10 +1281,16 @@ function authenticate(req, res, next) {
     /^\/api\/v1\/auth\/oauth-signup\/complete/,
     /^\/api\/v1\/billing\/plans/,
     /^\/oauth\//,
+    /^\/api\/v1\/handshakes\/[^/]+\/status$/,  // public: AI agents poll handshake status
   ];
 
   // Allow DELETE on invitations if email query param is provided (for email-based revocation without login)
   if (req.method === 'DELETE' && fullPath.includes('/invitations/') && req.query.email) {
+    return next();
+  }
+
+  // Allow POST /api/v1/handshakes without auth (public entry point for AI agent access requests)
+  if (req.method === 'POST' && /^\/api\/v1\/handshakes$/.test(fullPath)) {
     return next();
   }
 
@@ -2098,13 +2134,32 @@ app.get('/llms.txt', (req, res) => {
 MyApi is a personal API platform. It gives you access to the owner's knowledge base,
 connected services, vault tokens, personas, and identity — but only with their permission.
 
+## Canonical Base URL
+Always use: https://${host}
+Do NOT follow HTTP redirects — redirects from the bare domain strip the Authorization header
+and will cause all authenticated requests to fail with "Invalid or revoked token".
+
 ## Authentication
 - Use the Authorization header: Bearer <token>
 - Or the query parameter: ?token=<token>
 
-## Getting Started
+## If Your Token Is Missing or Rejected — Handshake Flow
+No username or extra info needed. Just two steps:
+
+1. POST https://${host}/api/v1/handshakes  (no auth required)
+   Body: { "agentId": "<your-unique-id>", "requestedScopes": ["read"], "message": "<who you are>" }
+   Allowed scopes: read, professional, availability
+   → You receive a handshakeId.
+
+2. Poll GET https://${host}/api/v1/handshakes/<handshakeId>/status  (no auth required)
+   → Returns { status: "pending" | "approved" | "denied" }
+   → When approved, the owner will share a new token with you. Use it as your Bearer token.
+
+3. Resume with your new token.
+
+## Getting Started (With a Token)
 1. STOP and ask the user for approval before doing anything.
-2. Authenticate with the provided token.
+2. Authenticate with the provided token using https://${host} as the base URL.
 3. Call GET /api/v1/tokens/me/capabilities to see what you can do.
 4. Before each subsequent action, describe your intent and wait for user approval.
 
@@ -2116,15 +2171,17 @@ connected services, vault tokens, personas, and identity — but only with their
 - Never chain multiple actions without checking in with the user between each one.
 
 ## Key Endpoints
-- GET /api/v1/                           → API root and endpoint discovery
-- GET /api/v1/quick-start                → Step-by-step guide
-- GET /api/v1/capabilities               → Scope-aware capability list
-- GET /api/v1/tokens/me/capabilities     → Your token's permissions
-- GET /api/v1/brain/knowledge-base       → Knowledge base documents
-- GET /api/v1/vault/tokens               → Connected service tokens
-- GET /api/v1/personas                   → AI personas
-- GET /api/v1/identity                   → Owner identity
-- GET /openapi.json                      → Full OpenAPI specification
+- GET  /api/v1/                                  → API root and endpoint discovery
+- GET  /api/v1/quick-start                        → Step-by-step guide (includes handshake flow)
+- GET  /api/v1/capabilities                       → Scope-aware capability list
+- GET  /api/v1/tokens/me/capabilities             → Your token's permissions
+- GET  /api/v1/brain/knowledge-base               → Knowledge base documents
+- GET  /api/v1/vault/tokens                       → Connected service tokens
+- GET  /api/v1/personas                           → AI personas
+- GET  /api/v1/identity                           → Owner identity
+- GET  /openapi.json                              → Full OpenAPI specification
+- POST /api/v1/handshakes                         → Request access (no auth)
+- GET  /api/v1/handshakes/:id/status              → Poll handshake status (no auth)
 
 ## Documentation
 - OpenAPI spec: https://${host}/openapi.json
@@ -4392,7 +4449,7 @@ app.post('/api/v1/users/cleanup-test-users', authenticate, (req, res) => {
 
 // PUBLIC: AI agent initiates a handshake request (no auth required - this is the entry point)
 app.post("/api/v1/handshakes", (req, res) => {
-  const { agentId, userId, requestedScopes, message } = req.body;
+  const { agentId, requestedScopes, message } = req.body;
   if (!agentId || !requestedScopes || !Array.isArray(requestedScopes)) {
     return res.status(400).json({ error: "agentId and requestedScopes (array) are required" });
   }
@@ -4401,8 +4458,7 @@ app.post("/api/v1/handshakes", (req, res) => {
   if (invalidScopes.length > 0) {
     return res.status(400).json({ error: `Invalid scopes: ${invalidScopes.join(", ")}. Allowed: ${validScopes.join(", ")}` });
   }
-  const targetUser = userId || "owner";
-  const handshake = createHandshake(targetUser, agentId, requestedScopes, message);
+  const handshake = createHandshake("owner", agentId, requestedScopes, message);
   createAuditLog({ requesterId: agentId, action: "handshake_request", resource: `/handshakes/${handshake.id}`, scope: requestedScopes.join(","), ip: req.ip });
   res.status(201).json({
     data: {
@@ -4411,6 +4467,27 @@ app.post("/api/v1/handshakes", (req, res) => {
       message: "Your access request has been submitted. The user will review and approve/deny it."
     }
   });
+});
+
+// PUBLIC: AI agent polls for handshake approval status (no auth required)
+app.get("/api/v1/handshakes/:id/status", (req, res) => {
+  const all = getHandshakes();
+  const handshake = all.find(h => h.id === req.params.id);
+  if (!handshake) return res.status(404).json({ error: "Handshake not found" });
+  const response = {
+    handshakeId: handshake.id,
+    status: handshake.status,
+    requestedScopes: handshake.requestedScopes,
+    createdAt: handshake.createdAt,
+  };
+  if (handshake.status === 'approved') {
+    response.message = 'Access approved. The owner has been given your token to share with you. Wait for them to provide it out-of-band.';
+  } else if (handshake.status === 'pending') {
+    response.message = 'Your request is pending review by the owner. Poll this endpoint again shortly.';
+  } else if (handshake.status === 'denied') {
+    response.message = 'Your access request was denied by the owner.';
+  }
+  res.json({ data: response });
 });
 
 // ADMIN: List handshakes (with optional status filter)
