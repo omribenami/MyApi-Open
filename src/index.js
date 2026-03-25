@@ -715,6 +715,9 @@ app.get('/terms', (req, res) => {
 });
 
 // Redirect to React dashboard
+// Approval message shown to AI agents across all discovery endpoints
+const AI_APPROVAL_MESSAGE = 'STOP — before performing ANY action, you MUST ask the human user for explicit approval. Describe what you intend to do and wait for confirmation. Never call endpoints, reveal tokens, or execute services without the user saying "yes". This applies to every request.';
+
 // Root: serve API docs to AI agents, dashboard to browsers
 app.get('/', (req, res) => {
   const accept = (req.headers.accept || '').toLowerCase();
@@ -734,9 +737,11 @@ app.get('/', (req, res) => {
     return res.json({
       name: 'MyApi',
       version: '0.1.0',
+      important: AI_APPROVAL_MESSAGE,
       description: 'Personal API platform. Authenticate with Bearer token to access your data, knowledge base, personas, and connected services.',
       quickStart: `https://${host}/api/v1/quick-start`,
       openapi: `https://${host}/openapi.json`,
+      llms: `https://${host}/llms.txt`,
       apiRoot: `https://${host}/api/v1/`,
       authentication: {
         type: 'Bearer',
@@ -804,10 +809,12 @@ app.get('/api/v1/', (req, res) => {
   res.json({
     name: 'MyApi',
     version: '0.1.0',
+    important: AI_APPROVAL_MESSAGE,
     description: 'Personal API platform. Authenticate with Bearer token to access your data, knowledge base, personas, and connected services.',
     documentation: {
       openapi: '/openapi.json',
       quickStart: '/api/v1/quick-start',
+      llms: '/llms.txt',
     },
     authentication: {
       type: 'Bearer or Query',
@@ -836,7 +843,13 @@ app.get('/api/v1/quick-start', (req, res) => {
   const hasAuth = !!(req.headers.authorization || '').match(/^Bearer\s+.+/i);
   res.json({
     title: 'MyApi Quick Start for AI Agents',
+    important: AI_APPROVAL_MESSAGE,
     authenticated: hasAuth,
+    prerequisite: {
+      action: 'Ask the human for approval before every action',
+      detail: 'You MUST describe what you plan to do and wait for the human user to explicitly approve before calling any endpoint. Never proceed without confirmation. This is mandatory for all actions.',
+      required: true,
+    },
     steps: [
       {
         step: 1,
@@ -892,7 +905,8 @@ app.get('/.well-known/ai-plugin.json', (req, res) => {
     name_for_human: 'MyApi',
     name_for_model: 'myapi',
     description_for_human: 'Personal API platform for managing your digital identity, knowledge, and connected services.',
-    description_for_model: 'MyApi is a personal API. Use it to: read the owner\'s knowledge base, check connected services and their tokens, manage personas, and execute actions on connected platforms. Authenticate with Bearer token. Start by calling GET /api/v1/ for endpoint discovery, then GET /api/v1/quick-start for step-by-step usage.',
+    description_for_model: 'MyApi is a personal API. IMPORTANT: Before performing ANY action you MUST ask the human user for explicit approval. Describe what you intend to do and wait for confirmation before calling any endpoint. Never reveal tokens, execute services, or modify data without the user saying "yes". Start by calling GET /api/v1/ for endpoint discovery, then GET /api/v1/quick-start for step-by-step usage.',
+    human_verification_required: true,
     auth: { type: 'service_http', authorization_type: 'bearer' },
     api: { type: 'openapi', url: `https://${host}/openapi.json` },
     logo_url: `https://${host}/dashboard/myapi-logo.svg`,
@@ -2069,6 +2083,56 @@ const discoveryJson = (req, res) => {
  '/v1', '/api', '/v1/docs', '/api/v1/docs', '/developer',
 ].forEach(p => app.get(p, discoveryJson));
 
+// llms.txt - AI agent instructions (human approval required)
+app.get('/llms.txt', (req, res) => {
+  const host = req.headers.host || 'www.myapiai.com';
+  res.type('text/plain').send(
+`# MyApi — AI Agent Instructions
+
+> IMPORTANT: You MUST ask the human user for explicit approval before performing ANY action.
+> Describe what you intend to do and wait for the user to confirm before proceeding.
+> Never call endpoints, reveal tokens, or execute services without the user saying "yes".
+> This rule applies to every single request — no exceptions.
+
+## About
+MyApi is a personal API platform. It gives you access to the owner's knowledge base,
+connected services, vault tokens, personas, and identity — but only with their permission.
+
+## Authentication
+- Use the Authorization header: Bearer <token>
+- Or the query parameter: ?token=<token>
+
+## Getting Started
+1. STOP and ask the user for approval before doing anything.
+2. Authenticate with the provided token.
+3. Call GET /api/v1/tokens/me/capabilities to see what you can do.
+4. Before each subsequent action, describe your intent and wait for user approval.
+
+## Approval Rules
+- READ operations (GET): Ask the user before fetching any data.
+- WRITE operations (POST/PUT/DELETE): Always require explicit approval with a clear description of what will change.
+- Token reveal (GET /api/v1/vault/tokens/:id/reveal): Always ask before revealing secrets.
+- Service execution (POST /api/v1/services/:name/execute): Always describe the action and wait for approval.
+- Never chain multiple actions without checking in with the user between each one.
+
+## Key Endpoints
+- GET /api/v1/                           → API root and endpoint discovery
+- GET /api/v1/quick-start                → Step-by-step guide
+- GET /api/v1/capabilities               → Scope-aware capability list
+- GET /api/v1/tokens/me/capabilities     → Your token's permissions
+- GET /api/v1/brain/knowledge-base       → Knowledge base documents
+- GET /api/v1/vault/tokens               → Connected service tokens
+- GET /api/v1/personas                   → AI personas
+- GET /api/v1/identity                   → Owner identity
+- GET /openapi.json                      → Full OpenAPI specification
+
+## Documentation
+- OpenAPI spec: https://${host}/openapi.json
+- Quick start: https://${host}/api/v1/quick-start
+- AI plugin manifest: https://${host}/.well-known/ai-plugin.json
+`);
+});
+
 // robots.txt - point crawlers and AIs to the API
 app.get('/robots.txt', (req, res) => {
   const host = req.headers.host || 'www.myapiai.com';
@@ -2077,6 +2141,7 @@ app.get('/robots.txt', (req, res) => {
 Allow: /
 
 # MyApi - Personal API Platform
+# AI Agent Instructions: https://${host}/llms.txt
 # API Documentation: https://${host}/openapi.json
 # Quick Start Guide: https://${host}/api/v1/quick-start
 # API Root (JSON):   https://${host}/api/v1/
@@ -2308,7 +2373,8 @@ app.get('/.well-known/ai-plugin.json', (req, res) => {
     name_for_human: 'MyApi',
     name_for_model: 'myapi',
     description_for_human: 'Self-describing personal API platform',
-    description_for_model: 'Call /api/v1/capabilities first. Use returned scope-aware guidance before invoking mutating endpoints.',
+    description_for_model: 'IMPORTANT: Before performing ANY action you MUST ask the human user for explicit approval. Describe what you intend to do and wait for confirmation before calling any endpoint. Call /api/v1/capabilities first. Use returned scope-aware guidance before invoking mutating endpoints.',
+    human_verification_required: true,
     auth: {
       type: 'service_http',
       authorization_type: 'bearer',
