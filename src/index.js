@@ -2239,6 +2239,7 @@ No username or extra info needed. Just two steps:
 - GET  /api/v1/tokens/me/capabilities             → Your token's permissions
 - GET  /api/v1/brain/knowledge-base               → Knowledge base documents
 - GET  /api/v1/vault/tokens                       → Connected service tokens
+- POST /api/v1/services/:name/proxy               → Proxy raw API request to a service
 - GET  /api/v1/personas                           → AI personas
 - GET  /api/v1/identity                           → Owner identity
 - GET  /openapi.json                              → Full OpenAPI specification
@@ -2442,6 +2443,7 @@ app.get('/openapi.json', (req, res) => {
       '/api/v1/services/{name}': { get: { summary: 'Get service', security: [{ bearerAuth: [] }] } },
       '/api/v1/services/{serviceId}/methods': { get: { summary: 'Service methods', security: [{ bearerAuth: [] }] } },
       '/api/v1/services/{serviceName}/execute': { post: { summary: 'Execute service method', security: [{ bearerAuth: [] }] } },
+      '/api/v1/services/{serviceName}/proxy': { post: { summary: 'Proxy raw API request to service', security: [{ bearerAuth: [] }] } },
 
       '/api/v1/oauth/authorize/{service}': { get: { summary: 'OAuth authorize URL', security: [{ bearerAuth: [] }] } },
       '/api/v1/oauth/callback/{service}': { get: { summary: 'OAuth callback', responses: { '200': { description: 'OK' } } } },
