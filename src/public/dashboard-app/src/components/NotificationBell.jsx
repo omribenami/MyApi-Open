@@ -1,142 +1,52 @@
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '../stores/authStore';
+import { useNotificationStore } from '../stores/notificationStore';
 
 export default function NotificationBell() {
   const currentWorkspace = useAuthStore((state) => state.currentWorkspace);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const { 
+    unreadCount, 
+    notifications, 
+    fetchUnreadCount, 
+    fetchNotifications,
+    markAsRead,
+    deleteNotification 
+  } = useNotificationStore();
   const [isOpen, setIsOpen] = useState(false);
-  const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // Fetch unread count
+  // Fetch unread count on mount and periodically
   useEffect(() => {
-    const fetchUnreadCount = async () => {
-      try {
-        const res = await fetch('/api/v1/notifications/unread-count', { 
-          credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          }
-        });
-        if (!res.ok) {
-          console.warn(`Notification count fetch failed: ${res.status}`);
-          return;
-        }
-        const data = await res.json();
-        setUnreadCount(data?.data?.unreadCount || data?.unreadCount || 0);
-      } catch (err) {
-        console.error('Error fetching unread count:', err);
-        setUnreadCount(0);
-      }
-    };
-
     fetchUnreadCount();
-    const interval = setInterval(fetchUnreadCount, 30000); // Poll every 30s
+    const interval = setInterval(() => fetchUnreadCount(), 30000); // Poll every 30s
     return () => clearInterval(interval);
-  }, [currentWorkspace?.id]);
+  }, [currentWorkspace?.id, fetchUnreadCount]);
 
   // Fetch notifications when dropdown opens
   useEffect(() => {
     if (!isOpen) return;
-
-    const fetchNotifications = async () => {
-      setLoading(true);
-      try {
-        const res = await fetch('/api/v1/notifications?limit=10&offset=0', { 
-          credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          }
-        });
-        if (!res.ok) {
-          console.warn(`Notifications fetch failed: ${res.status}`);
-          setNotifications([]);
-          return;
-        }
-        const data = await res.json();
-        const notificationsList = data?.data || data?.notifications || [];
-        setNotifications(Array.isArray(notificationsList) ? notificationsList : []);
-      } catch (err) {
-        console.error('Error fetching notifications:', err);
-        setNotifications([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchNotifications();
-  }, [isOpen, currentWorkspace?.id]);
+    setLoading(true);
+    fetchNotifications().finally(() => setLoading(false));
+  }, [isOpen, currentWorkspace?.id, fetchNotifications]);
 
   const handleMarkAsRead = async (notificationId) => {
-    try {
-      await fetch(`/api/v1/notifications/${notificationId}/read`, {
-        method: 'POST',
-        credentials: 'include'
-      });
-      // Optimistically update UI
-      setNotifications(prev =>
-        prev.map(n => n.id === notificationId ? { ...n, isRead: true } : n)
-      );
-      const newCount = Math.max(0, unreadCount - 1);
-      setUnreadCount(newCount);
-      
-      // Refetch count to ensure sync (in case multiple notifications marked)
-      try {
-        const res = await fetch('/api/v1/notifications/unread-count', { 
-          credentials: 'include'
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setUnreadCount(data?.data?.unreadCount || data?.unreadCount || 0);
-        }
-      } catch (e) {
-        console.warn('Failed to refetch unread count:', e);
-      }
-    } catch (err) {
-      console.error('Error marking notification as read:', err);
-    }
+    await markAsRead(undefined, notificationId);
+    await fetchUnreadCount();
   };
 
   const handleDelete = async (notificationId) => {
-    try {
-      await fetch(`/api/v1/notifications/${notificationId}`, {
-        method: 'DELETE',
-        credentials: 'include'
-      });
-      setNotifications(prev => prev.filter(n => n.id !== notificationId));
-      
-      // Refetch count to update badge
-      try {
-        const res = await fetch('/api/v1/notifications/unread-count', { 
-          credentials: 'include'
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setUnreadCount(data?.data?.unreadCount || data?.unreadCount || 0);
-        }
-      } catch (e) {
-        console.warn('Failed to refetch unread count:', e);
-      }
-    } catch (err) {
-      console.error('Error deleting notification:', err);
-    }
+    await deleteNotification(undefined, notificationId);
+    await fetchUnreadCount();
   };
 
   const handleMarkAllAsRead = async () => {
     try {
-      const res = await fetch('/api/v1/notifications/read-all', {
+      await fetch('/api/v1/notifications/read-all', {
         method: 'POST',
         credentials: 'include'
       });
-      if (res.ok) {
-        // Mark all notifications as read locally
-        setNotifications(prev =>
-          prev.map(n => ({ ...n, isRead: true }))
-        );
-        setUnreadCount(0);
-      }
+      await fetchNotifications();
+      await fetchUnreadCount();
     } catch (err) {
       console.error('Error marking all as read:', err);
     }

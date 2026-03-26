@@ -1,56 +1,25 @@
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '../stores/authStore';
+import { useNotificationStore } from '../stores/notificationStore';
 
 export default function NotificationCenter() {
   const currentWorkspace = useAuthStore((state) => state.currentWorkspace);
-  const [notifications, setNotifications] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { notifications, fetchNotifications } = useNotificationStore();
+  const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState('all'); // 'all', 'unread', 'read'
   const [typeFilter, setTypeFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
-    fetchNotifications();
-  }, [filter, typeFilter, currentWorkspace?.id]);
-
-  const fetchNotifications = async () => {
     setLoading(true);
-    try {
-      let url = '/api/v1/notifications?limit=50&offset=0';
-      
-      if (filter === 'unread') {
-        url += '&read=false';
-      } else if (filter === 'read') {
-        url += '&read=true';
-      }
-      
-      if (typeFilter) {
-        url += `&type=${typeFilter}`;
-      }
+    fetchNotifications().finally(() => setLoading(false));
+  }, [filter, typeFilter, currentWorkspace?.id, fetchNotifications]);
 
-      const res = await fetch(url, { credentials: 'include' });
-      if (!res.ok) return;
-      const data = await res.json();
-      setNotifications(data?.data || []);
-    } catch (err) {
-      console.error('Error fetching notifications:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  const { markAsRead, deleteNotification } = useNotificationStore();
+  
   const handleMarkAsRead = async (notificationId) => {
-    try {
-      await fetch(`/api/v1/notifications/${notificationId}/read`, {
-        method: 'POST',
-        credentials: 'include'
-      });
-      setNotifications(prev =>
-        prev.map(n => n.id === notificationId ? { ...n, isRead: true } : n)
-      );
-    } catch (err) {
-      console.error('Error marking notification as read:', err);
-    }
+    await markAsRead(undefined, notificationId);
+    await fetchNotifications();
   };
 
   const handleMarkAllAsRead = async () => {
@@ -59,24 +28,15 @@ export default function NotificationCenter() {
         method: 'POST',
         credentials: 'include'
       });
-      setNotifications(prev =>
-        prev.map(n => ({ ...n, isRead: true }))
-      );
+      await fetchNotifications();
     } catch (err) {
       console.error('Error marking all as read:', err);
     }
   };
 
   const handleDelete = async (notificationId) => {
-    try {
-      await fetch(`/api/v1/notifications/${notificationId}`, {
-        method: 'DELETE',
-        credentials: 'include'
-      });
-      setNotifications(prev => prev.filter(n => n.id !== notificationId));
-    } catch (err) {
-      console.error('Error deleting notification:', err);
-    }
+    await deleteNotification(undefined, notificationId);
+    await fetchNotifications();
   };
 
   const filteredNotifications = notifications.filter(n => {
