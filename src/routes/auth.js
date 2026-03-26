@@ -216,18 +216,27 @@ router.post('/logout', (req, res) => {
       });
     }
 
-    // Clear all auth-related cookies (multiple domain/path combinations)
-    clearAuthCookies(req, res);
-    
-    // CRITICAL: Explicitly clear the master token cookies with common settings
-    res.clearCookie('myapi_master_token', { path: '/', httpOnly: true, secure: false, sameSite: 'lax' });
-    res.clearCookie('myapi_master_token', { path: '/', httpOnly: true, secure: true, sameSite: 'none' });
-    res.clearCookie('myapi_master_token', { path: '/' });
-    
     // Prevent browser caching of any auth data
     res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.set('Pragma', 'no-cache');
     res.set('Expires', '0');
+    
+    // Clear all auth-related cookies (this does brute-force clearing with multiple variants)
+    clearAuthCookies(req, res);
+    
+    // ADDITIONAL: Explicitly clear with httpOnly flag (server-side only, can't be deleted by JS)
+    const clearOpts = [
+      { path: '/', httpOnly: true },
+      { path: '/', httpOnly: false },
+      { path: '/' },
+      { path: '/', domain: req.hostname },
+      { path: '/', domain: '.' + req.hostname },
+    ];
+    
+    for (const opts of clearOpts) {
+      res.clearCookie('myapi_master_token', opts);
+      res.clearCookie('masterToken', opts);
+    }
 
     if (!req.session) {
       return res.json({ success: true, message: 'No active session', cleared: true });

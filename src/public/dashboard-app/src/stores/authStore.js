@@ -118,9 +118,9 @@ export const useAuthStore = create((set, get) => ({
         }
 
         const cookieMasterToken = readCookie('myapi_master_token');
-        if (cookieMasterToken) {
-          // Keep token for later validation, but DO NOT mark authenticated yet.
-          // Otherwise app may route into dashboard and trigger /metrics 401 storms.
+        if (cookieMasterToken && !sessionReturned401) {
+          // Only use cookie if session wasn't explicitly 401
+          // If session returned 401, the user logged out and we should NOT restore
           try { localStorage.setItem('masterToken', cookieMasterToken); } catch {}
         }
 
@@ -255,10 +255,8 @@ export const useAuthStore = create((set, get) => ({
       .catch(() => {})
       .finally(() => {
         setLogoutInProgress(false);
-        // Force redirect to login page
-        if (window.location.pathname.startsWith('/dashboard')) {
-          window.location.href = '/';
-        }
+        // Redirect to login (but don't auto-trigger another auth attempt)
+        redirectToLoginOnce();
       });
   },
 
