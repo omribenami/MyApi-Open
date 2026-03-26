@@ -14,6 +14,7 @@ const QRCode = require('qrcode');
 const { marked } = require('marked');
 const http = require('http');
 const EventEmitter = require('events');
+const expressRateLimit = require('express-rate-limit');
 
 // Global event emitter for device alerts and real-time notifications
 const alertEmitter = new EventEmitter();
@@ -1211,8 +1212,23 @@ const authRateLimit = rateLimit(60000, process.env.NODE_ENV === 'test' ? 1000 : 
 // BUG-15: Stricter rate limit for 2FA/TOTP attempts (3 attempts per minute to prevent brute force)
 const twoFactorRateLimit = rateLimit(60000, process.env.NODE_ENV === 'test' ? 1000 : 3, '2fa-attempts');
 
+// Rate limit for billing usage endpoint (DB access + authorization)
+const billingUsageRateLimit = expressRateLimit({
+  windowMs: 60000,
+  max: process.env.NODE_ENV === 'test' ? 1000 : 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Rate limit exceeded', retryAfterSeconds: 60 },
+});
+
 // Rate limit for dashboard SPA shell requests (file-system access)
-const dashboardRateLimit = rateLimit(60000, process.env.NODE_ENV === 'test' ? 1000 : 60, 'dashboard-spa');
+const dashboardSpaRateLimit = expressRateLimit({
+  windowMs: 60000,
+  max: process.env.NODE_ENV === 'test' ? 1000 : 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Rate limit exceeded', retryAfterSeconds: 60 },
+});
 
 // Security: DB integrity check on startup - detect direct tampering
 function checkDbIntegrity() {
@@ -3448,7 +3464,7 @@ app.get('/api/v1/billing/invoices', (req, res) => {
   });
 });
 
-app.get('/api/v1/billing/usage', planFeatureRateLimit, (req, res) => {
+app.get('/api/v1/billing/usage', billingUsageRateLimit, (req, res) => {
   const workspaceId = getRequestWorkspaceId(req);
   if (!workspaceId) return res.status(400).json({ error: 'Workspace context is required' });
 
@@ -8116,9 +8132,9 @@ const sendDashboardIndex = (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'dist', 'index.html'));
 };
 
-app.get('/dashboard', dashboardRateLimit, sendDashboardIndex);
-app.get('/dashboard/', dashboardRateLimit, sendDashboardIndex);
-app.get('/dashboard/*path', dashboardRateLimit, (req, res) => {
+app.get('/dashboard', dashboardSpaRateLimit, sendDashboardIndex);
+app.get('/dashboard/', dashboardSpaRateLimit, sendDashboardIndex);
+app.get('/dashboard/*path', dashboardSpaRateLimit, (req, res) => {
   const relPath = req.path.replace(/^\/dashboard\/?/, '');
   const looksLikeStaticAsset = relPath.startsWith('assets/') || relPath === 'vite.svg' || /\.[a-z0-9]+$/i.test(relPath);
 
