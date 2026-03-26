@@ -8476,6 +8476,58 @@ if (process.env.NODE_ENV !== 'test') {
     }, 15 * 60 * 1000); // Every 15 minutes
     console.log('✅ Session cleanup scheduled (7-day TTL, 15-min check interval)');
   });
+
+  // Global error handlers to prevent crashes
+  process.on('uncaughtException', (error) => {
+    console.error('[CRITICAL] Uncaught Exception:', error.message);
+    console.error(error.stack);
+    // Log to database if available
+    try {
+      createAuditLog({
+        requesterId: 'system',
+        action: 'uncaught_exception',
+        resource: '/system/error',
+        scope: 'critical',
+        details: {
+          error: error.message,
+          stack: error.stack.substring(0, 500),
+          timestamp: new Date().toISOString()
+        }
+      });
+    } catch (logErr) {
+      console.error('[ERROR] Failed to log uncaught exception:', logErr.message);
+    }
+    // Exit gracefully
+    process.exit(1);
+  });
+
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('[CRITICAL] Unhandled Promise Rejection:', reason);
+    // Log to database if available
+    try {
+      createAuditLog({
+        requesterId: 'system',
+        action: 'unhandled_rejection',
+        resource: '/system/error',
+        scope: 'critical',
+        details: {
+          error: String(reason),
+          timestamp: new Date().toISOString()
+        }
+      });
+    } catch (logErr) {
+      console.error('[ERROR] Failed to log unhandled rejection:', logErr.message);
+    }
+    // Don't exit - let it continue but log it
+  });
+
+  server.on('error', (err) => {
+    console.error('[CRITICAL] Server Error:', err.message);
+    if (err.code === 'EADDRINUSE') {
+      console.error(`Port ${PORT} is already in use`);
+      process.exit(1);
+    }
+  });
 }
 
 module.exports = { app, server, bootstrap };
