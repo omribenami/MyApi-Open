@@ -11,7 +11,7 @@ function initDatabase(dbPath) {
     fs.mkdirSync(dataDir, { recursive: true });
   }
 
-  db = new Database(dbPath, { verbose: console.log });
+  db = new Database(dbPath, { verbose: process.env.NODE_ENV === 'development' ? console.log : undefined });
   db.pragma('journal_mode = WAL');
   
   // Create tables
@@ -28,6 +28,7 @@ function createTables() {
       name TEXT NOT NULL,
       type TEXT NOT NULL CHECK(type IN ('personal', 'guest')),
       token_hash TEXT NOT NULL UNIQUE,
+      token_prefix TEXT,
       scope TEXT NOT NULL,
       created_at INTEGER NOT NULL,
       expires_at INTEGER,

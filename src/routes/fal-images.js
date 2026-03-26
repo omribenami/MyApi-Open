@@ -133,8 +133,7 @@ router.post('/generate', async (req, res) => {
   } catch (err) {
     console.error('[FAL] Error:', err);
     return res.status(500).json({ 
-      error: 'Failed to generate image',
-      details: err.message 
+      error: 'Failed to generate image'
     });
   }
 });
@@ -306,8 +305,7 @@ router.post('/test', async (req, res) => {
   } catch (err) {
     console.error('[FAL] Test error:', err);
     return res.status(500).json({ 
-      error: 'Failed to test FAL API',
-      details: err.message 
+      error: 'Failed to test FAL API'
     });
   }
 });

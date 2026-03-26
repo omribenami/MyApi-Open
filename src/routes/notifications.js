@@ -70,7 +70,7 @@ const router = express.Router();
       });
     } catch (err) {
       console.error('Error fetching notifications:', err);
-      res.status(500).json({ error: 'Failed to fetch notifications', details: err.message });
+      res.status(500).json({ error: 'Failed to fetch notifications' });
     }
   });
 
@@ -94,7 +94,7 @@ const router = express.Router();
       });
     } catch (err) {
       console.error('Error fetching unread count:', err);
-      res.status(500).json({ error: 'Failed to fetch unread count', details: err.message });
+      res.status(500).json({ error: 'Failed to fetch unread count' });
     }
   };
 
@@ -126,7 +126,7 @@ const router = express.Router();
       });
     } catch (err) {
       console.error('Error marking notification as read:', err);
-      res.status(500).json({ error: 'Failed to mark notification as read', details: err.message });
+      res.status(500).json({ error: 'Failed to mark notification as read' });
     }
   });
 
@@ -157,7 +157,7 @@ const router = express.Router();
       });
     } catch (err) {
       console.error('Error marking all notifications as read:', err);
-      res.status(500).json({ error: 'Failed to mark all notifications as read', details: err.message });
+      res.status(500).json({ error: 'Failed to mark all notifications as read' });
     }
   });
 
@@ -185,7 +185,7 @@ const router = express.Router();
       });
     } catch (err) {
       console.error('Error deleting notification:', err);
-      res.status(500).json({ error: 'Failed to delete notification', details: err.message });
+      res.status(500).json({ error: 'Failed to delete notification' });
     }
   });
 
@@ -240,7 +240,7 @@ const router = express.Router();
       });
     } catch (err) {
       console.error('Error fetching notification settings:', err);
-      res.status(500).json({ error: 'Failed to fetch settings', details: err.message });
+      res.status(500).json({ error: 'Failed to fetch settings' });
     }
   });
 
@@ -297,7 +297,7 @@ const router = express.Router();
       });
     } catch (err) {
       console.error('Error updating notification settings:', err);
-      res.status(500).json({ error: 'Failed to update settings', details: err.message });
+      res.status(500).json({ error: 'Failed to update settings' });
     }
   });
 
@@ -329,7 +329,7 @@ const router = express.Router();
       });
     } catch (err) {
       console.error('Error fetching notification preferences:', err);
-      res.status(500).json({ error: 'Failed to fetch preferences', details: err.message });
+      res.status(500).json({ error: 'Failed to fetch preferences' });
     }
   });
 
@@ -370,7 +370,7 @@ const router = express.Router();
       });
     } catch (err) {
       console.error('Error updating notification preferences:', err);
-      res.status(500).json({ error: 'Failed to update preferences', details: err.message });
+      res.status(500).json({ error: 'Failed to update preferences' });
     }
   });
 

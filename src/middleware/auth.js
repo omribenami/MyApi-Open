@@ -88,7 +88,7 @@ function authenticate(tokenManager, auditLog) {
         status: 500,
         ipAddress: req.ip,
         userAgent: req.get('user-agent'),
-        details: { error: error.message }
+        details: { error: 'Authentication processing error' }
       });
       
       res.status(500).json({

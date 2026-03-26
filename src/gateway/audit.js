@@ -44,7 +44,7 @@ class AuditLog {
       status,
       ipAddress,
       userAgent,
-      details ? JSON.stringify(details) : null
+      details ? JSON.stringify(details).substring(0, 10000) : null
     );
 
     logger.info('Audit log entry created', {

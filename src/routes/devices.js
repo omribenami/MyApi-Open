@@ -346,7 +346,7 @@ router.post('/approve/:approval_id', requireAuth, (req, res) => {
     });
   } catch (error) {
     console.error('Error approving device:', error.message, error.stack);
-    res.status(500).json({ error: 'Failed to approve device', details: error.message });
+    res.status(500).json({ error: 'Failed to approve device' });
   }
 });
 
@@ -401,7 +401,7 @@ router.post('/deny/:approval_id', requireAuth, (req, res) => {
     });
   } catch (error) {
     console.error('Error denying device:', error.message, error.stack);
-    res.status(500).json({ error: 'Failed to deny device', details: error.message });
+    res.status(500).json({ error: 'Failed to deny device' });
   }
 });
 

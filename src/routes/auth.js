@@ -66,12 +66,32 @@ function regenerateSession(req) {
  */
 router.post('/token-login', (req, res) => {
   try {
-    const token = req.body?.token || req.query?.token;
-    if (!token) {
-      return res.status(400).json({ error: 'Token required' });
+    const token = req.body?.token;
+    if (!token || typeof token !== 'string' || token.length < 16) {
+      return res.status(400).json({ error: 'Valid token required' });
     }
+
+    // Validate token exists and is active in the database
+    const { getAccessTokens } = require('../database');
+    const bcryptLib = require('bcrypt');
+    const tokens = getAccessTokens() || [];
+    let validToken = null;
+    for (const tokenRecord of tokens) {
+      if (tokenRecord.revokedAt) continue;
+      if (tokenRecord.expiresAt && new Date(tokenRecord.expiresAt) <= new Date()) continue;
+      if (tokenRecord.hash && bcryptLib.compareSync(token, tokenRecord.hash)) {
+        validToken = tokenRecord;
+        break;
+      }
+    }
+
+    if (!validToken) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+
     req.session.masterToken = token;
     req.session.authMethod = 'token';
+    req.session.user = { id: validToken.ownerId };
     req.session.save((err) => {
       if (err) return res.status(500).json({ error: 'Session error' });
       res.json({ success: true, message: 'Logged in with token' });
@@ -165,6 +185,12 @@ router.post('/register', (req, res) => {
   const { username, password, display_name, email, timezone } = req.body || {};
   if (!username || !password) return res.status(400).json({ error: 'username and password required' });
   if (password.length < 6) return res.status(400).json({ error: 'password must be at least 6 characters' });
+  if (username.length < 3 || username.length > 50) return res.status(400).json({ error: 'username must be between 3 and 50 characters' });
+  if (!/^[a-zA-Z0-9_.-]+$/.test(username)) return res.status(400).json({ error: 'username can only contain letters, numbers, underscores, hyphens, and dots' });
+  if (password.length > 128) return res.status(400).json({ error: 'password must not exceed 128 characters' });
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'invalid email format' });
+  if (display_name && display_name.length > 100) return res.status(400).json({ error: 'display name must not exceed 100 characters' });
+  if (timezone && timezone.length > 50) return res.status(400).json({ error: 'invalid timezone' });
 
   try {
     const { db } = require('../database');
@@ -193,7 +219,7 @@ router.post('/register', (req, res) => {
     return res.status(201).json({ data: { token: sessionToken, user: { id, username, displayName: display_name || username, email: email || '', timezone: timezone || 'UTC' }, needsOnboarding: true } });
   } catch (err) {
     console.error('Registration error:', err);
-    return res.status(500).json({ error: 'Registration failed', details: err.message });
+    return res.status(500).json({ error: 'Registration failed' });
   }
 });
 
@@ -307,7 +333,7 @@ router.post('/logout', (req, res) => {
     }
   } catch (error) {
     console.error('Logout error:', error);
-    res.status(500).json({ success: false, error: 'Logout failed', details: error.message });
+    res.status(500).json({ success: false, error: 'Logout failed' });
   }
 });
 

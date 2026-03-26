@@ -21,6 +21,19 @@ function createBackupRoutes(db) {
     dbPath: process.env.DB_PATH || path.join(__dirname, '../data/myapi.db')
   });
 
+  // Security: All backup operations require admin authentication
+  router.use((req, res, next) => {
+    const scope = String(req.tokenMeta?.scope || req.tokenData?.scope || '');
+    const isSession = req.session?.user?.id;
+    if (!isSession && !scope) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    if (scope && scope !== 'full' && !scope.includes('admin')) {
+      return res.status(403).json({ error: 'Admin access required for backup operations' });
+    }
+    next();
+  });
+
   /**
    * GET /backups/status
    * Get backup system status
