@@ -163,6 +163,7 @@ const {
   getRolesByWorkspace,
   createRole,
   getOrEnsureUserWorkspace,
+  getWorkspaceMembers,
   // Phase 5: Compliance & Retention
   createRetentionPolicy,
   getRetentionPolicies,
@@ -3398,6 +3399,10 @@ app.get('/api/v1/billing/current', (req, res) => {
     }
   }
 
+  // Include the plan's limits and features so the frontend can show them
+  const planDef = BILLING_PLANS[effectivePlanId] || BILLING_PLANS.free;
+  const planLimits = PLAN_LIMITS[effectivePlanId] || PLAN_LIMITS.free;
+
   res.json({
     data: {
       workspaceId,
@@ -3410,6 +3415,16 @@ app.get('/api/v1/billing/current', (req, res) => {
         cancelAtPeriodEnd: Boolean(subscription.cancel_at_period_end),
       } : null,
       billingConfigured: isStripeConfigured(),
+      features: planDef.features || [],
+      limits: {
+        personas: planLimits.personas,
+        serviceConnections: planLimits.serviceConnections === Infinity ? null : planLimits.serviceConnections,
+        knowledgeBytes: planLimits.knowledgeBytes === Infinity ? null : planLimits.knowledgeBytes,
+        vaultTokens: planLimits.vaultTokens === Infinity ? null : planLimits.vaultTokens,
+        skillsPerPersona: planLimits.skillsPerPersona === Infinity ? null : planLimits.skillsPerPersona,
+        monthlyApiCalls: planLimits.monthlyApiCalls === Infinity ? null : planLimits.monthlyApiCalls,
+        teamMembers: planLimits.teamMembers === Infinity ? null : planLimits.teamMembers,
+      },
     },
   });
 });
@@ -3449,8 +3464,59 @@ app.get('/api/v1/billing/usage', (req, res) => {
     activeServices: Math.max(acc.activeServices, Number(row.active_services || 0)),
   }), { monthlyApiCalls: 0, installs: 0, ratings: 0, activeServices: 0 });
 
+  // Resolve effective plan (honour user's directly-assigned plan when no subscription)
   const subscription = getBillingSubscriptionByWorkspace(workspaceId);
-  const usageVsLimits = computeUsageVsLimits(resolveWorkspaceCurrentPlan(subscription), totals);
+  let effectivePlan = resolveWorkspaceCurrentPlan(subscription);
+  if (!subscription) {
+    const userId = req?.user?.id || req?.tokenMeta?.ownerId;
+    if (userId && userId !== 'owner') {
+      const user = getUserById(userId);
+      if (user?.plan && BILLING_PLAN_LIMITS[String(user.plan).toLowerCase()]) {
+        effectivePlan = BILLING_PLAN_LIMITS[String(user.plan).toLowerCase()];
+      }
+    }
+  }
+
+  const usageVsLimits = computeUsageVsLimits(effectivePlan, totals);
+
+  // Collect real-time resource counts
+  const ownerId = getRequestOwnerId(req);
+  const planLimits = PLAN_LIMITS[effectivePlan.id] || PLAN_LIMITS.free;
+  let resourceCounts;
+  try {
+    const personaCount = getPersonas(ownerId, workspaceId).length;
+    const vaultTokenCount = getVaultTokens(ownerId, workspaceId).length;
+    const serviceCount = countConnectedOAuthServices(ownerId);
+    const memberCount = getWorkspaceMembers(workspaceId).length;
+
+    const kbRows = db.prepare('SELECT content FROM kb_documents WHERE owner_id = ?').all(ownerId);
+    const kbBytesUsed = kbRows.reduce((sum, row) => sum + Buffer.byteLength(String(row.content || ''), 'utf8'), 0);
+
+    const makeResourceMetric = (used, limit) => {
+      const unlimited = limit === Infinity || limit === null || limit === undefined;
+      const numLimit = unlimited ? null : limit;
+      const ratio = unlimited ? 0 : (numLimit > 0 ? Math.min(1, used / numLimit) : 0);
+      return {
+        used,
+        limit: numLimit,
+        unlimited,
+        ratio,
+        remaining: unlimited ? null : Math.max(0, numLimit - used),
+        exceeded: unlimited ? false : used > numLimit,
+      };
+    };
+
+    resourceCounts = {
+      personas: makeResourceMetric(personaCount, planLimits.personas),
+      serviceConnections: makeResourceMetric(serviceCount, planLimits.serviceConnections),
+      knowledgeBytes: makeResourceMetric(kbBytesUsed, planLimits.knowledgeBytes),
+      vaultTokens: makeResourceMetric(vaultTokenCount, planLimits.vaultTokens),
+      teamMembers: makeResourceMetric(memberCount, planLimits.teamMembers),
+    };
+  } catch (err) {
+    console.error('[Billing] Error computing resource counts:', err);
+    resourceCounts = {};
+  }
 
   res.json({
     data: {
@@ -3459,6 +3525,7 @@ app.get('/api/v1/billing/usage', (req, res) => {
       totals,
       daily: rows,
       limits: usageVsLimits.metrics,
+      resources: resourceCounts,
     },
   });
 });
@@ -8048,7 +8115,7 @@ const sendDashboardIndex = (req, res) => {
 
 app.get('/dashboard', sendDashboardIndex);
 app.get('/dashboard/', sendDashboardIndex);
-app.get('/dashboard/*', (req, res) => {
+app.get('/dashboard/*path', (req, res) => {
   const relPath = req.path.replace(/^\/dashboard\/?/, '');
   const looksLikeStaticAsset = relPath.startsWith('assets/') || relPath === 'vite.svg' || /\.[a-z0-9]+$/i.test(relPath);
 

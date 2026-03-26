@@ -14,9 +14,9 @@ const PLAN_LIMITS = {
     name: 'Pro',
     limits: {
       monthlyApiCalls: 100000,
-      activeServices: 50,
-      installs: 1000,
-      ratings: 500,
+      activeServices: Number.POSITIVE_INFINITY,
+      installs: Number.POSITIVE_INFINITY,
+      ratings: Number.POSITIVE_INFINITY,
     },
   },
   enterprise: {
