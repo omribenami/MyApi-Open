@@ -1647,20 +1647,21 @@ function DangerZoneSection({ onRequestDelete }) {
 }
 
 function BillingSection() {
+  const currentWorkspace = useAuthStore((s) => s.currentWorkspace);
   const [plans, setPlans] = useState([]);
-  const [current, setCurrent] = useState({ plan: 'free', billingConfigured: false });
-  const [usage, setUsage] = useState({ limits: {} });
+  const [current, setCurrent] = useState({ plan: 'free', billingConfigured: false, features: [], limits: {} });
+  const [usage, setUsage] = useState({ limits: {}, resources: {} });
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const loadBilling = async () => {
+  const loadBilling = useCallback(async () => {
     try {
       const [plansRes, currentRes, usageRes, invoicesRes] = await Promise.all([
-        fetch('/api/v1/billing/plans'),
-        fetch('/api/v1/billing/current', { credentials: 'include' }),
-        fetch('/api/v1/billing/usage?range=30d', { credentials: 'include' }),
-        fetch('/api/v1/billing/invoices', { credentials: 'include' }),
+        apiRequest('/billing/plans'),
+        apiRequest('/billing/current'),
+        apiRequest('/billing/usage?range=30d'),
+        apiRequest('/billing/invoices'),
       ]);
 
       const plansData = await plansRes.json().catch(() => ({}));
@@ -1669,27 +1670,25 @@ function BillingSection() {
       const invoiceData = await invoicesRes.json().catch(() => ({}));
 
       setPlans(Array.isArray(plansData?.data) ? plansData.data : []);
-      setCurrent(currentData?.data || { plan: 'free', billingConfigured: false });
-      setUsage(usageData?.data || { limits: {} });
+      setCurrent(currentData?.data || { plan: 'free', billingConfigured: false, features: [], limits: {} });
+      setUsage(usageData?.data || { limits: {}, resources: {} });
       setInvoices(Array.isArray(invoiceData?.data) ? invoiceData.data : []);
     } catch {
       setError('Unable to load billing data');
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadBilling();
-  }, []);
+  }, [loadBilling, currentWorkspace?.id]);
 
   const handleCheckout = async (planId) => {
     setLoading(true);
     setError('');
     try {
-      const response = await fetch('/api/v1/billing/checkout', {
+      const response = await apiRequest('/billing/checkout', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ plan: planId }),
+        body: { plan: planId },
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Failed to start checkout');
@@ -1706,12 +1705,45 @@ function BillingSection() {
     }
   };
 
+  const formatBytes = (bytes) => {
+    if (bytes == null) return 'Unlimited';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
   const usageItems = [
-    { key: 'monthlyApiCalls', label: 'API Calls' },
+    { key: 'monthlyApiCalls', label: 'API Calls (30d)' },
     { key: 'activeServices', label: 'Connected Services' },
-    { key: 'installs', label: 'Marketplace Installs' },
-    { key: 'ratings', label: 'Ratings/Reviews' },
   ];
+
+  const resourceItems = [
+    { key: 'personas', label: 'AI Personas' },
+    { key: 'serviceConnections', label: 'Service Connections' },
+    { key: 'vaultTokens', label: 'Vault Tokens' },
+    { key: 'teamMembers', label: 'Team Members' },
+    { key: 'knowledgeBytes', label: 'Knowledge Base', formatValue: formatBytes, formatLimit: formatBytes },
+  ];
+
+  const renderMetric = (metric, item) => {
+    if (!metric) return null;
+    const used = item.formatValue ? item.formatValue(metric.used) : metric.used;
+    const limit = metric.unlimited ? 'Unlimited' : (item.formatLimit ? item.formatLimit(metric.limit) : (metric.limit ?? 0));
+    const ratioPct = Math.round((metric.ratio || 0) * 100);
+    const barColor = metric.exceeded ? 'bg-red-500' : ratioPct > 80 ? 'bg-amber-500' : 'bg-blue-500';
+
+    return (
+      <div key={item.key} className="p-3 rounded-lg border border-slate-700 bg-slate-900">
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-slate-300">{item.label}</span>
+          <span className={metric.exceeded ? 'text-red-400 font-medium' : 'text-slate-400'}>{used} / {limit}</span>
+        </div>
+        <div className="mt-2 h-2 rounded bg-slate-800 overflow-hidden">
+          <div className={`h-full ${barColor}`} style={{ width: `${Math.min(100, ratioPct)}%` }} />
+        </div>
+      </div>
+    );
+  };
 
   return (
     <SectionCard title="Plans & Billing" description="Workspace plan, usage and invoices">
@@ -1723,50 +1755,73 @@ function BillingSection() {
         </div>
       )}
 
-      <div className="mb-4 p-4 rounded-lg border border-slate-700 bg-slate-900">
+      <div className="mb-4 p-4 rounded-lg border border-blue-600/40 bg-slate-900">
         <p className="text-xs uppercase tracking-wide text-slate-400">Current Plan</p>
-        <p className="text-xl text-white font-semibold mt-1">{String(current.plan || 'free').toUpperCase()}</p>
+        <p className="text-2xl text-white font-bold mt-1">{String(current.plan || 'free').toUpperCase()}</p>
+        {current.status && current.status !== 'active' && (
+          <span className="mt-1 inline-block text-xs px-2 py-0.5 rounded bg-amber-900/40 text-amber-300 border border-amber-700">
+            {current.status}
+          </span>
+        )}
+        {Array.isArray(current.features) && current.features.length > 0 && (
+          <ul className="mt-3 space-y-1 text-sm text-slate-300">
+            {current.features.map((f, i) => (
+              <li key={i} className="flex items-start gap-2">
+                <span className="text-blue-400 mt-0.5">✓</span>
+                <span>{f}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
+      {Object.keys(usage?.resources || {}).length > 0 && (
+        <>
+          <h3 className="text-white font-semibold mb-2">Resource Usage</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
+            {resourceItems.map((item) => renderMetric(usage.resources?.[item.key], item))}
+          </div>
+        </>
+      )}
+
+      <h3 className="text-white font-semibold mb-2">Activity Usage</h3>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
-        {usageItems.map((item) => {
-          const metric = usage?.limits?.[item.key] || {};
-          const used = metric.used || 0;
-          const limit = metric.unlimited ? 'Unlimited' : (metric.limit ?? 0);
-          const ratioPct = Math.round((metric.ratio || 0) * 100);
-          return (
-            <div key={item.key} className="p-3 rounded-lg border border-slate-700 bg-slate-900">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-300">{item.label}</span>
-                <span className="text-slate-400">{used} / {limit}</span>
-              </div>
-              <div className="mt-2 h-2 rounded bg-slate-800 overflow-hidden">
-                <div className="h-full bg-blue-500" style={{ width: `${Math.min(100, ratioPct)}%` }} />
-              </div>
-            </div>
-          );
-        })}
+        {usageItems.map((item) => renderMetric(usage?.limits?.[item.key], item))}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {plans.map((plan) => (
-          <div key={plan.id} className={`bg-slate-900 border rounded-lg p-4 ${String(current.plan).toLowerCase() === String(plan.id).toLowerCase() ? 'border-blue-500 ring-1 ring-blue-500/40' : 'border-slate-700'}`}>
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="text-white font-semibold">{plan.name}</h3>
-              {String(current.plan).toLowerCase() === String(plan.id).toLowerCase() && (
-                <span className="text-[10px] uppercase tracking-wide font-semibold px-2 py-1 rounded bg-blue-600 text-white">Current</span>
+        {plans.map((plan) => {
+          const isCurrent = String(current.plan).toLowerCase() === String(plan.id).toLowerCase();
+          return (
+            <div key={plan.id} className={`bg-slate-900 border rounded-lg p-4 ${isCurrent ? 'border-blue-500 ring-1 ring-blue-500/40' : 'border-slate-700'}`}>
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-white font-semibold">{plan.name}</h3>
+                {isCurrent && (
+                  <span className="text-[10px] uppercase tracking-wide font-semibold px-2 py-1 rounded bg-blue-600 text-white">Current</span>
+                )}
+              </div>
+              <p className="text-slate-300 text-xl mt-1">${plan.priceMonthly ?? Math.floor((plan.price_cents || 0) / 100)}<span className="text-sm text-slate-400">/mo</span></p>
+              {plan.description && <p className="text-slate-400 text-xs mt-1">{plan.description}</p>}
+              {Array.isArray(plan.features) && plan.features.length > 0 && (
+                <ul className="mt-2 space-y-1 text-xs text-slate-400">
+                  {plan.features.map((f, i) => (
+                    <li key={i} className="flex items-start gap-1.5">
+                      <span className="text-slate-500 mt-0.5">•</span>
+                      <span>{f}</span>
+                    </li>
+                  ))}
+                </ul>
               )}
+              <button
+                disabled={loading || isCurrent}
+                onClick={() => handleCheckout(plan.id)}
+                className="mt-4 w-full px-3 py-2 rounded bg-blue-600 hover:bg-blue-500 text-white text-sm disabled:opacity-50"
+              >
+                {isCurrent ? 'Current Plan' : 'Choose Plan'}
+              </button>
             </div>
-            <p className="text-slate-300 text-xl mt-1">${plan.priceMonthly}<span className="text-sm text-slate-400">/mo</span></p>
-            <button
-              disabled={loading || String(current.plan).toLowerCase() === String(plan.id).toLowerCase()}
-              onClick={() => handleCheckout(plan.id)}
-              className="mt-4 w-full px-3 py-2 rounded bg-blue-600 hover:bg-blue-500 text-white text-sm disabled:opacity-50"
-            >
-              {String(current.plan).toLowerCase() === String(plan.id).toLowerCase() ? 'Current Plan' : 'Choose Plan'}
-            </button>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="mt-6">
