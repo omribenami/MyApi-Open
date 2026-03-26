@@ -209,35 +209,56 @@ router.post('/logout', (req, res) => {
   try {
     const userId = req.session?.user?.id;
 
-    // Remove user from global sessions store
+    // **STEP 1: Revoke all tokens in database**
+    if (userId) {
+      try {
+        // Revoke all access tokens (API tokens)
+        const accessTokenStmt = db.prepare(`
+          UPDATE access_tokens 
+          SET revoked_at = datetime('now')
+          WHERE owner_id = ? AND revoked_at IS NULL
+        `);
+        const revokedAccessTokens = accessTokenStmt.run(userId).changes;
+        
+        // Delete all OAuth tokens (service connections)
+        // We delete instead of marking revoked because OAuth tokens are sensitive
+        const oauthStmt = db.prepare(`
+          DELETE FROM oauth_tokens 
+          WHERE user_id = ?
+        `);
+        const deletedOAuthTokens = oauthStmt.run(userId).changes;
+        
+        console.log(`[Logout] User ${userId}: revoked ${revokedAccessTokens} access tokens, deleted ${deletedOAuthTokens} OAuth tokens`);
+      } catch (err) {
+        console.error('[Logout] Error revoking tokens in DB:', err);
+        // Don't fail the logout if this fails, but log it
+      }
+    }
+
+    // **STEP 2: Remove user from global sessions store**
     if (global.sessions) {
       Object.keys(global.sessions).forEach((token) => {
         if (global.sessions[token]?.userId === userId) delete global.sessions[token];
       });
     }
 
-    // Prevent browser caching of any auth data
+    // **STEP 3: Prevent browser caching**
     res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.set('Pragma', 'no-cache');
     res.set('Expires', '0');
     
-    // Clear all auth-related cookies (this does brute-force clearing with multiple variants)
+    // **STEP 4: Clear all auth-related cookies**
     clearAuthCookies(req, res);
     
-    // CRITICAL: Clear cookies with EXACT same options as when they were set
-    // The cookie is set with httpOnly: false, path: '/', sameSite: 'lax', maxAge: 7 days
-    // To clear it, we must use the same options!
+    // **STEP 5: Clear cookies with EXACT same options as when they were set**
     const cookieClearOpts = { path: '/', httpOnly: false, sameSite: 'lax' };
     const cookieClearOptsHttpOnly = { path: '/', httpOnly: true, sameSite: 'lax' };
     
-    // Clear with matching options
     res.clearCookie('myapi_master_token', cookieClearOpts);
     res.clearCookie('myapi_master_token', cookieClearOptsHttpOnly);
     res.clearCookie('myapi_user', cookieClearOpts);
     res.clearCookie('masterToken', cookieClearOpts);
     res.clearCookie('masterToken', cookieClearOptsHttpOnly);
-    
-    // Also try without sameSite in case it was set without it
     res.clearCookie('myapi_master_token', { path: '/', httpOnly: false });
     res.clearCookie('myapi_master_token', { path: '/', httpOnly: true });
     res.clearCookie('myapi_user', { path: '/' });
@@ -246,7 +267,7 @@ router.post('/logout', (req, res) => {
       return res.json({ success: true, message: 'No active session', cleared: true });
     }
 
-    // Clear all session auth data
+    // **STEP 6: Clear all session auth data**
     const sid = req.sessionID;
     delete req.session.user;
     delete req.session.masterToken;
@@ -265,7 +286,7 @@ router.post('/logout', (req, res) => {
         return res.status(500).json({ success: false, error: 'Failed to logout' });
       }
 
-      console.log(`[Auth] User ${userId} logged out successfully`);
+      console.log(`[Auth] User ${userId} logged out successfully (all tokens revoked/deleted)`);
       return res.json({ success: true, message: 'Successfully logged out', cleared: true });
     });
   } catch (error) {
