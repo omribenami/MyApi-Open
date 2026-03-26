@@ -3782,54 +3782,111 @@ app.post("/api/v1/auth/register", (req, res) => {
 
 // BUG-15: Add rate limiting to login endpoint to prevent brute force attacks
 app.post("/api/v1/auth/login", authRateLimit, (req, res) => {
-  const { username, password, totpCode } = req.body;
-  if (!username || !password) return res.status(400).json({ error: "username and password are required" });
-  const user = getUserByUsername(username);
-  if (!user) return res.status(401).json({ error: "Invalid credentials" });
-  const valid = bcrypt.compareSync(password, user.password_hash);
-  if (!valid) {
-    createAuditLog({
-      requesterId: 'unknown',
-      action: 'failed_login',
-      resource: `/auth/login`,
-      scope: 'session',
-      ip: req.ip,
-      details: { username, reason: 'invalid_credentials' }
-    });
-    return res.status(401).json({ error: "Invalid credentials" });
-  }
-
-  if (user.twoFactorEnabled) {
-    if (!totpCode) {
-      return res.status(401).json({ error: "2FA code required", requires2FA: true });
+  try {
+    const { username, email, password, totpCode } = req.body;
+    
+    // Support both username and email login
+    let user = null;
+    if (username) {
+      user = getUserByUsername(username);
+    } else if (email) {
+      user = getUserByEmail(email);
     }
-    const verified = speakeasy.totp.verify({
-      secret: user.totpSecret,
-      encoding: 'base32',
-      token: String(totpCode).replace(/\s+/g, ''),
-      window: 2,
-    });
-    if (!verified) {
-      // Log failed 2FA attempt
+    
+    if (!user) return res.status(401).json({ error: "Invalid email or password" });
+    
+    const valid = bcrypt.compareSync(password, user.password_hash);
+    if (!valid) {
       createAuditLog({
-        requesterId: user.id,
-        action: '2fa_failed_attempt',
-        resource: '/auth/login',
+        requesterId: 'unknown',
+        action: 'failed_login',
+        resource: `/auth/login`,
         scope: 'session',
         ip: req.ip,
-        details: { reason: 'invalid_code' }
+        details: { username: user.username, reason: 'invalid_credentials' }
       });
-      return res.status(401).json({ error: "Invalid 2FA code", requires2FA: true });
+      return res.status(401).json({ error: "Invalid email or password" });
     }
-  }
 
-  // Generate a session token
-  const sessionToken = crypto.randomBytes(32).toString('hex');
-  // Store session in memory (simple approach)
-  if (!global.sessions) global.sessions = {};
-  global.sessions[sessionToken] = { userId: user.id, username: user.username, createdAt: Date.now() };
-  createAuditLog({ requesterId: user.id, action: "user_login", resource: `/users/${user.id}`, scope: "session", ip: req.ip });
-  res.json({ data: { token: sessionToken, user: { id: user.id, username: user.username, displayName: user.displayName, email: user.email, timezone: user.timezone, twoFactorEnabled: Boolean(user.twoFactorEnabled) } } });
+    if (user.twoFactorEnabled) {
+      if (!totpCode) {
+        return res.status(401).json({ error: "2FA code required", requires2FA: true });
+      }
+      const verified = speakeasy.totp.verify({
+        secret: user.totpSecret,
+        encoding: 'base32',
+        token: String(totpCode).replace(/\s+/g, ''),
+        window: 2,
+      });
+      if (!verified) {
+        createAuditLog({
+          requesterId: user.id,
+          action: '2fa_failed_attempt',
+          resource: '/auth/login',
+          scope: 'session',
+          ip: req.ip,
+          details: { reason: 'invalid_code' }
+        });
+        return res.status(401).json({ error: "Invalid 2FA code", requires2FA: true });
+      }
+    }
+
+    // Regenerate session and set user
+    req.session.regenerate((err) => {
+      if (err) {
+        console.error('[login] Session regenerate error:', err);
+        return res.status(500).json({ error: 'Session error' });
+      }
+
+      // Get or create workspace for user
+      const workspace = getOrEnsureUserWorkspace(user.id);
+      
+      // Set session user
+      req.session.user = {
+        id: user.id,
+        username: user.username,
+        displayName: user.displayName || user.username,
+        email: user.email,
+        avatarUrl: user.avatarUrl || null,
+        twoFactorEnabled: Boolean(user.twoFactorEnabled),
+        roles: user.roles || 'user',
+      };
+      
+      // Set current workspace
+      req.session.currentWorkspace = workspace;
+      
+      // Save session
+      req.session.save((saveErr) => {
+        if (saveErr) {
+          console.error('[login] Session save error:', saveErr);
+          return res.status(500).json({ error: 'Session error' });
+        }
+        
+        createAuditLog({ 
+          requesterId: user.id, 
+          action: "user_login", 
+          resource: `/users/${user.id}`, 
+          scope: "session", 
+          ip: req.ip 
+        });
+        
+        res.json({ 
+          success: true,
+          userId: user.id,
+          user: {
+            id: user.id,
+            username: user.username,
+            displayName: user.displayName,
+            email: user.email,
+            twoFactorEnabled: Boolean(user.twoFactorEnabled)
+          }
+        });
+      });
+    });
+  } catch (err) {
+    console.error('[login] Error:', err);
+    res.status(500).json({ error: 'Login error' });
+  }
 });
 
 // Token-based login (for API access tokens)
