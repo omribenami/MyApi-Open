@@ -12,12 +12,22 @@ export default function NotificationBell() {
   useEffect(() => {
     const fetchUnreadCount = async () => {
       try {
-        const res = await fetch('/api/v1/notifications/unread-count', { credentials: 'include' });
-        if (!res.ok) return;
+        const res = await fetch('/api/v1/notifications/unread-count', { 
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          }
+        });
+        if (!res.ok) {
+          console.warn(`Notification count fetch failed: ${res.status}`);
+          return;
+        }
         const data = await res.json();
-        setUnreadCount(data?.data?.unreadCount || 0);
+        setUnreadCount(data?.data?.unreadCount || data?.unreadCount || 0);
       } catch (err) {
         console.error('Error fetching unread count:', err);
+        setUnreadCount(0);
       }
     };
 
@@ -33,12 +43,24 @@ export default function NotificationBell() {
     const fetchNotifications = async () => {
       setLoading(true);
       try {
-        const res = await fetch('/api/v1/notifications?limit=10&offset=0', { credentials: 'include' });
-        if (!res.ok) return;
+        const res = await fetch('/api/v1/notifications?limit=10&offset=0', { 
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          }
+        });
+        if (!res.ok) {
+          console.warn(`Notifications fetch failed: ${res.status}`);
+          setNotifications([]);
+          return;
+        }
         const data = await res.json();
-        setNotifications(data?.data || []);
+        const notificationsList = data?.data || data?.notifications || [];
+        setNotifications(Array.isArray(notificationsList) ? notificationsList : []);
       } catch (err) {
         console.error('Error fetching notifications:', err);
+        setNotifications([]);
       } finally {
         setLoading(false);
       }
