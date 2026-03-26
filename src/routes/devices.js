@@ -164,7 +164,15 @@ router.post('/:device_id/revoke', requireAuth, (req, res) => {
     
     db.revokeDevice(req.params.device_id);
     
-    // Emit notification
+    // Emit notification via dispatcher (respects user preferences)
+    const NotificationDispatcher = require('../lib/notificationDispatcher');
+    const ws = require('../database').getWorkspaces(req.userId);
+    if (ws?.length) {
+      NotificationDispatcher.onDeviceRevoked(ws[0].id, req.userId, device.device_name)
+        .catch(err => console.error('Notification dispatch error:', err));
+    }
+    
+    // Legacy notification (for backward compatibility)
     NotificationService.emitNotification(req.userId, 'device_revoked',
       'Device Access Revoked',
       `Your device "${device.device_name}" has been revoked and can no longer access your account`,
@@ -292,7 +300,15 @@ router.post('/approve/:approval_id', requireAuth, (req, res) => {
       return res.status(500).json({ error: 'Failed to approve device (database error)' });
     }
     
-    // Emit notification
+    // Emit notification via dispatcher (respects user preferences)
+    const NotificationDispatcher = require('../lib/notificationDispatcher');
+    const ws = require('../database').getWorkspaces(req.userId);
+    if (ws?.length) {
+      NotificationDispatcher.onDeviceApproved(ws[0].id, req.userId, finalDeviceName)
+        .catch(err => console.error('Notification dispatch error:', err));
+    }
+    
+    // Legacy notification (for backward compatibility)
     NotificationService.emitNotification(req.userId, 'device_approved',
       'Device Approved',
       `Your device "${finalDeviceName}" has been approved and can now access your account`,

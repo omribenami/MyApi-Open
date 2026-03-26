@@ -208,9 +208,15 @@ function agentApprovalMiddleware(req, res, next) {
  */
 async function sendApprovalNotification(userId, agentName, fingerprint) {
   try {
-    // This would call your notifications service
-    // For now, we'll just log it
-    console.log(`[AgentApproval] Sending approval notification to user ${userId}: ${agentName} requesting access`);
+    // Get user's workspace for notification
+    const { getWorkspaces } = require('../database');
+    const workspaces = getWorkspaces(userId);
+    const workspaceId = workspaces?.[0]?.id || 'default';
+
+    // Dispatch via NotificationDispatcher (respects user preferences)
+    const NotificationDispatcher = require('../lib/notificationDispatcher');
+    NotificationDispatcher.onAgentApprovalRequested(workspaceId, userId, agentName, fingerprint)
+      .catch(err => console.error('[AgentApproval] Notification dispatch error:', err));
 
     // Example integration (pseudo-code):
     // await notificationService.send({
