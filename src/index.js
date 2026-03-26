@@ -3648,56 +3648,32 @@ app.get("/api/v1/gateway/context", authenticate, (req, res) => {
   if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can access gateway context" });
 
   try {
-    // Read USER.md
-    let userProfile = {};
-    if (fs.existsSync(USER_MD_PATH)) {
-      const raw = fs.readFileSync(USER_MD_PATH, "utf8");
-      const lines = raw.split("\n");
-      for (const line of lines) {
-        const match = line.match(/^\s*[-*]\s*\*\*(.+?)\*\*[:\s]*(.+)/);
-        if (match) {
-          const key = match[1].trim().toLowerCase().replace(/\s+/g, "_");
-          userProfile[key] = match[2].trim();
-        }
-      }
-    }
+    // SECURITY: Do NOT expose USER.md via API
+    // User profile should only be available via /auth/me
+    let userProfile = {
+      available: false,
+      reason: "User profile is not exposed via gateway context for security reasons"
+    };
 
-    // Get active persona from database
+    // Get active persona from database (safe metadata only)
     let soulProfile = {};
     const activePersona = getActivePersona();
     if (activePersona) {
-      soulProfile.raw = activePersona.soul_content; // Use active persona's soul_content
-      const lines = activePersona.soul_content.split("\n");
-      for (const line of lines) {
-        const match = line.match(/^\s*[-*]\s*\*\*(.+?)\*\*[:\s]*(.+)/);
-        if (match) {
-          const key = match[1].trim().toLowerCase().replace(/\s+/g, "_");
-          soulProfile[key] = match[2].trim();
-        }
-      }
-    } else {
-      // Fallback to SOUL.md file if no active persona
-      if (fs.existsSync(SOUL_MD_PATH)) {
-        const raw = fs.readFileSync(SOUL_MD_PATH, "utf8");
-        soulProfile.raw = raw;
-        const lines = raw.split("\n");
-        for (const line of lines) {
-          const match = line.match(/^\s*[-*]\s*\*\*(.+?)\*\*[:\s]*(.+)/);
-          if (match) {
-            const key = match[1].trim().toLowerCase().replace(/\s+/g, "_");
-            soulProfile[key] = match[2].trim();
-          }
-        }
-      }
+      // SECURITY: Only expose persona ID and name, not soul_content
+      soulProfile = {
+        id: activePersona.id,
+        name: activePersona.name,
+        active: activePersona.active
+      };
     }
 
-    // Read MEMORY.md
-    const memoryMdPath = path.join(__dirname, "..", "..", "..", "MEMORY.md");
-    let memoryContext = {};
-    if (fs.existsSync(memoryMdPath)) {
-      const raw = fs.readFileSync(memoryMdPath, "utf8");
-      memoryContext.raw = raw; // Include full MEMORY.md
-    }
+    // SECURITY: Do NOT expose MEMORY.md via API
+    // Memory is sensitive context that should only exist locally
+    // Serving it via API exposes all project secrets to anyone with token
+    let memoryContext = {
+      available: false,
+      reason: "Memory context is not exposed via API for security reasons"
+    };
 
     // Get available connectors
     const connectors = getConnectors();
