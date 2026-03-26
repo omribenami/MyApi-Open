@@ -25,6 +25,23 @@ That's normal. The system sent an approval notification to the user. Wait 5 minu
 
 ---
 
+## 🔌 How Services Are Connected
+
+Services can be connected in **multiple ways**:
+
+1. **OAuth** (most common) — User logs in, MyApi stores & auto-refreshes token
+   - Examples: Google, GitHub, Slack, Discord, LinkedIn
+   
+2. **API Key/Token** — Credential stored in vault, MyApi retrieves it for each request
+   - Examples: Stripe, fal, custom services
+   
+3. **Vault Token** — Long-lived credential for non-OAuth services
+   - Examples: Home Assistant, Postquee, self-hosted APIs
+
+**From your perspective:** No difference. Use the proxy the same way for all three.
+
+---
+
 ## 🔑 Authentication
 
 All requests need:

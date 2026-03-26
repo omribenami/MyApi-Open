@@ -14,12 +14,26 @@ The system just sent them a notification asking: *"An AI agent wants access to y
 
 ---
 
+## Service Authentication Methods
+
+Services can be connected in **multiple ways**:
+
+| Method | What It Is | Example |
+|--------|-----------|---------|
+| **OAuth** | User authorized via provider's login | Google, GitHub, Slack |
+| **API Key/Token** | Direct credential stored in vault | Stripe, fal, custom services |
+| **Vault Token** | Long-lived token for any service | Home Assistant, Postquee |
+
+The proxy detects which method is configured and uses it automatically. No difference from your perspective — just make the request.
+
+---
+
 ## After Approval: What You Can Do
 
 Once approved, you have access to these **high-level capabilities**:
 
-### 1. **Service Proxy** — Call any connected OAuth service
-**What it does:** Pass requests to Google, GitHub, Slack, Discord, etc. with the user's token attached.
+### 1. **Service Proxy** — Call any connected service
+**What it does:** Pass requests to any service (OAuth, API key, or vault token) with the appropriate credentials attached. The system handles authentication automatically.
 
 **Endpoint:** `POST /api/v1/services/{service}/proxy`
 
@@ -62,6 +76,20 @@ Authorization: Bearer {token}
 **What it does:** See which services are connected and ready to use.
 
 **Endpoint:** `GET /api/v1/connectors`
+
+---
+
+## Service Types: OAuth, API Keys & Vault Tokens
+
+Services are connected in **one of three ways**:
+
+| Type | How It Works | Examples |
+|------|--------------|----------|
+| **OAuth** | User logs in, token auto-refreshed | Google, GitHub, Slack, Discord |
+| **API Key** | Stored credential in vault | Stripe, fal, custom services |
+| **Vault Token** | Long-lived credential for non-OAuth | Home Assistant, Postquee, custom APIs |
+
+**The proxy works the same way for all three.** You don't need to know which method is used — just make the request.
 
 ---
 

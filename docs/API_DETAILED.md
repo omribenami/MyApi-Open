@@ -33,7 +33,9 @@ Tokens are provided by MyApi and linked to a user account. Each token has:
 
 ## Service Proxy (Main Gateway)
 
-The service proxy is your primary tool for accessing OAuth services.
+The service proxy is your primary tool for accessing **any** service — whether connected via OAuth, API key, or vault token.
+
+The system automatically detects which authentication method is configured and uses it. You just make the request the same way.
 
 ### Endpoint
 
@@ -87,25 +89,49 @@ POST /api/v1/services/{service}/proxy
 }
 ```
 
+### Service Types & Authentication
+
+MyApi services fall into three categories:
+
+#### OAuth Services (User-Authorized)
+Connected via the user logging in through the provider's OAuth flow. Token is auto-refreshed by MyApi.
+
+Examples: Google, GitHub, Slack, Discord, LinkedIn, Twitter, Facebook, TikTok, Notion, etc.
+
+#### API Key Services
+Connected via stored credentials (API key, secret, token) in the vault.
+
+Examples: Stripe, fal (AI inference), custom services
+
+#### Vault Token Services
+Long-lived tokens for custom services. Useful for internal APIs, self-hosted services, or services without standard OAuth.
+
+Examples: Home Assistant, Postquee, custom backends
+
+---
+
 ### Supported Services
 
-| Service | OAuth Provider | Base Endpoint | Common Use |
-|---------|----------------|---------------|-----------|
-| `google` | Google | `https://www.googleapis.com` | Gmail, Calendar, Drive, Sheets, Docs |
-| `github` | GitHub | `https://api.github.com` | Repos, Issues, PRs, Gists |
-| `slack` | Slack | `https://slack.com/api` | Messages, Channels, Users, Files |
-| `discord` | Discord | `https://discord.com/api/v10` | Servers, Channels, Messages, Members |
-| `notion` | Notion | `https://api.notion.com/v1` | Databases, Pages, Blocks |
-| `linkedin` | LinkedIn | `https://api.linkedin.com/v2` | Profile, Posts, Connections |
-| `twitter` | Twitter/X | `https://api.twitter.com/2` | Tweets, Retweets, Followers |
-| `facebook` | Facebook | `https://graph.facebook.com` | Posts, Photos, Events, Pages |
-| `tiktok` | TikTok | `https://open.tiktokapis.com` | Videos, Analytics, Hashtags |
-| `microsoft365` | Microsoft | `https://graph.microsoft.com` | Outlook, OneDrive, Teams |
-| `dropbox` | Dropbox | `https://api.dropboxapi.com/2` | Files, Folders, Sharing |
-| `zoom` | Zoom | `https://api.zoom.us/v2` | Meetings, Recordings, Users |
-| `hubspot` | HubSpot | `https://api.hubapi.com` | Contacts, Companies, Deals |
-| `salesforce` | Salesforce | `https://login.salesforce.com` | Records, Accounts, Opportunities |
-| `jira` | Jira | `https://api.atlassian.com` | Issues, Projects, Workflows |
+| Service | Auth Type | Base Endpoint | Common Use |
+|---------|-----------|---------------|-----------|
+| `google` | OAuth | `https://www.googleapis.com` | Gmail, Calendar, Drive, Sheets, Docs |
+| `github` | OAuth | `https://api.github.com` | Repos, Issues, PRs, Gists |
+| `slack` | OAuth | `https://slack.com/api` | Messages, Channels, Users, Files |
+| `discord` | OAuth | `https://discord.com/api/v10` | Servers, Channels, Messages, Members |
+| `notion` | OAuth | `https://api.notion.com/v1` | Databases, Pages, Blocks |
+| `linkedin` | OAuth | `https://api.linkedin.com/v2` | Profile, Posts, Connections |
+| `twitter` | OAuth | `https://api.twitter.com/2` | Tweets, Retweets, Followers |
+| `facebook` | OAuth | `https://graph.facebook.com` | Posts, Photos, Events, Pages |
+| `tiktok` | OAuth | `https://open.tiktokapis.com` | Videos, Analytics, Hashtags |
+| `microsoft365` | OAuth | `https://graph.microsoft.com` | Outlook, OneDrive, Teams |
+| `dropbox` | OAuth | `https://api.dropboxapi.com/2` | Files, Folders, Sharing |
+| `zoom` | OAuth | `https://api.zoom.us/v2` | Meetings, Recordings, Users |
+| `hubspot` | OAuth | `https://api.hubapi.com` | Contacts, Companies, Deals |
+| `salesforce` | OAuth | `https://login.salesforce.com` | Records, Accounts, Opportunities |
+| `jira` | OAuth | `https://api.atlassian.com` | Issues, Projects, Workflows |
+| `stripe` | API Key | `https://api.stripe.com` | Payments, Charges, Subscriptions |
+| `fal` | API Key | `https://fal.run` | AI inference APIs |
+| `custom_vault_services` | Vault Token | Service-specific | Custom backends, Home Assistant, etc. |
 
 ### Examples
 
@@ -182,6 +208,64 @@ curl -X POST https://www.myapiai.com/api/v1/services/slack/proxy \
     }
   }'
 ```
+
+---
+
+## Vault Tokens (Non-OAuth Services)
+
+For services that don't have OAuth (like Home Assistant, custom APIs, or self-hosted services), MyApi supports **vault tokens** — long-lived credentials stored securely.
+
+### How It Works
+
+1. User adds a service token to their vault (e.g., Home Assistant JWT, Postquee API key)
+2. Token is encrypted and stored in the database
+3. You use the proxy with the service name — MyApi retrieves & decrypts the token
+4. Token is attached to your request automatically
+
+### Example: Home Assistant
+
+```bash
+# Retrieve Home Assistant data
+curl -X POST https://www.myapiai.com/api/v1/services/home-assistant/proxy \
+  -H "Authorization: Bearer myapi_xxx" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "path": "/api/states",
+    "method": "GET",
+    "headers": {
+      "Authorization": "Bearer {HA_TOKEN}"
+    }
+  }'
+
+# Response includes all Home Assistant entity states
+# MyApi automatically handles token encryption/decryption
+```
+
+### Example: Custom API
+
+```bash
+# Call a custom backend service
+curl -X POST https://www.myapiai.com/api/v1/services/my-api/proxy \
+  -H "Authorization: Bearer myapi_xxx" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "path": "/api/users",
+    "method": "GET"
+  }'
+
+# MyApi retrieves the stored token for "my-api" and includes it
+```
+
+### Available Vault Services
+
+Check what vault tokens are connected:
+
+```bash
+GET /api/v1/connectors
+Authorization: Bearer {token}
+```
+
+Response includes all connected services with their auth type and expiration info.
 
 ---
 
