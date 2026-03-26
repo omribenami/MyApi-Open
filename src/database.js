@@ -20,7 +20,11 @@ const {
 // 2) src/data/myapi.db (primary production db)
 // 3) src/db.sqlite (legacy fallback)
 function resolveDbPath() {
-  if (process.env.DB_PATH) return path.resolve(process.env.DB_PATH);
+  if (process.env.DB_PATH) {
+    // Preserve SQLite special paths like ':memory:' without resolving them to file paths
+    if (process.env.DB_PATH === ':memory:') return ':memory:';
+    return path.resolve(process.env.DB_PATH);
+  }
 
   const primary = path.join(__dirname, 'data', 'myapi.db');
   const legacy = path.join(__dirname, 'db.sqlite');
@@ -33,7 +37,9 @@ function resolveDbPath() {
 }
 
 const dbPath = resolveDbPath();
-fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+if (dbPath !== ':memory:') {
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+}
 const db = new Database(dbPath);
 console.log('[Database] Using DB at:', dbPath);
 
@@ -180,7 +186,8 @@ function initDatabase() {
       active INTEGER DEFAULT 0,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
-      owner_id TEXT DEFAULT 'owner'
+      owner_id TEXT DEFAULT 'owner',
+      workspace_id TEXT
     );
 
     CREATE TABLE IF NOT EXISTS oauth_tokens (
@@ -1669,7 +1676,7 @@ function getUsers() {
   const stripeSubscriptionExpr = hasStripeSubscriptionId ? 'stripe_subscription_id' : 'NULL';
   const twoFactorExpr = hasTwoFactorEnabled ? 'COALESCE(two_factor_enabled, 0)' : '0';
 
-  const stmt = db.prepare(`SELECT id, username, display_name as displayName, email, avatar_url as avatarUrl, timezone, created_at as createdAt, status, ${planExpr} as plan, ${stripeStatusExpr} as stripeSubscriptionStatus, ${stripeCustomerExpr} as stripeCustomerId, ${stripeSubscriptionExpr} as stripeSubscriptionId, ${twoFactorExpr} as twoFactorEnabled, CASE WHEN LOWER(COALESCE(${stripeStatusExpr}, '')) IN ('canceled','unpaid','past_due','incomplete_expired') THEN 0 WHEN LOWER(COALESCE(${stripeStatusExpr}, '')) IN ('active','trialing') THEN 1 ELSE 1 END as planActive FROM users ORDER BY created_at DESC`);
+  const stmt = db.prepare(`SELECT id, username, display_name as displayName, email, avatar_url as avatarUrl, timezone, created_at as createdAt, status, ${planExpr} as plan, ${stripeStatusExpr} as stripeSubscriptionStatus, ${stripeCustomerExpr} as stripeCustomerId, ${stripeSubscriptionExpr} as stripeSubscriptionId, ${twoFactorExpr} as twoFactorEnabled, CASE WHEN LOWER(COALESCE(${planExpr}, 'free')) IN ('free','enterprise') THEN 1 WHEN LOWER(COALESCE(${stripeStatusExpr}, '')) IN ('canceled','unpaid','past_due','incomplete_expired') THEN 0 WHEN LOWER(COALESCE(${stripeStatusExpr}, '')) IN ('active','trialing') THEN 1 ELSE 1 END as planActive FROM users ORDER BY created_at DESC`);
   return stmt.all().map((u) => ({ ...u, twoFactorEnabled: Boolean(u.twoFactorEnabled), planActive: Boolean(u.planActive) }));
 }
 
@@ -1712,8 +1719,9 @@ function getUserById(id) {
   const hasTwoFactorEnabled = cols.has('two_factor_enabled');
 
   const stripeStatusExpr = hasStripeStatus ? 'stripe_subscription_status' : 'NULL';
-  const planActiveExpr = `CASE WHEN LOWER(COALESCE(${stripeStatusExpr}, '')) IN ('canceled','unpaid','past_due','incomplete_expired') THEN 0 WHEN LOWER(COALESCE(${stripeStatusExpr}, '')) IN ('active','trialing') THEN 1 ELSE 1 END`;
-  const stmt = db.prepare(`SELECT id, username, display_name as displayName, email, avatar_url as avatarUrl, timezone, ${hasTwoFactorEnabled ? 'COALESCE(two_factor_enabled, 0)' : '0'} as twoFactorEnabled, created_at as createdAt, status, ${hasPlan ? "COALESCE(plan, 'free')" : "'free'"} as plan, ${stripeStatusExpr} as stripeSubscriptionStatus, ${hasStripeCustomerId ? 'stripe_customer_id' : 'NULL'} as stripeCustomerId, ${hasStripeSubscriptionId ? 'stripe_subscription_id' : 'NULL'} as stripeSubscriptionId, ${planActiveExpr} as planActive FROM users WHERE id = ?`);
+  const planExpr = hasPlan ? "COALESCE(plan, 'free')" : "'free'";
+  const planActiveExpr = `CASE WHEN LOWER(COALESCE(${planExpr}, 'free')) IN ('free','enterprise') THEN 1 WHEN LOWER(COALESCE(${stripeStatusExpr}, '')) IN ('canceled','unpaid','past_due','incomplete_expired') THEN 0 WHEN LOWER(COALESCE(${stripeStatusExpr}, '')) IN ('active','trialing') THEN 1 ELSE 1 END`;
+  const stmt = db.prepare(`SELECT id, username, display_name as displayName, email, avatar_url as avatarUrl, timezone, ${hasTwoFactorEnabled ? 'COALESCE(two_factor_enabled, 0)' : '0'} as twoFactorEnabled, created_at as createdAt, status, ${planExpr} as plan, ${stripeStatusExpr} as stripeSubscriptionStatus, ${hasStripeCustomerId ? 'stripe_customer_id' : 'NULL'} as stripeCustomerId, ${hasStripeSubscriptionId ? 'stripe_subscription_id' : 'NULL'} as stripeSubscriptionId, ${planActiveExpr} as planActive FROM users WHERE id = ?`);
   const u = stmt.get(id);
   if (!u) return null;
   return { ...u, twoFactorEnabled: Boolean(u.twoFactorEnabled), planActive: Boolean(u.planActive) };

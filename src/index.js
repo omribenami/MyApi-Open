@@ -3359,7 +3359,7 @@ app.post('/api/v1/billing/checkout', authenticate, async (req, res) => {
       upsertBillingSubscription(workspaceId, {
         stripe_subscription_id: `mock_sub_${Date.now()}`,
         plan_id: selectedPlan,
-        status: selectedPlan === 'free' ? 'active' : 'pending',
+        status: 'active',
       });
       return res.status(200).json({
         provider: 'mock',
