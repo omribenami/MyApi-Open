@@ -12,7 +12,7 @@ function Personas() {
   const [selectedPersona, setSelectedPersona] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingPersona, setEditingPersona] = useState(null);
-  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [, setLoadingDetail] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortBy, setSortBy] = useState('updated_desc');

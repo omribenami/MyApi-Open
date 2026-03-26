@@ -8,17 +8,15 @@ function NotificationDropdown({ open, onClose }) {
   const dropdownRef = useRef(null);
   const {
     notifications,
-    unreadCount,
     isLoading,
     error,
     fetchNotifications,
     markAsRead,
     deleteNotification,
-    addToast,
   } = useNotificationStore();
 
   const [offset, setOffset] = useState(0);
-  const [displayLimit, setDisplayLimit] = useState(15);
+  const [displayLimit] = useState(15);
   const [hasMore, setHasMore] = useState(false);
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
 

@@ -109,10 +109,10 @@ class DeviceFingerprint {
    */
   static verifyFingerprint(currentHash, storedHash) {
     if (!currentHash || !storedHash) return false;
-    return crypto.timingSafeEqual(
-      Buffer.from(currentHash, 'hex'),
-      Buffer.from(storedHash, 'hex')
-    );
+    const a = Buffer.from(String(currentHash));
+    const b = Buffer.from(String(storedHash));
+    if (a.length !== b.length) return false;
+    return crypto.timingSafeEqual(a, b);
   }
 
   /**
@@ -129,7 +129,7 @@ class DeviceFingerprint {
    * @private
    */
   static _parseOS(platform, userAgent) {
-    if (platform && platform !== 'Unknown') return platform;
+    if (platform && platform.toLowerCase() !== 'unknown') return platform;
     
     if (userAgent.includes('Windows')) return 'Windows';
     if (userAgent.includes('Macintosh') || userAgent.includes('Mac OS X')) return 'macOS';

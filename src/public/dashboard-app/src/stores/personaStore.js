@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export const usePersonaStore = create((set, get) => ({
+export const usePersonaStore = create((set) => ({
   personas: [],
   activePersonaId: null,
   isLoading: false,

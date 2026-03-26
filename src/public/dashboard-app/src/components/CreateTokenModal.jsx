@@ -15,7 +15,7 @@ function CreateTokenModal({ isOpen, onClose }) {
 
   const [showToken, setShowToken] = useState(false);
   const [createdToken, setCreatedToken] = useState(null);
-  const [templateFilter, setTemplateFilter] = useState('');
+  const [, setTemplateFilter] = useState('');
   const [searchScopes, setSearchScopes] = useState('');
 
   // Fetch scopes on mount
@@ -48,17 +48,6 @@ function CreateTokenModal({ isOpen, onClose }) {
       ...prev,
       selectedScopes: [],
     }));
-  };
-
-  const getExpirationLabel = (hours) => {
-    if (hours === 0) return 'Never';
-    const days = hours / 24;
-    if (days === 1) return '1 day';
-    if (days === 7) return '7 days';
-    if (days === 30) return '30 days';
-    if (days === 90) return '90 days';
-    if (days === 365) return '1 year';
-    return `${days}d`;
   };
 
   const handleSubmit = async (e) => {

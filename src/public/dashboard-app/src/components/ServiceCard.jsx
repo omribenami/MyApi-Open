@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { formatAuthTypeLabel, getAuthTypeStyle, getStatusMeta } from '../utils/serviceCatalog';
 
-function ServiceCard({ service, onConnect, onRevoke, onDetails, onConfigure, compact = false }) {
+function ServiceCard({ service, onConnect, onRevoke, onDetails, onConfigure }) {
   const statusMeta = getStatusMeta(service.status, service.notConfigured);
 
   const logoFallback = (service.label || service.name || '?').slice(0, 1).toUpperCase();

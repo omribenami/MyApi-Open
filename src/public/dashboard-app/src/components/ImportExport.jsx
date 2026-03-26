@@ -223,7 +223,7 @@ function ImportExport() {
       const a = document.createElement('a');
       a.href = url;
       const contentDisposition = response.headers.get('content-disposition') || '';
-      const fileNameMatch = contentDisposition.match(/filename="?([^\"]+)"?/i);
+      const fileNameMatch = contentDisposition.match(/filename="?([^"]+)"?/i);
       a.download = fileNameMatch?.[1] || `myapi-export-v3-${Date.now()}.zip`;
       document.body.appendChild(a);
       a.click();

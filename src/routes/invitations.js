@@ -113,8 +113,8 @@ router.delete('/:id', (req, res) => {
                   workspace.ownerId === req.user.id ||
                   req.user.email?.toLowerCase() === invitation.email.toLowerCase();
     } else {
-      // Allow deletion if email matches (self decline without auth)
-      canDelete = req.query.email && req.query.email.toLowerCase() === invitation.email.toLowerCase();
+      // Require authentication - unauthenticated deletion is not allowed
+      return res.status(401).json({ error: 'Authentication required to decline invitation' });
     }
 
     if (!canDelete) {

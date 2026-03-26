@@ -43,7 +43,7 @@ export const useSettingsStore = create((set) => ({
 
   // Profile actions
   setProfile: (data) =>
-    set((state) => ({
+    set(() => ({
       profile: data,
       profileDraft: {
         displayName: data.identity?.Name || data.user?.displayName || data.user?.display_name || data.user?.username || '',

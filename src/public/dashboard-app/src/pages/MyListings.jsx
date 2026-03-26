@@ -445,7 +445,7 @@ export default function MyListings() {
         const data = await res.json();
         setListings(data.listings || []);
       }
-    } catch {}
+    } catch { /* ignored */ }
     finally { setLoading(false); }
   }, [masterToken]);
 
@@ -505,7 +505,7 @@ export default function MyListings() {
         const data = await res.json();
         setReviewTarget(data.listing);
       }
-    } catch {}
+    } catch { /* ignored */ }
   }
 
   if (showForm || editing) {

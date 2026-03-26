@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useEffect, useCallback } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useIdentityStore } from '../stores/identityStore';
 
@@ -266,7 +266,6 @@ function PersonaTab() {
   const {
     personas,
     selectedPersonaId,
-    soulContent,
     soulDraft,
     personaLoading,
     personaSaving,

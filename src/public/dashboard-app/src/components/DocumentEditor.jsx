@@ -76,7 +76,6 @@ function DocumentEditor() {
     closeEditor,
     addDocument,
     setSuccess,
-    setError,
   } = useKnowledgeStore();
 
   const [title, setTitle] = useState('');

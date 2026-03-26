@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { usePersonaStore } from '../stores/personaStore';
 
 function EditPersonaModal({ onSuccess }) {
-  const { showEditModal, selectedPersona, closeEditModal, setError } =
+  const { showEditModal, selectedPersona, closeEditModal } =
     usePersonaStore();
 
   const [formData, setFormData] = useState({

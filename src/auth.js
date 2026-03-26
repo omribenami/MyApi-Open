@@ -115,7 +115,7 @@ router.post('/auth/logout', (req, res) => {
     }
   } catch (error) {
     console.error('Logout error:', error);
-    res.status(500).json({ error: 'Logout failed', details: error.message });
+    res.status(500).json({ error: 'Logout failed' });
   }
 });
 

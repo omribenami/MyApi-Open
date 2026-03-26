@@ -27,9 +27,10 @@ class TokenManager {
     const createdAt = Date.now();
     const expiresAt = expiresInDays ? createdAt + (expiresInDays * 24 * 60 * 60 * 1000) : null;
 
+    const tokenPrefix = token.substring(0, 8);
     const stmt = this.db.prepare(`
-      INSERT INTO tokens (id, name, type, token_hash, scope, created_at, expires_at, metadata)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO tokens (id, name, type, token_hash, token_prefix, scope, created_at, expires_at, metadata)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -37,6 +38,7 @@ class TokenManager {
       name,
       type,
       tokenHash,
+      tokenPrefix,
       JSON.stringify(scope),
       createdAt,
       expiresAt,
@@ -58,15 +60,27 @@ class TokenManager {
 
   // Validate a token and return its details
   async validateToken(token) {
-    const stmt = this.db.prepare(`
-      SELECT id, name, type, token_hash, scope, created_at, expires_at, revoked, metadata
-      FROM tokens
-      WHERE revoked = 0
-    `);
-    
-    const tokens = stmt.all();
+    // Optimization: use token prefix for fast lookup to avoid O(n) bcrypt comparisons
+    const tokenPrefix = token.substring(0, 8);
+    let candidates;
+    try {
+      const prefixStmt = this.db.prepare(`
+        SELECT id, name, type, token_hash, scope, created_at, expires_at, revoked, metadata
+        FROM tokens
+        WHERE revoked = 0 AND token_prefix = ?
+      `);
+      candidates = prefixStmt.all(tokenPrefix);
+    } catch (e) {
+      // Fallback: token_prefix column may not exist yet (pre-migration)
+      const fallbackStmt = this.db.prepare(`
+        SELECT id, name, type, token_hash, scope, created_at, expires_at, revoked, metadata
+        FROM tokens
+        WHERE revoked = 0
+      `);
+      candidates = fallbackStmt.all();
+    }
 
-    for (const tokenRecord of tokens) {
+    for (const tokenRecord of candidates) {
       const isValid = await bcrypt.compare(token, tokenRecord.token_hash);
       
       if (isValid) {

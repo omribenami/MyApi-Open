@@ -196,7 +196,7 @@ function Skills() {
     skills, isLoading, error, setSkills, setIsLoading, setError, clearError,
     showCreateModal, openCreateModal, closeCreateModal,
     showEditModal, selectedSkill, openEditModal, closeEditModal,
-    showDetailModal, openDetailModal,
+    openDetailModal,
     showDeleteConfirmation, targetSkillId, openDeleteConfirmation, closeDeleteConfirmation,
   } = useSkillStore();
 
@@ -222,7 +222,7 @@ function Skills() {
           const data = await res.json();
           setDeleteUsage(data?.data || { personas: [], total: 0 });
         }
-      } catch {}
+      } catch { /* ignored */ }
     };
     loadDeleteUsage();
   }, [showDeleteConfirmation, targetSkillId, masterToken]);
@@ -366,7 +366,7 @@ function Skills() {
         await navigator.clipboard.writeText(text);
         return true;
       }
-    } catch {}
+    } catch { /* ignored */ }
 
     try {
       const ta = document.createElement('textarea');

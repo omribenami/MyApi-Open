@@ -498,7 +498,40 @@ const BetterSqlite3 = require('better-sqlite3');
 const BetterSqlite3StoreFactory = require('better-sqlite3-session-store')(session);
 const isProd = process.env.NODE_ENV === 'production';
 
-app.use(helmet({ contentSecurityPolicy: false }));
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      imgSrc: ["'self'", "data:", "https:", "blob:"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
+      connectSrc: ["'self'", "https:", "wss:"],
+      frameSrc: ["'none'"],
+      objectSrc: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+      frameAncestors: ["'none'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true,
+  },
+}));
+app.use((req, res, next) => {
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
+app.use('/api/', (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.setHeader('Pragma', 'no-cache');
+  next();
+});
 
 const devOrigins = ['http://localhost:3001', 'http://127.0.0.1:3001', 'http://localhost:4500', 'http://127.0.0.1:4500', 'http://localhost:5173', 'http://127.0.0.1:5173'];
 const envOrigins = String(process.env.CORS_ORIGIN || '')
@@ -534,7 +567,10 @@ app.use(cors({
 
     // In local/dev environments we may access dashboard via LAN IP, localhost aliases,
     // or temporary tunnels; allow explicit Origin dynamically to avoid blank SPA asset loads.
-    if (!isProd) return callback(null, true);
+    if (!isProd) {
+      console.warn(`[CORS] Allowing non-whitelisted origin in dev mode: ${origin}`);
+      return callback(null, true);
+    }
 
     return callback(new Error('Not allowed by CORS'));
   },
@@ -600,16 +636,31 @@ app.use((req, res, next) => {
                    req.path === '/ping' ||
                    req.path.startsWith('/dashboard/');
 
-  // CRITICAL: Exempt Bearer token (API/agent) requests from global rate limiting
-  // Device approval middleware will handle rate limiting for API tokens
+  // Bearer token (API/agent) requests: apply a separate, higher rate limit
+  // Device approval middleware provides additional rate limiting for API tokens
   const hasBearer = req.headers.authorization?.startsWith('Bearer ') || req.query.token || req.query.api_key;
 
-  if (isExempt || hasBearer) {
+  if (isExempt) {
+    return next();
+  }
+
+  const now = Date.now();
+
+  if (hasBearer) {
+    // Apply a separate rate limit for API token requests (higher ceiling)
+    const bearerKey = `bearer:${req.ip}`;
+    const bearerWindowMs = 60000;
+    const bearerMaxRequests = process.env.NODE_ENV === 'test' ? 5000 : 600; // 600 req/min for API tokens
+    if (!globalRateLimitMap[bearerKey]) globalRateLimitMap[bearerKey] = [];
+    globalRateLimitMap[bearerKey] = globalRateLimitMap[bearerKey].filter(t => now - t < bearerWindowMs);
+    if (globalRateLimitMap[bearerKey].length >= bearerMaxRequests) {
+      return res.status(429).json({ error: 'API rate limit exceeded', retryAfter: 60 });
+    }
+    globalRateLimitMap[bearerKey].push(now);
     return next();
   }
 
   const key = `global:${req.ip}`;
-  const now = Date.now();
   const windowMs = 60000; // 1 minute
   const maxRequests = process.env.NODE_ENV === 'test' ? 1000 : 120; // 120 req/min default
 
@@ -3743,7 +3794,7 @@ app.get("/api/v1/gateway/context", authenticate, (req, res) => {
       scope: req.tokenMeta.scope,
       ip: req.ip,
     });
-    res.status(500).json({ error: "Failed to assemble gateway context", details: error.message });
+    res.status(500).json({ error: "Failed to assemble gateway context" });
   }
 });
 
@@ -4163,14 +4214,16 @@ app.post('/api/v1/auth/oauth-signup/complete', async (req, res) => {
   delete req.session.oauth_signup;
 
   res.cookie('myapi_master_token', rawMasterToken, {
-    httpOnly: false,
+    httpOnly: false, // Required: JS reads this to set Authorization header
+    secure: secureCookie,
     path: '/',
     maxAge: 7 * 24 * 60 * 60 * 1000,
     sameSite: 'lax'
   });
 
   res.cookie('myapi_user', JSON.stringify(req.session.user), {
-    httpOnly: false,
+    httpOnly: false, // Required: JS reads user info for dashboard display
+    secure: secureCookie,
     path: '/',
     maxAge: 7 * 24 * 60 * 60 * 1000,
     sameSite: 'lax'
@@ -5174,6 +5227,14 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
       }
     }
 
+    // When forcePrompt is explicitly disabled, suppress adapter default prompt params
+    if (explicitForcePrompt === false) {
+      if (service === 'google') {
+        runtimeAuthParams.prompt = null;
+        runtimeAuthParams.max_age = null;
+      }
+    }
+
     if (service === 'twitter') {
       const { codeChallenge } = buildPkcePairFromState(state);
       runtimeAuthParams.code_challenge = codeChallenge;
@@ -5610,7 +5671,8 @@ app.get([
     // Set master token as a persistent cookie so the dashboard can use it
     if (masterToken) {
       res.cookie('myapi_master_token', masterToken, {
-        httpOnly: false, // Allow JS to read it
+        httpOnly: false, // Required: JS reads this to set Authorization header
+        secure: secureCookie,
         path: '/',
         maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
         sameSite: 'lax'
@@ -5620,7 +5682,8 @@ app.get([
     // Also set user info for quick access (use session.user which is already set)
     if (req.session.user) {
       res.cookie('myapi_user', JSON.stringify(req.session.user), {
-        httpOnly: false,
+        httpOnly: false, // Required: JS reads user info for dashboard display
+        secure: secureCookie,
         path: '/',
         maxAge: 7 * 24 * 60 * 60 * 1000,
         sameSite: 'lax'

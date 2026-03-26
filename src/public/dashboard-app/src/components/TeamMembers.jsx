@@ -10,7 +10,6 @@ import './TeamMembers.css';
 const TeamMembers = ({
   members,
   currentUserId,
-  isOwner,
   canManage,
   workspaceId,
   masterToken,

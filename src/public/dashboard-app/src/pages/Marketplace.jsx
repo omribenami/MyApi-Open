@@ -126,11 +126,6 @@ function RatingWidget({ listingId, onRated, masterToken }) {
 }
 
 function ListingModal({ listing, onClose, onInstall, onRated, masterToken, initiallyInstalled = false }) {
-  // Defensive: validate listing object
-  if (!listing || typeof listing !== 'object') {
-    return null;
-  }
-
   const listingId = listing?.id;
   const listingType = listing?.type;
 
@@ -238,6 +233,11 @@ function ListingModal({ listing, onClose, onInstall, onRated, masterToken, initi
   const detailContent = detail?.content;
   const detailTags = Array.isArray(detail?.tags) ? detail.tags : [];
   const detailRatings = Array.isArray(detail?.ratings) ? detail.ratings : [];
+
+  // Defensive: validate listing object (after hooks to comply with rules-of-hooks)
+  if (!listing || typeof listing !== 'object') {
+    return null;
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -410,11 +410,6 @@ function ListingCard({
   onQuickInstall,
   quickInstalling = false,
 }) {
-  // Defensive: ensure listing is valid
-  if (!listing || typeof listing !== 'object') {
-    return null;
-  }
-
   const listingId = listing?.id;
   const listingType = listing?.type || 'unknown';
   const listingTitle = listing?.title || '(Untitled)';
@@ -426,8 +421,13 @@ function ListingCard({
   const listingRatingCount = listing?.ratingCount || 0;
   const listingTags = listing?.tags || [];
 
-  const scanner = listingType === 'skill' ? extractScanner(listing.content) : null;
+  const scanner = listingType === 'skill' ? extractScanner(listing?.content) : null;
   const [quickError, setQuickError] = useState('');
+
+  // Defensive: ensure listing is valid (after hooks to comply with rules-of-hooks)
+  if (!listing || typeof listing !== 'object') {
+    return null;
+  }
 
   async function handleQuickInstall(e) {
     e.stopPropagation();
