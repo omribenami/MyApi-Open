@@ -209,27 +209,38 @@ router.post('/logout', (req, res) => {
   try {
     const userId = req.session?.user?.id;
 
+    // Remove user from global sessions store
     if (global.sessions) {
       Object.keys(global.sessions).forEach((token) => {
         if (global.sessions[token]?.userId === userId) delete global.sessions[token];
       });
     }
 
+    // Clear all auth-related cookies (multiple domain/path combinations)
     clearAuthCookies(req, res);
+    
+    // CRITICAL: Explicitly clear the master token cookies with common settings
+    res.clearCookie('myapi_master_token', { path: '/', httpOnly: true, secure: false, sameSite: 'lax' });
+    res.clearCookie('myapi_master_token', { path: '/', httpOnly: true, secure: true, sameSite: 'none' });
+    res.clearCookie('myapi_master_token', { path: '/' });
+    
+    // Prevent browser caching of any auth data
     res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.set('Pragma', 'no-cache');
     res.set('Expires', '0');
 
     if (!req.session) {
-      return res.json({ success: true, message: 'No active session' });
+      return res.json({ success: true, message: 'No active session', cleared: true });
     }
 
+    // Clear all session auth data
     const sid = req.sessionID;
     delete req.session.user;
     delete req.session.masterToken;
     delete req.session.masterTokenRaw;
     delete req.session.masterTokenId;
     delete req.session.pending_2fa_user;
+    delete req.session.currentWorkspace;
 
     req.session.destroy((err) => {
       if (typeof req.sessionStore?.destroy === 'function' && sid) {
@@ -241,7 +252,8 @@ router.post('/logout', (req, res) => {
         return res.status(500).json({ success: false, error: 'Failed to logout' });
       }
 
-      return res.json({ success: true, message: 'Successfully logged out' });
+      console.log(`[Auth] User ${userId} logged out successfully`);
+      return res.json({ success: true, message: 'Successfully logged out', cleared: true });
     });
   } catch (error) {
     console.error('Logout error:', error);

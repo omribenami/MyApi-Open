@@ -220,17 +220,46 @@ export const useAuthStore = create((set, get) => ({
       return;
     }
     setLogoutInProgress(true);
+    
+    // Clear all client-side auth artifacts FIRST
     clearAuthArtifacts();
+    
+    // Clear workspace data
+    try {
+      localStorage.removeItem('currentWorkspace');
+      localStorage.removeItem('workspaces');
+      sessionStorage.clear();
+    } catch {}
+    
+    // Clear recovery flags
     try {
       sessionStorage.removeItem('__myapi_corruption_recovery_ts__');
       sessionStorage.removeItem('__myapi_corruption_recovery_count__');
     } catch {}
 
-    set({ user: null, masterToken: null, sessionToken: null, isAuthenticated: false, isInitialized: true, error: null });
+    // Update store immediately (so UI reflects logout)
+    set({ 
+      user: null, 
+      masterToken: null, 
+      sessionToken: null, 
+      isAuthenticated: false, 
+      isInitialized: true, 
+      error: null,
+      workspaces: [],
+      currentWorkspace: null
+    });
 
+    // Notify backend to destroy session
     fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'include' })
+      .then(res => res.json())
       .catch(() => {})
-      .finally(() => setLogoutInProgress(false));
+      .finally(() => {
+        setLogoutInProgress(false);
+        // Force redirect to login page
+        if (window.location.pathname.startsWith('/dashboard')) {
+          window.location.href = '/';
+        }
+      });
   },
 
   startOAuthFlow: () => set({ isLoading: true }),
