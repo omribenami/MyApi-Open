@@ -75,10 +75,25 @@ export default function NotificationBell() {
         method: 'POST',
         credentials: 'include'
       });
+      // Optimistically update UI
       setNotifications(prev =>
         prev.map(n => n.id === notificationId ? { ...n, isRead: true } : n)
       );
-      setUnreadCount(Math.max(0, unreadCount - 1));
+      const newCount = Math.max(0, unreadCount - 1);
+      setUnreadCount(newCount);
+      
+      // Refetch count to ensure sync (in case multiple notifications marked)
+      try {
+        const res = await fetch('/api/v1/notifications/unread-count', { 
+          credentials: 'include'
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setUnreadCount(data?.data?.unreadCount || data?.unreadCount || 0);
+        }
+      } catch (e) {
+        console.warn('Failed to refetch unread count:', e);
+      }
     } catch (err) {
       console.error('Error marking notification as read:', err);
     }
@@ -91,8 +106,39 @@ export default function NotificationBell() {
         credentials: 'include'
       });
       setNotifications(prev => prev.filter(n => n.id !== notificationId));
+      
+      // Refetch count to update badge
+      try {
+        const res = await fetch('/api/v1/notifications/unread-count', { 
+          credentials: 'include'
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setUnreadCount(data?.data?.unreadCount || data?.unreadCount || 0);
+        }
+      } catch (e) {
+        console.warn('Failed to refetch unread count:', e);
+      }
     } catch (err) {
       console.error('Error deleting notification:', err);
+    }
+  };
+
+  const handleMarkAllAsRead = async () => {
+    try {
+      const res = await fetch('/api/v1/notifications/read-all', {
+        method: 'POST',
+        credentials: 'include'
+      });
+      if (res.ok) {
+        // Mark all notifications as read locally
+        setNotifications(prev =>
+          prev.map(n => ({ ...n, isRead: true }))
+        );
+        setUnreadCount(0);
+      }
+    } catch (err) {
+      console.error('Error marking all as read:', err);
     }
   };
 
@@ -111,14 +157,18 @@ export default function NotificationBell() {
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="relative inline-flex items-center justify-center w-10 h-10 text-slate-300 rounded-lg hover:bg-slate-800 transition-colors"
-        title="Notifications"
+        className={`relative inline-flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-200 ${
+          unreadCount > 0
+            ? 'text-amber-400 bg-amber-400/10 hover:bg-amber-400/20'
+            : 'text-slate-300 hover:bg-slate-800'
+        }`}
+        title={unreadCount > 0 ? `${unreadCount} unread notification${unreadCount !== 1 ? 's' : ''}` : 'Notifications'}
       >
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
         </svg>
         {unreadCount > 0 && (
-          <span className="absolute top-0 right-0 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white transform translate-x-1/2 -translate-y-1/2 bg-red-600 rounded-full">
+          <span className="absolute top-0 right-0 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white transform translate-x-1/2 -translate-y-1/2 bg-red-600 rounded-full animate-pulse">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
@@ -126,8 +176,19 @@ export default function NotificationBell() {
 
       {isOpen && (
         <div className="absolute right-0 mt-2 w-80 bg-slate-900 border border-slate-700 rounded-lg shadow-xl z-50">
-          <div className="p-4 border-b border-slate-700">
-            <h3 className="text-sm font-semibold text-white">Notifications</h3>
+          <div className="p-4 border-b border-slate-700 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-white">
+              Notifications {unreadCount > 0 && <span className="text-red-400">({unreadCount})</span>}
+            </h3>
+            {unreadCount > 0 && (
+              <button
+                onClick={handleMarkAllAsRead}
+                className="text-xs font-medium text-blue-400 hover:text-blue-300 transition-colors"
+                title="Mark all as read"
+              >
+                Mark all as read
+              </button>
+            )}
           </div>
 
           <div className="max-h-96 overflow-y-auto">
