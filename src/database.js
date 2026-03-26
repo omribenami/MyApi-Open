@@ -1669,7 +1669,7 @@ function getUsers() {
   const stripeSubscriptionExpr = hasStripeSubscriptionId ? 'stripe_subscription_id' : 'NULL';
   const twoFactorExpr = hasTwoFactorEnabled ? 'COALESCE(two_factor_enabled, 0)' : '0';
 
-  const stmt = db.prepare(`SELECT id, username, display_name as displayName, email, avatar_url as avatarUrl, timezone, created_at as createdAt, status, ${planExpr} as plan, ${stripeStatusExpr} as stripeSubscriptionStatus, ${stripeCustomerExpr} as stripeCustomerId, ${stripeSubscriptionExpr} as stripeSubscriptionId, ${twoFactorExpr} as twoFactorEnabled, CASE WHEN ${planExpr} IN ('free','enterprise') THEN 1 WHEN LOWER(COALESCE(${stripeStatusExpr}, '')) IN ('active','trialing') THEN 1 ELSE 0 END as planActive FROM users ORDER BY created_at DESC`);
+  const stmt = db.prepare(`SELECT id, username, display_name as displayName, email, avatar_url as avatarUrl, timezone, created_at as createdAt, status, ${planExpr} as plan, ${stripeStatusExpr} as stripeSubscriptionStatus, ${stripeCustomerExpr} as stripeCustomerId, ${stripeSubscriptionExpr} as stripeSubscriptionId, ${twoFactorExpr} as twoFactorEnabled, CASE WHEN LOWER(COALESCE(${stripeStatusExpr}, '')) IN ('canceled','unpaid','past_due','incomplete_expired') THEN 0 WHEN LOWER(COALESCE(${stripeStatusExpr}, '')) IN ('active','trialing') THEN 1 ELSE 1 END as planActive FROM users ORDER BY created_at DESC`);
   return stmt.all().map((u) => ({ ...u, twoFactorEnabled: Boolean(u.twoFactorEnabled), planActive: Boolean(u.planActive) }));
 }
 

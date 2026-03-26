@@ -18,6 +18,11 @@ export async function apiRequest(path, options = {}) {
   };
   if (masterToken) headers.Authorization = `Bearer ${masterToken}`;
 
+  try {
+    const currentWorkspaceId = localStorage.getItem('currentWorkspace');
+    if (currentWorkspaceId) headers['X-Workspace-ID'] = currentWorkspaceId;
+  } catch { /* ignore storage errors */ }
+
   const fetchOptions = { ...options, headers, credentials: options.credentials || 'include' };
   if (options.body && typeof options.body === 'object') fetchOptions.body = JSON.stringify(options.body);
 
