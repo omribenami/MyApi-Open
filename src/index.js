@@ -1211,6 +1211,9 @@ const authRateLimit = rateLimit(60000, process.env.NODE_ENV === 'test' ? 1000 : 
 // BUG-15: Stricter rate limit for 2FA/TOTP attempts (3 attempts per minute to prevent brute force)
 const twoFactorRateLimit = rateLimit(60000, process.env.NODE_ENV === 'test' ? 1000 : 3, '2fa-attempts');
 
+// Rate limit for dashboard SPA shell requests (file-system access)
+const dashboardRateLimit = rateLimit(60000, process.env.NODE_ENV === 'test' ? 1000 : 60, 'dashboard-spa');
+
 // Security: DB integrity check on startup - detect direct tampering
 function checkDbIntegrity() {
   try {
@@ -3445,7 +3448,7 @@ app.get('/api/v1/billing/invoices', (req, res) => {
   });
 });
 
-app.get('/api/v1/billing/usage', (req, res) => {
+app.get('/api/v1/billing/usage', planFeatureRateLimit, (req, res) => {
   const workspaceId = getRequestWorkspaceId(req);
   if (!workspaceId) return res.status(400).json({ error: 'Workspace context is required' });
 
@@ -8113,9 +8116,9 @@ const sendDashboardIndex = (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'dist', 'index.html'));
 };
 
-app.get('/dashboard', sendDashboardIndex);
-app.get('/dashboard/', sendDashboardIndex);
-app.get('/dashboard/*path', (req, res) => {
+app.get('/dashboard', dashboardRateLimit, sendDashboardIndex);
+app.get('/dashboard/', dashboardRateLimit, sendDashboardIndex);
+app.get('/dashboard/*path', dashboardRateLimit, (req, res) => {
   const relPath = req.path.replace(/^\/dashboard\/?/, '');
   const looksLikeStaticAsset = relPath.startsWith('assets/') || relPath === 'vite.svg' || /\.[a-z0-9]+$/i.test(relPath);
 
