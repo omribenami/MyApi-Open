@@ -3916,8 +3916,10 @@ app.get("/api/v1/auth/me", (req, res) => {
       success: true,
       ...normalizedUser,
       user: normalizedUser,
-      bootstrap: req.session.masterTokenRaw && req.session.masterTokenId
-        ? { masterToken: req.session.masterTokenRaw, tokenId: req.session.masterTokenId }
+      // SECURITY: Do NOT expose masterToken in plaintext
+      // The frontend should use httpOnly session cookie, not bearer token
+      bootstrap: req.session.masterTokenId
+        ? { tokenId: req.session.masterTokenId, hasToken: true }
         : null,
     });
   }
@@ -3941,8 +3943,9 @@ app.get("/api/v1/auth/me", (req, res) => {
         success: true,
         user: normalizedUser,
         data: normalizedUser,
-        bootstrap: session.masterTokenRaw && session.masterTokenId
-          ? { masterToken: session.masterTokenRaw, tokenId: session.masterTokenId }
+        // SECURITY: Do NOT expose masterToken in plaintext
+        bootstrap: session.masterTokenId
+          ? { tokenId: session.masterTokenId, hasToken: true }
           : null,
       });
     }
