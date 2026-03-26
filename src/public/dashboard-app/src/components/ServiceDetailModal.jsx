@@ -22,7 +22,7 @@ function ServiceDetailModal({ service, onClose, onConnect, onRevoke }) {
         });
         const data = await response.json();
         if (response.ok) setEmailStatus(data);
-      } catch (_) {
+      } catch {
         // Best-effort status load.
       }
     };

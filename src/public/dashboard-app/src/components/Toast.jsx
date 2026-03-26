@@ -1,6 +1,6 @@
 import React from 'react';
 
-function Toast({ id, message, type = 'info', onClose }) {
+function Toast({ message, type = 'info', onClose }) {
   const bgColor = {
     success: 'bg-green-500',
     error: 'bg-red-500',

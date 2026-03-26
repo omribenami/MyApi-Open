@@ -53,14 +53,14 @@ const InviteModal = ({ workspaceId, onInvitationSent, onClose }) => {
         try {
           const data = await response.json();
           errorMsg = data.error || errorMsg;
-        } catch (e) {
+        } catch {
           // If response is not JSON, use status text
           errorMsg = response.statusText || errorMsg;
         }
         throw new Error(errorMsg);
       }
 
-      const data = await response.json();
+      await response.json();
       setSuccess(true);
       setEmail('');
       setRole('member');

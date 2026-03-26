@@ -30,7 +30,7 @@ function DeleteDocumentConfirmation() {
           const data = await res.json();
           setUsage(data?.data || { direct: [], viaSkills: [], total: 0 });
         }
-      } catch {}
+      } catch { /* ignored */ }
     };
     loadUsage();
   }, [showDeleteConfirmation, targetDocumentId, masterToken]);

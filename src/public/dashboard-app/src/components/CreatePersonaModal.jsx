@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { usePersonaStore } from '../stores/personaStore';
 
 function CreatePersonaModal({ onSuccess }) {
-  const { showCreateModal, closeCreateModal, setError, clearError } =
+  const { showCreateModal, closeCreateModal, setError } =
     usePersonaStore();
 
   const [formData, setFormData] = useState({
