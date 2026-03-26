@@ -267,28 +267,44 @@ router.post('/logout', (req, res) => {
       return res.json({ success: true, message: 'No active session', cleared: true });
     }
 
-    // **STEP 6: Clear all session auth data**
+    // **STEP 6: Invalidate session BEFORE destroying it**
+    // Mark session as invalid so if it's recreated from cookie, it won't have user data
     const sid = req.sessionID;
-    delete req.session.user;
-    delete req.session.masterToken;
-    delete req.session.masterTokenRaw;
-    delete req.session.masterTokenId;
-    delete req.session.pending_2fa_user;
-    delete req.session.currentWorkspace;
+    
+    // First, immediately clear user from session (synchronously)
+    if (req.session) {
+      delete req.session.user;
+      delete req.session.masterToken;
+      delete req.session.masterTokenRaw;
+      delete req.session.masterTokenId;
+      delete req.session.pending_2fa_user;
+      delete req.session.currentWorkspace;
+      
+      // Save the cleared session first
+      req.session.save((saveErr) => {
+        if (saveErr) {
+          console.error('Error saving cleared session:', saveErr);
+        }
+        
+        // THEN destroy the session entirely
+        req.session.destroy((err) => {
+          if (typeof req.sessionStore?.destroy === 'function' && sid) {
+            try { req.sessionStore.destroy(sid, () => {}); } catch (_) {}
+          }
 
-    req.session.destroy((err) => {
-      if (typeof req.sessionStore?.destroy === 'function' && sid) {
-        try { req.sessionStore.destroy(sid, () => {}); } catch (_) {}
-      }
+          if (err) {
+            console.error('Session destruction error:', err);
+            return res.status(500).json({ success: false, error: 'Failed to logout' });
+          }
 
-      if (err) {
-        console.error('Session destruction error:', err);
-        return res.status(500).json({ success: false, error: 'Failed to logout' });
-      }
-
-      console.log(`[Auth] User ${userId} logged out successfully (all tokens revoked/deleted)`);
+          console.log(`[Auth] User ${userId} logged out successfully (all tokens revoked/deleted)`);
+          return res.json({ success: true, message: 'Successfully logged out', cleared: true });
+        });
+      });
+    } else {
+      console.log(`[Auth] No session to destroy`);
       return res.json({ success: true, message: 'Successfully logged out', cleared: true });
-    });
+    }
   } catch (error) {
     console.error('Logout error:', error);
     res.status(500).json({ success: false, error: 'Logout failed', details: error.message });

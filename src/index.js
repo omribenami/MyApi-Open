@@ -1335,7 +1335,7 @@ function authenticate(req, res, next) {
   // CRITICAL: If session exists, use it EXCLUSIVELY. Never fall through to Bearer token auth.
   // Device approval only applies to API tokens, not session auth.
   // Sessions are from OAuth logins (browser), which are already protected by session cookies + CORS.
-  if (req.session && req.session.user) {
+  if (req.session && req.session.user && req.session.user.id) {
     req.user = req.session.user;
     req.authType = 'session';
     // session users are treated as "full" for MVP; we will add RBAC later.
@@ -1346,6 +1346,11 @@ function authenticate(req, res, next) {
     // Device approval is only for API token/agent access.
     // Session auth is complete and secure - return immediately.
     return next();
+  }
+  
+  // If session exists but has NO user, clear it (was logged out)
+  if (req.session && !req.session.user) {
+    req.session.destroy(() => {});
   }
 
   // 2) Bearer token auth (agents) or Query parameter (for basic AI fetch tools)
