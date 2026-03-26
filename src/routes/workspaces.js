@@ -600,15 +600,17 @@ router.post('/:id/invitations', (req, res) => {
       // Don't fail the API call if email queueing fails
     }
 
-    // Trigger notification for the invitee (when they log in, they'll see it)
+    // Trigger notification for the invitee
     const NotificationDispatcher = require('../lib/notificationDispatcher');
     try {
       const inviteeUser = getUserByEmail(email);
+      const inviter = getUserById(req.user.id);
+      const inviterName = inviter?.displayName || inviter?.email || 'A team member';
       if (inviteeUser) {
         NotificationDispatcher.onTeamInvitationReceived(
           workspace.id,
           inviteeUser.id,
-          req.user.id,
+          inviterName,
           workspace.name,
           role,
           invitation.id

@@ -1,375 +1,231 @@
 /**
  * Notification Dispatcher
  * Wires system events to notification creation
+ * Respects user notification preferences
  * Used internally by event handlers throughout the app
  */
 
-const { createNotification, queueNotificationForDelivery, getOrCreateNotificationSettings } = require('../database');
+const Database = require('better-sqlite3');
+const { createNotification, queueNotificationForDelivery } = require('../database');
+
+const db = new Database('./src/data/myapi.db');
 
 class NotificationDispatcher {
   /**
-   * Check if in-app notifications are enabled for a user
+   * Notification type definitions with default channels
    */
-  static isInAppEnabled(workspaceId, userId) {
+  static notificationTypes = {
+    'oauth_connected': { channels: ['in-app', 'email'], category: 'services', severity: 'info' },
+    'oauth_disconnected': { channels: ['in-app', 'email'], category: 'services', severity: 'warning' },
+    'skill_installed': { channels: ['in-app'], category: 'skills', severity: 'info' },
+    'skill_removed': { channels: ['in-app'], category: 'skills', severity: 'info' },
+    'team_invite_sent': { channels: ['in-app'], category: 'team', severity: 'info' },
+    'team_invite_accepted': { channels: ['in-app'], category: 'team', severity: 'info' },
+    'team_invitation': { channels: ['in-app', 'email'], category: 'team', severity: 'info' },
+    'security_new_device': { channels: ['in-app', 'email'], category: 'security', severity: 'warning' },
+    'security_2fa_enabled': { channels: ['in-app'], category: 'security', severity: 'info' },
+    'security_2fa_disabled': { channels: ['in-app', 'email'], category: 'security', severity: 'warning' },
+    'security_device_approved': { channels: ['in-app'], category: 'security', severity: 'info' },
+    'security_device_revoked': { channels: ['in-app', 'email'], category: 'security', severity: 'warning' },
+    'billing_quota_warning': { channels: ['in-app', 'email'], category: 'billing', severity: 'warning' },
+    'billing_quota_exceeded': { channels: ['in-app', 'email'], category: 'billing', severity: 'critical' },
+    'billing_subscription_upgraded': { channels: ['in-app'], category: 'billing', severity: 'info' },
+    'billing_failure': { channels: ['in-app', 'email'], category: 'billing', severity: 'critical' },
+    'agent_approval_request': { channels: ['in-app', 'email'], category: 'agents', severity: 'info' }
+  };
+
+  /**
+   * Get user's notification preferences for specific channels
+   */
+  static getUserChannelPreferences(workspaceId, userId, channels) {
     try {
-      const settings = getOrCreateNotificationSettings(workspaceId, userId);
-      return settings.inApp?.enabled === 1;
+      if (!channels || channels.length === 0) return {};
+
+      const placeholders = channels.map(() => '?').join(',');
+      const preferences = db.prepare(`
+        SELECT channel, enabled FROM notification_preferences
+        WHERE workspace_id = ? AND user_id = ? AND channel IN (${placeholders})
+      `).all(workspaceId, userId, ...channels);
+
+      // Build result: map each channel to enabled status
+      const result = {};
+      channels.forEach(channel => {
+        const pref = preferences.find(p => p.channel === channel);
+        result[channel] = pref ? pref.enabled === 1 : true; // Default to enabled
+      });
+
+      return result;
     } catch (err) {
-      // Default to enabled if we can't check preferences
-      return true;
+      console.error('[NotificationDispatcher] Error fetching preferences:', err);
+      // Fallback: enable all requested channels
+      const result = {};
+      channels.forEach(ch => result[ch] = true);
+      return result;
     }
   }
 
   /**
-   * OAuth service connected event
+   * Send notification respecting user preferences
    */
+  static async dispatch(workspaceId, userId, notificationType, title, message, data = {}) {
+    try {
+      const notifConfig = this.notificationTypes[notificationType];
+      if (!notifConfig) {
+        console.warn(`[NotificationDispatcher] Unknown notification type: ${notificationType}`);
+        return;
+      }
+
+      // Get user preferences for default channels
+      const enabledChannels = this.getUserChannelPreferences(workspaceId, userId, notifConfig.channels);
+      const channelsToUse = Object.keys(enabledChannels).filter(ch => enabledChannels[ch]);
+
+      if (channelsToUse.length === 0) {
+        console.log(`[NotificationDispatcher] Notification suppressed for ${notificationType}: all channels disabled`);
+        return;
+      }
+
+      // Create notification
+      const notificationId = createNotification(
+        workspaceId,
+        userId,
+        notificationType,
+        title,
+        message,
+        { ...data, timestamp: Date.now() }
+      );
+
+      // Queue for delivery on enabled channels
+      queueNotificationForDelivery(notificationId, channelsToUse);
+
+      console.log(`[NotificationDispatcher] ${notificationType} → user ${userId} on [${channelsToUse.join(', ')}]`);
+      return notificationId;
+    } catch (err) {
+      console.error(`[NotificationDispatcher] Error dispatching ${notificationType}:`, err);
+    }
+  }
+
+  // ========== SERVICE EVENTS ==========
+
   static async onServiceConnected(workspaceId, userId, serviceName) {
-    try {
-      if (!this.isInAppEnabled(workspaceId, userId)) return;
-      const title = `${serviceName.charAt(0).toUpperCase() + serviceName.slice(1)} Connected`;
-      const message = `Your ${serviceName} account has been successfully linked to MyApi`;
-      const notificationId = createNotification(
-        workspaceId,
-        userId,
-        'oauth_connected',
-        title,
-        message,
-        { serviceName, timestamp: Date.now() }
-      );
-      queueNotificationForDelivery(notificationId, ['in-app']);
-      console.log(`[Notification] Service connected: ${serviceName} for user ${userId}`);
-    } catch (err) {
-      console.error('Error creating service_connected notification:', err);
-    }
+    const title = `${serviceName.charAt(0).toUpperCase() + serviceName.slice(1)} Connected`;
+    const message = `Your ${serviceName} account has been successfully linked to MyApi`;
+    return this.dispatch(workspaceId, userId, 'oauth_connected', title, message, { serviceName });
   }
 
-  /**
-   * OAuth service disconnected event
-   */
   static async onServiceDisconnected(workspaceId, userId, serviceName) {
-    try {
-      if (!this.isInAppEnabled(workspaceId, userId)) return;
-      const title = `${serviceName.charAt(0).toUpperCase() + serviceName.slice(1)} Disconnected`;
-      const message = `Your ${serviceName} account has been removed from MyApi`;
-      const notificationId = createNotification(
-        workspaceId,
-        userId,
-        'oauth_disconnected',
-        title,
-        message,
-        { serviceName, timestamp: Date.now() }
-      );
-      queueNotificationForDelivery(notificationId, ['in-app']);
-      console.log(`[Notification] Service disconnected: ${serviceName} for user ${userId}`);
-    } catch (err) {
-      console.error('Error creating service_disconnected notification:', err);
-    }
+    const title = `${serviceName.charAt(0).toUpperCase() + serviceName.slice(1)} Disconnected`;
+    const message = `Your ${serviceName} account has been removed from MyApi`;
+    return this.dispatch(workspaceId, userId, 'oauth_disconnected', title, message, { serviceName });
   }
 
-  /**
-   * Skill installed event
-   */
+  // ========== SKILL EVENTS ==========
+
   static async onSkillInstalled(workspaceId, userId, skillName, skillId) {
-    try {
-      if (!this.isInAppEnabled(workspaceId, userId)) return;
-      const title = `Skill Installed: ${skillName}`;
-      const message = `You've successfully installed the "${skillName}" skill`;
-      const notificationId = createNotification(
-        workspaceId,
-        userId,
-        'skill_installed',
-        title,
-        message,
-        { skillId, skillName, timestamp: Date.now() }
-      );
-      queueNotificationForDelivery(notificationId, ['in-app']);
-      console.log(`[Notification] Skill installed: ${skillName} for user ${userId}`);
-    } catch (err) {
-      console.error('Error creating skill_installed notification:', err);
-    }
+    const title = `Skill Installed: ${skillName}`;
+    const message = `You've successfully installed the "${skillName}" skill`;
+    return this.dispatch(workspaceId, userId, 'skill_installed', title, message, { skillId, skillName });
   }
 
-  /**
-   * Skill removed event
-   */
   static async onSkillRemoved(workspaceId, userId, skillName, skillId) {
-    try {
-      if (!this.isInAppEnabled(workspaceId, userId)) return;
-      const title = `Skill Removed: ${skillName}`;
-      const message = `The "${skillName}" skill has been removed from your workspace`;
-      const notificationId = createNotification(
-        workspaceId,
-        userId,
-        'skill_removed',
-        title,
-        message,
-        { skillId, skillName, timestamp: Date.now() }
-      );
-      queueNotificationForDelivery(notificationId, ['in-app']);
-      console.log(`[Notification] Skill removed: ${skillName} for user ${userId}`);
-    } catch (err) {
-      console.error('Error creating skill_removed notification:', err);
-    }
+    const title = `Skill Removed: ${skillName}`;
+    const message = `The "${skillName}" skill has been removed from your workspace`;
+    return this.dispatch(workspaceId, userId, 'skill_removed', title, message, { skillId, skillName });
   }
 
-  /**
-   * Team member invited event
-   */
+  // ========== TEAM EVENTS ==========
+
   static async onTeamMemberInvited(workspaceId, userId, invitedEmail, role) {
-    try {
-      if (!this.isInAppEnabled(workspaceId, userId)) return;
-      const title = `Team Member Invited`;
-      const message = `You've invited ${invitedEmail} to join as ${role}`;
-      const notificationId = createNotification(
-        workspaceId,
-        userId,
-        'team_invite_sent',
-        title,
-        message,
-        { email: invitedEmail, role, timestamp: Date.now() }
-      );
-      queueNotificationForDelivery(notificationId, ['in-app']);
-      console.log(`[Notification] Team member invited: ${invitedEmail}`);
-    } catch (err) {
-      console.error('Error creating team_invite_sent notification:', err);
-    }
+    const title = `Team Member Invited`;
+    const message = `You've invited ${invitedEmail} to join as ${role}`;
+    return this.dispatch(workspaceId, userId, 'team_invite_sent', title, message, { email: invitedEmail, role });
   }
 
-  /**
-   * Team invitation accepted event
-   */
   static async onTeamInvitationAccepted(workspaceId, userId, memberName) {
-    try {
-      if (!this.isInAppEnabled(workspaceId, userId)) return;
-      const title = `Team Invitation Accepted`;
-      const message = `${memberName} has accepted your team invitation`;
-      const notificationId = createNotification(
-        workspaceId,
-        userId,
-        'team_invite_accepted',
-        title,
-        message,
-        { memberName, timestamp: Date.now() }
-      );
-      queueNotificationForDelivery(notificationId, ['in-app']);
-      console.log(`[Notification] Team invitation accepted by: ${memberName}`);
-    } catch (err) {
-      console.error('Error creating team_invite_accepted notification:', err);
-    }
+    const title = `Team Invitation Accepted`;
+    const message = `${memberName} has accepted your team invitation`;
+    return this.dispatch(workspaceId, userId, 'team_invite_accepted', title, message, { memberName });
   }
 
-  /**
-   * Login from new device event
-   */
+  static async onTeamInvitationReceived(workspaceId, userId, inviterName, workspaceName, role, invitationId) {
+    const title = `Team Invitation: ${workspaceName}`;
+    const message = `${inviterName} invited you to join "${workspaceName}" as a ${role}`;
+    return this.dispatch(workspaceId, userId, 'team_invitation', title, message, { 
+      workspaceName, 
+      inviterName,
+      role, 
+      invitationId,
+      actionUrl: `/accept-invite/${invitationId}`
+    });
+  }
+
+  // ========== SECURITY EVENTS ==========
+
   static async onNewDeviceLogin(workspaceId, userId, deviceName, ip) {
-    try {
-      if (!this.isInAppEnabled(workspaceId, userId)) return;
-      const title = `New Login from ${deviceName}`;
-      const message = `Your account was accessed from a new device at ${ip}`;
-      const notificationId = createNotification(
-        workspaceId,
-        userId,
-        'security_new_device',
-        title,
-        message,
-        { deviceName, ip, timestamp: Date.now() }
-      );
-      queueNotificationForDelivery(notificationId, ['in-app']);
-      console.log(`[Notification] New device login: ${deviceName} from ${ip}`);
-    } catch (err) {
-      console.error('Error creating security_new_device notification:', err);
-    }
+    const title = `New Login from ${deviceName}`;
+    const message = `Your account was accessed from a new device at ${ip}`;
+    return this.dispatch(workspaceId, userId, 'security_new_device', title, message, { deviceName, ip });
   }
 
-  /**
-   * 2FA disabled event
-   */
-  static async on2FADisabled(workspaceId, userId) {
-    try {
-      if (!this.isInAppEnabled(workspaceId, userId)) return;
-      const title = `Two-Factor Authentication Disabled`;
-      const message = `Your account's 2FA has been disabled. Your account is less secure.`;
-      const notificationId = createNotification(
-        workspaceId,
-        userId,
-        'security_2fa_disabled',
-        title,
-        message,
-        { timestamp: Date.now() }
-      );
-      queueNotificationForDelivery(notificationId, ['in-app']);
-      console.log(`[Notification] 2FA disabled for user ${userId}`);
-    } catch (err) {
-      console.error('Error creating security_2fa_disabled notification:', err);
-    }
-  }
-
-  /**
-   * 2FA enabled event
-   */
   static async on2FAEnabled(workspaceId, userId) {
-    try {
-      if (!this.isInAppEnabled(workspaceId, userId)) return;
-      const title = `Two-Factor Authentication Enabled`;
-      const message = `Your account is now protected with 2FA`;
-      const notificationId = createNotification(
-        workspaceId,
-        userId,
-        'security_2fa_enabled',
-        title,
-        message,
-        { timestamp: Date.now() }
-      );
-      queueNotificationForDelivery(notificationId, ['in-app']);
-      console.log(`[Notification] 2FA enabled for user ${userId}`);
-    } catch (err) {
-      console.error('Error creating security_2fa_enabled notification:', err);
-    }
+    const title = `Two-Factor Authentication Enabled`;
+    const message = `Your account is now protected with 2FA`;
+    return this.dispatch(workspaceId, userId, 'security_2fa_enabled', title, message, {});
   }
 
-  /**
-   * API quota warning event
-   */
-  static async onQuotaWarning(workspaceId, userId, percentageUsed) {
-    try {
-      if (!this.isInAppEnabled(workspaceId, userId)) return;
-      const title = `API Quota Warning`;
-      const message = `You've used ${percentageUsed}% of your monthly API quota`;
-      const notificationId = createNotification(
-        workspaceId,
-        userId,
-        'billing_quota_warning',
-        title,
-        message,
-        { percentageUsed, timestamp: Date.now() }
-      );
-      queueNotificationForDelivery(notificationId, ['in-app']);
-      console.log(`[Notification] Quota warning: ${percentageUsed}% used`);
-    } catch (err) {
-      console.error('Error creating billing_quota_warning notification:', err);
-    }
+  static async on2FADisabled(workspaceId, userId) {
+    const title = `Two-Factor Authentication Disabled`;
+    const message = `Your account's 2FA has been disabled. Your account is less secure.`;
+    return this.dispatch(workspaceId, userId, 'security_2fa_disabled', title, message, {});
   }
 
-  /**
-   * Subscription upgraded event
-   */
-  static async onSubscriptionUpgraded(workspaceId, userId, planName) {
-    try {
-      if (!this.isInAppEnabled(workspaceId, userId)) return;
-      const title = `Subscription Upgraded`;
-      const message = `You've successfully upgraded to the ${planName} plan`;
-      const notificationId = createNotification(
-        workspaceId,
-        userId,
-        'billing_subscription_upgraded',
-        title,
-        message,
-        { planName, timestamp: Date.now() }
-      );
-      queueNotificationForDelivery(notificationId, ['in-app']);
-      console.log(`[Notification] Subscription upgraded to: ${planName}`);
-    } catch (err) {
-      console.error('Error creating billing_subscription_upgraded notification:', err);
-    }
-  }
-
-  /**
-   * Billing failure event
-   */
-  static async onBillingFailure(workspaceId, userId, reason) {
-    try {
-      if (!this.isInAppEnabled(workspaceId, userId)) return;
-      const title = `Billing Failed`;
-      const message = `There was an issue processing your payment: ${reason}`;
-      const notificationId = createNotification(
-        workspaceId,
-        userId,
-        'billing_failure',
-        title,
-        message,
-        { reason, timestamp: Date.now() }
-      );
-      queueNotificationForDelivery(notificationId, ['in-app']);
-      console.log(`[Notification] Billing failure: ${reason}`);
-    } catch (err) {
-      console.error('Error creating billing_failure notification:', err);
-    }
-  }
-
-  /**
-   * Device approved event
-   */
   static async onDeviceApproved(workspaceId, userId, deviceName) {
-    try {
-      if (!this.isInAppEnabled(workspaceId, userId)) return;
-      const title = `Device Approved`;
-      const message = `Your device "${deviceName}" has been approved and can now access your account`;
-      const notificationId = createNotification(
-        workspaceId,
-        userId,
-        'security_device_approved',
-        title,
-        message,
-        { deviceName, timestamp: Date.now() }
-      );
-      queueNotificationForDelivery(notificationId, ['in-app']);
-      console.log(`[Notification] Device approved: ${deviceName}`);
-    } catch (err) {
-      console.error('Error creating security_device_approved notification:', err);
-    }
+    const title = `Device Approved`;
+    const message = `Your device "${deviceName}" has been approved and can now access your account`;
+    return this.dispatch(workspaceId, userId, 'security_device_approved', title, message, { deviceName });
   }
 
-  /**
-   * Device revoked event
-   */
   static async onDeviceRevoked(workspaceId, userId, deviceName) {
-    try {
-      if (!this.isInAppEnabled(workspaceId, userId)) return;
-      const title = `Device Revoked`;
-      const message = `Your device "${deviceName}" has been removed and can no longer access your account`;
-      const notificationId = createNotification(
-        workspaceId,
-        userId,
-        'security_device_revoked',
-        title,
-        message,
-        { deviceName, timestamp: Date.now() }
-      );
-      queueNotificationForDelivery(notificationId, ['in-app']);
-      console.log(`[Notification] Device revoked: ${deviceName}`);
-    } catch (err) {
-      console.error('Error creating security_device_revoked notification:', err);
-    }
+    const title = `Device Revoked`;
+    const message = `Your device "${deviceName}" has been removed and can no longer access your account`;
+    return this.dispatch(workspaceId, userId, 'security_device_revoked', title, message, { deviceName });
   }
 
-  /**
-   * Team invitation received event
-   */
-  static async onTeamInvitationReceived(workspaceId, userId, invitedByUserId, workspaceName, role, invitationId) {
-    try {
-      if (!this.isInAppEnabled(workspaceId, userId)) return;
-      const title = `Team Invitation: ${workspaceName}`;
-      const message = `You've been invited to join "${workspaceName}" as a ${role}`;
-      const notificationId = createNotification(
-        workspaceId,
-        userId,
-        'team_invitation',
-        title,
-        message,
-        { 
-          workspaceName, 
-          role, 
-          invitationId,
-          invitedByUserId,
-          actionUrl: `/accept-invite/${invitationId}`,
-          timestamp: Date.now() 
-        }
-      );
-      queueNotificationForDelivery(notificationId, ['in-app']);
-      console.log(`[Notification] Team invitation: ${workspaceName} (${role}) for user ${userId}`);
-    } catch (err) {
-      console.error('Error creating team_invitation notification:', err);
-    }
+  // ========== BILLING EVENTS ==========
+
+  static async onQuotaWarning(workspaceId, userId, percentageUsed) {
+    const title = `API Quota Warning`;
+    const message = `You've used ${percentageUsed}% of your monthly API quota`;
+    return this.dispatch(workspaceId, userId, 'billing_quota_warning', title, message, { percentageUsed });
+  }
+
+  static async onQuotaExceeded(workspaceId, userId) {
+    const title = `API Quota Exceeded`;
+    const message = `You've exceeded your monthly API quota. Requests are being rate-limited.`;
+    return this.dispatch(workspaceId, userId, 'billing_quota_exceeded', title, message, {});
+  }
+
+  static async onSubscriptionUpgraded(workspaceId, userId, planName) {
+    const title = `Subscription Upgraded`;
+    const message = `You've successfully upgraded to the ${planName} plan`;
+    return this.dispatch(workspaceId, userId, 'billing_subscription_upgraded', title, message, { planName });
+  }
+
+  static async onBillingFailure(workspaceId, userId, reason) {
+    const title = `Billing Failed`;
+    const message = `There was an issue processing your payment: ${reason}`;
+    return this.dispatch(workspaceId, userId, 'billing_failure', title, message, { reason });
+  }
+
+  // ========== AGENT EVENTS ==========
+
+  static async onAgentApprovalRequested(workspaceId, userId, agentName, agentFingerprint) {
+    const title = `Agent Access Request`;
+    const message = `${agentName} is requesting access to your MyApi services`;
+    return this.dispatch(workspaceId, userId, 'agent_approval_request', title, message, { 
+      agentName, 
+      agentFingerprint,
+      actionUrl: `/dashboard/approvals/${agentFingerprint}`
+    });
   }
 }
 
