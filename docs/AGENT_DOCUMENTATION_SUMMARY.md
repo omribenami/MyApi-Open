@@ -100,8 +100,23 @@ Agent can now access Gmail, Calendar, GitHub, etc.
 
 ## 🎯 Key Concepts
 
+### Service Authentication Methods
+
+MyApi supports **three ways** to connect services:
+
+1. **OAuth** — User logs in, token auto-refreshed
+   - Examples: Google, GitHub, Slack, Discord, LinkedIn
+   
+2. **API Key/Token** — Credential stored & retrieved from vault
+   - Examples: Stripe, fal (AI inference)
+   
+3. **Vault Token** — Long-lived credential for non-OAuth services
+   - Examples: Home Assistant, Postquee, custom APIs
+
+The proxy works **the same way for all three** — agents don't need to know which auth method is used.
+
 ### Service Proxy
-The main tool. Agents use this to call any OAuth service:
+The main tool. Agents use this to call **any** service (OAuth, API key, or vault token):
 
 ```bash
 POST /api/v1/services/{service}/proxy
