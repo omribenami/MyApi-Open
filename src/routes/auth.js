@@ -224,19 +224,23 @@ router.post('/logout', (req, res) => {
     // Clear all auth-related cookies (this does brute-force clearing with multiple variants)
     clearAuthCookies(req, res);
     
-    // ADDITIONAL: Explicitly clear with httpOnly flag (server-side only, can't be deleted by JS)
-    const clearOpts = [
-      { path: '/', httpOnly: true },
-      { path: '/', httpOnly: false },
-      { path: '/' },
-      { path: '/', domain: req.hostname },
-      { path: '/', domain: '.' + req.hostname },
-    ];
+    // CRITICAL: Clear cookies with EXACT same options as when they were set
+    // The cookie is set with httpOnly: false, path: '/', sameSite: 'lax', maxAge: 7 days
+    // To clear it, we must use the same options!
+    const cookieClearOpts = { path: '/', httpOnly: false, sameSite: 'lax' };
+    const cookieClearOptsHttpOnly = { path: '/', httpOnly: true, sameSite: 'lax' };
     
-    for (const opts of clearOpts) {
-      res.clearCookie('myapi_master_token', opts);
-      res.clearCookie('masterToken', opts);
-    }
+    // Clear with matching options
+    res.clearCookie('myapi_master_token', cookieClearOpts);
+    res.clearCookie('myapi_master_token', cookieClearOptsHttpOnly);
+    res.clearCookie('myapi_user', cookieClearOpts);
+    res.clearCookie('masterToken', cookieClearOpts);
+    res.clearCookie('masterToken', cookieClearOptsHttpOnly);
+    
+    // Also try without sameSite in case it was set without it
+    res.clearCookie('myapi_master_token', { path: '/', httpOnly: false });
+    res.clearCookie('myapi_master_token', { path: '/', httpOnly: true });
+    res.clearCookie('myapi_user', { path: '/' });
 
     if (!req.session) {
       return res.json({ success: true, message: 'No active session', cleared: true });
