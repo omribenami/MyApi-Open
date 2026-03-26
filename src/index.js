@@ -1347,14 +1347,9 @@ function authenticate(req, res, next) {
     // Session auth is complete and secure - return immediately.
     return next();
   }
-  
-  // If session exists but has NO user, clear it (was logged out)
-  if (req.session && !req.session.user) {
-    req.session.destroy(() => {});
-  }
 
   // 2) Bearer token auth (agents) or Query parameter (for basic AI fetch tools)
-  // ONLY used if there's NO session.
+  // ONLY used if there's NO active session.
   let rawToken = null;
   const authHeader = req.headers["authorization"] || "";
   const parts = authHeader.split(" ");
