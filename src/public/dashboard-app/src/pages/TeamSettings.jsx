@@ -12,7 +12,7 @@ import './TeamSettings.css';
 
 const TeamSettings = () => {
   const { user, masterToken } = useAuthStore();
-  const [workspaces, setWorkspaces] = useState([]);
+  const [, setWorkspaces] = useState([]);
   const [currentWorkspace, setCurrentWorkspace] = useState(null);
   const [members, setMembers] = useState([]);
   const [invitations, setInvitations] = useState([]);

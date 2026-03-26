@@ -35,7 +35,11 @@ class GoogleAdapter {
       prompt: 'consent', // always force consent screen so Google returns a fresh refresh_token
       ...(runtimeAuthParams || {}),
     };
-    return `${GOOGLE_AUTH_URL}?${querystring.stringify(params)}`;
+    // Filter out null/undefined values to allow runtime overrides to suppress defaults
+    const cleanParams = Object.fromEntries(
+      Object.entries(params).filter(([, v]) => v != null)
+    );
+    return `${GOOGLE_AUTH_URL}?${querystring.stringify(cleanParams)}`;
   }
 
   async exchangeCodeForToken(code) {

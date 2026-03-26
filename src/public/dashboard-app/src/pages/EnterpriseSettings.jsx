@@ -21,7 +21,7 @@ function EnterpriseSettings() {
     },
   });
   const [rbacRoles, setRbacRoles] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const effectivePlan = String(user?.plan || 'free').toLowerCase();

@@ -133,7 +133,7 @@ function ServiceConnectors() {
         setSelectedServiceDetail(normalizeService(merged, { status: service.status, enabled: !service.notConfigured }));
         return;
       }
-    } catch (_) {
+    } catch {
       // Fallback to currently-loaded service data.
     }
 

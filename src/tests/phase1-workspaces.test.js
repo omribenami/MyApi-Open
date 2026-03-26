@@ -19,7 +19,8 @@ const {
   declineWorkspaceInvitation,
   getUserWorkspaceInvitations,
   createUser,
-  cleanupExpiredInvitations
+  cleanupExpiredInvitations,
+  initDatabase
 } = require('../database');
 
 describe('Phase 1: Workspaces & Multi-Tenancy', () => {
@@ -27,6 +28,7 @@ describe('Phase 1: Workspaces & Multi-Tenancy', () => {
   const timestamp = Date.now();
 
   beforeAll(() => {
+    initDatabase();
     // Create test users with unique names to avoid UNIQUE constraint failures
     user1 = createUser(`testuser1_${timestamp}`, 'Test User 1', `test1_${timestamp}@example.com`, 'UTC', 'password123');
     user2 = createUser(`testuser2_${timestamp}`, 'Test User 2', `test2_${timestamp}@example.com`, 'UTC', 'password123');

@@ -510,7 +510,7 @@ function SecuritySection() {
           const data = await approvedRes.json();
           setApprovedDevices(data.devices || []);
         }
-      } catch (_) {}
+      } catch { /* ignored */ }
       
       try {
         const pendingRes = await apiRequest('/devices/approvals/pending');
@@ -518,7 +518,7 @@ function SecuritySection() {
           const data = await pendingRes.json();
           setPendingApprovals(data.approvals || []);
         }
-      } catch (_) {}
+      } catch { /* ignored */ }
     } catch (err) {
       console.error('Error approving device:', err);
       setDeviceError(`Failed to approve device: ${err.message}`);
@@ -547,7 +547,7 @@ function SecuritySection() {
           const data = await pendingRes.json();
           setPendingApprovals(data.approvals || []);
         }
-      } catch (_) {}
+      } catch { /* ignored */ }
     } catch (err) {
       console.error('Error denying device:', err);
       setDeviceError(`Failed to deny device: ${err.message}`);
@@ -1223,7 +1223,7 @@ function PrivacySection() {
       if (!res.ok) return;
       const data = await res.json();
       setRetentionPolicies(data?.data || []);
-    } catch (_) {
+    } catch {
       // ignore UI-only fetch errors
     }
   };

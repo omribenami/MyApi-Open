@@ -4,15 +4,17 @@ const db = require('../database');
 
 describe('Device Approval System', () => {
   // Test data
-  const testUserId = 'test-user-' + Date.now();
+  let testUserId;
   const testTokenId = 'test-token-' + Date.now();
   const testIp = '192.168.1.100';
 
   // Create test user and token before tests
   beforeAll(() => {
+    db.initDatabase();
     // Ensure test user exists
     try {
-      db.createUser(testUserId, 'testuser' + Date.now(), 'Test User');
+      const user = db.createUser('testuser' + Date.now(), 'Test User', 'device@example.com', 'UTC', 'password123');
+      testUserId = user.id;
     } catch (e) {
       // User might already exist
     }

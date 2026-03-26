@@ -5170,6 +5170,14 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
       }
     }
 
+    // When forcePrompt is explicitly disabled, suppress adapter default prompt params
+    if (explicitForcePrompt === false) {
+      if (service === 'google') {
+        runtimeAuthParams.prompt = null;
+        runtimeAuthParams.max_age = null;
+      }
+    }
+
     if (service === 'twitter') {
       const { codeChallenge } = buildPkcePairFromState(state);
       runtimeAuthParams.code_challenge = codeChallenge;

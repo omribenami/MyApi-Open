@@ -10,7 +10,7 @@ const db = require('../database');
 const DeviceFingerprint = require('../utils/deviceFingerprint');
 
 describe('Integration Tests - Device Approval Flow', () => {
-  const testUserId = 'test-user-' + Date.now();
+  let testUserId;
   const testTokenId = 'test-token-' + Date.now();
   const testToken = 'Bearer test-token-' + Date.now();
   let mockReq;
@@ -18,7 +18,8 @@ describe('Integration Tests - Device Approval Flow', () => {
   // Setup before tests
   beforeAll(() => {
     try {
-      db.createUser(testUserId, 'testuser' + Date.now(), 'Test User');
+      const user = db.createUser('testuser' + Date.now(), 'Test User', 'integ@example.com', 'UTC', 'password123');
+      testUserId = user.id;
     } catch (e) {
       // User might exist
     }

@@ -11,7 +11,7 @@ const DeviceManagement = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [renameMode, setRenameMode] = useState(null);
-  const [renamingDeviceId, setRenamingDeviceId] = useState(null);
+  const [, setRenamingDeviceId] = useState(null);
   const [newDeviceName, setNewDeviceName] = useState('');
   const [approvalMessage, setApprovalMessage] = useState('');
 
@@ -72,7 +72,7 @@ const DeviceManagement = () => {
     try {
       await apiClient.post(`/devices/${deviceId}/revoke`);
       setApprovalMessage({ type: 'success', text: 'Device revoked successfully' });
-      loadDeviceData();
+      loadAllDeviceData();
       setTimeout(() => setApprovalMessage(''), 3000);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to revoke device');
@@ -92,7 +92,7 @@ const DeviceManagement = () => {
       setRenameMode(null);
       setRenamingDeviceId(null);
       setNewDeviceName('');
-      loadDeviceData();
+      loadAllDeviceData();
       setTimeout(() => setApprovalMessage(''), 3000);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to rename device');
@@ -106,7 +106,7 @@ const DeviceManagement = () => {
       });
       setApprovalMessage({ type: 'success', text: 'Device approved successfully' });
       setNewDeviceName('');
-      loadDeviceData();
+      loadAllDeviceData();
       setTimeout(() => setApprovalMessage(''), 3000);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to approve device');
@@ -119,7 +119,7 @@ const DeviceManagement = () => {
         reason: 'Device approval denied by user',
       });
       setApprovalMessage({ type: 'success', text: 'Device approval denied' });
-      loadDeviceData();
+      loadAllDeviceData();
       setTimeout(() => setApprovalMessage(''), 3000);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to deny device');
@@ -355,7 +355,7 @@ const DeviceManagement = () => {
               <p className="p-6 text-slate-400">No device activity yet</p>
             ) : (
               <div className="space-y-4">
-                {activityLog.map((event, idx) => (
+                {activityLog.map((event) => (
                   <div key={event.id} className="bg-slate-900 border border-slate-700/50 rounded-lg overflow-hidden">
                     <div className="flex gap-4 p-4">
                       <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg ${

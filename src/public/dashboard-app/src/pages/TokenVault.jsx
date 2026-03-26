@@ -123,7 +123,7 @@ function TokenVault() {
         const errData = await response.json().catch(() => ({}));
         setError(errData.error || `Failed to ${editingToken ? 'update' : 'add'} token`);
       }
-    } catch (err) {
+    } catch {
       setError(`Error ${editingToken ? 'updating' : 'adding'} token`);
     }
   };
@@ -183,7 +183,7 @@ function TokenVault() {
         await navigator.clipboard.writeText(text);
         return true;
       }
-    } catch {}
+    } catch { /* ignored */ }
 
     try {
       const ta = document.createElement('textarea');

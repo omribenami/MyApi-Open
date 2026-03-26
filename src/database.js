@@ -4128,7 +4128,7 @@ function createPendingApproval(tokenId, userId, fingerprintHash, deviceInfo, ipA
   return id;
 }
 
-function getPendingApprovals(userId, tokenId = null) {
+function getPendingApprovals(userId, tokenId = null, limit = null) {
   let query = `
     SELECT * FROM device_approvals_pending 
     WHERE user_id = ? AND status = 'pending' AND expires_at > datetime('now')
@@ -4141,6 +4141,10 @@ function getPendingApprovals(userId, tokenId = null) {
   }
   
   query += ' ORDER BY created_at DESC';
+  if (limit) {
+    query += ' LIMIT ?';
+    params.push(limit);
+  }
   return db.prepare(query).all(...params);
 }
 
