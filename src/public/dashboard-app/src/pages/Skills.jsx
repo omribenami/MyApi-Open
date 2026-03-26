@@ -227,12 +227,20 @@ function Skills() {
     loadDeleteUsage();
   }, [showDeleteConfirmation, targetSkillId, masterToken]);
 
+  const workspaceHeaders = () => {
+    const h = {};
+    if (masterToken) h.Authorization = `Bearer ${masterToken}`;
+    const wsId = currentWorkspace?.id || localStorage.getItem('currentWorkspace');
+    if (wsId) h['X-Workspace-ID'] = wsId;
+    return h;
+  };
+
   const fetchSkills = async () => {
     setIsLoading(true);
     setFetchError(null);
     try {
       const res = await fetch('/api/v1/skills', {
-        headers: masterToken ? { Authorization: `Bearer ${masterToken}` } : {},
+        headers: workspaceHeaders(),
         credentials: 'include',
       });
       if (!res.ok) throw new Error('Failed to fetch skills');
@@ -248,7 +256,7 @@ function Skills() {
   const handleCreate = async (formData) => {
     const res = await fetch('/api/v1/skills', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${masterToken}`, 'Content-Type': 'application/json' },
+      headers: { ...workspaceHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify(formData),
     });
     if (!res.ok) {
@@ -261,7 +269,7 @@ function Skills() {
   const handleUpdate = async (formData) => {
     const res = await fetch(`/api/v1/skills/${selectedSkill.id}`, {
       method: 'PUT',
-      headers: { Authorization: `Bearer ${masterToken}`, 'Content-Type': 'application/json' },
+      headers: { ...workspaceHeaders(), 'Content-Type': 'application/json' },
       body: JSON.stringify(formData),
     });
     if (!res.ok) {
@@ -274,7 +282,7 @@ function Skills() {
   const handleDelete = async () => {
     const res = await fetch(`/api/v1/skills/${targetSkillId}`, {
       method: 'DELETE',
-      headers: { Authorization: `Bearer ${masterToken}` },
+      headers: workspaceHeaders(),
     });
     if (!res.ok) {
       const err = await res.json();
@@ -286,7 +294,7 @@ function Skills() {
   const handleActivate = async (skillId) => {
     const res = await fetch(`/api/v1/skills/${skillId}/activate`, {
       method: 'PUT',
-      headers: { Authorization: `Bearer ${masterToken}` },
+      headers: workspaceHeaders(),
     });
     if (res.ok) fetchSkills();
   };

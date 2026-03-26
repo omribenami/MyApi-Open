@@ -3399,7 +3399,7 @@ app.post('/api/v1/billing/checkout', authenticate, async (req, res) => {
   }
 });
 
-app.get('/api/v1/billing/current', (req, res) => {
+app.get('/api/v1/billing/current', authenticate, (req, res) => {
   const workspaceId = getRequestWorkspaceId(req);
   if (!workspaceId) return res.status(400).json({ error: 'Workspace context is required' });
 
@@ -3448,7 +3448,7 @@ app.get('/api/v1/billing/current', (req, res) => {
   });
 });
 
-app.get('/api/v1/billing/invoices', (req, res) => {
+app.get('/api/v1/billing/invoices', authenticate, (req, res) => {
   const workspaceId = getRequestWorkspaceId(req);
   if (!workspaceId) return res.status(400).json({ error: 'Workspace context is required' });
   const invoices = listInvoicesByWorkspace(workspaceId, Number(req.query.limit || 50));
@@ -3464,7 +3464,7 @@ app.get('/api/v1/billing/invoices', (req, res) => {
   });
 });
 
-app.get('/api/v1/billing/usage', billingUsageRateLimit, (req, res) => {
+app.get('/api/v1/billing/usage', billingUsageRateLimit, authenticate, (req, res) => {
   const workspaceId = getRequestWorkspaceId(req);
   if (!workspaceId) return res.status(400).json({ error: 'Workspace context is required' });
 
@@ -4484,6 +4484,17 @@ app.put('/api/v1/users/:id/plan', planFeatureRateLimit, authenticate, (req, res)
     const { plan } = req.body || {};
     const user = updateUserPlan(id, plan);
     if (!user) return res.status(404).json({ error: 'User not found' });
+
+    // Sync workspace subscription so billing/current reflects the new plan
+    const userWorkspaces = getWorkspaces(id);
+    const normalizedPlan = String(plan).toLowerCase().trim();
+    for (const ws of (userWorkspaces || [])) {
+      upsertBillingSubscription(ws.id, {
+        stripe_subscription_id: `admin_set_${Date.now()}`,
+        plan_id: normalizedPlan,
+        status: 'active',
+      });
+    }
 
     createAuditLog({
       requesterId: req.tokenMeta.tokenId,
@@ -8130,19 +8141,14 @@ const sendDashboardIndex = (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   res.set('Pragma', 'no-cache');
   res.set('Expires', '0');
-  res.sendFile(path.join(__dirname, 'public', 'dist', 'index.html'));
+  res.sendFile('index.html', { root: path.join(__dirname, 'public', 'dist') });
 };
 
-app.get('/dashboard', dashboardSpaRateLimit, sendDashboardIndex);
-app.get('/dashboard/', dashboardSpaRateLimit, sendDashboardIndex);
-app.get('/dashboard/*path', dashboardSpaRateLimit, (req, res) => {
-  const relPath = req.path.replace(/^\/dashboard\/?/, '');
-  const looksLikeStaticAsset = relPath.startsWith('assets/') || relPath === 'vite.svg' || /\.[a-z0-9]+$/i.test(relPath);
-
-  if (looksLikeStaticAsset) {
-    return res.status(404).send('Asset not found');
-  }
-
+app.use('/dashboard', dashboardSpaRateLimit, (req, res, next) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+  const relPath = req.path;
+  const looksLikeStaticAsset = relPath.startsWith('/assets/') || relPath === '/vite.svg' || /\.[a-z0-9]+$/i.test(relPath);
+  if (looksLikeStaticAsset) return next();
   return sendDashboardIndex(req, res);
 });
 

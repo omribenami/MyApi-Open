@@ -1711,10 +1711,12 @@ function getUserById(id) {
   const hasStripeSubscriptionId = cols.has('stripe_subscription_id');
   const hasTwoFactorEnabled = cols.has('two_factor_enabled');
 
-  const stmt = db.prepare(`SELECT id, username, display_name as displayName, email, avatar_url as avatarUrl, timezone, ${hasTwoFactorEnabled ? 'COALESCE(two_factor_enabled, 0)' : '0'} as twoFactorEnabled, created_at as createdAt, status, ${hasPlan ? "COALESCE(plan, 'free')" : "'free'"} as plan, ${hasStripeStatus ? 'stripe_subscription_status' : 'NULL'} as stripeSubscriptionStatus, ${hasStripeCustomerId ? 'stripe_customer_id' : 'NULL'} as stripeCustomerId, ${hasStripeSubscriptionId ? 'stripe_subscription_id' : 'NULL'} as stripeSubscriptionId FROM users WHERE id = ?`);
+  const stripeStatusExpr = hasStripeStatus ? 'stripe_subscription_status' : 'NULL';
+  const planActiveExpr = `CASE WHEN LOWER(COALESCE(${stripeStatusExpr}, '')) IN ('canceled','unpaid','past_due','incomplete_expired') THEN 0 WHEN LOWER(COALESCE(${stripeStatusExpr}, '')) IN ('active','trialing') THEN 1 ELSE 1 END`;
+  const stmt = db.prepare(`SELECT id, username, display_name as displayName, email, avatar_url as avatarUrl, timezone, ${hasTwoFactorEnabled ? 'COALESCE(two_factor_enabled, 0)' : '0'} as twoFactorEnabled, created_at as createdAt, status, ${hasPlan ? "COALESCE(plan, 'free')" : "'free'"} as plan, ${stripeStatusExpr} as stripeSubscriptionStatus, ${hasStripeCustomerId ? 'stripe_customer_id' : 'NULL'} as stripeCustomerId, ${hasStripeSubscriptionId ? 'stripe_subscription_id' : 'NULL'} as stripeSubscriptionId, ${planActiveExpr} as planActive FROM users WHERE id = ?`);
   const u = stmt.get(id);
   if (!u) return null;
-  return { ...u, twoFactorEnabled: Boolean(u.twoFactorEnabled) };
+  return { ...u, twoFactorEnabled: Boolean(u.twoFactorEnabled), planActive: Boolean(u.planActive) };
 }
 
 function getPiiMasterKey() {

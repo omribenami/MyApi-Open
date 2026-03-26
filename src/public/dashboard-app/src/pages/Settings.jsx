@@ -1654,6 +1654,7 @@ function BillingSection() {
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
   const loadBilling = useCallback(async () => {
     try {
@@ -1685,6 +1686,7 @@ function BillingSection() {
   const handleCheckout = async (planId) => {
     setLoading(true);
     setError('');
+    setSuccess('');
     try {
       const response = await apiRequest('/billing/checkout', {
         method: 'POST',
@@ -1697,7 +1699,7 @@ function BillingSection() {
         return;
       }
       await loadBilling();
-      if (data.message) setError(data.message);
+      setSuccess(`Plan updated to ${String(planId).toUpperCase()}.${data.provider === 'mock' ? ' (Stripe not configured — applied directly.)' : ''}`);
     } catch (e) {
       setError(e.message || 'Checkout failed');
     } finally {
@@ -1748,6 +1750,12 @@ function BillingSection() {
   return (
     <SectionCard title="Plans & Billing" description="Workspace plan, usage and invoices">
       {error && <ErrorBanner message={error} onClose={() => setError('')} />}
+      {success && (
+        <div className="mb-4 p-3 rounded-lg border border-emerald-600/40 bg-emerald-900/20 text-emerald-200 text-sm flex items-center justify-between gap-4">
+          <span>{success}</span>
+          <button type="button" onClick={() => setSuccess('')} className="text-emerald-300 hover:text-emerald-100">✕</button>
+        </div>
+      )}
 
       {!current.billingConfigured && (
         <div className="mb-4 p-3 rounded-lg border border-amber-600/40 bg-amber-900/20 text-amber-200 text-sm">
