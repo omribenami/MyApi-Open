@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export const useServicesStore = create((set, get) => ({
+export const useServicesStore = create((set) => ({
   services: [],
   isLoading: false,
   error: null,

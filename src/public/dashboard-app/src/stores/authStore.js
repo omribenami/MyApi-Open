@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { clearAuthArtifacts, isLogoutInProgress, setLogoutInProgress } from '../utils/authRuntime';
+import { clearAuthArtifacts, isLogoutInProgress, setLogoutInProgress, redirectToLoginOnce } from '../utils/authRuntime';
 
 const readCookie = (name) => {
   try {
@@ -60,7 +60,7 @@ export const useAuthStore = create((set, get) => ({
         try {
           masterToken = localStorage.getItem('masterToken');
           sessionToken = sessionStorage.getItem('sessionToken');
-        } catch {}
+        } catch { /* ignored */ }
 
         // Track whether the first session check definitively returned 401 (no active session).
         // This prevents a redundant second session-only call that would also return 401.
@@ -75,7 +75,7 @@ export const useAuthStore = create((set, get) => ({
             const bootstrapToken = sessionData?.bootstrap?.masterToken || null;
 
             if (bootstrapToken) {
-              try { localStorage.setItem('masterToken', bootstrapToken); } catch {}
+              try { localStorage.setItem('masterToken', bootstrapToken); } catch { /* ignored */ }
             }
 
             set({
@@ -110,7 +110,7 @@ export const useAuthStore = create((set, get) => ({
               set({ user, masterToken, sessionToken, isAuthenticated: true, isInitialized: true, error: null });
               return;
             }
-          } catch {}
+          } catch { /* ignored */ }
 
           clearAuthArtifacts();
           masterToken = null;
@@ -121,13 +121,13 @@ export const useAuthStore = create((set, get) => ({
         if (cookieMasterToken && !sessionReturned401) {
           // Only use cookie if session wasn't explicitly 401
           // If session returned 401, the user logged out and we should NOT restore
-          try { localStorage.setItem('masterToken', cookieMasterToken); } catch {}
+          try { localStorage.setItem('masterToken', cookieMasterToken); } catch { /* ignored */ }
         }
 
         const cookieUser = readCookie('myapi_user');
         if (cookieUser) {
           // Advisory only; authentication must still be confirmed via /auth/me.
-          try { JSON.parse(decodeURIComponent(cookieUser)); } catch {}
+          try { JSON.parse(decodeURIComponent(cookieUser)); } catch { /* ignored */ }
         }
 
         // If the first session check already returned 401 and we have a cookie master token,
@@ -157,11 +157,11 @@ export const useAuthStore = create((set, get) => ({
                     const bootData = await bootRes.json();
                     bootstrapToken = bootData?.data?.token || null;
                   }
-                } catch {}
+                } catch { /* ignored */ }
               }
 
               if (bootstrapToken) {
-                try { localStorage.setItem('masterToken', bootstrapToken); } catch {}
+                try { localStorage.setItem('masterToken', bootstrapToken); } catch { /* ignored */ }
               }
               set({ user, masterToken: bootstrapToken || cookieMasterToken || null, isAuthenticated: true, error: null, isInitialized: true });
               return;
@@ -189,13 +189,13 @@ export const useAuthStore = create((set, get) => ({
 
   setMasterToken: (token) => {
     setLogoutInProgress(false);
-    try { localStorage.setItem('masterToken', token); } catch {}
+    try { localStorage.setItem('masterToken', token); } catch { /* ignored */ }
     set({ masterToken: token, isAuthenticated: true, error: null });
   },
 
   setSessionToken: (token) => {
     setLogoutInProgress(false);
-    try { sessionStorage.setItem('sessionToken', token); } catch {}
+    try { sessionStorage.setItem('sessionToken', token); } catch { /* ignored */ }
     set({ sessionToken: token });
   },
 
@@ -229,13 +229,13 @@ export const useAuthStore = create((set, get) => ({
       localStorage.removeItem('currentWorkspace');
       localStorage.removeItem('workspaces');
       sessionStorage.clear();
-    } catch {}
+    } catch { /* ignored */ }
     
     // Clear recovery flags
     try {
       sessionStorage.removeItem('__myapi_corruption_recovery_ts__');
       sessionStorage.removeItem('__myapi_corruption_recovery_count__');
-    } catch {}
+    } catch { /* ignored */ }
 
     // Update store immediately (so UI reflects logout)
     set({ 
@@ -281,7 +281,7 @@ export const useAuthStore = create((set, get) => ({
           if (stored) {
             currentWorkspace = workspaces.find(w => w.id === stored);
           }
-        } catch {}
+        } catch { /* ignored */ }
 
         if (!currentWorkspace && workspaces.length > 0) {
           currentWorkspace = workspaces[0];
@@ -309,7 +309,7 @@ export const useAuthStore = create((set, get) => ({
         const workspace = data.workspace;
         try {
           localStorage.setItem('currentWorkspace', workspaceId);
-        } catch {}
+        } catch { /* ignored */ }
         set({ currentWorkspace: workspace });
         return { success: true, workspace };
       }
@@ -326,7 +326,7 @@ export const useAuthStore = create((set, get) => ({
       } else {
         localStorage.removeItem('currentWorkspace');
       }
-    } catch {}
+    } catch { /* ignored */ }
     set({ currentWorkspace: workspace });
   },
 }));
