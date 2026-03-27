@@ -39,6 +39,7 @@ services:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: ${PORT:-4500}
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}
+      DB_PATH: /app/data/myapi.db
 
     ports:
       - "${PORT:-4500}:${PORT:-4500}"
