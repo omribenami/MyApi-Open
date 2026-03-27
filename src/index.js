@@ -1339,7 +1339,6 @@ const billingUsageRateLimit = expressRateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Rate limit exceeded', retryAfterSeconds: 60 },
-  trustProxy: (req) => true, // Trust all proxies (Cloudflare)
   skip: () => process.env.NODE_ENV === 'test', // Skip in test mode
 });
 
@@ -1349,7 +1348,6 @@ const dashboardSpaRateLimit = expressRateLimit({
   max: process.env.NODE_ENV === 'test' ? 1000 : 60,
   standardHeaders: true,
   legacyHeaders: false,
-  trustProxy: (req) => true, // Trust all proxies (Cloudflare)
   skip: () => process.env.NODE_ENV === 'test',
   message: { error: 'Rate limit exceeded', retryAfterSeconds: 60 },
 });
