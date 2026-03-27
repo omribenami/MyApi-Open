@@ -3325,6 +3325,7 @@ const BILLING_PLANS = {
     maxTeamMembers: 2,
     maxSkillsPerPersona: 4,
     stripe_product_id: null,
+    stripePriceId: null,
     stripePaymentLinkEnv: null,
   },
   pro: {
@@ -3347,7 +3348,8 @@ const BILLING_PLANS = {
     maxServices: -1, // unlimited
     maxTeamMembers: 10,
     maxSkillsPerPersona: -1, // unlimited
-    stripe_product_id: 'prod_pro_myapi',
+    stripe_product_id: process.env.STRIPE_PRODUCT_ID_PRO_LIVE || 'prod_pro_myapi',
+    stripePriceId: process.env.STRIPE_PRICE_ID_PRO_LIVE,
     stripePaymentLinkEnv: 'STRIPE_PAYMENT_LINK_PRO',
   },
   enterprise: {
@@ -3372,7 +3374,8 @@ const BILLING_PLANS = {
     maxServices: -1, // unlimited
     maxTeamMembers: -1, // unlimited
     maxSkillsPerPersona: -1, // unlimited
-    stripe_product_id: 'prod_enterprise_myapi',
+    stripe_product_id: process.env.STRIPE_PRODUCT_ID_ENTERPRISE_LIVE || 'prod_enterprise_myapi',
+    stripePriceId: process.env.STRIPE_PRICE_ID_ENTERPRISE_LIVE,
     stripePaymentLinkEnv: 'STRIPE_PAYMENT_LINK_ENTERPRISE',
   },
 };
@@ -3509,9 +3512,6 @@ app.post('/api/v1/billing/checkout', authenticate, async (req, res) => {
       customer = upsertBillingCustomer(workspaceId, created.id, ownerEmail);
     }
 
-    // MVP-safe: if checkout price mapping is not configured, keep current payment-link behavior
-    const paymentLink = process.env[definition.stripePaymentLinkEnv] || (selectedPlan === 'pro' ? process.env.STRIPE_PAYMENT_LINK || '' : '');
-    
     // SECURITY: Only auto-upgrade to free plan. For paid plans, wait for Stripe webhook confirmation
     if (selectedPlan === 'free') {
       upsertBillingSubscription(workspaceId, {
@@ -3519,15 +3519,43 @@ app.post('/api/v1/billing/checkout', authenticate, async (req, res) => {
         plan_id: 'free',
         status: 'active',
       });
+      return res.json({
+        url: null,
+        plan: 'free',
+        provider: 'stripe',
+        message: 'Free plan activated'
+      });
     }
-    // For paid plans (pro, enterprise), DO NOT update plan until webhook confirms payment
+
+    // For paid plans, create a Stripe Checkout Session
+    const priceId = definition.stripePriceId;
+    if (!priceId) {
+      return res.status(400).json({ error: `No price configured for ${selectedPlan} plan` });
+    }
+
+    const baseUrl = process.env.BASE_URL || 'https://www.myapiai.com';
+    const checkoutSession = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      mode: 'subscription',
+      customer: customer.stripe_customer_id,
+      line_items: [{
+        price: priceId,
+        quantity: 1,
+      }],
+      success_url: `${baseUrl}/dashboard/?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}/dashboard/?checkout=canceled`,
+      metadata: {
+        workspace_id: workspaceId,
+        plan: selectedPlan,
+      },
+    });
 
     return res.json({
-      url: paymentLink || null,
+      url: checkoutSession.url,
+      sessionId: checkoutSession.id,
       plan: selectedPlan,
       provider: 'stripe',
       customerId: customer?.stripe_customer_id || null,
-      message: paymentLink ? undefined : 'No Stripe payment link configured for this plan',
     });
   } catch (error) {
     console.error('Stripe checkout init error:', error);
