@@ -899,6 +899,15 @@ app.use((req, res, next) => {
 app.use('/dashboard', express.static(path.join(__dirname, 'public', 'dist')));
 app.use(express.static(path.join(__dirname, "public")));
 
+// Legal pages - Terms and Privacy
+app.get('/terms', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'legal', 'terms.html'));
+});
+
+app.get('/privacy', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'legal', 'privacy.html'));
+});
+
 // Redirect invitation links to the dashboard where the PendingInvitations UI handles them
 app.get('/accept-invite/:id', (req, res) => {
   res.redirect('/dashboard/');
