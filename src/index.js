@@ -3511,11 +3511,16 @@ app.post('/api/v1/billing/checkout', authenticate, async (req, res) => {
 
     // MVP-safe: if checkout price mapping is not configured, keep current payment-link behavior
     const paymentLink = process.env[definition.stripePaymentLinkEnv] || (selectedPlan === 'pro' ? process.env.STRIPE_PAYMENT_LINK || '' : '');
-    upsertBillingSubscription(workspaceId, {
-      stripe_subscription_id: `pending_${Date.now()}`,
-      plan_id: selectedPlan,
-      status: selectedPlan === 'free' ? 'active' : 'pending',
-    });
+    
+    // SECURITY: Only auto-upgrade to free plan. For paid plans, wait for Stripe webhook confirmation
+    if (selectedPlan === 'free') {
+      upsertBillingSubscription(workspaceId, {
+        stripe_subscription_id: `free_${Date.now()}`,
+        plan_id: 'free',
+        status: 'active',
+      });
+    }
+    // For paid plans (pro, enterprise), DO NOT update plan until webhook confirms payment
 
     return res.json({
       url: paymentLink || null,

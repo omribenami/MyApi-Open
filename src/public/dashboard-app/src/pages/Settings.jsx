@@ -1699,7 +1699,15 @@ function BillingSection() {
         return;
       }
       await loadBilling();
-      setSuccess(`Plan updated to ${String(planId).toUpperCase()}.${data.provider === 'mock' ? ' (Stripe not configured — applied directly.)' : ''}`);
+      if (planId === 'free') {
+        setSuccess(`Plan updated to ${String(planId).toUpperCase()}.`);
+      } else if (data.provider === 'mock') {
+        setSuccess(`Plan updated to ${String(planId).toUpperCase()}. (Stripe not configured — applied directly.)`);
+      } else if (data.url) {
+        setSuccess(`Redirecting to Stripe checkout. Complete payment to activate ${String(planId).toUpperCase()} plan.`);
+      } else {
+        setSuccess(`Plan upgrade initiated. Complete payment to activate ${String(planId).toUpperCase()} plan.`);
+      }
     } catch (e) {
       setError(e.message || 'Checkout failed');
     } finally {
