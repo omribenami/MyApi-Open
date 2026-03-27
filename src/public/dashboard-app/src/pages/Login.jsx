@@ -28,16 +28,16 @@ const OAuthIcons = {
 
 const features = [
   {
-    title: 'Built for AI agents',
-    desc: 'Native support for autonomous workflows and intelligent automation.',
+    title: 'Built for agents',
+    desc: 'Native support for autonomous AI workflows with full API access and token management.',
   },
   {
-    title: 'Your digital command center',
-    desc: 'Centralize APIs, tokens, and integrations in one secure place.',
+    title: 'Unified control',
+    desc: 'Centralize every service, credential, and integration in one secure, auditable place.',
   },
   {
-    title: 'Human + AI synergy',
-    desc: 'A new way for humans and AI to work together seamlessly.',
+    title: 'Natural collaboration',
+    desc: 'Humans and AI working together — each with the right permissions, visibility, and control.',
   },
 ];
 
@@ -301,9 +301,9 @@ function Login() {
           <section className="lg:col-span-5">
             <div className="max-w-xl">
               <BrandLogo size="lg" className="mb-8" />
-              <p className="mb-4 text-sm font-semibold uppercase tracking-[0.14em] text-blue-300">Built for the AI era</p>
+              <p className="mb-4 text-sm font-semibold uppercase tracking-[0.14em] text-blue-300">The natural way for humans and AI to work</p>
               <h1 className="text-3xl font-semibold leading-tight sm:text-4xl lg:text-[2.65rem] lg:leading-[1.1]">
-                Your digital presence, powered by intelligence.
+                Unified API control for you and your agents.
               </h1>
               <p className="mt-5 text-base leading-relaxed text-slate-300 sm:text-lg">
                 Connect providers, protect credentials, and run your automation stack from one focused workspace.
