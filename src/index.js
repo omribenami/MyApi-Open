@@ -265,30 +265,22 @@ function sanitizeUrl(url = '') {
 
 function renderLegalMarkdown(markdown = '') {
   const safeMarkdown = String(markdown || '').replace(/<[^>]*>/g, '');
-  const renderer = new marked.Renderer();
-  renderer.link = ({ href, title, tokens, text }) => {
-    // Extract link text from tokens or use the text parameter
-    let linkText = text;
-    if (!linkText && tokens && tokens.length > 0) {
-      linkText = (tokens || []).map((token) => {
-        if (typeof token === 'string') return token;
-        return token.raw || token.text || '';
-      }).join('');
-    }
-    linkText = linkText || href || '';
-    
-    const safeHref = sanitizeUrl(href || '');
-    const safeTitle = title ? ` title="${escapeHtml(title)}"` : '';
-    return `<a href="${escapeHtml(safeHref)}"${safeTitle} target="_blank" rel="noopener noreferrer">${escapeHtml(linkText)}</a>`;
-  };
-
-  return marked.parse(safeMarkdown, {
+  
+  // Use marked with default rendering first, then sanitize the output
+  let html = marked.parse(safeMarkdown, {
     gfm: true,
     breaks: true,
-    renderer,
     headerIds: false,
     mangle: false,
   });
+  
+  // Fix links: sanitize hrefs but preserve link text
+  html = html.replace(/<a\s+href="([^"]*)"\s*([^>]*)>([^<]*)<\/a>/g, (match, href, attrs, text) => {
+    const safeHref = sanitizeUrl(href);
+    return `<a href="${escapeHtml(safeHref)}" ${attrs}>${escapeHtml(text)}</a>`;
+  });
+  
+  return html;
 }
 
 function loadLegalDoc(filename, fallbackTitle, fallbackBody) {
