@@ -1,8 +1,47 @@
-const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const bcrypt = require('bcrypt');
+
+// MongoDB or SQLite adapter
+let db = null;
+let mongodbAdapter = null;
+
+// Check if we're using MongoDB (DATABASE_URL set)
+const isMongoDBMode = !!process.env.DATABASE_URL;
+
+if (isMongoDBMode) {
+  // Use MongoDB adapter
+  mongodbAdapter = require('./database-mongodb');
+  db = mongodbAdapter.db; // Mock SQLite interface
+  console.log('[Database] Using MongoDB via adapter');
+} else {
+  // Fall back to SQLite
+  const Database = require('better-sqlite3');
+  
+  function resolveDbPath() {
+    if (process.env.DB_PATH) {
+      if (process.env.DB_PATH === ':memory:') return ':memory:';
+      return path.resolve(process.env.DB_PATH);
+    }
+
+    const primary = path.join(__dirname, 'data', 'myapi.db');
+    const legacy = path.join(__dirname, 'db.sqlite');
+
+    if (fs.existsSync(primary)) return primary;
+    if (fs.existsSync(legacy)) return legacy;
+
+    return primary;
+  }
+
+  const dbPath = resolveDbPath();
+  if (dbPath !== ':memory:') {
+    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+  }
+  db = new Database(dbPath);
+  console.log('[Database] Using SQLite at:', dbPath);
+}
+
 const MigrationRunner = require('./lib/migrationRunner');
 const {
   encrypt,
@@ -13,35 +52,6 @@ const {
   deriveKey,
   ENCRYPTION_VERSION,
 } = require('./lib/encryption');
-
-// Database path resolution (prevents accidental empty-db boot)
-// Priority:
-// 1) DB_PATH env var (explicit override)
-// 2) src/data/myapi.db (primary production db)
-// 3) src/db.sqlite (legacy fallback)
-function resolveDbPath() {
-  if (process.env.DB_PATH) {
-    // Preserve SQLite special paths like ':memory:' without resolving them to file paths
-    if (process.env.DB_PATH === ':memory:') return ':memory:';
-    return path.resolve(process.env.DB_PATH);
-  }
-
-  const primary = path.join(__dirname, 'data', 'myapi.db');
-  const legacy = path.join(__dirname, 'db.sqlite');
-
-  if (fs.existsSync(primary)) return primary;
-  if (fs.existsSync(legacy)) return legacy;
-
-  // First-run fallback: create primary location
-  return primary;
-}
-
-const dbPath = resolveDbPath();
-if (dbPath !== ':memory:') {
-  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-}
-const db = new Database(dbPath);
-console.log('[Database] Using DB at:', dbPath);
 
 function normalizeOwnerId(ownerId) {
   const v = String(ownerId || '').trim();

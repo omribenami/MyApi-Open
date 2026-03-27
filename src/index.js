@@ -16,6 +16,17 @@ const http = require('http');
 const EventEmitter = require('events');
 const expressRateLimit = require('express-rate-limit');
 
+// MongoDB initialization (if using MongoDB)
+let mongodbReady = Promise.resolve();
+if (process.env.DATABASE_URL) {
+  const mongodbAdapter = require('./database-mongodb');
+  mongodbReady = mongodbAdapter.connectMongoDB().catch(err => {
+    console.error('[MongoDB] Failed to connect:', err.message);
+    process.exit(1);
+  });
+  console.log('[Startup] Initializing MongoDB connection...');
+}
+
 // Global event emitter for device alerts and real-time notifications
 const alertEmitter = new EventEmitter();
 const NotificationService = require('./services/notificationService');
@@ -8549,11 +8560,13 @@ function cleanupExpiredSessions() {
 
 // --- Start ---
 if (process.env.NODE_ENV !== 'test') {
-  // Validate required secrets BEFORE bootstrap
-  validateRequiredSecrets();
+  // Wait for MongoDB if using it, then start server
+  mongodbReady.then(() => {
+    // Validate required secrets BEFORE bootstrap
+    validateRequiredSecrets();
 
-  bootstrap();
-  server.listen(PORT, '0.0.0.0', () => {
+    bootstrap();
+    server.listen(PORT, '0.0.0.0', () => {
     console.log(`Server ready on http://0.0.0.0:${PORT}`);
     if (WebSocketServer) {
       console.log(`WebSocket ready on ws://0.0.0.0:${PORT}`);
@@ -8571,58 +8584,62 @@ if (process.env.NODE_ENV !== 'test') {
       cleanupExpiredSessions();
     }, 15 * 60 * 1000); // Every 15 minutes
     console.log('✅ Session cleanup scheduled (7-day TTL, 15-min check interval)');
-  });
+    });
 
-  // Global error handlers to prevent crashes
-  process.on('uncaughtException', (error) => {
-    console.error('[CRITICAL] Uncaught Exception:', error.message);
-    console.error(error.stack);
-    // Log to database if available
-    try {
-      createAuditLog({
-        requesterId: 'system',
-        action: 'uncaught_exception',
-        resource: '/system/error',
-        scope: 'critical',
-        details: {
-          error: error.message,
-          stack: error.stack.substring(0, 500),
-          timestamp: new Date().toISOString()
-        }
-      });
-    } catch (logErr) {
-      console.error('[ERROR] Failed to log uncaught exception:', logErr.message);
-    }
-    // Exit gracefully
-    process.exit(1);
-  });
-
-  process.on('unhandledRejection', (reason, promise) => {
-    console.error('[CRITICAL] Unhandled Promise Rejection:', reason);
-    // Log to database if available
-    try {
-      createAuditLog({
-        requesterId: 'system',
-        action: 'unhandled_rejection',
-        resource: '/system/error',
-        scope: 'critical',
-        details: {
-          error: String(reason),
-          timestamp: new Date().toISOString()
-        }
-      });
-    } catch (logErr) {
-      console.error('[ERROR] Failed to log unhandled rejection:', logErr.message);
-    }
-    // Don't exit - let it continue but log it
-  });
-
-  server.on('error', (err) => {
-    console.error('[CRITICAL] Server Error:', err.message);
-    if (err.code === 'EADDRINUSE') {
-      console.error(`Port ${PORT} is already in use`);
+    // Global error handlers to prevent crashes
+    process.on('uncaughtException', (error) => {
+      console.error('[CRITICAL] Uncaught Exception:', error.message);
+      console.error(error.stack);
+      // Log to database if available
+      try {
+        createAuditLog({
+          requesterId: 'system',
+          action: 'uncaught_exception',
+          resource: '/system/error',
+          scope: 'critical',
+          details: {
+            error: error.message,
+            stack: error.stack.substring(0, 500),
+            timestamp: new Date().toISOString()
+          }
+        });
+      } catch (logErr) {
+        console.error('[ERROR] Failed to log uncaught exception:', logErr.message);
+      }
+      // Exit gracefully
       process.exit(1);
-    }
+    });
+
+    process.on('unhandledRejection', (reason, promise) => {
+      console.error('[CRITICAL] Unhandled Promise Rejection:', reason);
+      // Log to database if available
+      try {
+        createAuditLog({
+          requesterId: 'system',
+          action: 'unhandled_rejection',
+          resource: '/system/error',
+          scope: 'critical',
+          details: {
+            error: String(reason),
+            timestamp: new Date().toISOString()
+          }
+        });
+      } catch (logErr) {
+        console.error('[ERROR] Failed to log unhandled rejection:', logErr.message);
+      }
+      // Don't exit - let it continue but log it
+    });
+
+    server.on('error', (err) => {
+      console.error('[CRITICAL] Server Error:', err.message);
+      if (err.code === 'EADDRINUSE') {
+        console.error(`Port ${PORT} is already in use`);
+        process.exit(1);
+      }
+    });
+  }).catch(err => {
+    console.error('[FATAL] Failed to start server:', err.message);
+    process.exit(1);
   });
 }
 
