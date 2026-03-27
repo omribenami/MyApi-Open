@@ -599,14 +599,14 @@ function initDatabase() {
   }
 
   // Seed default scopes if not already present
-  seedDefaultScopes();
+  // seedDefaultScopes(); // TODO: MongoDB version
 
   // Seed example personas
-  seedExamplePersonas();
+  // seedExamplePersonas(); // TODO: MongoDB version
 
   // Seed service categories and services
-  seedServiceCategories();
-  seedServices();
+  // seedServiceCategories(); // TODO: MongoDB version
+  // seedServices(); // TODO: MongoDB version
 
   // Vault token schema migrations
   const vaultTokenMigrations = [
@@ -1102,7 +1102,7 @@ function initDatabase() {
   // Seed initial pricing plans if table is empty
   seedDefaultPricingPlans();
 
-  console.log('Database initialized at:', dbPath);
+  console.log('Database initialized successfully (MongoDB mode)');
 }
 
 // Vault Tokens
