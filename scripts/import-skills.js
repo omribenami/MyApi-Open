@@ -72,17 +72,35 @@ for (const skillDirName of skillDirs) {
 
   try {
     const content = fs.readFileSync(skillMdPath, 'utf8');
-    
-    // Parse basic metadata from SKILL.md
-    // Format: first line is usually the title
     const lines = content.split('\n');
-    const title = lines[0]?.replace(/^#+\s+/, '').trim() || skillDirName;
     
-    // Extract description from first paragraph
+    // Parse skill name: prefer directory name, fallback to first markdown header
+    let title = skillDirName;
+    for (const line of lines) {
+      if (line.startsWith('#') && !line.startsWith('##')) {
+        title = line.replace(/^#+\s+/, '').trim();
+        if (title && title !== '---') break;
+      }
+    }
+    
+    // Extract description: skip YAML front matter and get first paragraph
     let description = '';
-    for (let i = 1; i < lines.length; i++) {
-      if (lines[i].trim() && !lines[i].startsWith('#')) {
-        description = lines[i].trim();
+    let inYaml = false;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      
+      if (i === 0 && line === '---') {
+        inYaml = true;
+        continue;
+      }
+      if (inYaml && line === '---') {
+        inYaml = false;
+        continue;
+      }
+      if (inYaml) continue; // Skip YAML content
+      
+      if (line.trim() && !line.startsWith('#')) {
+        description = line.trim().substring(0, 200); // First 200 chars
         break;
       }
     }
