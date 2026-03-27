@@ -3,15 +3,11 @@ FROM node:22
 
 WORKDIR /app
 
-# Copy package files from root
-COPY package.json package-lock.json ./
+# Copy ALL files from root context
+COPY . .
 
 # Install dependencies
 RUN npm install --no-audit
-
-# Copy entire application code (from root context)
-COPY src src
-COPY . .
 
 # Ensure directories exist
 RUN mkdir -p data logs && chmod -R 755 data logs
