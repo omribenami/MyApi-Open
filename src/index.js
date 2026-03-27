@@ -1761,6 +1761,35 @@ app.get('/api/v1/billing/plans', (req, res) => {
   }
 });
 
+// PUBLIC: List all skills (no auth required - metadata only)
+app.get('/api/v1/skills/public/list', (req, res) => {
+  try {
+    const skills = db.prepare(`
+      SELECT id, name, description, version, author, category,
+             active, created_at, updated_at
+      FROM skills
+      WHERE active = 1
+      ORDER BY created_at DESC
+    `).all();
+
+    res.json({ 
+      data: skills.map(skill => ({
+        id: skill.id,
+        name: skill.name,
+        description: skill.description,
+        version: skill.version,
+        author: skill.author,
+        category: skill.category,
+        createdAt: skill.created_at,
+        updatedAt: skill.updated_at
+      }))
+    });
+  } catch (err) {
+    console.error('[Skills] Public list error:', err);
+    res.status(500).json({ error: 'Failed to list skills' });
+  }
+});
+
 // Import multi-tenancy middleware
 const { extractWorkspaceContext, enforceMultiTenancy, switchWorkspaceHandler } = require('./middleware/multitenancy');
 const { createAuditSecurityRouter } = require('./routes/auditSecurity');
