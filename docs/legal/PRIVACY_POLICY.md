@@ -45,28 +45,29 @@ We use your data to:
 
 | What | How Long |
 |-----|----------|
-| Your account info | Until you delete it, then 30 days |
+| Your account info | Until you delete it (then immediately removed) |
 | OAuth tokens | Until you disconnect the service |
 | Session data | 7 days (then deleted) |
 | Notifications | 30 days (then deleted) |
-| Login history | Until account deletion (for security), then deleted |
-| Backups | 90 days max (then overwritten) |
-| Payment records | 7 years (required by US tax law) |
+| Your files & documents | Until you delete them or your account |
+| Audit logs | Kept indefinitely for security and compliance |
 
 **When you delete your account:**
-- Active data (files, settings, etc): Deleted within 30 days
-- Backups containing your data: Deleted or overwritten within 90 days
-- Payment records: Kept for 7 years (required by law, but no longer linked to your account)
-- Security logs: Deleted within 90 days
+- Your account and all associated data are deleted immediately
+- Files, messages, personas, skills, documents are all removed
+- OAuth tokens are revoked
+- Access is terminated
+- Cannot be undone
 
-**Exception:** If you're involved in a legal case or investigation, we may keep data longer as required by law.
+**What we cannot delete:**
+- Audit logs (kept for security and compliance purposes, but no longer linked to your identity)
+- If you're involved in a legal case or investigation, data may be preserved as required by law
 
 **What "deleted" means:**
-- Your data is removed from active systems
-- It's unrecoverable from normal access
-- Backups are overwritten on the next backup cycle
-- We don't keep copies for any purpose
-- Payment records may be anonymized (card details removed)
+- Your data is removed from our database completely
+- It's immediately unrecoverable
+- No backups are kept
+- We cannot restore it after deletion
 
 ---
 
