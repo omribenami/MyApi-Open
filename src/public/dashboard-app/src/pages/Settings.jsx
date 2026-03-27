@@ -1747,19 +1747,19 @@ function BillingSection() {
     if (!downgradeWarning) return;
     setConfirmingDowngrade(true);
     setError('');
+    const planId = downgradeWarning.planId; // Capture before state change
     try {
       const confirmResponse = await apiRequest('/billing/downgrade-confirm', {
         method: 'POST',
-        body: { newPlan: downgradeWarning.planId, confirmed: true },
+        body: { newPlan: planId, confirmed: true },
       });
       const confirmData = await confirmResponse.json().catch(() => ({}));
       if (!confirmResponse.ok) throw new Error(confirmData.error || 'Failed to confirm downgrade');
       
       setDowngradeWarning(null);
-      setSuccess(`✓ Downgrade confirmed. Excess items have been deleted. Proceeding to checkout...`);
-      
-      // Now proceed with checkout
-      setTimeout(() => handleCheckout(downgradeWarning.planId), 500);
+      setConfirmingDowngrade(false);
+      setSuccess(`✓ Downgrade confirmed. Excess items deleted.`);
+      await loadBilling(); // Refresh billing info
     } catch (e) {
       setError(e.message || 'Failed to process downgrade');
       setConfirmingDowngrade(false);
