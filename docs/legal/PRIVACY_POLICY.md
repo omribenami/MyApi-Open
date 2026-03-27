@@ -106,7 +106,7 @@ We use your information to:
 | Account information | Until account deletion (then immediately deleted) |
 | OAuth tokens | Until disconnected or account deletion |
 | Session data | 7 days (auto-deleted) |
-| Notifications | 30 days (auto-deleted) |
+| Notifications | 60 days (auto-deleted) |
 | Audit logs | Indefinitely (for security/compliance) |
 | Support tickets | 1 year, then deleted |
 
