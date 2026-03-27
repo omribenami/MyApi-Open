@@ -45,15 +45,28 @@ We use your data to:
 
 | What | How Long |
 |-----|----------|
-| Your account info | Until you delete your account |
+| Your account info | Until you delete it, then 30 days |
 | OAuth tokens | Until you disconnect the service |
-| Session data | 7 days |
-| Notifications | 30 days |
-| Login history | 90 days |
-| Backups | 90 days |
-| Payment records | 7 years (required by tax law) |
+| Session data | 7 days (then deleted) |
+| Notifications | 30 days (then deleted) |
+| Login history | Until account deletion (for security), then deleted |
+| Backups | 90 days max (then overwritten) |
+| Payment records | 7 years (required by US tax law) |
 
-When you delete your account, we delete your data within 30 days. Backups are deleted within 90 days.
+**When you delete your account:**
+- Active data (files, settings, etc): Deleted within 30 days
+- Backups containing your data: Deleted or overwritten within 90 days
+- Payment records: Kept for 7 years (required by law, but no longer linked to your account)
+- Security logs: Deleted within 90 days
+
+**Exception:** If you're involved in a legal case or investigation, we may keep data longer as required by law.
+
+**What "deleted" means:**
+- Your data is removed from active systems
+- It's unrecoverable from normal access
+- Backups are overwritten on the next backup cycle
+- We don't keep copies for any purpose
+- Payment records may be anonymized (card details removed)
 
 ---
 
