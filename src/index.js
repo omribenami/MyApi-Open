@@ -918,7 +918,10 @@ app.use((req, res, next) => {
 // Dashboard assets with cache control headers for fresh deployment
 // Serve dashboard static files BEFORE SPA shell
 const dashboardDistPath = path.join(__dirname, 'public', 'dist');
-app.use('/dashboard', express.static(dashboardDistPath));
+// Serve assets from /dashboard/assets/
+app.use('/dashboard/assets', express.static(path.join(dashboardDistPath, 'assets')));
+// Serve other files from /dashboard/
+app.use('/dashboard', express.static(dashboardDistPath, { index: ['index.html'] }));
 
 // General static files
 app.use(express.static(path.join(__dirname, "public")));
