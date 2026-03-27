@@ -77,6 +77,14 @@
             border-radius: 4px;
         }
         
+        .info-box {
+            background: #e8f4f8;
+            padding: 15px;
+            border-left: 4px solid #0284c7;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        
         footer {
             margin-top: 40px;
             padding-top: 20px;
@@ -111,6 +119,23 @@
         body {
             padding-top: 50px;
         }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        
+        th {
+            background: #f5f5f5;
+            font-weight: 600;
+        }
     </style>
 </head>
 <body>
@@ -126,57 +151,249 @@
         <header>
             <h1>Terms of Service</h1>
             <div class="meta">
-                <p><strong>Last Updated:</strong> March 26, 2026</p>
-                <p><strong>Effective Date:</strong> March 26, 2026</p>
+                <p><strong>Last Updated:</strong> March 27, 2026</p>
+                <p><strong>Effective Date:</strong> March 27, 2026</p>
             </div>
         </header>
         
         <h2>1. Binding Agreement</h2>
-        <p>By accessing and using MyApi ("the Service"), you agree to be bound by these Terms of Service. If you do not agree to all terms, do not use the Service.</p>
+        <p>By accessing or using MyApi ("the Service"), you ("User", "you") agree to be bound by these Terms of Service ("Terms"). If you do not agree to all Terms, do not access or use the Service. These Terms constitute a legally binding agreement between you and MyApi ("we", "us", "our").</p>
+        <p>By creating an account, accessing the dashboard, using our API, or connecting third-party services, you confirm that you have read, understood, and agree to these Terms and our <a href="/privacy">Privacy Policy</a>.</p>
         
-        <h2>2. Limited License</h2>
-        <p>We grant you a non-exclusive, non-transferable, revocable limited license to access the Service for personal, non-commercial use only.</p>
-        
-        <p><strong>You may NOT:</strong></p>
+        <h2>2. Service Description</h2>
+        <p>MyApi is a self-hosted AI agent management platform that provides:</p>
         <ul>
-            <li>Copy, modify, or distribute the Service</li>
-            <li>Reverse engineer or decompile</li>
-            <li>Use for illegal purposes</li>
-            <li>Harass or abuse others</li>
-            <li>Interfere with the Service</li>
-            <li>Attempt unauthorized access</li>
+            <li><strong>AI Personas:</strong> Create, configure, and manage AI agent personas with custom instructions and knowledge bases</li>
+            <li><strong>Conversations:</strong> AI-powered chat sessions using configured personas and connected knowledge</li>
+            <li><strong>Knowledge Base:</strong> Upload and manage documents for AI context and retrieval</li>
+            <li><strong>Skills Marketplace:</strong> Create, publish, fork, and install custom skill packages</li>
+            <li><strong>OAuth Integrations:</strong> Connect third-party services (Google, GitHub, Slack, Discord, and others) for extended capabilities</li>
+            <li><strong>API Access:</strong> Programmatic access via REST API with scoped tokens for automation and integration</li>
+            <li><strong>Workspaces:</strong> Multi-tenant team environments with role-based access control</li>
+            <li><strong>Device Management:</strong> Device fingerprinting and approval workflows for secure access</li>
+            <li><strong>Data Export/Import:</strong> Portable data export in ZIP format with integrity verification</li>
         </ul>
         
-        <h2>3. User Accounts</h2>
-        <p>You are responsible for maintaining the confidentiality of your password and all activities under your account. You must immediately notify us of any unauthorized access.</p>
+        <h2>3. Eligibility</h2>
+        <p>You must be at least 18 years of age to use the Service. By using the Service, you represent and warrant that you are at least 18 years old and have the legal capacity to enter into these Terms. If you are using the Service on behalf of an organization, you represent that you have the authority to bind that organization to these Terms.</p>
         
-        <h2>4. Disclaimer</h2>
+        <h2>4. User Accounts</h2>
+        <h3>4.1 Account Creation</h3>
+        <p>To access most features, you must create an account by providing a valid email address and password, or by authenticating through a supported OAuth provider. You agree to provide accurate, current, and complete information.</p>
+        
+        <h3>4.2 Account Security</h3>
+        <p>You are responsible for:</p>
+        <ul>
+            <li>Maintaining the confidentiality of your password, API tokens, and master tokens</li>
+            <li>All activities that occur under your account or through your API tokens</li>
+            <li>Enabling two-factor authentication (2FA) for enhanced security when available</li>
+            <li>Approving or denying device access requests promptly</li>
+            <li>Immediately notifying us of any unauthorized access or security breach</li>
+        </ul>
+        <p>We are not liable for any loss or damage arising from your failure to secure your account credentials, API tokens, or approved devices.</p>
+        
+        <h3>4.3 Master Tokens</h3>
+        <p>Master tokens provide persistent, full-scope API access across devices and sessions. You acknowledge that master tokens grant complete access to your account data and must be stored securely. We are not responsible for unauthorized access resulting from compromised master tokens.</p>
+        
+        <h2>5. License and Permitted Use</h2>
+        <h3>5.1 License Grant</h3>
+        <p>Subject to these Terms, we grant you a limited, non-exclusive, non-transferable, revocable license to access and use the Service in accordance with your subscription plan. This license permits both personal and commercial use within the scope of your plan.</p>
+        
+        <h3>5.2 Restrictions</h3>
+        <p><strong>You may NOT:</strong></p>
+        <ul>
+            <li>Copy, modify, distribute, sell, or lease any part of the Service software</li>
+            <li>Reverse engineer, decompile, or disassemble the Service</li>
+            <li>Use the Service for any illegal, harmful, or fraudulent purpose</li>
+            <li>Harass, abuse, or harm other users or third parties</li>
+            <li>Interfere with, disrupt, or overload the Service or its infrastructure</li>
+            <li>Attempt to gain unauthorized access to any part of the Service, other accounts, or connected systems</li>
+            <li>Circumvent or disable rate limits, authentication, or security features</li>
+            <li>Use automated tools to scrape, crawl, or extract data from the Service beyond authorized API usage</li>
+            <li>Share, resell, or sublicense your API tokens or account access</li>
+            <li>Upload malicious code, viruses, or harmful content to the Service</li>
+            <li>Use the Service to generate, store, or distribute content that violates applicable law</li>
+        </ul>
+        
+        <h2>6. API Usage and Rate Limits</h2>
+        <p>Access to the API is subject to rate limits and usage quotas based on your subscription plan. Current limits include:</p>
+        <table>
+            <tr>
+                <th>Resource</th>
+                <th>Free Plan</th>
+                <th>Pro Plan</th>
+                <th>Enterprise Plan</th>
+            </tr>
+            <tr>
+                <td>Monthly API Calls</td>
+                <td>1,000</td>
+                <td>100,000</td>
+                <td>Unlimited</td>
+            </tr>
+            <tr>
+                <td>Active Services</td>
+                <td>3</td>
+                <td>Unlimited</td>
+                <td>Unlimited</td>
+            </tr>
+            <tr>
+                <td>Skill Installs</td>
+                <td>50</td>
+                <td>Unlimited</td>
+                <td>Unlimited</td>
+            </tr>
+        </table>
+        <p>Additional per-endpoint rate limits apply to prevent abuse (e.g., authentication endpoints are limited to 5 requests per minute; 2FA verification is limited to 3 attempts per minute). Exceeding rate limits may result in temporary throttling or suspension of access.</p>
+        <p>We reserve the right to modify rate limits and usage quotas at any time. Material changes to plan limits will be communicated in advance.</p>
+        
+        <h2>7. Subscription Plans and Payment</h2>
+        <h3>7.1 Plans</h3>
+        <p>The Service offers Free, Pro, and Enterprise subscription tiers. Feature availability and usage limits vary by plan. Free plan users may be subject to additional restrictions.</p>
+        
+        <h3>7.2 Payment Processing</h3>
+        <p>Paid subscriptions are processed through Stripe, a third-party payment processor. By subscribing to a paid plan, you agree to Stripe's <a href="https://stripe.com/legal" target="_blank" rel="noopener">terms of service</a>. We do not store your full credit card information; payment data is handled directly by Stripe.</p>
+        
+        <h3>7.3 Billing</h3>
+        <p>Subscriptions are billed on a recurring basis according to your selected plan. You authorize us to charge your payment method for all applicable fees. Failed payments may result in service downgrade or suspension.</p>
+        
+        <h3>7.4 Refunds</h3>
+        <p>Subscription fees are generally non-refundable. We may, at our sole discretion, provide refunds or credits on a case-by-case basis. Downgrading your plan takes effect at the end of your current billing period.</p>
+        
+        <h2>8. User Content and Intellectual Property</h2>
+        <h3>8.1 Your Content</h3>
+        <p>You retain all ownership rights to content you create, upload, or store on the Service, including but not limited to: persona configurations, knowledge base documents, skill code, conversation data, and exported data packages. By using the Service, you grant us a limited license to host, store, process, and transmit your content solely to provide the Service to you.</p>
+        
+        <h3>8.2 Marketplace Content</h3>
+        <p>When you publish skills, personas, or other content to the Marketplace, you grant other users a license to install and use that content according to the license you specify (e.g., MIT, Apache 2.0). You represent that you have the right to publish such content and that it does not infringe any third-party rights. Marketplace ratings and reviews are visible to all users.</p>
+        
+        <h3>8.3 Content Licensing for Skills</h3>
+        <p>Skills published to the Marketplace must specify an open-source license. Forking a skill creates a derivative work subject to the original skill's license terms. You are responsible for compliance with all applicable license obligations when forking, modifying, or distributing skills.</p>
+        
+        <h3>8.4 Our Intellectual Property</h3>
+        <p>The Service, including its software, design, logos, documentation, and all underlying technology, is owned by MyApi and protected by intellectual property laws. Nothing in these Terms grants you any right to use our trademarks, trade names, or branding without prior written consent.</p>
+        
+        <h2>9. AI-Generated Content</h2>
         <div class="highlight">
-            <strong>THE SERVICE IS PROVIDED "AS-IS" WITHOUT WARRANTIES OF ANY KIND.</strong>
-            <p style="margin-top: 10px;">We make no guarantees regarding accuracy, completeness, uptime, security, or fitness for any purpose.</p>
+            <strong>AI outputs are not guaranteed to be accurate, complete, or suitable for any particular purpose.</strong>
+            <p style="margin-top: 10px;">You are solely responsible for reviewing, validating, and using any AI-generated content. We disclaim all liability for decisions made or actions taken based on AI outputs.</p>
+        </div>
+        <p>The Service integrates with third-party AI models (such as Google Gemini) to generate responses. You acknowledge that:</p>
+        <ul>
+            <li>AI-generated content may contain errors, inaccuracies, biases, or hallucinations</li>
+            <li>AI outputs should not be relied upon as professional, legal, medical, or financial advice</li>
+            <li>Conversation data and prompts may be processed by third-party AI providers according to their own terms and policies</li>
+            <li>We do not control and are not responsible for the behavior, output quality, or availability of third-party AI models</li>
+            <li>You are responsible for ensuring AI-generated content complies with applicable laws before use</li>
+        </ul>
+        
+        <h2>10. Third-Party Services and OAuth</h2>
+        <p>The Service allows you to connect third-party accounts via OAuth, including but not limited to: Google, GitHub, Slack, Discord, Facebook, Instagram, TikTok, Twitter/X, Reddit, LinkedIn, and WhatsApp. When you connect a third-party service:</p>
+        <ul>
+            <li>You are subject to that service's own terms of service and privacy policy</li>
+            <li>We store encrypted OAuth tokens to maintain your connection (using AES-256-GCM encryption)</li>
+            <li>We access only the data scopes you authorize during the OAuth flow</li>
+            <li>You may disconnect any service at any time, which revokes our stored tokens</li>
+            <li>We are not responsible for the security, availability, data practices, or policy changes of any third-party service</li>
+            <li>Third-party service outages or API changes may affect Service functionality without notice</li>
+        </ul>
+        
+        <h2>11. Email Communications</h2>
+        <p>By creating an account, you consent to receive transactional emails related to your account, including security alerts, device approval notifications, workspace invitations, and service updates. You may configure notification preferences through the Service settings. We process outbound emails through SMTP or third-party email providers (such as SendGrid).</p>
+        
+        <h2>12. Device Management</h2>
+        <p>The Service uses device fingerprinting to identify and manage authorized devices. When you access the Service from a new device, it may require approval before granting access. You are responsible for reviewing and managing your approved devices list and promptly denying access to any unrecognized devices.</p>
+        
+        <h2>13. Data Export and Portability</h2>
+        <p>You may export your data at any time using the built-in export feature. Exports are provided in ZIP format with SHA-256 integrity checksums. Exported data includes personas, skills, documents, preferences, and activity logs. Sensitive credentials (OAuth tokens, vault tokens, passwords) are automatically stripped from exports for security.</p>
+        
+        <h2>14. Service Availability and Modifications</h2>
+        <h3>14.1 Availability</h3>
+        <p>We strive to maintain high availability but do not guarantee uninterrupted access. The Service may be temporarily unavailable due to maintenance, updates, or circumstances beyond our control. We provide no service level agreement (SLA) unless separately agreed in writing.</p>
+        
+        <h3>14.2 Modifications</h3>
+        <p>We reserve the right to modify, suspend, or discontinue any feature or aspect of the Service at any time, with or without notice. We will make reasonable efforts to provide advance notice of material changes. Continued use after modifications constitutes acceptance.</p>
+        
+        <h3>14.3 Beta and Experimental Features</h3>
+        <p>Certain features may be designated as beta, experimental, or preview. Such features are provided "as-is" without warranty, may be unstable, and may be modified or removed without notice. Use of beta features is at your own risk.</p>
+        
+        <h2>15. Disclaimer of Warranties</h2>
+        <div class="highlight">
+            <strong>THE SERVICE IS PROVIDED "AS-IS" AND "AS-AVAILABLE" WITHOUT WARRANTIES OF ANY KIND, WHETHER EXPRESS, IMPLIED, OR STATUTORY.</strong>
+            <p style="margin-top: 10px;">We expressly disclaim all warranties, including but not limited to implied warranties of merchantability, fitness for a particular purpose, non-infringement, accuracy, and reliability. We do not warrant that the Service will be uninterrupted, error-free, secure, or free of harmful components.</p>
         </div>
         
-        <h2>5. Limitation of Liability</h2>
-        <p><strong>OUR LIABILITY IS LIMITED TO $100 OR THE AMOUNT YOU PAID US IN THE PAST 12 MONTHS, WHICHEVER IS LESS.</strong></p>
-        <p>We are not liable for indirect, consequential, or punitive damages, even if advised of their possibility.</p>
+        <h2>16. Limitation of Liability</h2>
+        <p><strong>TO THE MAXIMUM EXTENT PERMITTED BY LAW, OUR TOTAL AGGREGATE LIABILITY FOR ALL CLAIMS ARISING FROM OR RELATED TO THESE TERMS OR THE SERVICE IS LIMITED TO THE GREATER OF: (A) $100 USD, OR (B) THE TOTAL AMOUNT YOU PAID US IN THE 12 MONTHS PRECEDING THE CLAIM.</strong></p>
+        <p>IN NO EVENT SHALL WE BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, INCLUDING BUT NOT LIMITED TO LOSS OF PROFITS, DATA, BUSINESS OPPORTUNITIES, OR GOODWILL, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES. THIS APPLIES REGARDLESS OF THE THEORY OF LIABILITY (CONTRACT, TORT, STRICT LIABILITY, OR OTHERWISE).</p>
+        <p>Some jurisdictions do not allow the exclusion or limitation of certain damages. In such jurisdictions, our liability is limited to the maximum extent permitted by law.</p>
         
-        <h2>6. Termination</h2>
-        <p>We may terminate your account immediately for violation of these Terms, illegal activity, or security threats. Termination is final with no refunds or compensation.</p>
+        <h2>17. Indemnification</h2>
+        <p>You agree to indemnify, defend, and hold harmless MyApi, its officers, directors, employees, and agents from and against any and all claims, liabilities, damages, losses, costs, and expenses (including reasonable attorney's fees) arising from or related to:</p>
+        <ul>
+            <li>Your use or misuse of the Service</li>
+            <li>Your violation of these Terms</li>
+            <li>Your infringement of any third-party rights (including intellectual property rights)</li>
+            <li>Content you upload, publish, or share through the Service or Marketplace</li>
+            <li>Your use of AI-generated content</li>
+            <li>Your violation of any applicable law or regulation</li>
+        </ul>
         
-        <h2>7. Third-Party Services</h2>
-        <p>When you connect OAuth services (Google, GitHub, etc.), you are subject to their terms. We are not responsible for their security, availability, or policies.</p>
+        <h2>18. Termination</h2>
+        <h3>18.1 Termination by Us</h3>
+        <p>We may suspend or terminate your account immediately, without prior notice, for:</p>
+        <ul>
+            <li>Violation of these Terms or any applicable law</li>
+            <li>Fraudulent, illegal, or harmful activity</li>
+            <li>Security threats or unauthorized access attempts</li>
+            <li>Abuse of rate limits, API resources, or the Marketplace</li>
+            <li>Non-payment of subscription fees</li>
+            <li>Extended inactivity as defined by our data retention policies</li>
+        </ul>
         
-        <h2>8. Indemnification</h2>
-        <p>You agree to indemnify and hold MyApi harmless from any claims arising from your use of the Service, your violation of these Terms, or your infringement of third-party rights.</p>
+        <h3>18.2 Termination by You</h3>
+        <p>You may delete your account at any time through the Service settings. Account deletion is <strong>immediate and permanent</strong>. Upon deletion, all your data — including OAuth tokens, API tokens, conversations, personas, skills, and knowledge base documents — is permanently removed and cannot be recovered. We recommend exporting your data before deleting your account.</p>
         
-        <h2>9. Governing Law</h2>
-        <p>These Terms are governed by the laws of the jurisdiction where MyApi operates, without regard to conflict of law principles.</p>
+        <h3>18.3 Effect of Termination</h3>
+        <p>Upon termination, your license to use the Service ceases immediately. Sections that by their nature should survive termination (including Disclaimer, Limitation of Liability, Indemnification, and Governing Law) shall survive.</p>
         
-        <h2>10. Changes to Terms</h2>
-        <p>We may modify these Terms at any time. Continued use after changes constitutes acceptance of new Terms.</p>
+        <h2>19. Dispute Resolution</h2>
+        <h3>19.1 Informal Resolution</h3>
+        <p>Before filing any formal dispute, you agree to contact us at <strong>legal@myapiai.com</strong> and attempt to resolve the dispute informally for at least 30 days.</p>
+        
+        <h3>19.2 Binding Arbitration</h3>
+        <p>If informal resolution fails, any dispute arising from or relating to these Terms or the Service shall be resolved through binding arbitration, rather than in court, except that either party may seek injunctive relief in court for intellectual property violations or security breaches.</p>
+        
+        <h3>19.3 Class Action Waiver</h3>
+        <p><strong>You agree that any dispute resolution proceedings will be conducted on an individual basis only, and not as a class, consolidated, or representative action.</strong> You waive any right to participate in a class action lawsuit or class-wide arbitration.</p>
+        
+        <h2>20. Governing Law</h2>
+        <p>These Terms are governed by and construed in accordance with the laws of the jurisdiction where MyApi operates, without regard to conflict of law principles. Any legal action not subject to arbitration shall be brought exclusively in the courts of that jurisdiction.</p>
+        
+        <h2>21. General Provisions</h2>
+        <h3>21.1 Entire Agreement</h3>
+        <p>These Terms, together with the <a href="/privacy">Privacy Policy</a>, constitute the entire agreement between you and MyApi regarding the Service and supersede all prior agreements.</p>
+        
+        <h3>21.2 Severability</h3>
+        <p>If any provision of these Terms is found to be unenforceable, the remaining provisions shall remain in full force and effect.</p>
+        
+        <h3>21.3 Waiver</h3>
+        <p>Our failure to enforce any right or provision of these Terms shall not constitute a waiver of that right or provision.</p>
+        
+        <h3>21.4 Assignment</h3>
+        <p>You may not assign or transfer your rights under these Terms without our written consent. We may assign our rights without restriction.</p>
+        
+        <h2>22. Changes to Terms</h2>
+        <p>We reserve the right to modify these Terms at any time. We will notify you of material changes by posting the updated Terms on the Service and updating the "Last Updated" date. For significant changes, we may also notify you via email or in-app notification. Your continued use of the Service after changes take effect constitutes acceptance of the revised Terms. If you do not agree to the revised Terms, you must stop using the Service.</p>
+        
+        <h2>23. Contact Us</h2>
+        <ul>
+            <li><strong>General Inquiries:</strong> support@myapiai.com</li>
+            <li><strong>Legal/Terms Questions:</strong> legal@myapiai.com</li>
+            <li><strong>Security Issues:</strong> security@myapiai.com</li>
+        </ul>
         
         <footer>
-            <p>&copy; 2026 MyApi Inc. All rights reserved.</p>
+            <p>&copy; 2026 MyApi. All rights reserved.</p>
             <p><a href="/privacy">Privacy Policy</a> | <a href="/terms">Terms of Service</a></p>
         </footer>
     </div>
