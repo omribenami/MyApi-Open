@@ -5848,7 +5848,14 @@ app.get("/api/v1/oauth/status", async (req, res) => {
 
     if (userId) {
       try {
-        token = getOAuthToken(service, userId);
+        // Use cache to prevent CPU spike
+        token = getCachedOAuthToken(service, userId);
+        if (!token) {
+          token = getOAuthToken(service, userId);
+          if (token) {
+            setCachedOAuthToken(service, userId, token);
+          }
+        }
         if (service === 'twitter' || service === 'discord') {
           console.log(`[OAuth Status DEBUG] ${service}: userId=${userId}, token=${token ? 'FOUND' : 'NOT_FOUND'}`);
         }
@@ -5996,7 +6003,14 @@ app.post("/api/v1/oauth/disconnect/:service", authenticate, async (req, res) => 
     // Try to get token, but handle decryption errors gracefully
     let token = null;
     try {
-      token = getOAuthToken(service, userId);
+      // Use cache to prevent CPU spike
+      token = getCachedOAuthToken(service, userId);
+      if (!token) {
+        token = getOAuthToken(service, userId);
+        if (token) {
+          setCachedOAuthToken(service, userId, token);
+        }
+      }
     } catch (decryptErr) {
       console.warn(`[OAuth Disconnect] Token decryption failed for ${service} (old key?):`, decryptErr.message);
       // Token is corrupted/unreadable, just delete it from DB
@@ -6068,7 +6082,14 @@ app.get("/api/v1/oauth/test/:service", authenticate, async (req, res) => {
 
   try {
     const userId = getOAuthUserId(req);
-    const token = getOAuthToken(service, userId);
+    // Use cache to prevent CPU spike
+    let token = getCachedOAuthToken(service, userId);
+    if (!token) {
+      token = getOAuthToken(service, userId);
+      if (token) {
+        setCachedOAuthToken(service, userId, token);
+      }
+    }
 
     if (!token) {
       return res.status(404).json({ error: "No token found for this service" });
@@ -6374,7 +6395,14 @@ app.post('/api/v1/services/:serviceName/execute', authenticate, async (req, res)
     if (authType === 'api_key') {
       token = resolveServiceApiKeyToken(serviceName, userId);
     } else {
-      token = getOAuthToken(serviceName, userId);
+      // Use cache to prevent CPU spike
+      token = getCachedOAuthToken(serviceName, userId);
+      if (!token) {
+        token = getOAuthToken(serviceName, userId);
+        if (token) {
+          setCachedOAuthToken(serviceName, userId, token);
+        }
+      }
     }
 
     if (!token && authType !== 'webhook' && authType !== 'none') {
@@ -6491,9 +6519,19 @@ app.post('/api/v1/services/:serviceName/proxy', authenticate, async (req, res) =
     const serviceRecord = getServiceByName(serviceName);
     const authType = serviceRecord?.auth_type || 'oauth2';
 
-    let token = authType === 'api_key'
-      ? resolveServiceApiKeyToken(serviceName, userId)
-      : getOAuthToken(serviceName, userId);
+    let token;
+    if (authType === 'api_key') {
+      token = resolveServiceApiKeyToken(serviceName, userId);
+    } else {
+      // Use cache to prevent CPU spike
+      token = getCachedOAuthToken(serviceName, userId);
+      if (!token) {
+        token = getOAuthToken(serviceName, userId);
+        if (token) {
+          setCachedOAuthToken(serviceName, userId, token);
+        }
+      }
+    }
 
     if (!token) {
       return res.status(403).json({ error: `Service '${serviceName}' not connected. Please connect it first.` });
