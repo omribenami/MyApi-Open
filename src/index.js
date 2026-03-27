@@ -1414,31 +1414,45 @@ app.use('/api/v1/dashboard', authenticate, dashboardRoutes);
 app.use('/api/v1/services', createServicesRoutes());
 
 // PUBLIC: List all skills (no auth required - metadata only)
-app.get('/api/v1/skills/public/list', (req, res) => {
+// Works with both SQLite and MongoDB
+app.get('/api/v1/skills/public/list', async (req, res) => {
   try {
-    const skills = db.prepare(`
-      SELECT id, name, description, version, author, category,
-             active, created_at, updated_at
-      FROM skills
-      WHERE active = 1
-      ORDER BY created_at DESC
-    `).all();
+    let skills = [];
+    
+    // Check if using MongoDB (database-mongodb adapter)
+    if (process.env.DATABASE_URL) {
+      // MongoDB path
+      const skillsCollection = db.collection('skills');
+      skills = await skillsCollection
+        .find({ active: { $ne: false } })
+        .sort({ created_at: -1 })
+        .toArray();
+    } else {
+      // SQLite path
+      skills = db.prepare(`
+        SELECT id, name, description, version, author, category,
+               active, created_at, updated_at
+        FROM skills
+        WHERE active = 1
+        ORDER BY created_at DESC
+      `).all();
+    }
 
     res.json({ 
       data: skills.map(skill => ({
-        id: skill.id,
+        id: skill.id || skill._id,
         name: skill.name,
         description: skill.description,
         version: skill.version,
         author: skill.author,
         category: skill.category,
-        createdAt: skill.created_at,
-        updatedAt: skill.updated_at
+        createdAt: skill.created_at || skill.createdAt,
+        updatedAt: skill.updated_at || skill.updatedAt
       }))
     });
   } catch (err) {
     console.error('[Skills] Public list error:', err);
-    res.status(500).json({ error: 'Failed to list skills' });
+    res.status(500).json({ error: 'Failed to list skills', details: err.message });
   }
 });
 
