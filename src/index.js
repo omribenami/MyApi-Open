@@ -3534,7 +3534,7 @@ app.post('/api/v1/billing/downgrade-preview', authenticate, (req, res) => {
 });
 
 // --- PLAN DOWNGRADE CONFIRM (executes deletion) ---
-app.post('/api/v1/billing/downgrade-confirm', authenticate, (req, res) => {
+app.post('/api/v1/billing/downgrade-confirm', authenticate, async (req, res) => {
   try {
     const { newPlan, confirmed } = req.body || {};
     if (!confirmed) {
@@ -3585,9 +3585,38 @@ app.post('/api/v1/billing/downgrade-confirm', authenticate, (req, res) => {
           }
         }
       }
+
+      // Update user's plan
+      db.prepare('UPDATE users SET plan = ? WHERE id = ?').run(newPlanId, req.user?.id || ownerId);
+
+      // Update workspace subscription
+      const workspaceId = getRequestWorkspaceId(req);
+      if (workspaceId) {
+        upsertBillingSubscription(workspaceId, {
+          stripe_subscription_id: `manual_downgrade_${Date.now()}`,
+          plan_id: newPlanId,
+          status: 'active',
+        });
+      }
     });
 
     tx();
+
+    // Cancel Stripe subscription if downgrading from paid plan
+    if ((currentPlanId === 'pro' || currentPlanId === 'enterprise') && newPlanId === 'free') {
+      try {
+        const stripe = getStripeClient();
+        const workspaceId = getRequestWorkspaceId(req);
+        const sub = getBillingSubscriptionByWorkspace(workspaceId);
+        if (sub && sub.stripe_subscription_id && !sub.stripe_subscription_id.includes('manual')) {
+          await stripe.subscriptions.cancel(sub.stripe_subscription_id);
+          console.log(`[Downgrade] Cancelled Stripe subscription ${sub.stripe_subscription_id}`);
+        }
+      } catch (err) {
+        console.error('[Downgrade] Failed to cancel Stripe subscription:', err.message);
+        // Don't fail the whole downgrade if Stripe cancellation fails
+      }
+    }
 
     createAuditLog({
       requesterId: req.tokenMeta.tokenId,
@@ -3598,7 +3627,7 @@ app.post('/api/v1/billing/downgrade-confirm', authenticate, (req, res) => {
       details: { fromPlan: currentPlanId, toPlan: newPlanId }
     });
 
-    return res.json({ ok: true, message: `Excess items deleted. Proceeding to checkout for ${newPlanId} plan.` });
+    return res.json({ ok: true, message: `Downgraded to ${newPlanId}. Excess items deleted. Stripe subscription cancelled.` });
   } catch (error) {
     console.error('Downgrade confirm error:', error);
     return res.status(500).json({ error: 'Failed to process downgrade' });
