@@ -916,10 +916,8 @@ app.use((req, res, next) => {
 });
 
 // Dashboard assets with cache control headers for fresh deployment
-app.use('/dashboard/assets', (req, res, next) => {
-  res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
-  express.static(path.join(__dirname, 'public', 'dist', 'assets'))(req, res, next);
-});
+// Serve static files BEFORE any SPA shell middleware
+app.use('/dashboard/assets', express.static(path.join(__dirname, 'public', 'dist', 'assets')));
 app.use('/dashboard', express.static(path.join(__dirname, 'public', 'dist')));
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -8588,18 +8586,7 @@ const sendDashboardIndex = (req, res) => {
   res.sendFile('index.html', { root: path.join(__dirname, 'public', 'dist') });
 };
 
-// CRITICAL: Serve static dist files FIRST, BEFORE the SPA shell middleware
-// This must come before any other /dashboard middleware to avoid SPA shell catching asset requests
-app.use('/dashboard/assets', express.static(path.join(__dirname, 'public', 'dist', 'assets')));
-app.use('/dashboard/', express.static(path.join(__dirname, 'public', 'dist'), { setHeaders: (res, path) => {
-  if (path.endsWith('.html')) {
-    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-  } else {
-    res.set('Cache-Control', 'public, max-age=31536000, immutable');
-  }
-}}));
-
-// Serve SPA shell for all other /dashboard routes (this comes AFTER static serve)
+// Serve SPA shell for all /dashboard routes
 app.use('/dashboard', dashboardSpaRateLimit, (req, res, next) => {
   if (req.method !== 'GET' && req.method !== 'HEAD') return next();
   return sendDashboardIndex(req, res);
