@@ -917,23 +917,8 @@ app.use((req, res, next) => {
 
 // Dashboard assets with cache control headers for fresh deployment
 // Serve dashboard static files BEFORE SPA shell
-// Using express.static with proper options
 const dashboardDistPath = path.join(__dirname, 'public', 'dist');
-app.use('/dashboard', (req, res, next) => {
-  console.log(`[Dashboard Static] Incoming: ${req.path}, checking dist at: ${dashboardDistPath}`);
-  express.static(dashboardDistPath, {
-    maxAge: '1y',
-    etag: false,
-    setHeaders: (res, path) => {
-      if (path.includes('index.html')) {
-        res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-      }
-    }
-  })(req, res, (err) => {
-    console.log(`[Dashboard Static] Fallthrough for ${req.path}, error: ${err?.message || 'none'}`);
-    next();
-  });
-});
+app.use('/dashboard', express.static(dashboardDistPath));
 
 // General static files
 app.use(express.static(path.join(__dirname, "public")));
