@@ -28,16 +28,16 @@ const OAuthIcons = {
 
 const features = [
   {
-    title: 'Launch faster',
-    desc: 'Unify APIs, tools, and automations in one secure dashboard.',
+    title: 'Made by AI, for AI',
+    desc: 'Native integration with AI agents and modern workflows.',
   },
   {
-    title: 'Stay in control',
-    desc: 'Manage token access and service permissions with confidence.',
+    title: 'Your Digital Presence',
+    desc: 'Centralize all your APIs, tokens, and automations.',
   },
   {
-    title: 'Scale with clarity',
-    desc: 'Grow from solo workflow to team operations without chaos.',
+    title: 'AI & Human Together',
+    desc: 'A new way for artificial and human intelligence to interact.',
   },
 ];
 
@@ -301,9 +301,9 @@ function Login() {
           <section className="lg:col-span-5">
             <div className="max-w-xl">
               <BrandLogo size="lg" className="mb-8" />
-              <p className="mb-4 text-sm font-semibold uppercase tracking-[0.14em] text-blue-300">MyApi Platform</p>
+              <p className="mb-4 text-sm font-semibold uppercase tracking-[0.14em] text-blue-300">A new way for AI and human to interact</p>
               <h1 className="text-3xl font-semibold leading-tight sm:text-4xl lg:text-[2.65rem] lg:leading-[1.1]">
-                The professional command center for APIs, tokens, and AI workflows.
+                Your new digital presence.
               </h1>
               <p className="mt-5 text-base leading-relaxed text-slate-300 sm:text-lg">
                 Connect providers, protect credentials, and run your automation stack from one focused workspace.
