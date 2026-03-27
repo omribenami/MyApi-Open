@@ -3,60 +3,176 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>MyApi Sign In / Sign Up</title>
+  <title>MyApi - Your Digital Presence, Powered by AI</title>
   <style>
-    :root{--bg:#0b1020;--card:#121a2b;--text:#e5e7eb;--muted:#93a3b8;}
-    @media (prefers-color-scheme: light){:root{--bg:#f7f7fb;--card:#fff;--text:#111;--muted:#555;}}
-    body{margin:0;background:var(--bg);color:var(--text);font-family:Arial, Helvetica, sans-serif;min-height:100vh;}
-    .wrap{max-width:860px;margin:0 auto; padding:32px 16px;}
-    .card{background:var(--card);border-radius:14px;padding:24px;border:1px solid #334155;box-shadow:0 4px 16px rgba(0,0,0,.15)}
-    h1{margin:0 0 8px;font-size:28px}
-    h2{font-size:20px;margin:0 0 14px}
-    label{display:block;margin:8px 0 4px;font-size:12px;color:var(--muted)}
-    input{width:100%;padding:10px 12px;border-radius:8px;border:1px solid #334155;background:#0b1020;color:#fff}
-    .btn{padding:10px 14px;border-radius:8px;border:0;background:#4f46e5;color:white;font-weight:600;cursor:pointer}
-    .btn.secondary{background:#374151}
-    .row{display:flex;gap:16px}
-    .col{flex:1}
-    .tabs{display:flex;gap:8px;margin-bottom:12px}
-    .tab{padding:8px 14px;border-radius:8px;background:#1e1e2d;color:white;cursor:pointer}
-    .tab.active{background:#4f46e5}
+    :root{--bg:#0b1020;--card:#121a2b;--text:#e5e7eb;--muted:#93a3b8;--accent:#4f46e5;}
+    @media (prefers-color-scheme: light){:root{--bg:#f7f7fb;--card:#fff;--text:#111;--muted:#555;--accent:#4f46e5;}}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;min-height:100vh;display:flex;flex-direction:column}
+    .container{display:flex;gap:32px;max-width:1200px;margin:0 auto;padding:48px 24px;flex:1;align-items:center}
+    .left{flex:1;min-width:300px}
+    .right{flex:1;min-width:300px}
+    .header{margin-bottom:32px}
+    .logo{display:flex;align-items:center;gap:12px;margin-bottom:24px}
+    .logo h1{margin:0;font-size:32px;font-weight:700}
+    .tagline{font-size:18px;color:var(--muted);margin:0 0 8px;line-height:1.4}
+    .description{font-size:14px;color:var(--muted);margin:0;line-height:1.6}
+    .features{display:flex;flex-direction:column;gap:16px;margin-top:24px}
+    .feature{display:flex;gap:12px;align-items:flex-start}
+    .feature-icon{font-size:20px;flex-shrink:0}
+    .feature-text{flex:1}
+    .feature-text strong{display:block;color:var(--text);margin-bottom:4px;font-size:14px}
+    .feature-text span{font-size:13px;color:var(--muted);line-height:1.4}
+    .card{background:var(--card);border-radius:12px;padding:32px;border:1px solid #334155;box-shadow:0 8px 24px rgba(0,0,0,.2)}
+    .card-header{margin-bottom:24px}
+    .card-title{font-size:24px;font-weight:700;margin:0 0 8px;color:var(--text)}
+    .card-subtitle{font-size:13px;color:var(--muted);margin:0;font-weight:500}
+    .tabs{display:flex;gap:16px;margin-bottom:28px;border-bottom:1px solid #334155;padding-bottom:16px}
+    .tab{padding:8px 0;border:none;background:none;color:var(--muted);font-size:14px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;transition:all 0.2s}
+    .tab:hover{color:var(--text)}
+    .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+    .form-group{margin-bottom:16px}
+    .form-row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    label{display:block;margin-bottom:6px;font-size:12px;font-weight:600;color:var(--text);text-transform:uppercase;letter-spacing:0.5px}
+    input{width:100%;padding:12px 14px;border-radius:8px;border:1px solid #334155;background:#0b1020;color:#fff;font-size:14px;transition:border-color 0.2s}
+    input:focus{outline:none;border-color:var(--accent)}
+    input::placeholder{color:#555}
+    .btn{width:100%;padding:12px 16px;border-radius:8px;border:0;background:var(--accent);color:white;font-weight:700;cursor:pointer;font-size:14px;transition:all 0.2s;margin-top:8px}
+    .btn:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(79,70,229,0.4)}
+    .note{font-size:12px;color:var(--muted);margin-top:12px;line-height:1.5}
     .hidden{display:none}
-    .note{font-size:12px;color:var(--muted);margin-top:8px}
-    @media (max-width: 640px){ .wrap{padding:16px} }
+    .plans{display:flex;flex-direction:column;gap:16px}
+    .plan{background:rgba(79,70,229,0.05);border:1px solid #334155;border-radius:10px;padding:20px;transition:all 0.2s}
+    .plan:hover{border-color:var(--accent);background:rgba(79,70,229,0.08);transform:translateY(-2px)}
+    .plan-name{font-weight:700;font-size:14px;color:var(--accent);margin:0 0 8px;text-transform:uppercase;letter-spacing:0.5px}
+    .plan-desc{font-size:13px;color:var(--text);margin:0;line-height:1.5}
+    .plan-price{font-size:20px;font-weight:700;color:var(--text);margin-top:12px}
+    .plan-price span{font-size:12px;color:var(--muted);font-weight:500}
+    .cta{margin-top:24px;font-size:12px;color:var(--muted);text-align:center}
+    @media (max-width:900px){
+      .container{flex-direction:column;gap:24px;padding:32px 16px}
+      .left,.right{min-width:unset}
+      .form-row{grid-template-columns:1fr}
+      .logo h1{font-size:28px}
+    }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="card" style="margin-bottom:16px;text-align:center">
-      <h1>🔐 MyApi</h1>
-      <div class="tabs" aria-label="Auth tabs">
-        <button class="tab active" id="tabSignIn">Sign In</button>
-        <button class="tab" id="tabSignUp">Sign Up</button>
-      </div>
-      <div id="signinForm" class="sign-form">
-        <div class="col">
-          <label for="si_username">Username</label>
-          <input id="si_username" type="text" placeholder="Username" />
+  <div class="container">
+    <!-- LEFT: LOGIN/SIGNUP -->
+    <div class="left">
+      <div class="header">
+        <div class="logo">
+          <span style="font-size:36px">🔐</span>
+          <h1>MyApi</h1>
         </div>
-        <div class="col">
-          <label for="si_password">Password</label>
-          <input id="si_password" type="password" placeholder="Password" />
-        </div>
-        <button class="btn" id="loginBtn">Sign In</button>
-        <div class="note" id="signinNote">Use Sign Up to create a new account.</div>
+        <p class="tagline">A new way for AI and human to interact.</p>
+        <p class="description">Your unified digital presence, crafted by artificial intelligence, for the next generation of applications.</p>
       </div>
-      <div id="signupForm" class="hidden sign-form">
-        <div class="row"><div class="col"><label for="su_username">Username</label><input id="su_username" type="text" placeholder="Username" /></div><div class="col"><label for="su_password">Password</label><input id="su_password" type="password" placeholder="Password" /></div></div>
-        <div class="row"><div class="col"><label for="su_display">Display Name</label><input id="su_display" type="text" placeholder="Display name" /></div><div class="col"><label for="su_email">Email</label><input id="su_email" type="email" placeholder="Email" /></div></div>
-        <div class="row"><div class="col"><label for="su_timezone">Timezone</label><input id="su_timezone" type="text" placeholder="e.g. America/Chicago" /></div><div class="col"></div></div>
-        <button class="btn" id="signupBtn">Create Account</button>
-        <div class="note" id="signupNote">After signup, you may be prompted to complete onboarding and MFA setup.</div>
+
+      <div class="features">
+        <div class="feature">
+          <div class="feature-icon">⚡</div>
+          <div class="feature-text">
+            <strong>Made by AI, for AI</strong>
+            <span>Native integration with LLMs and modern AI workflows</span>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🔗</div>
+          <div class="feature-text">
+            <strong>Connect Everything</strong>
+            <span>Unified access to your services, tokens, and data</span>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon">🛡️</div>
+          <div class="feature-text">
+            <strong>Privacy First</strong>
+            <span>End-to-end encryption, complete data control</span>
+          </div>
+        </div>
       </div>
     </div>
-    <div class="card" id="flowCard" class="hidden">
-      <h2>Onboarding flow</h2>
-      <p class="note">Sign in to begin onboarding. This panel will guide you through Identity, Connectors, and Vault setup.</p>
+
+    <!-- RIGHT: CARD -->
+    <div class="right">
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Get Started</h2>
+          <p class="card-subtitle">Your new digital presence awaits</p>
+        </div>
+
+        <div class="tabs" aria-label="Auth tabs">
+          <button class="tab active" id="tabSignIn">Sign In</button>
+          <button class="tab" id="tabSignUp">Create Account</button>
+        </div>
+
+        <!-- SIGN IN -->
+        <div id="signinForm" class="sign-form">
+          <div class="form-group">
+            <label for="si_username">Username</label>
+            <input id="si_username" type="text" placeholder="your_username" />
+          </div>
+          <div class="form-group">
+            <label for="si_password">Password</label>
+            <input id="si_password" type="password" placeholder="••••••••" />
+          </div>
+          <button class="btn" id="loginBtn">Sign In</button>
+          <div class="note" id="signinNote">New here? Create an account above to join MyApi.</div>
+        </div>
+
+        <!-- SIGN UP -->
+        <div id="signupForm" class="hidden sign-form">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="su_username">Username</label>
+              <input id="su_username" type="text" placeholder="your_username" />
+            </div>
+            <div class="form-group">
+              <label for="su_password">Password</label>
+              <input id="su_password" type="password" placeholder="••••••••" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="su_display">Display Name</label>
+              <input id="su_display" type="text" placeholder="Your Name" />
+            </div>
+            <div class="form-group">
+              <label for="su_email">Email</label>
+              <input id="su_email" type="email" placeholder="you@example.com" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="su_timezone">Timezone</label>
+            <input id="su_timezone" type="text" placeholder="e.g. America/Chicago" />
+          </div>
+          <button class="btn" id="signupBtn">Create Account</button>
+          <div class="note" id="signupNote">After signup, complete a quick onboarding and MFA setup to secure your account.</div>
+        </div>
+
+        <!-- PRICING PREVIEW -->
+        <div class="cta" style="margin-top:32px">
+          <div class="plans">
+            <div class="plan">
+              <div class="plan-name">Free</div>
+              <div class="plan-price">$0<span>/month</span></div>
+              <div class="plan-desc">Perfect for exploring. Get started instantly.</div>
+            </div>
+            <div class="plan">
+              <div class="plan-name">Pro</div>
+              <div class="plan-price">$29<span>/month</span></div>
+              <div class="plan-desc">Everything you need to scale your presence.</div>
+            </div>
+            <div class="plan">
+              <div class="plan-name">Enterprise</div>
+              <div class="plan-price">Custom</div>
+              <div class="plan-desc">Dedicated support and unlimited features.</div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
   <script>
