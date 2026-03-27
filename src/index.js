@@ -4723,11 +4723,25 @@ app.delete('/api/v1/users/:id', authenticate, (req, res) => {
     }
 
     const tx = db.transaction((userId) => {
+      // Delete from all tables that reference this user (in dependency order)
       db.prepare('DELETE FROM oauth_tokens WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM vault_tokens WHERE user_id = ?').run(userId);
       db.prepare('DELETE FROM access_tokens WHERE owner_id = ?').run(userId);
+      db.prepare('DELETE FROM approved_devices WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM device_approvals_pending WHERE user_id = ?').run(userId);
       db.prepare('DELETE FROM handshakes WHERE user_id = ?').run(userId);
       db.prepare('DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)').run(userId);
       db.prepare('DELETE FROM conversations WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM notifications WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM notification_preferences WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM service_preferences WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM activity_log WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM email_queue WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM rate_limits WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM subscriptions WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM two_factor_backup_codes WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM team_invitations WHERE sender_id = ? OR recipient_id = ?').run(userId, userId);
+      db.prepare('DELETE FROM marketplace_listings WHERE owner_id = ?').run(userId);
       db.prepare('DELETE FROM persona_documents WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)').run(userId);
       db.prepare('DELETE FROM persona_skills WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)').run(userId);
       db.prepare('DELETE FROM skills WHERE owner_id = ?').run(userId);

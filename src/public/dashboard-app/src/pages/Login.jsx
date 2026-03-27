@@ -236,10 +236,32 @@ function Login() {
   const handleCheckout = async (plan) => {
     setError('');
     setLoading(true);
+    
+    // Check if user is authenticated first
+    try {
+      const authCheck = await fetch('/api/v1/auth/me', { credentials: 'include' });
+      if (!authCheck.ok) {
+        // Not authenticated — redirect to login
+        setError('Please log in to subscribe.');
+        setViewMode('login');
+        setIsSignup(false);
+        setLoading(false);
+        return;
+      }
+    } catch {
+      setError('Please log in to subscribe.');
+      setViewMode('login');
+      setIsSignup(false);
+      setLoading(false);
+      return;
+    }
+    
+    // User is authenticated, proceed with checkout
     try {
       const response = await fetch('/api/v1/billing/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', // Send session cookie for authentication
         body: JSON.stringify({ plan }),
       });
       if (response.ok) {
