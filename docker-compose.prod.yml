@@ -26,8 +26,8 @@
 services:
   myapi:
     build:
-      context: ./src
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: src/Dockerfile
     image: myapi:latest
     container_name: myapi
     restart: unless-stopped

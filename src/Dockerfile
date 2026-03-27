@@ -3,14 +3,14 @@ FROM node:22
 
 WORKDIR /app
 
-# Install dependencies first (before copying code, for better caching)
-# Copy both package.json and package-lock.json
+# Copy package files from root
 COPY package.json package-lock.json ./
 
-# Install all dependencies (force refresh to bypass lock file issues)
-RUN npm cache clean --force && npm install --legacy-peer-deps --no-audit
+# Install dependencies
+RUN npm install --no-audit
 
-# Copy entire application code
+# Copy entire application code (from root context)
+COPY src src
 COPY . .
 
 # Ensure directories exist
