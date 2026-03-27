@@ -1,189 +1,195 @@
 # Privacy Policy
 
-**Last Updated:** March 26, 2026  
-**Effective Date:** March 26, 2026
+**Last Updated:** March 26, 2026
 
 ---
 
-## 1. Executive Summary & Compliance
+## What Information Do We Collect?
 
-This Privacy Policy describes how MyApi Inc. collects, uses, stores, and protects personal data.
+We collect information you provide to us:
+- **Email address** and account credentials (passwords are hashed and never stored in plaintext)
+- **OAuth tokens** from services you connect (GitHub, Google, LinkedIn, etc.)
+- **Files and documents** you upload
+- **Billing information** if you use paid services
 
-**We comply with:**
-- ✅ GDPR (EU)
-- ✅ CCPA (California)
-- ✅ COPPA (Children Under 13)
-- ✅ HIPAA (Medical Data)
-- ✅ CAN-SPAM (Email)
-- ✅ PCI-DSS (Payments)
-- ✅ State Data Breach Laws
-
----
-
-## 2. What Data We Collect
-
-### Information You Provide
-- Email address and account credentials (passwords are hashed, never plaintext)
-- OAuth tokens from connected services (GitHub, Google, etc.)
-- API keys and credentials
-- Documents and files you upload
-- Communication with support
-- Billing and payment information
-- Profile information (name, avatar, timezone)
-
-### Information We Collect Automatically
-- IP address and geolocation
-- Browser type, OS, device information
-- Pages visited and time spent
-- API calls and usage data
-- Login attempts and timestamps
-- Device fingerprints (for security)
-- Cookies and session data
-- Error logs and performance metrics
-
-### Information from Third Parties
-- OAuth providers (name, email, avatar, public profile)
-- Payment processors (transaction history)
-- Law enforcement (legal requests)
+We also automatically collect:
+- **IP address and location** when you visit
+- **Browser and device information** (type, OS, model)
+- **Usage data** (pages visited, API calls made, time spent)
+- **Login information** (when and where you logged in)
+- **Cookies** for session management
 
 ---
 
-## 3. How We Use Your Data
+## How Do We Use Your Data?
 
 We use your data to:
-- Authenticate and manage your account
-- Connect to OAuth services
-- Process API requests and provide support
-- Prevent fraud, abuse, and security threats
-- Improve the Service (analytics on usage patterns)
-- Comply with legal obligations
-- Send transactional emails and notifications
+- ✅ Keep your account secure and working
+- ✅ Connect you to OAuth services (Google, GitHub, etc.)
+- ✅ Process your API requests
+- ✅ Send you notifications and updates
+- ✅ Help you if you need customer support
+- ✅ Prevent fraud and abuse
+- ✅ Improve our service based on how you use it
+- ✅ Follow legal requirements
 
 **We DO NOT:**
-- Sell your personal data to third parties
-- Share data with data brokers
-- Use data for illegal activities
-- Train AI models on your private content (without consent)
+- ❌ Sell your personal data
+- ❌ Share your data with marketing companies
+- ❌ Use your private files to train AI models
+- ❌ Trade your data with data brokers
 
 ---
 
-## 4. Data Retention
+## How Long Do We Keep Your Data?
 
-| Data Type | Retention Period |
-|-----------|-----------------|
-| Account Information | Until deletion |
-| OAuth Tokens | Until disconnected |
-| Session Data | 7 days |
+| What | How Long |
+|-----|----------|
+| Your account info | Until you delete your account |
+| OAuth tokens | Until you disconnect the service |
+| Session data | 7 days |
 | Notifications | 30 days |
-| Audit Logs | 90 days |
-| Payment Records | 7 years (tax compliance) |
+| Login history | 90 days |
 | Backups | 90 days |
+| Payment records | 7 years (required by tax law) |
+
+When you delete your account, we delete your data within 30 days. Backups are deleted within 90 days.
 
 ---
 
-## 5. Your Data Rights (GDPR & CCPA)
+## Who Can Access Your Data?
 
-### GDPR Rights (EU Users)
-- **Access:** Request a copy of your data
-- **Rectification:** Correct inaccurate information
-- **Erasure:** Delete your account and data
-- **Portability:** Export data in standard format
-- **Object:** Opt-out of processing
-- **Restrict:** Limit how we use your data
-- **Withdraw Consent:** Withdraw consent anytime
+We share your data with:
+- **Service providers** we use to run MyApi (hosting, email, payments) - they sign agreements to protect it
+- **Law enforcement** only if required by a valid legal order
 
-### CCPA Rights (California Users)
+**We do NOT share with:**
+- Marketing companies
+- Data brokers
+- Competitors
+- Anyone else without your permission
+
+---
+
+## How Do We Protect Your Data?
+
+We use:
+- **HTTPS encryption** for all data in transit (like a locked connection)
+- **AES-256 encryption** for sensitive data at rest (like a vault)
+- **Multi-factor authentication** support (2FA)
+- **Role-based access control** (only people who need to see data can see it)
+- **Regular security audits** to find problems
+- **Encrypted daily backups** in case something goes wrong
+
+---
+
+## Your Privacy Rights
+
+Depending on where you live, you have rights:
+
+### If You're in the EU (GDPR)
+- **See your data:** Request a copy of everything we have about you
+- **Fix your data:** Ask us to correct incorrect information
+- **Delete your data:** Request that we delete your account and information
+- **Get your data out:** Download your data in a standard format
+- **Stop certain uses:** Ask us to limit how we use your data
+- **Object:** Say no to certain types of processing
+
+### If You're in California (CCPA)
 - **Know:** What personal information we collect
-- **Delete:** Request deletion of your data
-- **Opt-Out:** Opt out of data sales (we don't sell your data)
-- **Non-Discrimination:** No discrimination for exercising rights
+- **Delete:** Ask us to delete your information
+- **Opt-out:** Opt out of any data sales (we don't sell anyway)
+- **Non-discrimination:** We won't punish you for asking
+
+### How to Exercise Your Rights
+Email: **privacy@myapiai.com**
+- Subject: "Privacy Request: [What you want]"
+- We'll respond within 30-45 days
 
 ---
 
-## 6. Data Security
+## Cookies and Tracking
 
-We implement:
-- HTTPS encryption (TLS 1.2+)
-- AES-256 encryption for sensitive data
-- Multi-factor authentication support
-- Role-based access control
-- Regular security audits
-- Encrypted daily backups
-- 24/7 incident response team
+**Session Cookies** (Required to log you in)
+- How long: 7 days
+- Can you turn it off: No, you need this to stay logged in
+- Why: Keeps you logged in securely
 
----
+**Analytics** (Optional)
+- We might use Google Analytics to understand how people use MyApi
+- You can turn this off in your browser settings
+- We respect "Do Not Track" signals
 
-## 7. Who We Share Data With
-
-- **Service Providers:** AWS, Stripe, SendGrid (under data agreements)
-- **OAuth Providers:** Only tokens, not personal data
-- **Law Enforcement:** Only with valid legal process
-- **Business Transfers:** If we're acquired, data may transfer (we'll notify you)
-
-**We DO NOT share with:** Marketing companies, data brokers, or competitors without your consent.
+**Ads and Marketing** (Optional)
+- We might use pixels from Facebook or Twitter to track if ads work
+- You can turn this off in your browser settings
 
 ---
 
-## 8. Data Breaches
+## Our Promise About Children
 
-If your data is breached, we will:
-1. Investigate within 24 hours
-2. Notify you within 72 hours (GDPR requirement)
-3. Report to authorities as required
-4. Provide details of what happened and next steps
+MyApi is not for people under 13 years old. We:
+- ❌ Don't knowingly collect data from children under 13
+- ✅ Will delete such data if we discover it
+- ✅ Will notify parents/guardians if this happens
+
+---
+
+## Third-Party Services
+
+When you connect services like Google or GitHub:
+- **Their privacy policies apply** to your interaction with them
+- **We only store your token**, not your personal data from those services
+- **You see their consent screen** so you know what you're approving
+
+---
+
+## If There's a Security Problem
+
+If someone breaks in and accesses your data:
+1. We investigate immediately (within 24 hours)
+2. We notify you via email (within 72 hours as required by law)
+3. We tell authorities if required
+4. We explain what happened and what to do
 
 **Report security issues:** security@myapiai.com
 
 ---
 
-## 9. Cookies & Tracking
+## International Data Transfers
 
-- **Session Cookies:** Keep you logged in (required, 7 days)
-- **Analytics:** Optional tracking with Google Analytics
-- **Marketing:** Optional tracking with Facebook/Twitter pixels
-- **DNT Support:** We respect Do-Not-Track signals
+Your data is stored primarily in the **United States**. 
 
-You can opt-out via browser settings.
-
----
-
-## 10. Children's Privacy (COPPA)
-
-MyApi is NOT intended for users under 13. We:
-- Do not knowingly collect data from children under 13
-- Will delete such data if discovered
-- Will notify parents/guardians
+If you're in the EU, you should know:
+- US laws are weaker than EU data protection laws
+- The US government can request data via legal process
+- By using MyApi, you accept this risk
 
 ---
 
-## 11. International Data Transfers
+## Changes to This Policy
 
-Your data is primarily stored in the United States. We use Standard Contractual Clauses for EU/UK data transfers.
-
-**By using MyApi, you consent to data transfers to the US.**
+We may update this policy sometimes. When we make big changes:
+- We'll email you about it
+- We'll update the date at the top
+- Continuing to use MyApi means you accept the changes
 
 ---
 
-## 12. Contact Us
+## Questions? Contact Us
 
-**Privacy Questions:**
+**General Privacy Questions:**
 - Email: privacy@myapiai.com
-- Response time: 5 business days
+- Response: 5 business days
 
 **Security Issues:**
 - Email: security@myapiai.com
-- Response time: 48 hours
+- Response: 48 hours
 
 **GDPR/CCPA Requests:**
 - Email: privacy@myapiai.com
-- Subject: "GDPR Request: [Access/Delete/Portability]"
-- Response time: 30-45 days
-
----
-
-## 13. Changes to This Policy
-
-We may update this policy anytime. We'll notify you of material changes via email. Continued use constitutes acceptance.
+- Subject: "GDPR Request: [Access/Delete/Export]"
+- Response: 30-45 days
 
 ---
 

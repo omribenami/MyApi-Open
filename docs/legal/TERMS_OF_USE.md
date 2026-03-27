@@ -1,299 +1,189 @@
 # Terms of Use
 
-**Last Updated:** March 26, 2026  
-**Effective Date:** March 26, 2026
+**Last Updated:** March 26, 2026
 
 ---
 
-## 1. Binding Agreement
+## 1. Agree to These Terms or Don't Use MyApi
 
-By accessing and using MyApi ("the Service"), you agree to be bound by these Terms of Service. If you do not agree to all terms, **do not use the Service**.
-
----
-
-## 2. Limited License
-
-We grant you a **non-exclusive, non-transferable, revocable limited license** to access the Service for personal, non-commercial use only.
-
-### You May NOT:
-- Copy, modify, or distribute the Service
-- Reverse engineer or decompile
-- Use for illegal purposes
-- Harass, abuse, or threaten others
-- Interfere with the Service
-- Attempt unauthorized access
-- Use for competitive purposes
-- Violate any laws
-- Bypass security measures
+By using MyApi, you agree to follow these rules. If you don't agree, don't use the service.
 
 ---
 
-## 3. User Accounts
+## 2. You Can Use MyApi For Personal Use Only
 
-**You are responsible for:**
-- Maintaining confidentiality of your password
-- All activities under your account
-- Keeping account information accurate
-- Notifying us immediately of unauthorized access
-
-**We are not liable for:**
-- Unauthorized access if you share credentials
-- Phishing attacks
-- Malware on your device
-- Loss of password
+We give you permission to use MyApi for yourself. You cannot:
+- Copy or steal the code
+- Try to hack or break it
+- Use it for illegal things
+- Use it to hurt other people
+- Try to compete with us
+- Reverse engineer it
+- Interfere with other people's access
 
 ---
 
-## 4. Disclaimer - Service Provided "AS-IS"
+## 3. You're Responsible for Your Account
 
-**THE SERVICE IS PROVIDED "AS-IS" WITHOUT ANY WARRANTIES.**
-
-We make NO guarantees regarding:
-- Accuracy or completeness of data
-- Uninterrupted uptime or availability
-- Security or freedom from breaches
-- Fitness for any particular purpose
-- No viruses or malware
-- Third-party services or integrations
-- OAuth service reliability
-- No loss of data
+- Keep your password secret
+- Tell us immediately if someone accesses your account without permission
+- Everything that happens on your account is your responsibility
+- We're not liable if someone hacks your account
 
 ---
 
-## 5. Limitation of Liability
+## 4. Important: MyApi is Provided "As-Is"
 
-**OUR LIABILITY IS LIMITED TO $100 OR THE AMOUNT YOU PAID US IN THE PAST 12 MONTHS, WHICHEVER IS LESS.**
+**We don't promise anything about MyApi:**
+- It might go down sometimes
+- Your data might get lost
+- It might not work for what you want
+- We don't guarantee it's secure (we try hard, but can't promise)
+- Third-party services (Google, GitHub) might break
 
-**We are not liable for:**
-- Indirect damages (lost profits, lost revenue, lost data)
-- Consequential damages
-- Punitive damages
-- Special damages
-- Any damages from:
-  - Service downtime or unavailability
-  - Data loss or corruption
-  - Unauthorized access
-  - Third-party service failures
-  - Your use of the Service
-  - Any other cause
-
-**This limitation applies even if we were advised of the possibility of such damages.**
+**Use it at your own risk.**
 
 ---
 
-## 6. Indemnification
+## 5. We're Not Liable For Much
 
-You agree to defend and hold MyApi harmless from any claims, damages, or costs arising from:
-- Your use of the Service
-- Your violation of these Terms
-- Your infringement of third-party rights
-- Your illegal activity
-- Your content or data
-- Your connections to OAuth services
+**If something goes wrong, our responsibility is limited to:**
+- **$100** or **the amount you paid us in the last 12 months**, whichever is less
 
----
+That's it. We're not responsible for:
+- Lost money
+- Lost data
+- Lost business opportunities
+- Any big damages
+- Any problems at all, really
 
-## 7. User Content & Rights
-
-### Your Content
-- You retain ownership of content you upload
-- You grant us license to store, process, and deliver it
-- You warrant you have rights to provide this content
-- You are responsible for compliance with laws
-
-### Our Rights
-- We may analyze your data (anonymized only)
-- We may retain data as required by law
-- We may use anonymized data for improvement
-- We retain all Service intellectual property
+This is true even if we knew the problem could happen.
 
 ---
 
-## 8. Acceptable Use Policy
+## 6. If Something Goes Wrong With Your Use
 
-### Prohibited Activities
+If you use MyApi in a way that causes problems, you have to pay us back for any legal costs or claims against us.
+
+---
+
+## 7. Your Data, Our Data
+
+**You own what you upload:**
+- Files you upload are yours
+- We can store them and show them to you
+- You promise you have the right to upload them
+
+**We own MyApi:**
+- All the code and design is ours
+- You can't copy it
+- You can't use it to make a competing service
+
+---
+
+## 8. Rules You Have to Follow
+
+Don't use MyApi for:
 - Illegal activity
-- Harassment or threatening behavior
-- Fraud or deception
-- Malware or viruses
-- Privacy violations
-- Intellectual property infringement
+- Harassing or threatening people
 - Spam or bulk messaging
-- Excessive resource usage
-- Circumventing security
-- Reverse engineering
+- Fraud or scams
+- Malware or viruses
+- Breaking other people's privacy
+- Stealing other people's intellectual property
+- Breaking other people's copyright
+- Trying to break our security
 
-### Consequences
-We may immediately:
-- Suspend your account
-- Terminate your account
-- Delete your data
-- Report to authorities
-- Pursue legal action
-- Ban your IP address
-
-**No refunds will be issued.**
+**If you break these rules:**
+- We'll shut down your account immediately
+- We'll delete your data
+- We might report you to police
+- No refunds
 
 ---
 
-## 9. Termination
+## 9. We Can Shut Down Your Account
 
-### We May Terminate If:
-- You violate these Terms
-- You engage in illegal activity
-- We suspect fraud or abuse
-- You threaten security
-- We discontinue the Service
-- You request deletion
+We can delete your account if:
+- You break these terms
+- We think you're doing something illegal
+- You're threatening our security
+- You're abusing the service
+- We decide to shut down MyApi entirely
 
-### What Happens:
-- Your account is immediately deactivated
-- Your data is retained per privacy policy (30-90 days then deleted)
-- No refunds (except where required by law)
-- You lose access to all services
-- Termination is final
-
-### You May Terminate:
-- Delete your account anytime via Settings
-- We'll delete your data per privacy policy
-- Immediately upon deletion
+When we do:
+- Your account is gone
+- Your data is deleted in 30-90 days
+- No refunds
 
 ---
 
-## 10. Third-Party Services
+## 10. Third-Party Services (Google, GitHub, etc.)
 
-When you connect OAuth services (Google, GitHub, LinkedIn, etc.):
+When you connect to other services:
 - Their terms and privacy policies apply
-- We are not responsible for their security
-- We are not responsible for their availability
-- We are not responsible for their policies
-- They may terminate service anytime
-- We cannot guarantee their reliability
+- We're not responsible if they break
+- We're not responsible for their security
+- We're not responsible for what they do with your data
 
 ---
 
-## 11. Payment Terms
+## 11. Payment & Refunds
 
-### Pricing
-- We reserve the right to change pricing with 30 days notice
-- Price changes do not apply to current billing cycle
-
-### Refunds
-- Non-refundable after service is provided
-- Except where required by law (e.g., 30-day trial)
-- Refunds processed within 5-10 business days
-
-### Billing
-- You authorize recurring charges to your payment method
-- You are responsible for providing valid payment information
-- Failed payments may result in service suspension
-- We are not responsible for bank fees
+- We can change prices with 30 days notice (future billing only)
+- Refunds are non-refundable after you get the service
+- Some refunds might be required by law (like trial periods)
+- Your credit card company might charge fees (not our fault)
 
 ---
 
-## 12. Intellectual Property
+## 12. Ownership of MyApi
 
-### Our IP
-- All Service code, design, logos, and content belong to MyApi
-- You cannot copy or modify
-- You cannot use for competitive purposes
-- We retain all rights
-
-### Your IP
-- You retain ownership of your uploaded content
-- We have license to store and deliver it
-- We may use anonymized versions for improvement
+- MyApi owns all the code, logos, and design
+- You can't copy or use any of it
+- You can't use it to compete with us
+- You can't sell it
 
 ---
 
-## 13. Confidentiality
+## 13. We Can Change These Terms
 
-### What's Confidential
-- Your passwords and credentials
-- Your OAuth tokens
-- Your private data
-- Your API keys
-
-### Our Obligations
-- We will not disclose except:
-  - Law enforcement with valid legal process
-  - Business partners under NDAs
-  - Service providers with data agreements
-  - Your explicit consent
+We might change these terms anytime. If we do:
+- We'll tell you via email about big changes
+- Continuing to use MyApi means you accept the changes
+- If you don't like the changes, delete your account
 
 ---
 
-## 14. Export Controls & Compliance
+## 14. This Applies Everywhere
 
-You agree not to:
-- Export to sanctioned countries
-- Sell to restricted parties
-- Violate export control laws
-- Comply with US OFAC sanctions
-- Use for weapons development
-- Use for illegal purposes
+These terms are governed by the laws of [your jurisdiction]. Any disputes go to binding arbitration (not court), which means:
+- You can't sue us in court
+- We can't sue you in court
+- An arbitrator decides instead
+- It's private (not public)
 
 ---
 
-## 15. Governing Law & Jurisdiction
+## 15. No Class Action Lawsuits
 
-- These Terms are governed by applicable law
-- All disputes are subject to binding arbitration (not court)
-- Arbitration shall occur in agreed location
-- Each party bears own arbitration costs
-- You waive right to class action lawsuit
-- You waive right to jury trial
+You and MyApi agree that any disputes are handled individually. You can't:
+- Join with other people's lawsuits
+- Be part of a class action
+- Be part of a group lawsuit
 
 ---
 
-## 16. Class Action Waiver
+## 16. Contact Us
 
-**YOU AND MYAPI AGREE:**
-- All disputes shall be individual
-- Not as part of class action or group proceeding
-- Not as representative action
-- You cannot pursue group claims
-- You cannot join others' claims
-
----
-
-## 17. Changes to Terms
-
-We may modify these Terms anytime. We'll notify you of material changes via email. **Continued use constitutes acceptance.**
-
-If you don't accept changes:
-- Delete your account
-- Stop using the Service
-
----
-
-## 18. Severability
-
-If any part of these Terms is invalid:
-- The invalid part is severed
-- Remaining terms continue in full force
-- We will enforce to maximum extent
-
----
-
-## 19. Entire Agreement
-
-These Terms, plus Privacy Policy and Incident Response Plan, constitute the entire agreement between you and MyApi. No other promises or understandings exist.
-
----
-
-## 20. Contact Us
-
-**For legal questions:**
+**Legal questions:**
 - Email: privacy@myapiai.com
-- Response time: 5 business days
+- Response: 5 business days
 
-**For urgent matters:**
+**Urgent issues:**
 - Email: security@myapiai.com
-- Response time: 48 hours
+- Response: 48 hours
 
 ---
 
-**By using MyApi, you accept these Terms of Service completely.**
-
-**Read carefully. This is a binding legal agreement.**
+**By using MyApi, you accept these terms completely.**
