@@ -8588,7 +8588,11 @@ const sendDashboardIndex = (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   res.set('Pragma', 'no-cache');
   res.set('Expires', '0');
-  res.sendFile('index.html', { root: path.join(__dirname, 'public', 'dist') });
+  const indexPath = path.join(__dirname, 'public', 'dist', 'index.html');
+  console.log(`[SPA Shell] Serving dashboard from: ${indexPath}`);
+  res.sendFile('index.html', { root: path.join(__dirname, 'public', 'dist') }, (err) => {
+    if (err) console.error(`[SPA Shell] sendFile error: ${err.message}`);
+  });
 };
 
 // Serve SPA shell for all /dashboard routes
