@@ -3485,8 +3485,7 @@ app.post('/api/v1/billing/downgrade-preview', authenticate, (req, res) => {
     }
 
     const ownerId = getRequestOwnerId(req);
-    const currentPlan = resolveRequesterPlan(req);
-    const currentPlanId = String(currentPlan.id || 'free').toLowerCase();
+    const currentPlanId = String(resolveRequesterPlan(req) || 'free').toLowerCase();
     const currentPlanDef = BILLING_PLANS[currentPlanId] || BILLING_PLANS.free;
 
     if (!currentPlanDef) {
@@ -3549,8 +3548,7 @@ app.post('/api/v1/billing/downgrade-confirm', authenticate, (req, res) => {
     }
 
     const ownerId = getRequestOwnerId(req);
-    const currentPlan = resolveRequesterPlan(req);
-    const currentPlanId = String(currentPlan.id || 'free').toLowerCase();
+    const currentPlanId = String(resolveRequesterPlan(req) || 'free').toLowerCase();
     const currentPlanDef = BILLING_PLANS[currentPlanId] || BILLING_PLANS.free;
 
     // Verify this is actually a downgrade
