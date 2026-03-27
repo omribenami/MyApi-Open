@@ -1339,8 +1339,7 @@ const billingUsageRateLimit = expressRateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Rate limit exceeded', retryAfterSeconds: 60 },
-  trustProxy: 1, // Trust Cloudflare proxy (1 hop)
-  keyGenerator: (req) => req.ip || req.connection.remoteAddress, // Use IP directly
+  trustProxy: (req) => true, // Trust all proxies (Cloudflare)
   skip: () => process.env.NODE_ENV === 'test', // Skip in test mode
 });
 
@@ -1350,8 +1349,7 @@ const dashboardSpaRateLimit = expressRateLimit({
   max: process.env.NODE_ENV === 'test' ? 1000 : 60,
   standardHeaders: true,
   legacyHeaders: false,
-  trustProxy: 1, // Trust Cloudflare proxy
-  keyGenerator: (req) => req.ip || req.connection.remoteAddress,
+  trustProxy: (req) => true, // Trust all proxies (Cloudflare)
   skip: () => process.env.NODE_ENV === 'test',
   message: { error: 'Rate limit exceeded', retryAfterSeconds: 60 },
 });
