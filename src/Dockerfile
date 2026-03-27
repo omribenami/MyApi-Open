@@ -1,5 +1,5 @@
 # Production Dockerfile for MyApi with MongoDB
-FROM node:22-alpine
+FROM node:22
 
 WORKDIR /app
 
