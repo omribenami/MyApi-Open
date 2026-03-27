@@ -3474,6 +3474,159 @@ function getKnowledgeBaseBytesUsed(req) {
   return rows.reduce((sum, row) => sum + Buffer.byteLength(String(row.content || ''), 'utf8'), 0);
 }
 
+// --- PLAN DOWNGRADE PREVIEW ---
+app.post('/api/v1/billing/downgrade-preview', authenticate, (req, res) => {
+  try {
+    const { newPlan } = req.body || {};
+    const newPlanDef = BILLING_PLANS[String(newPlan || '').toLowerCase()];
+    if (!newPlanDef) {
+      return res.status(400).json({ error: 'Invalid plan' });
+    }
+
+    const ownerId = getRequestOwnerId(req);
+    const currentPlan = resolveRequesterPlan(req);
+    const currentPlanDef = BILLING_PLANS[currentPlan.id];
+
+    // If upgrading (higher or equal limits), no preview needed
+    if (currentPlanDef.maxServices <= newPlanDef.maxServices &&
+        currentPlanDef.monthlyApiCallLimit <= newPlanDef.monthlyApiCallLimit) {
+      return res.json({ isDowngrade: false, preview: null });
+    }
+
+    // Calculate what would be deleted
+    const preview = { isDowngrade: true, toDelete: {} };
+
+    // Check personas (count and identify excess)
+    const personas = db.prepare('SELECT id, created_at FROM personas WHERE owner_id = ? ORDER BY created_at DESC').all(ownerId);
+    if (personas.length > newPlanDef.maxSkillsPerPersona && newPlanDef.maxSkillsPerPersona > 0) {
+      const toDelete = personas.length - (newPlanDef.maxSkillsPerPersona === -1 ? personas.length : newPlanDef.maxSkillsPerPersona);
+      preview.toDelete.personas = {
+        count: toDelete,
+        items: personas.slice(0, toDelete).map(p => ({ id: p.id, createdAt: p.created_at }))
+      };
+    }
+
+    // Check service connections
+    const services = db.prepare(`
+      SELECT id, service_name, created_at FROM service_tokens WHERE owner_id = ? ORDER BY created_at DESC
+    `).all(ownerId);
+    if (services.length > newPlanDef.maxServices && newPlanDef.maxServices > 0) {
+      const toDelete = services.length - newPlanDef.maxServices;
+      preview.toDelete.services = {
+        count: toDelete,
+        items: services.slice(0, toDelete).map(s => ({ id: s.id, service: s.service_name, createdAt: s.created_at }))
+      };
+    }
+
+    // Check skills
+    const skills = db.prepare('SELECT id, name, created_at FROM skills WHERE owner_id = ? ORDER BY created_at DESC').all(ownerId);
+    // Skills limit is typically tied to persona slots, estimate conservatively
+    const skillsPerPersona = 4; // Free plan limit
+    const maxTotalSkills = (newPlanDef.maxSkillsPerPersona === -1) ? -1 : (newPlanDef.maxSkillsPerPersona * 5); // Rough estimate
+    if (maxTotalSkills > 0 && skills.length > maxTotalSkills) {
+      const toDelete = skills.length - maxTotalSkills;
+      preview.toDelete.skills = {
+        count: toDelete,
+        items: skills.slice(0, toDelete).map(s => ({ id: s.id, name: s.name, createdAt: s.created_at }))
+      };
+    }
+
+    // Check KB size
+    const kbSize = getKnowledgeBaseBytesUsed(req);
+    const kbLimitBytes = (newPlanDef.kbLimitMb || 10) * 1024 * 1024;
+    if (kbSize > kbLimitBytes) {
+      preview.toDelete.kbDocs = {
+        message: `Knowledge Base exceeds limit. Current: ${Math.round(kbSize / 1024 / 1024)}MB, Limit: ${newPlanDef.kbLimitMb}MB`,
+        excessBytes: kbSize - kbLimitBytes
+      };
+    }
+
+    return res.json(preview);
+  } catch (error) {
+    console.error('Downgrade preview error:', error);
+    return res.status(500).json({ error: 'Failed to generate downgrade preview' });
+  }
+});
+
+// --- PLAN DOWNGRADE CONFIRM (executes deletion) ---
+app.post('/api/v1/billing/downgrade-confirm', authenticate, async (req, res) => {
+  try {
+    const { newPlan, confirmed } = req.body || {};
+    if (!confirmed) {
+      return res.status(400).json({ error: 'Downgrade must be confirmed' });
+    }
+
+    const newPlanDef = BILLING_PLANS[String(newPlan || '').toLowerCase()];
+    if (!newPlanDef) {
+      return res.status(400).json({ error: 'Invalid plan' });
+    }
+
+    const ownerId = getRequestOwnerId(req);
+    const currentPlan = resolveRequesterPlan(req);
+    const currentPlanDef = BILLING_PLANS[currentPlan.id];
+
+    // Verify this is actually a downgrade
+    if (currentPlanDef.maxServices <= newPlanDef.maxServices) {
+      return res.status(400).json({ error: 'This is not a downgrade' });
+    }
+
+    const tx = db.transaction(() => {
+      // Delete excess personas (keep oldest)
+      const personas = db.prepare('SELECT id FROM personas WHERE owner_id = ? ORDER BY created_at DESC').all(ownerId);
+      if (personas.length > 1) {
+        const toDelete = personas.slice(0, personas.length - 1).map(p => p.id);
+        for (const id of toDelete) {
+          db.prepare('DELETE FROM persona_documents WHERE persona_id = ?').run(id);
+          db.prepare('DELETE FROM persona_skills WHERE persona_id = ?').run(id);
+          db.prepare('DELETE FROM personas WHERE id = ?').run(id);
+        }
+      }
+
+      // Delete excess service connections (keep oldest)
+      const services = db.prepare(`SELECT id FROM oauth_tokens WHERE user_id = ? ORDER BY created_at DESC`).all(ownerId);
+      if (newPlanDef.maxServices > 0 && services.length > newPlanDef.maxServices) {
+        const toDelete = services.slice(0, services.length - newPlanDef.maxServices).map(s => s.id);
+        for (const id of toDelete) {
+          db.prepare('DELETE FROM oauth_tokens WHERE id = ?').run(id);
+        }
+      }
+
+      // Delete oldest KB documents if over limit
+      const kbLimit = (newPlanDef.kbLimitMb || 10) * 1024 * 1024;
+      const docs = db.prepare('SELECT id, content FROM kb_documents WHERE owner_id = ? ORDER BY created_at ASC').all(ownerId);
+      let totalSize = 0;
+      const docsToKeep = [];
+      for (const doc of docs.reverse()) {
+        const docSize = Buffer.byteLength(String(doc.content || ''), 'utf8');
+        if (totalSize + docSize <= kbLimit) {
+          totalSize += docSize;
+          docsToKeep.push(doc.id);
+        }
+      }
+      const docsToDelete = docs.filter(d => !docsToKeep.includes(d.id));
+      for (const doc of docsToDelete) {
+        db.prepare('DELETE FROM kb_documents WHERE id = ?').run(doc.id);
+      }
+    });
+
+    tx();
+
+    createAuditLog({
+      requesterId: req.tokenMeta.tokenId,
+      action: 'downgrade_plan',
+      resource: `/billing/plans`,
+      scope: req.tokenMeta.scope,
+      ip: req.ip,
+      details: { fromPlan: currentPlan.id, toPlan: newPlan }
+    });
+
+    return res.json({ ok: true, message: `Downgraded to ${newPlan}. Excess items have been deleted.` });
+  } catch (error) {
+    console.error('Downgrade confirm error:', error);
+    return res.status(500).json({ error: 'Failed to process downgrade' });
+  }
+});
+
 // --- BILLING / STRIPE CHECKOUT + USAGE ---
 app.post('/api/v1/billing/checkout', authenticate, async (req, res) => {
   try {

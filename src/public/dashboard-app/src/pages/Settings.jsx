@@ -1650,6 +1650,8 @@ function BillingSection() {
   const currentWorkspace = useAuthStore((s) => s.currentWorkspace);
   const [plans, setPlans] = useState([]);
   const [current, setCurrent] = useState({ plan: 'free', billingConfigured: false, features: [], limits: {} });
+  const [downgradeWarning, setDowngradeWarning] = useState(null);
+  const [confirmingDowngrade, setConfirmingDowngrade] = useState(false);
   const [usage, setUsage] = useState({ limits: {}, resources: {} });
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -1684,9 +1686,35 @@ function BillingSection() {
   }, [loadBilling, currentWorkspace?.id]);
 
   const handleCheckout = async (planId) => {
-    setLoading(true);
     setError('');
     setSuccess('');
+    
+    // Check if this is a downgrade
+    const planRank = { free: 0, pro: 1, enterprise: 2 };
+    const isDowngrade = (planRank[planId] || 0) < (planRank[current.plan] || 0);
+    
+    if (isDowngrade) {
+      // Show downgrade preview first
+      setLoading(true);
+      try {
+        const response = await apiRequest('/billing/downgrade-preview', {
+          method: 'POST',
+          body: { newPlan: planId },
+        });
+        const preview = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(preview.error || 'Failed to generate preview');
+        
+        setDowngradeWarning({ planId, preview });
+        setLoading(false);
+      } catch (e) {
+        setError(e.message || 'Failed to check downgrade impact');
+        setLoading(false);
+      }
+      return;
+    }
+    
+    // Upgrade flow (no confirmation needed)
+    setLoading(true);
     try {
       const response = await apiRequest('/billing/checkout', {
         method: 'POST',
@@ -1712,6 +1740,29 @@ function BillingSection() {
       setError(e.message || 'Checkout failed');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleConfirmDowngrade = async () => {
+    if (!downgradeWarning) return;
+    setConfirmingDowngrade(true);
+    setError('');
+    try {
+      const confirmResponse = await apiRequest('/billing/downgrade-confirm', {
+        method: 'POST',
+        body: { newPlan: downgradeWarning.planId, confirmed: true },
+      });
+      const confirmData = await confirmResponse.json().catch(() => ({}));
+      if (!confirmResponse.ok) throw new Error(confirmData.error || 'Failed to confirm downgrade');
+      
+      setDowngradeWarning(null);
+      setSuccess(`✓ Downgrade confirmed. Excess items have been deleted. Proceeding to checkout...`);
+      
+      // Now proceed with checkout
+      setTimeout(() => handleCheckout(downgradeWarning.planId), 500);
+    } catch (e) {
+      setError(e.message || 'Failed to process downgrade');
+      setConfirmingDowngrade(false);
     }
   };
 
@@ -1839,6 +1890,45 @@ function BillingSection() {
           );
         })}
       </div>
+
+      {downgradeWarning && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 border border-red-600/40 rounded-lg max-w-md w-full p-6">
+            <h2 className="text-xl font-bold text-red-400 mb-3">⚠️ Downgrade Warning</h2>
+            <p className="text-slate-300 mb-4">Downgrading will remove items that exceed the new plan's limits:</p>
+            <div className="space-y-2 bg-slate-800 rounded p-3 mb-4 text-sm text-slate-300 max-h-64 overflow-y-auto">
+              {downgradeWarning.preview.toDelete?.personas && (
+                <p>❌ <strong>{downgradeWarning.preview.toDelete.personas.count}</strong> AI Personas (keeping oldest)</p>
+              )}
+              {downgradeWarning.preview.toDelete?.services && (
+                <p>❌ <strong>{downgradeWarning.preview.toDelete.services.count}</strong> Service Connections (keeping oldest)</p>
+              )}
+              {downgradeWarning.preview.toDelete?.skills && (
+                <p>❌ <strong>{downgradeWarning.preview.toDelete.skills.count}</strong> Skills (keeping oldest)</p>
+              )}
+              {downgradeWarning.preview.toDelete?.kbDocs && (
+                <p>❌ Knowledge Base: {downgradeWarning.preview.toDelete.kbDocs.message}</p>
+              )}
+            </div>
+            <p className="text-xs text-slate-400 mb-6">Items are deleted based on creation date (newest first).</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDowngradeWarning(null)}
+                className="flex-1 px-4 py-2 rounded border border-slate-600 text-slate-200 hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDowngrade}
+                disabled={confirmingDowngrade}
+                className="flex-1 px-4 py-2 rounded bg-red-600 hover:bg-red-500 text-white font-medium disabled:opacity-50"
+              >
+                {confirmingDowngrade ? 'Processing...' : 'Confirm Downgrade'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="mt-6">
         <h3 className="text-white font-semibold mb-2">Invoices</h3>
