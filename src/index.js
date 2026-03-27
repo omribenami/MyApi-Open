@@ -547,9 +547,15 @@ const isOAuthServiceEnabled = (service) => {
 
 // --- Middleware ---
 const session = require('express-session');
-const BetterSqlite3 = require('better-sqlite3');
-const BetterSqlite3StoreFactory = require('better-sqlite3-session-store')(session);
 const isProd = process.env.NODE_ENV === 'production';
+
+// Only load BetterSqlite3 if not using MongoDB
+let BetterSqlite3 = null;
+let BetterSqlite3StoreFactory = null;
+if (!process.env.DATABASE_URL) {
+  BetterSqlite3 = require('better-sqlite3');
+  BetterSqlite3StoreFactory = require('better-sqlite3-session-store')(session);
+}
 
 app.use(helmet({
   contentSecurityPolicy: {
@@ -738,7 +744,8 @@ const secureCookie = process.env.SESSION_COOKIE_SECURE
 
 let sessionStore;
 let sessionDb = null;
-if (process.env.NODE_ENV !== 'test') {
+if (process.env.NODE_ENV !== 'test' && !process.env.DATABASE_URL) {
+  // Only use SQLite session store if not using MongoDB
   const sessionDbPath = process.env.SESSION_DB_PATH || path.join(__dirname, 'db.sqlite');
   sessionDb = new BetterSqlite3(sessionDbPath);
   sessionStore = new BetterSqlite3StoreFactory({
