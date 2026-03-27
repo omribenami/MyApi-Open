@@ -177,11 +177,11 @@ You and MyApi agree that any disputes are handled individually. You can't:
 ## 16. Contact Us
 
 **Legal questions:**
-- Email: privacy@myapiai.com
+- Email: [privacy@myapiai.com](mailto:privacy@myapiai.com)
 - Response: 5 business days
 
 **Urgent issues:**
-- Email: security@myapiai.com
+- Email: [security@myapiai.com](mailto:security@myapiai.com)
 - Response: 48 hours
 
 ---

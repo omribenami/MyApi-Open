@@ -102,7 +102,7 @@ Depending on where you live, you have rights:
 - **Non-discrimination:** We won't punish you for asking
 
 ### How to Exercise Your Rights
-Email: **privacy@myapiai.com**
+Email: [privacy@myapiai.com](mailto:privacy@myapiai.com)
 - Subject: "Privacy Request: [What you want]"
 - We'll respond within 30-45 days
 
@@ -152,7 +152,7 @@ If someone breaks in and accesses your data:
 3. We tell authorities if required
 4. We explain what happened and what to do
 
-**Report security issues:** security@myapiai.com
+**Report security issues:** [security@myapiai.com](mailto:security@myapiai.com)
 
 ---
 
@@ -179,15 +179,15 @@ We may update this policy sometimes. When we make big changes:
 ## Questions? Contact Us
 
 **General Privacy Questions:**
-- Email: privacy@myapiai.com
+- Email: [privacy@myapiai.com](mailto:privacy@myapiai.com)
 - Response: 5 business days
 
 **Security Issues:**
-- Email: security@myapiai.com
+- Email: [security@myapiai.com](mailto:security@myapiai.com)
 - Response: 48 hours
 
 **GDPR/CCPA Requests:**
-- Email: privacy@myapiai.com
+- Email: [privacy@myapiai.com](mailto:privacy@myapiai.com)
 - Subject: "GDPR Request: [Access/Delete/Export]"
 - Response: 30-45 days
 
