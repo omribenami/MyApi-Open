@@ -5,10 +5,9 @@
  * Used internally by event handlers throughout the app
  */
 
-const Database = require('better-sqlite3');
+// NOTE: Database is handled by database.js which detects MongoDB or SQLite
+// No need to create a separate instance here
 const { createNotification, queueNotificationForDelivery } = require('../database');
-
-const db = new Database('./src/data/myapi.db');
 
 class NotificationDispatcher {
   /**
