@@ -7,8 +7,8 @@ WORKDIR /app
 # Copy both package.json and package-lock.json
 COPY package.json package-lock.json ./
 
-# Install all dependencies
-RUN npm install --no-audit
+# Install all dependencies (force refresh to bypass lock file issues)
+RUN npm cache clean --force && npm install --legacy-peer-deps --no-audit
 
 # Copy entire application code
 COPY . .
