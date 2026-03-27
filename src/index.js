@@ -3602,15 +3602,16 @@ app.post('/api/v1/billing/downgrade-confirm', authenticate, async (req, res) => 
 
     tx();
 
-    // Cancel Stripe subscription if downgrading from paid plan
-    if ((currentPlanId === 'pro' || currentPlanId === 'enterprise') && newPlanId === 'free') {
+    // Cancel Stripe subscription if downgrading from paid plan to lower/free plan
+    const paidPlans = ['pro', 'enterprise'];
+    if (paidPlans.includes(currentPlanId) && (newPlanId === 'free' || (currentPlanId === 'enterprise' && newPlanId === 'pro'))) {
       try {
         const stripe = getStripeClient();
         const workspaceId = getRequestWorkspaceId(req);
         const sub = getBillingSubscriptionByWorkspace(workspaceId);
         if (sub && sub.stripe_subscription_id && !sub.stripe_subscription_id.includes('manual')) {
           await stripe.subscriptions.cancel(sub.stripe_subscription_id);
-          console.log(`[Downgrade] Cancelled Stripe subscription ${sub.stripe_subscription_id}`);
+          console.log(`[Downgrade] Cancelled Stripe subscription ${sub.stripe_subscription_id} (${currentPlanId} → ${newPlanId})`);
         }
       } catch (err) {
         console.error('[Downgrade] Failed to cancel Stripe subscription:', err.message);
