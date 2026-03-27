@@ -3555,6 +3555,7 @@ app.post('/api/v1/billing/downgrade-confirm', authenticate, (req, res) => {
     // Handle unlimited (-1) case: unlimited is always "higher"
     const currentMax = currentPlanDef.maxServices === -1 ? Infinity : currentPlanDef.maxServices;
     const newMax = newPlanDef.maxServices === -1 ? Infinity : newPlanDef.maxServices;
+    console.log(`[Downgrade Confirm] currentPlan=${currentPlanId}, newPlan=${newPlanId}, currentMax=${currentMax}, newMax=${newMax}, isUpgrade=${currentMax <= newMax}`);
     if (currentMax <= newMax) {
       return res.status(400).json({ error: 'This is not a downgrade' });
     }
