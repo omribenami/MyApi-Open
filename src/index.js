@@ -266,11 +266,20 @@ function sanitizeUrl(url = '') {
 function renderLegalMarkdown(markdown = '') {
   const safeMarkdown = String(markdown || '').replace(/<[^>]*>/g, '');
   const renderer = new marked.Renderer();
-  renderer.link = ({ href, title, tokens }) => {
-    const text = (tokens || []).map((token) => token.raw || token.text || '').join('') || href || '';
+  renderer.link = ({ href, title, tokens, text }) => {
+    // Extract link text from tokens or use the text parameter
+    let linkText = text;
+    if (!linkText && tokens && tokens.length > 0) {
+      linkText = (tokens || []).map((token) => {
+        if (typeof token === 'string') return token;
+        return token.raw || token.text || '';
+      }).join('');
+    }
+    linkText = linkText || href || '';
+    
     const safeHref = sanitizeUrl(href || '');
     const safeTitle = title ? ` title="${escapeHtml(title)}"` : '';
-    return `<a href="${escapeHtml(safeHref)}"${safeTitle} target="_blank" rel="noopener noreferrer">${escapeHtml(text)}</a>`;
+    return `<a href="${escapeHtml(safeHref)}"${safeTitle} target="_blank" rel="noopener noreferrer">${escapeHtml(linkText)}</a>`;
   };
 
   return marked.parse(safeMarkdown, {
