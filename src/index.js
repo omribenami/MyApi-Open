@@ -8588,18 +8588,18 @@ const sendDashboardIndex = (req, res) => {
   res.sendFile('index.html', { root: path.join(__dirname, 'public', 'dist') });
 };
 
-// Serve static assets for dashboard
+// CRITICAL: Serve static dist files FIRST, BEFORE the SPA shell middleware
+// This must come before any other /dashboard middleware to avoid SPA shell catching asset requests
 app.use('/dashboard/assets', express.static(path.join(__dirname, 'public', 'dist', 'assets')));
-app.use('/dashboard/', (req, res, next) => {
-  // Serve known static files
-  const staticFiles = ['vite.svg', 'myapi-logo.svg', 'cookie-nano.jpg'];
-  if (staticFiles.includes(req.path.split('/').pop())) {
-    return express.static(path.join(__dirname, 'public', 'dist'))(req, res, next);
+app.use('/dashboard/', express.static(path.join(__dirname, 'public', 'dist'), { setHeaders: (res, path) => {
+  if (path.endsWith('.html')) {
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  } else {
+    res.set('Cache-Control', 'public, max-age=31536000, immutable');
   }
-  next();
-});
+}}));
 
-// Serve SPA shell for all other /dashboard routes
+// Serve SPA shell for all other /dashboard routes (this comes AFTER static serve)
 app.use('/dashboard', dashboardSpaRateLimit, (req, res, next) => {
   if (req.method !== 'GET' && req.method !== 'HEAD') return next();
   return sendDashboardIndex(req, res);
