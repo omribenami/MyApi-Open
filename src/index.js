@@ -915,6 +915,11 @@ app.use((req, res, next) => {
   next();
 });
 
+// Dashboard assets with cache control headers for fresh deployment
+app.use('/dashboard/assets', (req, res, next) => {
+  res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+  express.static(path.join(__dirname, 'public', 'dist', 'assets'))(req, res, next);
+});
 app.use('/dashboard', express.static(path.join(__dirname, 'public', 'dist')));
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -8583,11 +8588,20 @@ const sendDashboardIndex = (req, res) => {
   res.sendFile('index.html', { root: path.join(__dirname, 'public', 'dist') });
 };
 
+// Serve static assets for dashboard
+app.use('/dashboard/assets', express.static(path.join(__dirname, 'public', 'dist', 'assets')));
+app.use('/dashboard/', (req, res, next) => {
+  // Serve known static files
+  const staticFiles = ['vite.svg', 'myapi-logo.svg', 'cookie-nano.jpg'];
+  if (staticFiles.includes(req.path.split('/').pop())) {
+    return express.static(path.join(__dirname, 'public', 'dist'))(req, res, next);
+  }
+  next();
+});
+
+// Serve SPA shell for all other /dashboard routes
 app.use('/dashboard', dashboardSpaRateLimit, (req, res, next) => {
   if (req.method !== 'GET' && req.method !== 'HEAD') return next();
-  const relPath = req.path;
-  const looksLikeStaticAsset = relPath.startsWith('/assets/') || relPath === '/vite.svg' || /\.[a-z0-9]+$/i.test(relPath);
-  if (looksLikeStaticAsset) return next();
   return sendDashboardIndex(req, res);
 });
 
