@@ -1339,6 +1339,9 @@ const billingUsageRateLimit = expressRateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Rate limit exceeded', retryAfterSeconds: 60 },
+  trustProxy: 1, // Trust Cloudflare proxy (1 hop)
+  keyGenerator: (req) => req.ip || req.connection.remoteAddress, // Use IP directly
+  skip: () => process.env.NODE_ENV === 'test', // Skip in test mode
 });
 
 // Rate limit for dashboard SPA shell requests (file-system access)
@@ -1347,6 +1350,9 @@ const dashboardSpaRateLimit = expressRateLimit({
   max: process.env.NODE_ENV === 'test' ? 1000 : 60,
   standardHeaders: true,
   legacyHeaders: false,
+  trustProxy: 1, // Trust Cloudflare proxy
+  keyGenerator: (req) => req.ip || req.connection.remoteAddress,
+  skip: () => process.env.NODE_ENV === 'test',
   message: { error: 'Rate limit exceeded', retryAfterSeconds: 60 },
 });
 
