@@ -916,31 +916,19 @@ app.use((req, res, next) => {
 });
 
 // Dashboard assets with cache control headers for fresh deployment
-// Serve dashboard assets and static files
-// CRITICAL: Do this BEFORE any catch-all middleware
-app.get('/dashboard/assets/:filename', (req, res) => {
-  const file = req.params.filename;
-  // Only allow safe filenames (alphanumeric, dash, dot)
-  if (!/^[\w\-.]+$/.test(file)) {
-    return res.status(400).json({ error: 'Invalid filename' });
+// Serve dashboard static files BEFORE SPA shell
+// Using express.static with proper options
+const dashboardDistPath = path.join(__dirname, 'public', 'dist');
+app.use('/dashboard', express.static(dashboardDistPath, {
+  // Cache hashed assets for 1 year
+  maxAge: '1y',
+  etag: false,
+  setHeaders: (res, path) => {
+    if (path.includes('index.html')) {
+      res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
   }
-  res.set('Cache-Control', 'public, max-age=31536000, immutable');
-  res.sendFile(path.join(__dirname, 'public', 'dist', 'assets', file), (err) => {
-    if (err) res.status(404).json({ error: 'Asset not found', filename: file });
-  });
-});
-
-// Serve root-level dashboard assets (logo, etc)
-app.get('/dashboard/:filename', (req, res, next) => {
-  const file = req.params.filename;
-  if (!/^[\w\-.]+$/.test(file)) return next();
-  
-  const filePath = path.join(__dirname, 'public', 'dist', file);
-  res.set('Cache-Control', 'public, max-age=31536000, immutable');
-  res.sendFile(filePath, (err) => {
-    if (err) next();  // Fall through to SPA shell
-  });
-});
+}));
 
 // General static files
 app.use(express.static(path.join(__dirname, "public")));
