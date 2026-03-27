@@ -2,195 +2,265 @@
 
 **Last Updated:** March 26, 2026
 
----
-
-## What Information Do We Collect?
-
-We collect information you provide to us:
-- **Email address** and account credentials (passwords are hashed and never stored in plaintext)
-- **OAuth tokens** from services you connect (GitHub, Google, LinkedIn, etc.)
-- **Files and documents** you upload
-- **Billing information** if you use paid services
-
-We also automatically collect:
-- **IP address and location** when you visit
-- **Browser and device information** (type, OS, model)
-- **Usage data** (pages visited, API calls made, time spent)
-- **Login information** (when and where you logged in)
-- **Cookies** for session management
+At MyApi ("Company," "we," "us," or "our"), we are committed to protecting your privacy. This Privacy Policy explains how we collect, use, and safeguard your personal information. By accessing or using our Service, you agree to these terms.
 
 ---
 
-## How Do We Use Your Data?
+## 1. Our Service
 
-We use your data to:
-- ✅ Keep your account secure and working
-- ✅ Connect you to OAuth services (Google, GitHub, etc.)
-- ✅ Process your API requests
-- ✅ Send you notifications and updates
-- ✅ Help you if you need customer support
-- ✅ Prevent fraud and abuse
-- ✅ Improve our service based on how you use it
-- ✅ Follow legal requirements
+MyApi provides:
+- **OAuth Integration**: Securely connect and manage third-party accounts
+- **Token Vault**: Encrypted storage for API credentials and personal tokens  
+- **Access Management**: Master tokens and scoped guest access
+- **Personas & Docs**: Identity and context management
+
+**Third-Party Services Note:**
+Any collection, use, and management of personal information by OAuth providers (Google, GitHub, etc.) are governed by their privacy policies. You must comply with their terms when connecting services.
+
+**Age Requirement:**
+MyApi is not intended for children under 18. We do not knowingly collect data from users under 18.
+
+---
+
+## 2. What Information Do We Collect?
+
+### Account Information
+- Name, email address, profile information
+- Password (hashed, never stored plaintext)
+- Billing information if you use paid services
+- Language, timezone, communication preferences
+
+### Your Content
+- OAuth tokens from connected services
+- API keys and credentials (encrypted)
+- Files and documents you upload
+- Messages and workspace data
+
+### Automatic Collection
+- IP address and geolocation
+- Browser type, OS, device information
+- Usage data and analytics
+- Login timestamps and frequency
+- Cookies and session data
+- Error logs and performance metrics
+
+### Support Data
+- Customer support inquiries and feedback
+- Emails and communication history
+- Screenshots or information you provide
+
+---
+
+## 3. How Do We Use Your Information?
+
+We use your information to:
+
+**Providing the Service:**
+- Authenticate your account
+- Manage OAuth connections
+- Store encrypted tokens and credentials
+- Process API requests
+- Handle payments and billing
+
+**Security & Compliance:**
+- Prevent fraud and abuse
+- Maintain service security
+- Comply with legal obligations
+- Monitor for unauthorized access
+- Improve security measures
+
+**Communication:**
+- Send transactional emails (account, billing, security)
+- Send notifications you've requested
+- Respond to support inquiries
+- Notify about service changes
+
+**Improvement:**
+- Analyze usage patterns
+- Identify and fix issues
+- Improve features and performance
+- Better understand your needs
+
+**Analytics:**
+- Aggregate anonymous usage data
+- Measure service effectiveness
+- Plan improvements and new features
+
+**Marketing** (with your consent):
+- Send promotional emails
+- Inform about new features
+- Share product announcements
 
 **We DO NOT:**
-- ❌ Sell your personal data
-- ❌ Share your data with marketing companies
-- ❌ Use your private files to train AI models
-- ❌ Trade your data with data brokers
+- Sell personal data
+- Share data with marketing companies
+- Use private files to train AI
+- Trade data with data brokers
 
 ---
 
-## How Long Do We Keep Your Data?
+## 4. Data Retention
 
 | What | How Long |
 |-----|----------|
-| Your account info | Until you delete it (then immediately removed) |
-| OAuth tokens | Until you disconnect the service |
-| Session data | 7 days (then deleted) |
-| Notifications | 30 days (then deleted) |
-| Your files & documents | Until you delete them or your account |
-| Audit logs | Kept indefinitely for security and compliance |
+| Account information | Until account deletion (then immediately deleted) |
+| OAuth tokens | Until disconnected or account deletion |
+| Session data | 7 days (auto-deleted) |
+| Notifications | 30 days (auto-deleted) |
+| Audit logs | Indefinitely (for security/compliance) |
+| Support tickets | 1 year, then deleted |
 
 **When you delete your account:**
-- Your account and all associated data are deleted immediately
-- Files, messages, personas, skills, documents are all removed
-- OAuth tokens are revoked
-- Access is terminated
-- Cannot be undone
+- All account data deleted immediately
+- OAuth tokens revoked
+- Files and documents removed
+- Cannot be undone or recovered
 
 **What we cannot delete:**
-- Audit logs (kept for security and compliance purposes, but no longer linked to your identity)
-- If you're involved in a legal case or investigation, data may be preserved as required by law
-
-**What "deleted" means:**
-- Your data is removed from our database completely
-- It's immediately unrecoverable
-- No backups are kept
-- We cannot restore it after deletion
+- Audit logs (kept for security, de-identified)
+- Legal hold data (if legally required)
 
 ---
 
-## Who Can Access Your Data?
+## 5. Who Can Access Your Information?
 
-We share your data with:
-- **Service providers** we use to run MyApi (hosting, email, payments) - they sign agreements to protect it
-- **Law enforcement** only if required by a valid legal order
+**We do not sell or rent your information.**
 
-**We do NOT share with:**
-- Marketing companies
-- Data brokers
-- Competitors
-- Anyone else without your permission
+We may share limited information with:
+
+### Service Providers
+- Hosting and infrastructure providers
+- Payment processors (PCI certified)
+- Email delivery services
+- Analytics and monitoring tools
+- All under data protection agreements
+
+### Authorized Personnel
+- Customer support (to help you)
+- Security team (to investigate threats)
+- Engineering (to improve the Service)
+- All bound by confidentiality
+
+### Legal Requirements
+- Law enforcement (with valid court order)
+- Regulatory authorities (as required by law)
+- To protect rights, safety, or property
+- To investigate illegal activity
+- To comply with legal obligations
+
+### Business Transfers
+- In case of merger or acquisition
+- New owner will be required to honor this policy
+- We will notify you if this occurs
+
+### Resellers & Partners
+- If you purchased through a reseller, they may receive limited info to support you
+- Under strict data protection agreements
 
 ---
 
-## How Do We Protect Your Data?
+## 6. Your Privacy Rights
 
-We use:
-- **HTTPS encryption** for all data in transit (like a locked connection)
-- **AES-256 encryption** for sensitive data at rest (like a vault)
-- **Multi-factor authentication** support (2FA)
-- **Role-based access control** (only people who need to see data can see it)
-- **Regular security audits** to find problems
-- **Encrypted daily backups** in case something goes wrong
+### General Rights
+You can:
+- Access your account data anytime (via dashboard)
+- Update or correct your information
+- Request a copy of your data
+- Request deletion of your account
 
----
+### GDPR Rights (EU Users)
+- **Access:** Request a copy of your data
+- **Correction:** Correct inaccurate information
+- **Deletion:** Delete your account and data
+- **Portability:** Export data in standard format
+- **Restrict:** Limit how we use your data
+- **Object:** Opt out of certain processing
+- **Withdraw consent:** Withdraw at any time
 
-## Your Privacy Rights
-
-Depending on where you live, you have rights:
-
-### If You're in the EU (GDPR)
-- **See your data:** Request a copy of everything we have about you
-- **Fix your data:** Ask us to correct incorrect information
-- **Delete your data:** Request that we delete your account and information
-- **Get your data out:** Download your data in a standard format
-- **Stop certain uses:** Ask us to limit how we use your data
-- **Object:** Say no to certain types of processing
-
-### If You're in California (CCPA)
-- **Know:** What personal information we collect
-- **Delete:** Ask us to delete your information
-- **Opt-out:** Opt out of any data sales (we don't sell anyway)
-- **Non-discrimination:** We won't punish you for asking
+### CCPA Rights (California Users)
+- **Know:** What data we collect
+- **Delete:** Request deletion
+- **Opt-Out:** Opt out of data sales (we don't sell)
+- **Non-Discrimination:** No penalties for exercising rights
 
 ### How to Exercise Your Rights
 Email: [privacy@myapiai.com](mailto:privacy@myapiai.com)
-- Subject: "Privacy Request: [What you want]"
-- We'll respond within 30-45 days
+- Subject: "Privacy Request: [Your Request Type]"
+- Response time: 30-45 days
 
 ---
 
-## Cookies and Tracking
+## 7. Data Security
 
-**Session Cookies** (Required to log you in)
-- How long: 7 days
-- Can you turn it off: No, you need this to stay logged in
-- Why: Keeps you logged in securely
+We implement:
+- **HTTPS encryption** for all data in transit (TLS 1.2+)
+- **AES-256 encryption** for sensitive data at rest
+- **Multi-factor authentication** support
+- **Role-based access control** (need-to-know basis)
+- **Regular security audits** and penetration testing
+- **Encrypted daily backups** with secure storage
+- **24/7 incident response** team
+
+However, **no system is 100% secure**. Use the Service at your own risk.
+
+---
+
+## 8. Cookies & Tracking
+
+**Session Cookies** (Required)
+- Keep you logged in securely
+- 7-day expiration
+- Cannot be disabled (required for login)
 
 **Analytics** (Optional)
-- We might use Google Analytics to understand how people use MyApi
-- You can turn this off in your browser settings
+- Google Analytics for usage metrics
+- You can opt-out via browser settings
 - We respect "Do Not Track" signals
 
-**Ads and Marketing** (Optional)
-- We might use pixels from Facebook or Twitter to track if ads work
-- You can turn this off in your browser settings
+**Marketing** (Optional)
+- Facebook/Twitter pixels for ad effectiveness
+- Can be disabled in browser settings
+
+You can control cookies via your browser settings.
 
 ---
 
-## Our Promise About Children
+## 9. International Transfers
 
-MyApi is not for people under 13 years old. We:
-- ❌ Don't knowingly collect data from children under 13
-- ✅ Will delete such data if we discover it
-- ✅ Will notify parents/guardians if this happens
+Your data is stored primarily in the **United States**.
 
----
+**For EU Users:**
+- US law provides different data protections than EU law
+- The US government may request data via legal process
+- By using MyApi, you accept this data transfer
+- We use Standard Contractual Clauses for transfers
 
-## Third-Party Services
-
-When you connect services like Google or GitHub:
-- **Their privacy policies apply** to your interaction with them
-- **We only store your token**, not your personal data from those services
-- **You see their consent screen** so you know what you're approving
+**For all users:**
+- Social media data may be shared globally (per OAuth providers' practices)
+- Third-party services process data in their locations
 
 ---
 
-## If There's a Security Problem
+## 10. Children's Privacy
 
-If someone breaks in and accesses your data:
-1. We investigate immediately (within 24 hours)
-2. We notify you via email (within 72 hours as required by law)
-3. We tell authorities if required
-4. We explain what happened and what to do
-
-**Report security issues:** [security@myapiai.com](mailto:security@myapiai.com)
+MyApi is not intended for users under 18. We:
+- Do not knowingly collect data from minors
+- Will delete such data if discovered
+- Will notify parents/guardians
 
 ---
 
-## International Data Transfers
+## 11. Third-Party Services
 
-Your data is stored primarily in the **United States**. 
-
-If you're in the EU, you should know:
-- US laws are weaker than EU data protection laws
-- The US government can request data via legal process
-- By using MyApi, you accept this risk
-
----
-
-## Changes to This Policy
-
-We may update this policy sometimes. When we make big changes:
-- We'll email you about it
-- We'll update the date at the top
-- Continuing to use MyApi means you accept the changes
+When you connect OAuth services (Google, GitHub, Slack, etc.):
+- **Their policies apply** to your interaction with them
+- **We only store your token**, not your personal data
+- **You see their consent screen** to approve permissions
+- **We are not responsible** for their security or changes
 
 ---
 
-## Questions? Contact Us
+## 12. Contact Us
 
 **General Privacy Questions:**
 - Email: [privacy@myapiai.com](mailto:privacy@myapiai.com)
@@ -204,6 +274,26 @@ We may update this policy sometimes. When we make big changes:
 - Email: [privacy@myapiai.com](mailto:privacy@myapiai.com)
 - Subject: "GDPR Request: [Access/Delete/Export]"
 - Response: 30-45 days
+
+---
+
+## 13. Changes to This Policy
+
+We may update this policy anytime to reflect service changes, legal requirements, and other factors. We'll notify you of material changes via email.
+
+Your continued use constitutes acceptance of changes. If you disagree, delete your account.
+
+---
+
+## 14. Compliance Statements
+
+**GDPR:** We comply with EU General Data Protection Regulation requirements.
+
+**CCPA:** We comply with California Consumer Privacy Act requirements.
+
+**COPPA:** We do not target children under 13.
+
+**CAN-SPAM:** Unsubscribe from marketing emails anytime via the link in each email.
 
 ---
 
