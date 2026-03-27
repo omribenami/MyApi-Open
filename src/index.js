@@ -915,13 +915,18 @@ app.use((req, res, next) => {
   next();
 });
 
-// Dashboard assets with cache control headers for fresh deployment
-// Serve dashboard static files BEFORE SPA shell
+// Dashboard static files - serve ONLY specific file types, not index.html
+// This allows SPA shell to serve index.html with fresh build
 const dashboardDistPath = path.join(__dirname, 'public', 'dist');
-// Serve assets from /dashboard/assets/
 app.use('/dashboard/assets', express.static(path.join(dashboardDistPath, 'assets')));
-// Serve other files from /dashboard/
-app.use('/dashboard', express.static(dashboardDistPath, { index: ['index.html'] }));
+app.use('/dashboard', (req, res, next) => {
+  // Only serve non-HTML static files directly (images, favicons, etc)
+  if (/\.(js|css|svg|png|jpg|jpeg|gif|ico|woff|woff2|ttf|eot)$/i.test(req.path)) {
+    return express.static(dashboardDistPath)(req, res, next);
+  }
+  // Let SPA shell handle everything else (including / and /index.html)
+  next();
+});
 
 // General static files
 app.use(express.static(path.join(__dirname, "public")));
