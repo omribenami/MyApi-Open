@@ -22,6 +22,47 @@ const NotificationService = require('./services/notificationService');
 const NotificationDispatcher = require('./lib/notificationDispatcher');
 const emailService = require('./services/emailService');
 
+// PERFORMANCE FIX: Token cache to prevent repeated decryption
+// Each decryption is CPU-intensive. Cache for 5 minutes to prevent 502 errors.
+const tokenCache = new Map(); // { "service:userId" => { token: {...}, expiresAt: timestamp } }
+const TOKEN_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+function getCachedOAuthToken(serviceName, userId) {
+  const cacheKey = `${serviceName}:${userId}`;
+  const cached = tokenCache.get(cacheKey);
+  
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.token;
+  }
+  
+  // Cache expired or missing
+  tokenCache.delete(cacheKey);
+  return null;
+}
+
+function setCachedOAuthToken(serviceName, userId, token) {
+  const cacheKey = `${serviceName}:${userId}`;
+  tokenCache.set(cacheKey, {
+    token,
+    expiresAt: Date.now() + TOKEN_CACHE_TTL
+  });
+}
+
+// Clear cache every 10 minutes to prevent stale data
+setInterval(() => {
+  const now = Date.now();
+  let cleared = 0;
+  for (const [key, value] of tokenCache.entries()) {
+    if (value.expiresAt < now) {
+      tokenCache.delete(key);
+      cleared++;
+    }
+  }
+  if (cleared > 0) {
+    console.log(`[TokenCache] Cleared ${cleared} expired entries`);
+  }
+}, 10 * 60 * 1000);
+
 const {
   db,
   initDatabase,
@@ -1497,7 +1538,14 @@ function countConnectedOAuthServices(userId) {
   let count = 0;
   for (const service of OAUTH_SERVICES) {
     try {
-      const token = getOAuthToken(service, String(userId));
+      // Use cache to prevent CPU spike from repeated decryption
+      let token = getCachedOAuthToken(service, String(userId));
+      if (!token) {
+        token = getOAuthToken(service, String(userId));
+        if (token) {
+          setCachedOAuthToken(service, String(userId), token);
+        }
+      }
       if (token && !token.revoked_at) count += 1;
     } catch {
       // Ignore per-service read/decrypt failures for counting
