@@ -79,12 +79,16 @@ function App() {
     // so the target page (e.g. ServiceConnectors) can show the success state.
     if (oauthStatus === 'connected' && oauthMode === 'connect' && nextUrl) {
       const decoded = decodeURIComponent(nextUrl);
-      const target = new URL(decoded, window.location.origin);
-      target.searchParams.set('oauth_service', urlParams.get('oauth_service') || '');
-      target.searchParams.set('oauth_status', 'connected');
-      target.searchParams.set('mode', 'connect');
-      window.location.replace(target.toString());
-      return;
+      // Only allow internal redirects under /dashboard/ to prevent open redirects
+      if (decoded.startsWith('/dashboard/') || decoded === '/dashboard') {
+        const target = new URL(decoded, window.location.origin);
+        const oauthService = urlParams.get('oauth_service');
+        if (oauthService) target.searchParams.set('oauth_service', oauthService);
+        target.searchParams.set('oauth_status', 'connected');
+        target.searchParams.set('mode', 'connect');
+        window.location.replace(target.toString());
+        return;
+      }
     }
 
     if (oauthStatus === 'confirm_login' && confirmToken) {

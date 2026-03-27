@@ -1,6 +1,10 @@
 const SIMPLE_ICONS_BASE = 'https://cdn.simpleicons.org';
 const JSDELIVR_SIMPLE_ICONS_BASE = 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons';
 
+// Inline SVG data URIs for brands not available in simple-icons
+const LINKEDIN_SVG = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%230A66C2"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.064 2.064 0 1 1 0-4.128 2.064 2.064 0 0 1 0 4.128zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>')}`;
+const FAL_SVG = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%237C3AED"><rect width="24" height="24" rx="4"/><text x="12" y="17" text-anchor="middle" font-family="system-ui,sans-serif" font-size="14" font-weight="700" fill="white">fal</text></svg>')}`;
+
 const BRAND_ALIASES = {
   x: 'twitter',
   googleanalytics: 'google',
@@ -23,7 +27,7 @@ const BRAND_LOGOS = {
   tiktok: `${SIMPLE_ICONS_BASE}/tiktok/FFFFFF`,
   twitter: `${SIMPLE_ICONS_BASE}/x/FFFFFF`,
   reddit: `${SIMPLE_ICONS_BASE}/reddit/FF4500`,
-  linkedin: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%230A66C2"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.064 2.064 0 1 1 0-4.128 2.064 2.064 0 0 1 0 4.128zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>')}`,
+  linkedin: LINKEDIN_SVG,
   slack: `${SIMPLE_ICONS_BASE}/slack/4A154B`,
   discord: `${SIMPLE_ICONS_BASE}/discord/5865F2`,
   whatsapp: `${SIMPLE_ICONS_BASE}/whatsapp/25D366`,
@@ -47,7 +51,7 @@ const BRAND_LOGOS = {
   hubspot: `${SIMPLE_ICONS_BASE}/hubspot/FF7A59`,
   salesforce: `${SIMPLE_ICONS_BASE}/salesforce/00A1E0`,
   email: `${SIMPLE_ICONS_BASE}/gmail/EA4335`,
-  fal: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%237C3AED"><rect width="24" height="24" rx="4"/><text x="12" y="17" text-anchor="middle" font-family="system-ui,sans-serif" font-size="14" font-weight="700" fill="white">fal</text></svg>')}`,
+  fal: FAL_SVG,
 };
 
 const BRAND_LOGO_FALLBACKS = {
@@ -58,7 +62,7 @@ const BRAND_LOGO_FALLBACKS = {
   tiktok: `${JSDELIVR_SIMPLE_ICONS_BASE}/tiktok.svg`,
   twitter: `${JSDELIVR_SIMPLE_ICONS_BASE}/x.svg`,
   reddit: `${JSDELIVR_SIMPLE_ICONS_BASE}/reddit.svg`,
-  linkedin: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%230A66C2"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.064 2.064 0 1 1 0-4.128 2.064 2.064 0 0 1 0 4.128zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>')}`,
+  linkedin: LINKEDIN_SVG,
   slack: `${JSDELIVR_SIMPLE_ICONS_BASE}/slack.svg`,
   discord: `${JSDELIVR_SIMPLE_ICONS_BASE}/discord.svg`,
   whatsapp: `${JSDELIVR_SIMPLE_ICONS_BASE}/whatsapp.svg`,
@@ -71,7 +75,7 @@ const BRAND_LOGO_FALLBACKS = {
   zoom: `${JSDELIVR_SIMPLE_ICONS_BASE}/zoom.svg`,
   hubspot: `${JSDELIVR_SIMPLE_ICONS_BASE}/hubspot.svg`,
   salesforce: `${JSDELIVR_SIMPLE_ICONS_BASE}/salesforce.svg`,
-  fal: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%237C3AED"><rect width="24" height="24" rx="4"/><text x="12" y="17" text-anchor="middle" font-family="system-ui,sans-serif" font-size="14" font-weight="700" fill="white">fal</text></svg>')}`,
+  fal: FAL_SVG,
 };
 
 const SERVICE_ENV_REQUIREMENTS = {
