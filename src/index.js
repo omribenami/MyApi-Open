@@ -3494,7 +3494,10 @@ app.post('/api/v1/billing/downgrade-preview', authenticate, (req, res) => {
     }
 
     // If upgrading (higher or equal limits), no preview needed
-    if (currentPlanDef.maxServices <= newPlanDef.maxServices) {
+    // Handle unlimited (-1) case: unlimited is always "higher"
+    const currentMax = currentPlanDef.maxServices === -1 ? Infinity : currentPlanDef.maxServices;
+    const newMax = newPlanDef.maxServices === -1 ? Infinity : newPlanDef.maxServices;
+    if (currentMax <= newMax) {
       return res.json({ isDowngrade: false, preview: null });
     }
 
@@ -3551,7 +3554,10 @@ app.post('/api/v1/billing/downgrade-confirm', authenticate, (req, res) => {
     const currentPlanDef = BILLING_PLANS[currentPlanId] || BILLING_PLANS.free;
 
     // Verify this is actually a downgrade
-    if (currentPlanDef.maxServices <= newPlanDef.maxServices) {
+    // Handle unlimited (-1) case: unlimited is always "higher"
+    const currentMax = currentPlanDef.maxServices === -1 ? Infinity : currentPlanDef.maxServices;
+    const newMax = newPlanDef.maxServices === -1 ? Infinity : newPlanDef.maxServices;
+    if (currentMax <= newMax) {
       return res.status(400).json({ error: 'This is not a downgrade' });
     }
 
