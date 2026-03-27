@@ -5632,8 +5632,14 @@ app.get([
     console.error(`[OAuth] Service not in list: ${service}`);
     return res.status(400).json({ error: "Invalid OAuth service" });
   }
-  if (!state || !validateStateToken(service, state)) {
+  if (!state) {
     return res.status(400).json({ error: "Invalid or expired state token" });
+  }
+
+  // Check state in session (where it was stored during authorize step)
+  const stateMeta = req.session?.oauthStateMeta?.[state];
+  if (!stateMeta) {
+    return res.status(400).json({ error: "Invalid or expired state token - not found in session" });
   }
 
   // Provider denied/failed before issuing a code (common for scope/config problems)
@@ -5668,10 +5674,7 @@ app.get([
     });
   }
 
-  const stateMeta = req.session?.oauthStateMeta?.[state];
-  if (!stateMeta) {
-    return res.status(400).json({ error: "OAuth flow session expired or invalid state" });
-  }
+  // Clean up state token from session after validation
   if (req.session?.oauthStateMeta) delete req.session.oauthStateMeta[state];
 
   // Prevent open redirect
