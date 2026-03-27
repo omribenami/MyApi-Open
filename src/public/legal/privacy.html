@@ -85,6 +85,14 @@
             border-radius: 4px;
         }
         
+        .warning-box {
+            background: #fff3cd;
+            padding: 15px;
+            border-left: 4px solid #ffc107;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        
         footer {
             margin-top: 40px;
             padding-top: 20px;
@@ -151,129 +159,339 @@
         <header>
             <h1>Privacy Policy</h1>
             <div class="meta">
-                <p><strong>Last Updated:</strong> March 26, 2026</p>
-                <p><strong>Effective Date:</strong> March 26, 2026</p>
+                <p><strong>Last Updated:</strong> March 27, 2026</p>
+                <p><strong>Effective Date:</strong> March 27, 2026</p>
             </div>
         </header>
         
         <div class="highlight">
-            <strong>GDPR & CCPA Compliant</strong>
-            <p style="margin-top: 10px;">MyApi complies with GDPR (EU), CCPA (California), COPPA (Children), and other privacy laws.</p>
+            <strong>GDPR &amp; CCPA Compliant</strong>
+            <p style="margin-top: 10px;">MyApi is committed to protecting your privacy. This policy complies with the General Data Protection Regulation (GDPR), the California Consumer Privacy Act (CCPA), and other applicable privacy laws.</p>
         </div>
         
         <h2>1. What Data We Collect</h2>
         
-        <h3>Information You Provide</h3>
+        <h3>1.1 Information You Provide</h3>
         <ul>
-            <li>Email address and account information</li>
-            <li>Password (hashed, never plaintext)</li>
-            <li>OAuth tokens from connected services</li>
-            <li>API keys and credentials</li>
-            <li>Documents and files you upload</li>
-            <li>Communication with support</li>
+            <li><strong>Account Information:</strong> Email address, username, display name, avatar, and timezone</li>
+            <li><strong>Authentication Credentials:</strong> Password (stored as a bcrypt hash, never in plaintext), two-factor authentication secrets (encrypted)</li>
+            <li><strong>OAuth Tokens:</strong> Access and refresh tokens from connected third-party services (encrypted with AES-256-GCM before storage)</li>
+            <li><strong>API Keys and Tokens:</strong> Master tokens, access tokens, and vault tokens you create (hashed or encrypted)</li>
+            <li><strong>AI Persona Content:</strong> Persona configurations, system prompts ("soul content"), and persona settings</li>
+            <li><strong>Knowledge Base Documents:</strong> Documents and files you upload for AI context (up to 50MB per upload)</li>
+            <li><strong>Conversation Data:</strong> Messages exchanged in AI conversations, including prompts and responses</li>
+            <li><strong>Skills and Code:</strong> Custom skill packages, code, and configurations you create or install</li>
+            <li><strong>Marketplace Content:</strong> Listings, descriptions, ratings, and reviews you publish</li>
+            <li><strong>Payment Information:</strong> Billing details processed through Stripe (we store only Stripe customer and subscription IDs, not full payment card details)</li>
+            <li><strong>Communication Data:</strong> Workspace invitations, email preferences, and notification settings</li>
         </ul>
         
-        <h3>Information Automatically Collected</h3>
+        <h3>1.2 Information Automatically Collected</h3>
         <ul>
-            <li>IP address and location</li>
-            <li>Browser type and device information</li>
-            <li>Pages visited and time spent</li>
-            <li>API calls and usage data</li>
-            <li>Authentication events and timestamps</li>
+            <li><strong>IP Address:</strong> Logged with every API request for security and rate limiting</li>
+            <li><strong>Device Information:</strong> User agent string, browser type, and device fingerprint hash (SHA-256) for device approval</li>
+            <li><strong>Usage Data:</strong> API call counts, endpoints accessed, HTTP methods, and response status codes</li>
+            <li><strong>Authentication Events:</strong> Login timestamps, failed attempts, 2FA verification events, and session activity</li>
+            <li><strong>Audit Trail:</strong> Actions performed, including token creation/revocation, data modifications, and administrative operations</li>
         </ul>
+        
+        <h3>1.3 Cookies and Local Storage</h3>
+        <p>We use a minimal set of cookies essential for the Service to function:</p>
+        <table>
+            <tr>
+                <th>Cookie Name</th>
+                <th>Purpose</th>
+                <th>Type</th>
+                <th>Duration</th>
+            </tr>
+            <tr>
+                <td><code>myapi.sid</code></td>
+                <td>Session authentication</td>
+                <td>Essential (HttpOnly, Secure)</td>
+                <td>7 days</td>
+            </tr>
+            <tr>
+                <td><code>myapi_master_token</code></td>
+                <td>Persistent API authentication</td>
+                <td>Functional</td>
+                <td>7 days</td>
+            </tr>
+            <tr>
+                <td><code>myapi_user</code></td>
+                <td>User display information</td>
+                <td>Functional</td>
+                <td>7 days</td>
+            </tr>
+        </table>
+        <p>You can configure cookie preferences (essential only, all, or none) through the cookie consent banner or Settings page. We also use browser <code>localStorage</code> to store your authentication token and workspace selection for a seamless experience.</p>
+        
+        <div class="highlight">
+            <strong>No Third-Party Tracking or Analytics</strong>
+            <p style="margin-top: 10px;">We do <strong>not</strong> embed any third-party analytics, tracking pixels, advertising scripts, or social media trackers. Your browsing behavior within the Service is not shared with any advertising or analytics company.</p>
+        </div>
         
         <h2>2. How We Use Your Data</h2>
         <ul>
-            <li>Provide and improve the Service</li>
-            <li>Authenticate your account</li>
-            <li>Connect to OAuth services</li>
-            <li>Prevent fraud and abuse</li>
-            <li>Comply with legal obligations</li>
-            <li>Send notifications and updates</li>
+            <li><strong>Provide the Service:</strong> Authenticate your identity, manage your sessions, and deliver Service features</li>
+            <li><strong>AI Processing:</strong> Send your prompts and persona configurations to AI providers (e.g., Google Gemini) to generate responses</li>
+            <li><strong>OAuth Integration:</strong> Use encrypted tokens to connect and interact with your authorized third-party services</li>
+            <li><strong>Security and Fraud Prevention:</strong> Detect unauthorized access, enforce rate limits, manage device approvals, and maintain audit logs</li>
+            <li><strong>Billing:</strong> Process subscription payments through Stripe, track usage against plan limits, and manage invoices</li>
+            <li><strong>Notifications:</strong> Send security alerts, device approval requests, workspace invitations, and system updates</li>
+            <li><strong>Service Improvement:</strong> Analyze usage patterns (in aggregate) to improve reliability and features</li>
+            <li><strong>Legal Compliance:</strong> Fulfill legal obligations, respond to lawful requests, and enforce our Terms of Service</li>
         </ul>
         
         <div class="highlight">
             <strong>We DO NOT sell your personal data.</strong>
-            <p style="margin-top: 10px;">Your data is never sold to third parties, data brokers, or marketing companies.</p>
+            <p style="margin-top: 10px;">Your data is never sold to third parties, data brokers, or marketing companies. We do not use your data for targeted advertising. We do not share your data with third parties for their own marketing purposes.</p>
         </div>
         
-        <h2>3. Data Security</h2>
-        <p>We implement:</p>
+        <h2>3. Data Sharing and Third-Party Processors</h2>
+        <p>We share your data only in the following limited circumstances:</p>
+        
+        <h3>3.1 Service Providers (Data Processors)</h3>
+        <table>
+            <tr>
+                <th>Provider</th>
+                <th>Purpose</th>
+                <th>Data Shared</th>
+            </tr>
+            <tr>
+                <td><strong>Stripe</strong></td>
+                <td>Payment processing</td>
+                <td>Billing email, subscription plan, payment method (handled directly by Stripe)</td>
+            </tr>
+            <tr>
+                <td><strong>SMTP / SendGrid</strong></td>
+                <td>Email delivery</td>
+                <td>Recipient email address, email subject and body content</td>
+            </tr>
+            <tr>
+                <td><strong>AI Model Providers</strong> (e.g., Google Gemini)</td>
+                <td>AI response generation</td>
+                <td>Conversation prompts, persona context, and knowledge base excerpts sent for processing</td>
+            </tr>
+            <tr>
+                <td><strong>OAuth Providers</strong> (Google, GitHub, Slack, etc.)</td>
+                <td>Third-party service integration</td>
+                <td>OAuth authorization codes and tokens (to maintain your connected accounts)</td>
+            </tr>
+        </table>
+        
+        <h3>3.2 Other Circumstances</h3>
         <ul>
-            <li>HTTPS encryption (TLS 1.2+)</li>
-            <li>AES-256 encryption for sensitive data</li>
-            <li>Multi-factor authentication support</li>
-            <li>Regular security audits</li>
-            <li>Encrypted daily backups</li>
+            <li><strong>Legal Requirements:</strong> When required by law, regulation, legal process, or governmental request</li>
+            <li><strong>Safety:</strong> To protect the rights, property, or safety of MyApi, our users, or the public</li>
+            <li><strong>Business Transfer:</strong> In connection with a merger, acquisition, or sale of assets (you will be notified of any change in data handling)</li>
+            <li><strong>With Your Consent:</strong> When you explicitly authorize sharing (e.g., publishing content to the Marketplace)</li>
         </ul>
         
-        <h2>4. Data Retention</h2>
+        <h3>3.3 Workspace and Team Data</h3>
+        <p>When you participate in a workspace, other workspace members with appropriate roles may access shared resources including personas, skills, knowledge base documents, and activity logs within that workspace. Workspace administrators can manage members, view audit logs, and configure workspace settings. Data you create within a workspace is accessible according to the workspace's role-based access control settings.</p>
+        
+        <h2>4. Data Security</h2>
+        <p>We implement multiple layers of security to protect your data:</p>
+        
+        <h3>4.1 Encryption</h3>
+        <ul>
+            <li><strong>In Transit:</strong> All data transmitted over HTTPS with TLS 1.2+ (enforced via Cloudflare)</li>
+            <li><strong>At Rest:</strong> Sensitive data encrypted with AES-256-GCM authenticated encryption</li>
+            <li><strong>Key Derivation:</strong> PBKDF2 with 600,000 iterations and SHA-256 (compliant with NIST SP 800-132)</li>
+            <li><strong>Passwords:</strong> Hashed with bcrypt (never stored in plaintext or reversible form)</li>
+            <li><strong>Random Nonces:</strong> Unique 96-bit nonce per encryption operation to prevent IV reuse</li>
+        </ul>
+        
+        <h3>4.2 Access Controls</h3>
+        <ul>
+            <li>Multi-factor authentication (TOTP-based 2FA with backup codes)</li>
+            <li>Scoped API tokens with granular permissions (e.g., <code>services:read</code>, <code>admin:*</code>)</li>
+            <li>Device fingerprinting with manual approval workflow</li>
+            <li>Role-based access control (RBAC) within workspaces</li>
+            <li>Session management with automatic expiration</li>
+        </ul>
+        
+        <h3>4.3 Infrastructure</h3>
+        <ul>
+            <li>Security headers via Helmet.js (HSTS, CSP, X-Content-Type-Options, Referrer-Policy)</li>
+            <li>Rate limiting at multiple levels (per-IP, per-user, per-endpoint, per-workspace)</li>
+            <li>CORS restrictions to authorized origins only</li>
+            <li>Immutable compliance audit logs that cannot be modified or deleted</li>
+            <li>Automated session cleanup and OAuth state token expiration</li>
+        </ul>
+        
+        <h2>5. Data Retention</h2>
         <table>
             <tr>
                 <th>Data Type</th>
-                <th>Retention Period</th>
+                <th>Default Retention Period</th>
+                <th>Notes</th>
             </tr>
             <tr>
                 <td>Account Information</td>
                 <td>Until account deletion</td>
+                <td>Deleted immediately and permanently upon request</td>
             </tr>
             <tr>
                 <td>OAuth Tokens</td>
-                <td>Until disconnected</td>
+                <td>Until disconnected or account deleted</td>
+                <td>Encrypted at rest; revoked upon disconnection</td>
             </tr>
             <tr>
                 <td>Session Data</td>
                 <td>7 days</td>
+                <td>Cleaned up automatically every 15 minutes</td>
+            </tr>
+            <tr>
+                <td>Conversations &amp; Messages</td>
+                <td>Until account deletion</td>
+                <td>Deleted when account is deleted; can be individually deleted</td>
+            </tr>
+            <tr>
+                <td>Notifications</td>
+                <td>60 days</td>
+                <td>Automatically expired after 60 days</td>
             </tr>
             <tr>
                 <td>Audit Logs</td>
-                <td>90 days</td>
+                <td>Indefinite (default)</td>
+                <td>Retained for security; configurable via workspace retention policies</td>
+            </tr>
+            <tr>
+                <td>Compliance Audit Logs</td>
+                <td>Indefinite (immutable)</td>
+                <td>Append-only; cannot be deleted (regulatory requirement)</td>
             </tr>
             <tr>
                 <td>Backups</td>
-                <td>90 days</td>
+                <td>30 days</td>
+                <td>Configurable; maximum 50 backups retained</td>
+            </tr>
+            <tr>
+                <td>OAuth State Tokens</td>
+                <td>Cleaned hourly</td>
+                <td>Temporary tokens expired and removed automatically</td>
+            </tr>
+            <tr>
+                <td>Rate Limit Records</td>
+                <td>24 hours</td>
+                <td>Cleaned up automatically every hour</td>
+            </tr>
+            <tr>
+                <td>Pending Device Approvals</td>
+                <td>7 days</td>
+                <td>Expired approvals are automatically removed</td>
             </tr>
         </table>
+        <p>Workspace administrators can configure custom retention policies for notifications, audit logs, and activity logs through the Settings page. Custom policies may shorten (but are subject to minimum compliance requirements) or extend default retention periods.</p>
         
-        <h2>5. Your Rights</h2>
-        <div class="rights-section">
-            <h3>GDPR Rights (EU Users)</h3>
-            <ul>
-                <li><strong>Access:</strong> Request a copy of your data</li>
-                <li><strong>Rectification:</strong> Correct inaccurate information</li>
-                <li><strong>Erasure:</strong> Delete your account and data</li>
-                <li><strong>Portability:</strong> Export data in standard format</li>
-                <li><strong>Object:</strong> Opt-out of certain processing</li>
-            </ul>
+        <h2>6. AI Data Processing</h2>
+        <div class="warning-box">
+            <strong>Important: AI Processing Disclosure</strong>
+            <p style="margin-top: 10px;">When you use AI conversation features, your prompts, persona configurations, and relevant knowledge base content are sent to third-party AI providers for processing.</p>
         </div>
-        
-        <div class="rights-section">
-            <h3>CCPA Rights (California Users)</h3>
-            <ul>
-                <li><strong>Know:</strong> What personal information we collect</li>
-                <li><strong>Delete:</strong> Request deletion of your data</li>
-                <li><strong>Opt-Out:</strong> Opt out of data sales (we don't sell)</li>
-                <li><strong>Non-Discrimination:</strong> No discrimination for exercising rights</li>
-            </ul>
-        </div>
-        
-        <h2>6. Exercise Your Rights</h2>
-        <p><strong>Email:</strong> privacy@myapiai.com</p>
-        <p><strong>Subject line:</strong> "GDPR Request: [Your Request Type]"</p>
-        <p><strong>Response time:</strong> 30 days (GDPR), 45 days (CCPA)</p>
-        
-        <h2>7. Contact Us</h2>
         <ul>
-            <li><strong>Privacy Questions:</strong> privacy@myapiai.com</li>
-            <li><strong>Security Issues:</strong> security@myapiai.com</li>
-            <li><strong>Incident Response:</strong> 72 hours (GDPR requirement)</li>
+            <li>Conversation prompts and context are transmitted to AI model providers (e.g., Google Gemini) to generate responses</li>
+            <li>AI providers may process your data according to their own privacy policies and terms</li>
+            <li>We store conversation history (prompts and AI responses) locally in your account for your reference</li>
+            <li>Token usage (the number of tokens processed per message) is tracked for billing and usage reporting</li>
+            <li>You can delete individual conversations or all conversation data at any time</li>
+            <li>Messages flagged as "private" are excluded from data exports</li>
         </ul>
         
-        <h2>8. Changes to This Policy</h2>
-        <p>We may update this Privacy Policy at any time. We will notify you of material changes via email. Continued use constitutes acceptance.</p>
+        <h2>7. Device Fingerprinting</h2>
+        <p>To protect your account security, we generate a SHA-256 hash of your device characteristics (such as browser type, screen attributes, and IP address) to create a unique device fingerprint. This fingerprint is used to:</p>
+        <ul>
+            <li>Identify new or unrecognized devices accessing your account</li>
+            <li>Require explicit approval before granting access from new devices</li>
+            <li>Alert you when a new device attempts to access your account</li>
+            <li>Maintain a list of your approved devices for ongoing authentication</li>
+        </ul>
+        <p>Device fingerprints are stored as irreversible hashes and cannot be used to reconstruct your device information. You can view and revoke approved devices at any time through your account settings.</p>
+        
+        <h2>8. Privacy Controls</h2>
+        <p>You have control over your privacy settings through the Service dashboard:</p>
+        <ul>
+            <li><strong>Cookie Preferences:</strong> Choose between "All cookies", "Essential only", or "None" (note: disabling essential cookies while authenticated is not permitted)</li>
+            <li><strong>Data Sharing:</strong> Toggle whether your usage data may be used for aggregate service improvement</li>
+            <li><strong>API Logging:</strong> Control whether detailed API activity is logged for your account</li>
+            <li><strong>Data Retention Policies:</strong> Workspace administrators can set custom retention periods for different data types</li>
+            <li><strong>Notification Preferences:</strong> Configure which notifications you receive and how they are delivered</li>
+        </ul>
+        
+        <h2>9. Your Rights</h2>
+        <div class="rights-section">
+            <h3>GDPR Rights (EU/EEA Users)</h3>
+            <ul>
+                <li><strong>Access (Art. 15):</strong> Request a copy of all personal data we hold about you</li>
+                <li><strong>Rectification (Art. 16):</strong> Correct inaccurate or incomplete personal information</li>
+                <li><strong>Erasure (Art. 17):</strong> Request deletion of your account and all associated data (deletion is immediate and permanent)</li>
+                <li><strong>Data Portability (Art. 20):</strong> Export your data in a structured, machine-readable ZIP format with integrity checksums</li>
+                <li><strong>Restriction (Art. 18):</strong> Request restriction of processing in certain circumstances</li>
+                <li><strong>Object (Art. 21):</strong> Object to processing based on legitimate interests</li>
+                <li><strong>Withdraw Consent:</strong> Withdraw consent at any time where processing is based on consent</li>
+            </ul>
+        </div>
+        
+        <div class="rights-section">
+            <h3>CCPA Rights (California Residents)</h3>
+            <ul>
+                <li><strong>Right to Know:</strong> Request disclosure of the categories and specific pieces of personal information we collect, use, and share</li>
+                <li><strong>Right to Delete:</strong> Request deletion of your personal data (subject to legal exceptions)</li>
+                <li><strong>Right to Opt-Out:</strong> Opt out of the "sale" of personal information (we do not sell personal data)</li>
+                <li><strong>Right to Non-Discrimination:</strong> We will not discriminate against you for exercising your privacy rights</li>
+                <li><strong>Right to Correct:</strong> Request correction of inaccurate personal information</li>
+            </ul>
+        </div>
+        
+        <h2>10. Children's Privacy</h2>
+        <p>The Service is not directed to individuals under the age of 18. We do not knowingly collect personal information from children. If you are a parent or guardian and believe your child has provided us with personal data, please contact us immediately at <strong>privacy@myapiai.com</strong>. If we become aware that we have collected personal data from a child under 18, we will take steps to delete that information promptly.</p>
+        
+        <h2>11. International Data Transfers</h2>
+        <p>MyApi is a self-hosted platform. Your data is stored on the server where the Service is deployed. If you access the Service from outside the jurisdiction where the server is located, your data may be transferred across borders. We implement appropriate safeguards (including encryption in transit and at rest) to protect your data during any such transfer in accordance with applicable data protection laws.</p>
+        
+        <h2>12. Data Breach Notification</h2>
+        <p>In the event of a personal data breach that poses a risk to your rights and freedoms:</p>
+        <ul>
+            <li>We will notify the relevant supervisory authority within <strong>72 hours</strong> of becoming aware of the breach (GDPR Art. 33)</li>
+            <li>We will notify affected users without undue delay if the breach is likely to result in a high risk to their rights</li>
+            <li>Notification will include: the nature of the breach, data affected, likely consequences, and measures taken to mitigate the breach</li>
+            <li>All breach events are recorded in the immutable compliance audit log</li>
+        </ul>
+        
+        <h2>13. Exercise Your Rights</h2>
+        <p>To exercise any of your privacy rights:</p>
+        <ul>
+            <li><strong>Email:</strong> <a href="mailto:privacy@myapiai.com">privacy@myapiai.com</a></li>
+            <li><strong>Subject Line:</strong> "Privacy Request: [Your Request Type]"</li>
+            <li><strong>Self-Service:</strong> Many rights can be exercised directly through the Service (data export, account deletion, privacy settings)</li>
+        </ul>
+        <p><strong>Response Times:</strong></p>
+        <ul>
+            <li>GDPR requests: Within 30 days (extendable by 60 days for complex requests, with notification)</li>
+            <li>CCPA requests: Within 45 days (extendable by an additional 45 days, with notification)</li>
+        </ul>
+        <p>We may verify your identity before processing a request to protect against fraudulent requests.</p>
+        
+        <h2>14. Contact Us</h2>
+        <ul>
+            <li><strong>Privacy Questions:</strong> <a href="mailto:privacy@myapiai.com">privacy@myapiai.com</a></li>
+            <li><strong>Security Issues:</strong> <a href="mailto:security@myapiai.com">security@myapiai.com</a></li>
+            <li><strong>General Support:</strong> <a href="mailto:support@myapiai.com">support@myapiai.com</a></li>
+            <li><strong>Data Protection Concerns:</strong> If you are unsatisfied with our response, you have the right to lodge a complaint with your local data protection supervisory authority</li>
+        </ul>
+        
+        <h2>15. Changes to This Policy</h2>
+        <p>We may update this Privacy Policy from time to time to reflect changes in our practices, technology, or legal requirements. When we make material changes:</p>
+        <ul>
+            <li>We will update the "Last Updated" date at the top of this page</li>
+            <li>For significant changes, we will notify you via email or in-app notification</li>
+            <li>We will provide a summary of what changed</li>
+        </ul>
+        <p>Your continued use of the Service after changes take effect constitutes acceptance of the revised policy. We encourage you to review this policy periodically.</p>
         
         <footer>
-            <p>&copy; 2026 MyApi Inc. All rights reserved.</p>
+            <p>&copy; 2026 MyApi. All rights reserved.</p>
             <p><a href="/privacy">Privacy Policy</a> | <a href="/terms">Terms of Service</a></p>
         </footer>
     </div>
