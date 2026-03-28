@@ -399,8 +399,23 @@ router.get('/me', (req, res) => {
     }
 
     const { getUserById } = require('../database');
-    const user = getUserById(userId);
-    
+    let user = getUserById(userId);
+
+    // In MongoDB mode, getUserById uses a SQLite stub and returns null.
+    // Fall back to the session user object populated during OAuth login.
+    if (!user && req.session?.user) {
+      const s = req.session.user;
+      user = {
+        id: userId,
+        email: s.email || null,
+        username: s.username || s.displayName || null,
+        displayName: s.displayName || s.display_name || null,
+        avatarUrl: s.avatarUrl || s.avatar_url || null,
+        timezone: s.timezone || null,
+        plan: s.plan || 'free',
+      };
+    }
+
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -416,7 +431,7 @@ router.get('/me', (req, res) => {
     // Verify the session's cached token is still active in the DB (not revoked).
     // If it was revoked (e.g. by a regenerate call), clear it from the session
     // so we don't hand out a dead token as the bootstrap value.
-    if (masterTokenId) {
+    if (masterTokenId && !process.env.DATABASE_URL) {
       const { db } = require('../database');
       const tokenRow = db.prepare('SELECT revoked_at FROM access_tokens WHERE id = ?').get(masterTokenId);
       if (!tokenRow || tokenRow.revoked_at) {
