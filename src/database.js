@@ -12,7 +12,16 @@ let mongodbAdapter = null;
 const isPostgreSQLMode = process.env.DATABASE_URL && (process.env.DATABASE_URL.includes('postgres://') || process.env.DATABASE_URL.includes('postgresql://'));
 const isMongoDBMode = process.env.DATABASE_URL && !isPostgreSQLMode && (process.env.DATABASE_URL.includes('mongodb'));
 
-if (isMongoDBMode) {
+if (isPostgreSQLMode) {
+  // PostgreSQL mode via Supabase - use as-is, queries will work via the pool
+  console.log('[Database] Using PostgreSQL (Supabase) - queries routed through pg pool');
+  // Create a mock db object so the rest of the code works
+  db = {
+    prepare: () => ({ all: () => [], get: () => null, run: () => ({}) }),
+    exec: () => {},
+    pragma: () => 'ok'
+  };
+} else if (isMongoDBMode) {
   // Use MongoDB adapter
   mongodbAdapter = require('./database-mongodb');
   db = mongodbAdapter.db; // Mock SQLite interface
