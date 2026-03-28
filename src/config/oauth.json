@@ -1,0 +1,23 @@
+{
+  "google": {
+    "enabled": true,
+    "clientId": "${GOOGLE_CLIENT_ID}",
+    "clientSecret": "${GOOGLE_CLIENT_SECRET}",
+    "redirectUri": "${GOOGLE_REDIRECT_URI}"
+  },
+  "github": {
+    "enabled": false
+  },
+  "slack": {
+    "enabled": false
+  },
+  "discord": {
+    "enabled": false
+  },
+  "twitter": {
+    "enabled": false
+  },
+  "whatsapp": {
+    "enabled": false
+  }
+}
