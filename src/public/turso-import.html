@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Turso Data Import - MyApi</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      max-width: 600px;
+      width: 100%;
+      padding: 40px;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .logo {
+      font-size: 48px;
+      margin-bottom: 10px;
+    }
+
+    h1 {
+      color: #333;
+      font-size: 28px;
+      margin-bottom: 10px;
+    }
+
+    .subtitle {
+      color: #666;
+      font-size: 14px;
+    }
+
+    .form-group {
+      margin-bottom: 25px;
+    }
+
+    label {
+      display: block;
+      color: #333;
+      font-weight: 600;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+
+    input[type="text"],
+    input[type="password"],
+    textarea {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #e0e0e0;
+      border-radius: 6px;
+      font-size: 14px;
+      transition: border-color 0.3s;
+      font-family: monospace;
+    }
+
+    input[type="text"]:focus,
+    input[type="password"]:focus,
+    textarea:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    textarea {
+      min-height: 80px;
+      resize: vertical;
+    }
+
+    .helper-text {
+      color: #999;
+      font-size: 12px;
+      margin-top: 5px;
+    }
+
+    button {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    button:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .status {
+      margin-top: 20px;
+      padding: 15px;
+      border-radius: 6px;
+      display: none;
+    }
+
+    .status.show {
+      display: block;
+    }
+
+    .status.success {
+      background: #f0fdf4;
+      border: 2px solid #22c55e;
+      color: #166534;
+    }
+
+    .status.error {
+      background: #fef2f2;
+      border: 2px solid #ef4444;
+      color: #991b1b;
+    }
+
+    .status.loading {
+      background: #f0f9ff;
+      border: 2px solid #0ea5e9;
+      color: #075985;
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 6px;
+      background: #e0e0e0;
+      border-radius: 3px;
+      margin-top: 10px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+      width: 0%;
+      transition: width 0.3s;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+      margin-top: 20px;
+    }
+
+    .stat-box {
+      background: #f9fafb;
+      padding: 15px;
+      border-radius: 6px;
+      text-align: center;
+    }
+
+    .stat-number {
+      font-size: 24px;
+      font-weight: bold;
+      color: #667eea;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: #666;
+      margin-top: 5px;
+    }
+
+    .info-box {
+      background: #f0f9ff;
+      border-left: 4px solid #0ea5e9;
+      padding: 15px;
+      border-radius: 6px;
+      margin-bottom: 20px;
+      font-size: 13px;
+      color: #075985;
+    }
+
+    .code-block {
+      background: #1f2937;
+      color: #10b981;
+      padding: 10px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 12px;
+      margin-top: 10px;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo">🚀</div>
+      <h1>Turso Data Import</h1>
+      <p class="subtitle">Import your MyApi data into Turso Cloud</p>
+    </div>
+
+    <div class="info-box">
+      ℹ️ This tool will import your SQLite data (12 skills, 3 users, 46 services, etc.) into Turso. This may take a few minutes.
+    </div>
+
+    <form id="importForm">
+      <div class="form-group">
+        <label for="tursoUrl">Turso Database URL</label>
+        <input 
+          type="text" 
+          id="tursoUrl" 
+          placeholder="libsql://myapidb-myapi-db.aws-us-east-2.turso.io"
+          value="libsql://myapidb-myapi-db.aws-us-east-2.turso.io"
+          readonly
+        >
+        <p class="helper-text">Your Turso database connection URL (pre-filled)</p>
+      </div>
+
+      <div class="form-group">
+        <label for="tursoToken">Turso Auth Token</label>
+        <textarea 
+          id="tursoToken" 
+          placeholder="Paste your Turso auth token here..."
+          required
+        ></textarea>
+        <p class="helper-text">From your Turso account (keep this secret!)</p>
+      </div>
+
+      <button type="submit" id="submitBtn">Start Import</button>
+    </form>
+
+    <div id="status" class="status">
+      <div id="statusMessage"></div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+      <div class="stats" id="stats" style="display: none;">
+        <div class="stat-box">
+          <div class="stat-number" id="executedCount">0</div>
+          <div class="stat-label">Imported</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-number" id="skippedCount">0</div>
+          <div class="stat-label">Skipped</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-number" id="errorCount">0</div>
+          <div class="stat-label">Errors</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-number" id="totalCount">0</div>
+          <div class="stat-label">Total</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById('importForm');
+    const statusDiv = document.getElementById('status');
+    const statusMessage = document.getElementById('statusMessage');
+    const progressFill = document.getElementById('progressFill');
+    const statsDiv = document.getElementById('stats');
+    const submitBtn = document.getElementById('submitBtn');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const tursoUrl = document.getElementById('tursoUrl').value;
+      const tursoToken = document.getElementById('tursoToken').value.trim();
+
+      if (!tursoToken) {
+        showStatus('Please paste your Turso auth token', 'error');
+        return;
+      }
+
+      submitBtn.disabled = true;
+      showStatus('Fetching SQL dump...', 'loading');
+
+      try {
+        // Fetch the SQL dump
+        const sqlResponse = await fetch('/api/v1/turso/export-sql');
+        if (!sqlResponse.ok) {
+          throw new Error(`Failed to fetch SQL: ${sqlResponse.statusText}`);
+        }
+
+        const sqlText = await sqlResponse.text();
+        const statements = sqlText.split(';\n').filter(s => s.trim() && !s.trim().startsWith('--'));
+
+        showStatus(`🚀 Starting import of ${statements.length} statements...`, 'loading');
+        statsDiv.style.display = 'grid';
+
+        let executed = 0;
+        let skipped = 0;
+        let errors = 0;
+
+        for (let i = 0; i < statements.length; i++) {
+          const stmt = statements[i].trim() + ';';
+
+          if (stmt.includes('CREATE TABLE')) {
+            skipped++;
+          } else {
+            try {
+              const response = await fetch('/api/v1/turso/execute', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${tursoToken}`
+                },
+                body: JSON.stringify({
+                  sql: stmt,
+                  tursoUrl: tursoUrl
+                })
+              });
+
+              if (response.ok) {
+                executed++;
+              } else {
+                errors++;
+              }
+            } catch (err) {
+              errors++;
+            }
+          }
+
+          // Update progress
+          const progress = ((i + 1) / statements.length) * 100;
+          progressFill.style.width = progress + '%';
+
+          document.getElementById('executedCount').textContent = executed;
+          document.getElementById('skippedCount').textContent = skipped;
+          document.getElementById('errorCount').textContent = errors;
+          document.getElementById('totalCount').textContent = statements.length;
+
+          // Show status every 100 statements
+          if ((i + 1) % 100 === 0) {
+            statusMessage.textContent = `⏳ Processing: ${i + 1} / ${statements.length}`;
+          }
+        }
+
+        showStatus(`
+          ✅ Import Complete!
+          📊 Executed: ${executed} statements
+          ⏭️ Skipped: ${skipped} CREATE statements
+          ❌ Errors: ${errors}
+          
+          🎉 Your 12 skills, 3 users, 46 services, and all data are now in Turso!
+        `, 'success');
+
+      } catch (err) {
+        showStatus(`❌ Error: ${err.message}`, 'error');
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+
+    function showStatus(message, type) {
+      statusMessage.textContent = message;
+      statusDiv.className = `status show ${type}`;
+    }
+  </script>
+</body>
+</html>

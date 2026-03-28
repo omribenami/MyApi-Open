@@ -32,6 +32,7 @@
     "ssl:self-signed": "bash scripts/setup-ssl.sh self-signed"
   },
   "dependencies": {
+    "@libsql/client": "^0.17.2",
     "axios": "^1.13.6",
     "bcrypt": "^6.0.0",
     "better-sqlite3": "^12.6.2",
