@@ -87,7 +87,15 @@ async function migrateTable(client, tableName) {
       return `(${ph})`;
     }).join(', ');
 
-    const sql = `INSERT INTO ${tableName} (${colList}) VALUES ${rowPlaceholders} ON CONFLICT DO NOTHING`;
+    // First check if the table already has data (avoid re-running migration)
+    if (i === 0) {
+      const countRes = await client.query(`SELECT COUNT(*) as n FROM ${tableName}`);
+      if (parseInt(countRes.rows[0].n) >= rows.length) {
+        console.log(`  [SKIP] ${tableName} — already has ${countRes.rows[0].n} rows`);
+        return { inserted: 0, skipped: rows.length };
+      }
+    }
+    const sql = `INSERT INTO ${tableName} (${colList}) VALUES ${rowPlaceholders}`;
 
     try {
       const res = await client.query(sql, allValues);
