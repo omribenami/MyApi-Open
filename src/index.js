@@ -3740,47 +3740,43 @@ app.post('/api/v1/billing/downgrade-confirm', authenticate, async (req, res) => 
       return res.status(400).json({ error: 'This is not a downgrade' });
     }
 
-    const tx = db.transaction(() => {
-      // Delete excess personas (keep oldest)
-      const maxPersonas = newPlanId === 'free' ? 1 : (newPlanId === 'pro' ? 5 : -1);
-      if (maxPersonas > 0) {
-        const personas = db.prepare('SELECT id FROM personas WHERE owner_id = ? ORDER BY created_at DESC').all(ownerId);
-        if (personas.length > maxPersonas) {
-          const toDelete = personas.slice(0, personas.length - maxPersonas).map(p => p.id);
-          for (const id of toDelete) {
-            db.prepare('DELETE FROM persona_documents WHERE persona_id = ?').run(id);
-            db.prepare('DELETE FROM persona_skills WHERE persona_id = ?').run(id);
-            db.prepare('DELETE FROM personas WHERE id = ?').run(id);
-          }
+    // Delete excess personas (keep oldest)
+    const maxPersonas = newPlanId === 'free' ? 1 : (newPlanId === 'pro' ? 5 : -1);
+    if (maxPersonas > 0) {
+      const personas = db.prepare('SELECT id FROM personas WHERE owner_id = ? ORDER BY created_at DESC').all(ownerId);
+      if (personas.length > maxPersonas) {
+        const toDelete = personas.slice(0, personas.length - maxPersonas).map(p => p.id);
+        for (const pid of toDelete) {
+          try { db.prepare('DELETE FROM persona_documents WHERE persona_id = ?').run(pid); } catch (e) {}
+          try { db.prepare('DELETE FROM persona_skills WHERE persona_id = ?').run(pid); } catch (e) {}
+          db.prepare('DELETE FROM personas WHERE id = ?').run(pid);
         }
       }
+    }
 
-      // Delete excess service connections (keep oldest)
-      if (newPlanDef.maxServices > 0) {
-        const services = db.prepare(`SELECT id FROM oauth_tokens WHERE user_id = ? ORDER BY created_at DESC`).all(ownerId);
-        if (services.length > newPlanDef.maxServices) {
-          const toDelete = services.slice(0, services.length - newPlanDef.maxServices).map(s => s.id);
-          for (const id of toDelete) {
-            db.prepare('DELETE FROM oauth_tokens WHERE id = ?').run(id);
-          }
+    // Delete excess service connections (keep oldest)
+    if (newPlanDef.maxServices > 0) {
+      const services = db.prepare(`SELECT id FROM oauth_tokens WHERE user_id = ? ORDER BY created_at DESC`).all(ownerId);
+      if (services.length > newPlanDef.maxServices) {
+        const toDelete = services.slice(0, services.length - newPlanDef.maxServices).map(s => s.id);
+        for (const sid of toDelete) {
+          db.prepare('DELETE FROM oauth_tokens WHERE id = ?').run(sid);
         }
       }
+    }
 
-      // Update user's plan
-      db.prepare('UPDATE users SET plan = ? WHERE id = ?').run(newPlanId, req.user?.id || ownerId);
+    // Update user's plan
+    db.prepare('UPDATE users SET plan = ? WHERE id = ?').run(newPlanId, req.user?.id || ownerId);
 
-      // Update workspace subscription
-      const workspaceId = getRequestWorkspaceId(req);
-      if (workspaceId) {
-        upsertBillingSubscription(workspaceId, {
-          stripe_subscription_id: `manual_downgrade_${Date.now()}`,
-          plan_id: newPlanId,
-          status: 'active',
-        });
-      }
-    });
-
-    tx();
+    // Update workspace subscription
+    const workspaceId = getRequestWorkspaceId(req);
+    if (workspaceId) {
+      upsertBillingSubscription(workspaceId, {
+        stripe_subscription_id: `manual_downgrade_${Date.now()}`,
+        plan_id: newPlanId,
+        status: 'active',
+      });
+    }
 
     // Cancel Stripe subscription if downgrading from paid plan to lower/free plan
     const paidPlans = ['pro', 'enterprise'];
@@ -4521,35 +4517,35 @@ app.delete('/api/v1/account', authenticate, (req, res) => {
       return res.status(400).json({ error: 'Cannot delete power user account from self-service endpoint' });
     }
 
-    const tx = db.transaction((uid) => {
-      // Delete from all tables that reference this user (in dependency order)
-      db.prepare('DELETE FROM oauth_tokens WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM vault_tokens WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM access_tokens WHERE owner_id = ?').run(uid);
-      db.prepare('DELETE FROM approved_devices WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM device_approvals_pending WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM handshakes WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)').run(uid);
-      db.prepare('DELETE FROM conversations WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM notifications WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM notification_preferences WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM service_preferences WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM activity_log WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM email_queue WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM rate_limits WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM subscriptions WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM two_factor_backup_codes WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM team_invitations WHERE sender_id = ? OR recipient_id = ?').run(uid, uid);
-      db.prepare('DELETE FROM marketplace_listings WHERE owner_id = ?').run(uid);
-      db.prepare('DELETE FROM persona_documents WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)').run(uid);
-      db.prepare('DELETE FROM persona_skills WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)').run(uid);
-      db.prepare('DELETE FROM skills WHERE owner_id = ?').run(uid);
-      db.prepare('DELETE FROM personas WHERE owner_id = ?').run(uid);
-      db.prepare('DELETE FROM kb_documents WHERE owner_id = ?').run(uid);
-      db.prepare('DELETE FROM users WHERE id = ?').run(uid);
-    });
-
-    tx(userId);
+    const selfDeleteStatements = [
+      ['DELETE FROM oauth_tokens WHERE user_id = ?', [userId]],
+      ['DELETE FROM vault_tokens WHERE user_id = ?', [userId]],
+      ['DELETE FROM access_tokens WHERE owner_id = ?', [userId]],
+      ['DELETE FROM approved_devices WHERE user_id = ?', [userId]],
+      ['DELETE FROM device_approvals_pending WHERE user_id = ?', [userId]],
+      ['DELETE FROM handshakes WHERE user_id = ?', [userId]],
+      ['DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)', [userId]],
+      ['DELETE FROM conversations WHERE user_id = ?', [userId]],
+      ['DELETE FROM notifications WHERE user_id = ?', [userId]],
+      ['DELETE FROM notification_preferences WHERE user_id = ?', [userId]],
+      ['DELETE FROM service_preferences WHERE user_id = ?', [userId]],
+      ['DELETE FROM activity_log WHERE user_id = ?', [userId]],
+      ['DELETE FROM email_queue WHERE user_id = ?', [userId]],
+      ['DELETE FROM rate_limits WHERE user_id = ?', [userId]],
+      ['DELETE FROM subscriptions WHERE user_id = ?', [userId]],
+      ['DELETE FROM two_factor_backup_codes WHERE user_id = ?', [userId]],
+      ['DELETE FROM team_invitations WHERE sender_id = ? OR recipient_id = ?', [userId, userId]],
+      ['DELETE FROM marketplace_listings WHERE owner_id = ?', [userId]],
+      ['DELETE FROM persona_documents WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)', [userId]],
+      ['DELETE FROM persona_skills WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)', [userId]],
+      ['DELETE FROM skills WHERE owner_id = ?', [userId]],
+      ['DELETE FROM personas WHERE owner_id = ?', [userId]],
+      ['DELETE FROM kb_documents WHERE owner_id = ?', [userId]],
+      ['DELETE FROM users WHERE id = ?', [userId]],
+    ];
+    for (const [sql, params] of selfDeleteStatements) {
+      try { db.prepare(sql).run(...params); } catch (e) { /* table may not exist */ }
+    }
 
     if (req.session) {
       req.session.destroy(() => {});
@@ -5181,34 +5177,37 @@ app.delete('/api/v1/users/:id', authenticate, (req, res) => {
       return res.status(400).json({ error: 'Cannot delete power user account' });
     }
 
-    const tx = db.transaction((userId) => {
-      // Delete from all tables that reference this user (in dependency order)
-      db.prepare('DELETE FROM oauth_tokens WHERE user_id = ?').run(userId);
-      db.prepare('DELETE FROM vault_tokens WHERE user_id = ?').run(userId);
-      db.prepare('DELETE FROM access_tokens WHERE owner_id = ?').run(userId);
-      db.prepare('DELETE FROM approved_devices WHERE user_id = ?').run(userId);
-      db.prepare('DELETE FROM device_approvals_pending WHERE user_id = ?').run(userId);
-      db.prepare('DELETE FROM handshakes WHERE user_id = ?').run(userId);
-      db.prepare('DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)').run(userId);
-      db.prepare('DELETE FROM conversations WHERE user_id = ?').run(userId);
-      db.prepare('DELETE FROM notifications WHERE user_id = ?').run(userId);
-      db.prepare('DELETE FROM notification_preferences WHERE user_id = ?').run(userId);
-      db.prepare('DELETE FROM service_preferences WHERE user_id = ?').run(userId);
-      db.prepare('DELETE FROM activity_log WHERE user_id = ?').run(userId);
-      db.prepare('DELETE FROM email_queue WHERE user_id = ?').run(userId);
-      db.prepare('DELETE FROM rate_limits WHERE user_id = ?').run(userId);
-      db.prepare('DELETE FROM subscriptions WHERE user_id = ?').run(userId);
-      db.prepare('DELETE FROM two_factor_backup_codes WHERE user_id = ?').run(userId);
-      db.prepare('DELETE FROM team_invitations WHERE sender_id = ? OR recipient_id = ?').run(userId, userId);
-      db.prepare('DELETE FROM marketplace_listings WHERE owner_id = ?').run(userId);
-      db.prepare('DELETE FROM persona_documents WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)').run(userId);
-      db.prepare('DELETE FROM persona_skills WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)').run(userId);
-      db.prepare('DELETE FROM skills WHERE owner_id = ?').run(userId);
-      db.prepare('DELETE FROM personas WHERE owner_id = ?').run(userId);
-      db.prepare('DELETE FROM kb_documents WHERE owner_id = ?').run(userId);
-      db.prepare('DELETE FROM users WHERE id = ?').run(userId);
-    });
-    tx(id);
+    // Delete from all tables that reference this user (in dependency order)
+    // Each wrapped in try/catch to gracefully skip tables that may not exist
+    const deleteStatements = [
+      ['DELETE FROM oauth_tokens WHERE user_id = ?', [id]],
+      ['DELETE FROM vault_tokens WHERE user_id = ?', [id]],
+      ['DELETE FROM access_tokens WHERE owner_id = ?', [id]],
+      ['DELETE FROM approved_devices WHERE user_id = ?', [id]],
+      ['DELETE FROM device_approvals_pending WHERE user_id = ?', [id]],
+      ['DELETE FROM handshakes WHERE user_id = ?', [id]],
+      ['DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)', [id]],
+      ['DELETE FROM conversations WHERE user_id = ?', [id]],
+      ['DELETE FROM notifications WHERE user_id = ?', [id]],
+      ['DELETE FROM notification_preferences WHERE user_id = ?', [id]],
+      ['DELETE FROM service_preferences WHERE user_id = ?', [id]],
+      ['DELETE FROM activity_log WHERE user_id = ?', [id]],
+      ['DELETE FROM email_queue WHERE user_id = ?', [id]],
+      ['DELETE FROM rate_limits WHERE user_id = ?', [id]],
+      ['DELETE FROM subscriptions WHERE user_id = ?', [id]],
+      ['DELETE FROM two_factor_backup_codes WHERE user_id = ?', [id]],
+      ['DELETE FROM team_invitations WHERE sender_id = ? OR recipient_id = ?', [id, id]],
+      ['DELETE FROM marketplace_listings WHERE owner_id = ?', [id]],
+      ['DELETE FROM persona_documents WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)', [id]],
+      ['DELETE FROM persona_skills WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)', [id]],
+      ['DELETE FROM skills WHERE owner_id = ?', [id]],
+      ['DELETE FROM personas WHERE owner_id = ?', [id]],
+      ['DELETE FROM kb_documents WHERE owner_id = ?', [id]],
+      ['DELETE FROM users WHERE id = ?', [id]],
+    ];
+    for (const [sql, params] of deleteStatements) {
+      try { db.prepare(sql).run(...params); } catch (e) { /* table may not exist */ }
+    }
 
     createAuditLog({ requesterId: req.tokenMeta.tokenId, action: 'delete_user', resource: `/users/${id}`, scope: req.tokenMeta.scope, ip: req.ip, details: { email: user.email || null } });
     res.json({ ok: true, deletedUserId: id });
@@ -5226,23 +5225,25 @@ app.post('/api/v1/users/cleanup-test-users', authenticate, (req, res) => {
   try {
     const users = db.prepare('SELECT id, email, username FROM users WHERE username LIKE ?').all(`${prefix}%`);
     let deleted = 0;
-    const tx = db.transaction((list) => {
-      for (const u of list) {
-        db.prepare('DELETE FROM oauth_tokens WHERE user_id = ?').run(u.id);
-        db.prepare('DELETE FROM access_tokens WHERE owner_id = ?').run(u.id);
-        db.prepare('DELETE FROM handshakes WHERE user_id = ?').run(u.id);
-        db.prepare('DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)').run(u.id);
-        db.prepare('DELETE FROM conversations WHERE user_id = ?').run(u.id);
-        db.prepare('DELETE FROM persona_documents WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)').run(u.id);
-        db.prepare('DELETE FROM persona_skills WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)').run(u.id);
-        db.prepare('DELETE FROM skills WHERE owner_id = ?').run(u.id);
-        db.prepare('DELETE FROM personas WHERE owner_id = ?').run(u.id);
-        db.prepare('DELETE FROM kb_documents WHERE owner_id = ?').run(u.id);
-        const r = db.prepare('DELETE FROM users WHERE id = ?').run(u.id);
-        if (r.changes > 0) deleted += 1;
+    for (const u of users) {
+      const cleanupSqls = [
+        ['DELETE FROM oauth_tokens WHERE user_id = ?', [u.id]],
+        ['DELETE FROM access_tokens WHERE owner_id = ?', [u.id]],
+        ['DELETE FROM handshakes WHERE user_id = ?', [u.id]],
+        ['DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)', [u.id]],
+        ['DELETE FROM conversations WHERE user_id = ?', [u.id]],
+        ['DELETE FROM persona_documents WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)', [u.id]],
+        ['DELETE FROM persona_skills WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)', [u.id]],
+        ['DELETE FROM skills WHERE owner_id = ?', [u.id]],
+        ['DELETE FROM personas WHERE owner_id = ?', [u.id]],
+        ['DELETE FROM kb_documents WHERE owner_id = ?', [u.id]],
+      ];
+      for (const [sql, params] of cleanupSqls) {
+        try { db.prepare(sql).run(...params); } catch (e) { /* table may not exist */ }
       }
-    });
-    tx(users);
+      const r = db.prepare('DELETE FROM users WHERE id = ?').run(u.id);
+      if (r.changes > 0) deleted += 1;
+    }
 
     createAuditLog({ requesterId: req.tokenMeta.tokenId, action: 'cleanup_test_users', resource: '/users/cleanup-test-users', scope: req.tokenMeta.scope, ip: req.ip, details: { prefix, deleted } });
     res.json({ ok: true, prefix, deleted });

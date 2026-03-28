@@ -2,7 +2,8 @@ const Database = require('better-sqlite3');
 const { Pool } = require('pg');
 
 const SQLITE_PATH = '/opt/MyApi/myapi-full-backup.db';
-const PG_URL = 'postgresql://postgres:WG3ppW%rLu@sk4a@db.hamdecobkbdzvzkxoqqr.supabase.co:5432/postgres';
+const PG_URL = process.env.DATABASE_URL;
+if (!PG_URL) { console.error('DATABASE_URL env var required'); process.exit(1); }
 const BATCH_SIZE = 100;
 
 const sqlite = new Database(SQLITE_PATH, { readonly: true });

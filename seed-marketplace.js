@@ -1,7 +1,8 @@
 const { Pool } = require('pg');
 const crypto = require('crypto');
 
-const PG_URL = 'postgresql://postgres:WG3ppW%rLu@sk4a@db.hamdecobkbdzvzkxoqqr.supabase.co:5432/postgres';
+const PG_URL = process.env.DATABASE_URL;
+if (!PG_URL) { console.error('DATABASE_URL env var required'); process.exit(1); }
 const pool = new Pool({ connectionString: PG_URL, ssl: { rejectUnauthorized: false } });
 
 const now = new Date().toISOString();

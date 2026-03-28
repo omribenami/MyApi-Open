@@ -352,21 +352,6 @@ class PostgreSQLAdapter extends DatabaseAdapter {
     }
   }
 
-  async transaction(fn) {
-    const client = await this.pool.connect();
-    try {
-      await client.query('BEGIN');
-      const result = await fn();
-      await client.query('COMMIT');
-      return result;
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
-    } finally {
-      client.release();
-    }
-  }
-
   async ping() {
     try {
       await this.get('SELECT 1');
