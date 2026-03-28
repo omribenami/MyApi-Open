@@ -1,6 +1,17 @@
 const path = require("path");
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 require('dotenv').config(); // fallback to current working dir .env if present
+
+// Register process-level error handlers immediately so nothing crashes
+// before the server starts (e.g. pg-pool connection failures at startup)
+process.on('uncaughtException', (error) => {
+  console.error('[CRITICAL] Uncaught Exception:', error.message);
+  // Don't exit during startup — let retry logic handle transient DB errors
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[CRITICAL] Unhandled Promise Rejection:', String(reason));
+  // Don't exit — log only
+});
 const express = require("express");
 const helmet = require("helmet");
 const cors = require("cors");
@@ -344,8 +355,11 @@ function renderLegalPage({ title, markdownContent }) {
 // Initialize database
 initDatabase();
 
-// Run database migrations
-runMigrations();
+// Run database migrations (async — server start waits for this)
+const migrationPromise = runMigrations().catch(err => {
+  console.error('[Migrations] Fatal migration error:', err.message);
+  process.exit(1);
+});
 
 // Startup database integrity check
 const startupHealth = checkDatabaseHealth();
@@ -1386,7 +1400,9 @@ const dashboardSpaRateLimit = expressRateLimit({
 });
 
 // Security: DB integrity check on startup - detect direct tampering
+// Only runs in SQLite mode; PostgreSQL uses row-level security instead
 function checkDbIntegrity() {
+  if (!db || !db.prepare) return; // Skip in PostgreSQL mode
   try {
     const tokens = db.prepare("SELECT id, owner_id, scope, label, created_at FROM access_tokens WHERE revoked_at IS NULL").all();
     const hash = require('crypto').createHash('sha256').update(JSON.stringify(tokens)).digest('hex');
@@ -8963,8 +8979,8 @@ function cleanupExpiredSessions() {
 
 // --- Start ---
 if (process.env.NODE_ENV !== 'test') {
-  // Wait for MongoDB if using it, then start server
-  mongodbReady.then(() => {
+  // Wait for DB connections and migrations before starting server
+  Promise.all([mongodbReady, migrationPromise]).then(() => {
     // Validate required secrets BEFORE bootstrap
     validateRequiredSecrets();
 

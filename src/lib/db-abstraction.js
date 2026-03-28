@@ -196,11 +196,127 @@ class PostgreSQLAdapter extends DatabaseAdapter {
       connectionTimeoutMillis: 2000,
     });
 
+    // Handle errors on the pool itself
     this.pool.on('error', (err) => {
-      console.error('[Database] PostgreSQL pool error:', err);
+      console.error('[Database] PostgreSQL pool error:', err.message);
+    });
+
+    // Attach error handlers to each client to prevent uncaught EventEmitter throws
+    this.pool.on('connect', (client) => {
+      client.on('error', (err) => {
+        console.error('[Database] PostgreSQL client error:', err.message);
+      });
     });
 
     console.log('[Database] PostgreSQL initialized via Supabase');
+  }
+
+  /**
+   * Convert SQLite ? placeholders to PostgreSQL $1, $2, $3 ...
+   */
+  _convertPlaceholders(sql) {
+    let i = 0;
+    return sql.replace(/\?/g, () => `$${++i}`);
+  }
+
+  /**
+   * Synchronous prepare() shim so all existing SQLite-style CRUD code works with PostgreSQL.
+   * Uses deasync to block the event loop until the async pg query resolves.
+   */
+  prepare(sql) {
+    const deasync = require('deasync');
+    const pgSql = this._convertPlaceholders(sql);
+    const pool = this.pool;
+
+    const syncQuery = deasync(function (querySql, params, cb) {
+      pool.query(querySql, params, (err, result) => cb(err, result));
+    });
+
+    return {
+      get: (...args) => {
+        const params = args.flat();
+        try {
+          const result = syncQuery(pgSql, params);
+          return result.rows[0] || null;
+        } catch (err) {
+          console.error('[DB prepare.get]', err.message);
+          return null;
+        }
+      },
+      all: (...args) => {
+        const params = args.flat();
+        try {
+          const result = syncQuery(pgSql, params);
+          return result.rows || [];
+        } catch (err) {
+          console.error('[DB prepare.all]', err.message);
+          return [];
+        }
+      },
+      run: (...args) => {
+        const params = args.flat();
+        try {
+          const result = syncQuery(pgSql, params);
+          return { changes: result.rowCount, lastID: null };
+        } catch (err) {
+          console.error('[DB prepare.run]', err.message);
+          return { changes: 0, lastID: null };
+        }
+      },
+      iterate: (...args) => {
+        const params = args.flat();
+        try {
+          const result = syncQuery(pgSql, params);
+          return (result.rows || [])[Symbol.iterator]();
+        } catch {
+          return [][Symbol.iterator]();
+        }
+      }
+    };
+  }
+
+  /**
+   * SQLite pragma shim — no-op for PostgreSQL
+   */
+  pragma() {
+    return null;
+  }
+
+  /**
+   * SQLite transaction shim — wraps fn in BEGIN/COMMIT for PostgreSQL synchronously via deasync
+   */
+  transaction(fn) {
+    const deasync = require('deasync');
+    const pool = this.pool;
+    return function (...args) {
+      let result;
+      let done = false;
+      let error;
+      pool.connect().then(client => {
+        client.query('BEGIN')
+          .then(() => {
+            try { result = fn(...args); } catch (e) { error = e; return client.query('ROLLBACK'); }
+            return client.query('COMMIT');
+          })
+          .catch(e => { error = error || e; return client.query('ROLLBACK').catch(() => {}); })
+          .finally(() => { client.release(); done = true; });
+      }).catch(e => { error = e; done = true; });
+      deasync.loopWhile(() => !done);
+      if (error) throw error;
+      return result;
+    };
+  }
+
+  /**
+   * Execute one or more SQL statements with no parameters (DDL, multi-statement migrations)
+   */
+  async exec(sql) {
+    const client = await this.pool.connect();
+    try {
+      await client.query(sql);
+    } finally {
+      client.release();
+    }
   }
 
   async all(sql, params = []) {

@@ -21,9 +21,9 @@ const isPostgreSQLMode = dbType === 'postgres' || dbType === 'postgresql' || (pr
 const isSQLiteMode = !isPostgreSQLMode;
 const isMongoDBMode = false; // Deprecated - kept for code that checks this
 
-// Initialize database using abstraction layer
+// Initialize database using abstraction layer (use singleton so db-wrapper shares the same pool)
 try {
-  const dbAdapterInstance = dbAbstraction.createDatabaseAdapter();
+  const dbAdapterInstance = dbAbstraction.getDatabase();
   db = dbAdapterInstance; // For sync compatibility (has .prepare() for SQLite)
   dbAsync = dbWrapper; // For async operations
   
@@ -5417,28 +5417,30 @@ function seedDefaultPricingPlans() {
 }
 
 /**
- * Run pending database migrations
- * Called during application startup
+ * Run pending database migrations with retry for transient connection failures
+ * (e.g. Docker DNS not ready at startup)
  */
-function runMigrations() {
-  try {
-    const migrationRunner = new MigrationRunner(db);
-    
-    // Initialize migration tracking table
-    migrationRunner.initMigrationTable();
-    
-    // Run all pending migrations
-    const result = migrationRunner.runPendingMigrations();
-    
-    console.log('[Migrations]', result.message);
-    if (result.failed && result.failed.length > 0) {
-      console.warn('[Migrations] Failed migrations:', result.failed);
+async function runMigrations(retries = 20, delayMs = 3000) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const migrationRunner = new MigrationRunner(db);
+      await migrationRunner.initMigrationTable();
+      const result = await migrationRunner.runPendingMigrations();
+      console.log('[Migrations]', result.message);
+      if (result.failed && result.failed.length > 0) {
+        console.warn('[Migrations] Failed migrations:', result.failed);
+      }
+      return result;
+    } catch (error) {
+      const isTransient = ['EAI_AGAIN', 'ENOTFOUND', 'ECONNREFUSED', 'ETIMEDOUT', 'ECONNRESET'].includes(error.code);
+      console.error(`[Migrations] Error (attempt ${attempt}/${retries}):`, error.message);
+      if (isTransient && attempt < retries) {
+        console.log(`[Migrations] Retrying in ${delayMs / 1000}s...`);
+        await new Promise(r => setTimeout(r, delayMs));
+      } else {
+        throw error;
+      }
     }
-    
-    return result;
-  } catch (error) {
-    console.error('[Migrations] Error running migrations:', error.message);
-    throw error;
   }
 }
 
