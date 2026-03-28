@@ -4610,7 +4610,78 @@ app.post('/api/v1/auth/oauth-signup/complete', async (req, res) => {
   if (email) {
     const emailMatch = getUsers().find((u) => String(u.email || '').toLowerCase() === email.toLowerCase());
     if (emailMatch) {
-      return res.status(409).json({ error: 'An account with this email already exists. Please sign in instead.' });
+      // Auto sign-in the existing user instead of rejecting with 409
+      const existingUser = emailMatch;
+      const rawMasterToken = 'myapi_' + crypto.randomBytes(32).toString('hex');
+      const hash = bcrypt.hashSync(rawMasterToken, 10);
+      const tokenId = createAccessToken(hash, existingUser.id, 'full', 'Master Token (OAuth Login)', null, null, null, rawMasterToken);
+
+      await regenerateSession(req);
+
+      req.session.user = {
+        id: existingUser.id,
+        username: existingUser.username,
+        display_name: existingUser.displayName || existingUser.username,
+        displayName: existingUser.displayName || existingUser.username,
+        email: existingUser.email || null,
+        avatar_url: existingUser.avatarUrl || null,
+        avatarUrl: existingUser.avatarUrl || null,
+        two_factor_enabled: Boolean(existingUser.twoFactorEnabled),
+        roles: existingUser.roles || 'user',
+      };
+
+      req.session.masterTokenRaw = rawMasterToken;
+      req.session.masterTokenId = tokenId;
+
+      if (pending.oauthToken) {
+        const t = pending.oauthToken;
+        storeOAuthToken(
+          pending.service,
+          existingUser.id,
+          t.accessToken,
+          t.refreshToken || null,
+          t.expiresAt || null,
+          t.scope || null,
+        );
+      }
+
+      // Update avatar if it changed
+      if (pending.avatarUrl) {
+        updateUserOAuthProfile(existingUser.id, {
+          avatarUrl: pending.avatarUrl,
+        });
+      }
+
+      delete req.session.oauth_signup;
+
+      res.cookie('myapi_master_token', rawMasterToken, {
+        httpOnly: false,
+        secure: secureCookie,
+        path: '/',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+        sameSite: 'lax'
+      });
+
+      res.cookie('myapi_user', JSON.stringify(req.session.user), {
+        httpOnly: false,
+        secure: secureCookie,
+        path: '/',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+        sameSite: 'lax'
+      });
+
+      createAuditLog({
+        requesterId: existingUser.id,
+        action: 'oauth_login_existing_account',
+        resource: `/users/${existingUser.id}`,
+        scope: 'session',
+        ip: req.ip,
+        details: { service: pending.service, providerUserId: pending.providerUserId || null }
+      });
+
+      return req.session.save(() => {
+        res.json({ ok: true, data: { user: req.session.user, bootstrap: { masterToken: rawMasterToken, tokenId } } });
+      });
     }
   }
 
