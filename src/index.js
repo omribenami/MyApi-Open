@@ -359,7 +359,7 @@ if (!startupHealth.healthy) {
 
 // --- OAuth Configuration ---
 // Load OAuth config with environment variable support
-const oauthConfigPath = path.join(__dirname, '..', 'config', 'oauth.json');
+const oauthConfigPath = path.join(__dirname, 'config', 'oauth.json');
 let oauthConfig = {};
 if (fs.existsSync(oauthConfigPath)) {
   const raw = fs.readFileSync(oauthConfigPath, 'utf8');
