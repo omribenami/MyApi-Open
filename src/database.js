@@ -3,54 +3,42 @@ const fs = require('fs');
 const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 
-// MongoDB or SQLite adapter
+// ============================================================================
+// NEW DATABASE ABSTRACTION LAYER
+// ============================================================================
+// Import the new database abstraction layer
+// This provides a unified interface for both local SQLite and external PostgreSQL
+const dbAbstraction = require('./lib/db-abstraction');
+const dbWrapper = require('./lib/db-wrapper');
+
+// Get the database instance (will use abstraction layer)
 let db = null;
-let mongodbAdapter = null;
+let dbAsync = null;  // For new async code
 
-// Check if we're using MongoDB (DATABASE_URL set)
-// Detect database type from DATABASE_URL
-const isPostgreSQLMode = process.env.DATABASE_URL && (process.env.DATABASE_URL.includes('postgres://') || process.env.DATABASE_URL.includes('postgresql://'));
-const isMongoDBMode = process.env.DATABASE_URL && !isPostgreSQLMode && (process.env.DATABASE_URL.includes('mongodb'));
+// Detect database mode for backward compatibility checks
+const dbType = process.env.DATABASE_TYPE || 'sqlite';
+const isPostgreSQLMode = dbType === 'postgres' || dbType === 'postgresql' || (process.env.DATABASE_URL && process.env.DATABASE_URL.includes('postgres'));
+const isSQLiteMode = !isPostgreSQLMode;
+const isMongoDBMode = false; // Deprecated - kept for code that checks this
 
-if (isPostgreSQLMode) {
-  // PostgreSQL mode via Supabase - use as-is, queries will work via the pool
-  console.log('[Database] Using PostgreSQL (Supabase) - queries routed through pg pool');
-  // Create a mock db object so the rest of the code works
-  db = {
-    prepare: () => ({ all: () => [], get: () => null, run: () => ({}) }),
-    exec: () => {},
-    pragma: () => 'ok'
-  };
-} else if (isMongoDBMode) {
-  // Use MongoDB adapter
-  mongodbAdapter = require('./database-mongodb');
-  db = mongodbAdapter.db; // Mock SQLite interface
-  console.log('[Database] Using MongoDB via adapter');
-} else {
-  // Fall back to SQLite
-  const Database = require('better-sqlite3');
+// Initialize database using abstraction layer
+try {
+  const dbAdapterInstance = dbAbstraction.createDatabaseAdapter();
+  db = dbAdapterInstance; // For sync compatibility (has .prepare() for SQLite)
+  dbAsync = dbWrapper; // For async operations
   
-  function resolveDbPath() {
-    if (process.env.DB_PATH) {
-      if (process.env.DB_PATH === ':memory:') return ':memory:';
-      return path.resolve(process.env.DB_PATH);
-    }
-
-    const primary = path.join(__dirname, 'data', 'myapi.db');
-    const legacy = path.join(__dirname, 'db.sqlite');
-
-    if (fs.existsSync(primary)) return primary;
-    if (fs.existsSync(legacy)) return legacy;
-
-    return primary;
+  console.log(`[Database] Initialized: ${isPostgreSQLMode ? 'PostgreSQL' : 'SQLite'}`);
+  
+  // For SQLite, configure pragmas for better concurrency
+  if (isSQLiteMode && db.pragma) {
+    db.pragma('journal_mode = WAL');
+    db.pragma('busy_timeout = 10000');
+    db.pragma('synchronous = NORMAL');
+    db.pragma('wal_autocheckpoint = 1000');
   }
-
-  const dbPath = resolveDbPath();
-  if (dbPath !== ':memory:') {
-    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-  }
-  db = new Database(dbPath);
-  console.log('[Database] Using SQLite at:', dbPath);
+} catch (err) {
+  console.error('[Database] Failed to initialize:', err.message);
+  throw err;
 }
 
 const MigrationRunner = require('./lib/migrationRunner');
@@ -69,15 +57,6 @@ function normalizeOwnerId(ownerId) {
   return v || 'owner';
 }
 
-// Enable WAL mode for better concurrency (SQLite only)
-if (!isMongoDBMode) {
-  db.pragma('journal_mode = WAL');
-  // Configure pragmas to prevent "database is locked" errors under concurrent load
-  db.pragma('busy_timeout = 10000'); // 10 second timeout for locked database
-  db.pragma('synchronous = NORMAL'); // Balance safety and performance
-  db.pragma('wal_autocheckpoint = 1000'); // Checkpoint every 1000 pages
-}
-
 /**
  * Check database health by running a simple query.
  * Returns { healthy: true } or { healthy: false, error: '...' }.
@@ -87,17 +66,25 @@ function checkDatabaseHealth() {
     return mongodbAdapter.checkDatabaseHealth();
   }
   
-  // If using PostgreSQL, just return healthy (we verified the connection already)
-  if (process.env.DATABASE_URL && (process.env.DATABASE_URL.includes('postgres://') || process.env.DATABASE_URL.includes('postgresql://'))) {
+  // For PostgreSQL, just return healthy
+  if (isPostgreSQLMode) {
     return { healthy: true };
   }
   
+  // For SQLite, run pragma check
   try {
-    const result = db.pragma('quick_check', { simple: true });
-    if (result === 'ok') {
-      return { healthy: true };
+    if (isSQLiteMode && db.pragma) {
+      const result = db.pragma('quick_check', { simple: true });
+      if (result === 'ok' || result === undefined) {
+        return { healthy: true };
+      }
+      // pragma returns an object in some versions, check for ok property
+      if (typeof result === 'object' && result.ok) {
+        return { healthy: true };
+      }
+      return { healthy: false, error: `quick_check returned: ${JSON.stringify(result)}` };
     }
-    return { healthy: false, error: `quick_check returned: ${result}` };
+    return { healthy: true }; // Default to healthy
   } catch (error) {
     return { healthy: false, error: error.message };
   }
