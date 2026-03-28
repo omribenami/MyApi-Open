@@ -12,35 +12,54 @@ const crypto = require('crypto');
 // Connection pooling
 let mongoClient = null;
 let db = null;
+let connectingPromise = null;
 
 const MONGODB_URI = process.env.DATABASE_URL || 'mongodb://localhost:27017/myapi';
 
 /**
- * Connect to MongoDB
+ * Connect to MongoDB with retry logic for Docker startup race conditions.
+ * Uses a shared promise so concurrent callers wait for the same attempt.
  */
 async function connectMongoDB() {
-  if (mongoClient && db) {
-    return db;
-  }
+  if (db) return db;
 
-  try {
-    mongoClient = new MongoClient(MONGODB_URI, {
-      maxPoolSize: 10,
-      minPoolSize: 2,
-      retryWrites: true,
-      w: 'majority'
-    });
+  // If a connection attempt is already in progress, wait for it
+  if (connectingPromise) return connectingPromise;
 
-    await mongoClient.connect();
-    db = mongoClient.db('myapi');
-    
-    console.log('[MongoDB] Connected successfully');
-    await initDatabase();
-    return db;
-  } catch (error) {
-    console.error('[MongoDB] Connection failed:', error.message);
-    throw error;
-  }
+  connectingPromise = (async () => {
+    const retries = 20;
+    const delayMs = 3000;
+
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      if (db) return db; // Another caller may have connected
+      try {
+        const client = new MongoClient(MONGODB_URI, {
+          maxPoolSize: 10,
+          minPoolSize: 2,
+          retryWrites: true,
+          w: 'majority'
+        });
+
+        await client.connect();
+        mongoClient = client;
+        db = mongoClient.db('myapi');
+
+        console.log('[MongoDB] Connected successfully');
+        await initDatabase();
+        return db;
+      } catch (error) {
+        console.error(`[MongoDB] Connection attempt ${attempt}/${retries} failed:`, error.message);
+        if (attempt < retries) {
+          console.log(`[MongoDB] Retrying in ${delayMs / 1000}s...`);
+          await new Promise(r => setTimeout(r, delayMs));
+        } else {
+          throw error;
+        }
+      }
+    }
+  })().finally(() => { connectingPromise = null; });
+
+  return connectingPromise;
 }
 
 /**
