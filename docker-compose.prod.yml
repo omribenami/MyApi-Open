@@ -40,6 +40,10 @@ services:
       PORT: ${PORT:-4500}
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}
       DB_PATH: /app/data/myapi.db
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-REMOVED_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-REMOVED_SECRET}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-https://www.myapiai.com/api/v1/oauth/callback/google}
+      GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL:-https://www.myapiai.com/api/v1/oauth/callback/google}
 
     ports:
       - "${PORT:-4500}:${PORT:-4500}"
