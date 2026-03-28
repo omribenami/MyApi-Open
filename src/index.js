@@ -361,15 +361,21 @@ if (!startupHealth.healthy) {
 // Load OAuth config with environment variable support
 const oauthConfigPath = path.join(__dirname, 'config', 'oauth.json');
 let oauthConfig = {};
+console.log('[OAuth] Looking for config at:', oauthConfigPath);
 if (fs.existsSync(oauthConfigPath)) {
+  console.log('[OAuth] Config file found!');
   const raw = fs.readFileSync(oauthConfigPath, 'utf8');
   // Replace environment variable placeholders
   const resolved = raw.replace(/\$\{([^}]+)\}/g, (match, envVar) => process.env[envVar] || match);
   try {
     oauthConfig = JSON.parse(resolved);
+    console.log('[OAuth] Parsed config:', Object.keys(oauthConfig));
+    console.log('[OAuth] Google enabled:', oauthConfig.google?.enabled);
   } catch (e) {
     console.warn('Warning: Could not parse OAuth config, using empty config');
   }
+} else {
+  console.warn('[OAuth] Config file NOT found at:', oauthConfigPath);
 }
 
 // Initialize OAuth adapters
