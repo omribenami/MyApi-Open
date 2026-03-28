@@ -1,9 +1,9 @@
 {
   "google": {
     "enabled": true,
-    "clientId": "${GOOGLE_CLIENT_ID}",
-    "clientSecret": "${GOOGLE_CLIENT_SECRET}",
-    "redirectUri": "${GOOGLE_REDIRECT_URI}"
+    "clientId": "REMOVED_CLIENT_ID",
+    "clientSecret": "REMOVED_SECRET",
+    "redirectUri": "https://www.myapiai.com/api/v1/oauth/callback/google"
   },
   "github": {
     "enabled": false
