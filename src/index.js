@@ -16,15 +16,24 @@ const http = require('http');
 const EventEmitter = require('events');
 const expressRateLimit = require('express-rate-limit');
 
-// MongoDB initialization (if using MongoDB)
+// Database initialization
 let mongodbReady = Promise.resolve();
-if (process.env.DATABASE_URL) {
+const DATABASE_URL = process.env.DATABASE_URL || '';
+
+if (DATABASE_URL.includes('postgres://') || DATABASE_URL.includes('postgresql://')) {
+  // PostgreSQL (Supabase) - use the built-in pool
+  console.log('[Startup] Using PostgreSQL database');
+} else if (DATABASE_URL && !DATABASE_URL.includes('sqlite')) {
+  // MongoDB
   const mongodbAdapter = require('./database-mongodb');
   mongodbReady = mongodbAdapter.connectMongoDB().catch(err => {
     console.error('[MongoDB] Failed to connect:', err.message);
     process.exit(1);
   });
   console.log('[Startup] Initializing MongoDB connection...');
+} else {
+  // SQLite (default)
+  console.log('[Startup] Using SQLite database');
 }
 
 // Global event emitter for device alerts and real-time notifications

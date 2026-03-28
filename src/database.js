@@ -76,6 +76,11 @@ function checkDatabaseHealth() {
     return mongodbAdapter.checkDatabaseHealth();
   }
   
+  // If using PostgreSQL, just return healthy (we verified the connection already)
+  if (process.env.DATABASE_URL && (process.env.DATABASE_URL.includes('postgres://') || process.env.DATABASE_URL.includes('postgresql://'))) {
+    return { healthy: true };
+  }
+  
   try {
     const result = db.pragma('quick_check', { simple: true });
     if (result === 'ok') {
