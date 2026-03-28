@@ -1686,6 +1686,13 @@ function createUser(username, displayName, email, timezone, password, plan = 'fr
 
 function getUsersTableColumns() {
   try {
+    // PostgreSQL: use information_schema instead of PRAGMA
+    if (db.pool) {
+      const cols = db.prepare(
+        "SELECT column_name as name FROM information_schema.columns WHERE table_name = 'users' AND table_schema = 'public'"
+      ).all();
+      return new Set(cols.map((c) => c.name));
+    }
     const cols = db.prepare('PRAGMA table_info(users)').all();
     return new Set(cols.map((c) => c.name));
   } catch (_) {
