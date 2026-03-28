@@ -58,18 +58,24 @@ function normalizeOwnerId(ownerId) {
   return v || 'owner';
 }
 
-// Enable WAL mode for better concurrency
-db.pragma('journal_mode = WAL');
-// Configure pragmas to prevent "database is locked" errors under concurrent load
-db.pragma('busy_timeout = 10000'); // 10 second timeout for locked database
-db.pragma('synchronous = NORMAL'); // Balance safety and performance
-db.pragma('wal_autocheckpoint = 1000'); // Checkpoint every 1000 pages
+// Enable WAL mode for better concurrency (SQLite only)
+if (!isMongoDBMode) {
+  db.pragma('journal_mode = WAL');
+  // Configure pragmas to prevent "database is locked" errors under concurrent load
+  db.pragma('busy_timeout = 10000'); // 10 second timeout for locked database
+  db.pragma('synchronous = NORMAL'); // Balance safety and performance
+  db.pragma('wal_autocheckpoint = 1000'); // Checkpoint every 1000 pages
+}
 
 /**
  * Check database health by running a simple query.
  * Returns { healthy: true } or { healthy: false, error: '...' }.
  */
 function checkDatabaseHealth() {
+  if (isMongoDBMode && mongodbAdapter) {
+    return mongodbAdapter.checkDatabaseHealth();
+  }
+  
   try {
     const result = db.pragma('quick_check', { simple: true });
     if (result === 'ok') {
@@ -102,6 +108,12 @@ function safeMigration(sql, ignoreColumnExists = true) {
 
 // Initialize database schema
 function initDatabase() {
+  // MongoDB mode: use adapter's initialization
+  if (isMongoDBMode && mongodbAdapter) {
+    return mongodbAdapter.initDatabase();
+  }
+  
+  // SQLite mode: create tables
   // Phase 3.5 Pre-Migration: Drop old notification tables before schema initialization
   try { db.exec('DROP TABLE IF EXISTS notification_settings'); } catch (e) {}
   try { db.exec('DROP TABLE IF EXISTS notifications'); } catch (e) {}
