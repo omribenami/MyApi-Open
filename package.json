@@ -51,6 +51,7 @@
     "node-cache": "^5.1.2",
     "nodemailer": "^8.0.3",
     "pdf-parse": "^2.4.5",
+    "pg": "^8.20.0",
     "qrcode": "^1.5.4",
     "speakeasy": "^2.0.0",
     "stripe": "^20.4.1",
