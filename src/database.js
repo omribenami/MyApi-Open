@@ -8,7 +8,9 @@ let db = null;
 let mongodbAdapter = null;
 
 // Check if we're using MongoDB (DATABASE_URL set)
-const isMongoDBMode = !!process.env.DATABASE_URL;
+// Detect database type from DATABASE_URL
+const isPostgreSQLMode = process.env.DATABASE_URL && (process.env.DATABASE_URL.includes('postgres://') || process.env.DATABASE_URL.includes('postgresql://'));
+const isMongoDBMode = process.env.DATABASE_URL && !isPostgreSQLMode && (process.env.DATABASE_URL.includes('mongodb'));
 
 if (isMongoDBMode) {
   // Use MongoDB adapter
@@ -116,6 +118,12 @@ function initDatabase() {
   // MongoDB mode: use adapter's initialization
   if (isMongoDBMode && mongodbAdapter) {
     return mongodbAdapter.initDatabase();
+  }
+  
+  // PostgreSQL mode: tables already exist from migration, skip SQLite creation
+  if (isPostgreSQLMode) {
+    console.log('[Database] PostgreSQL mode - skipping table creation (tables migrated)');
+    return;
   }
   
   // SQLite mode: create tables
