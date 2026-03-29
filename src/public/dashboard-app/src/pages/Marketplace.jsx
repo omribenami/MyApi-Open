@@ -666,6 +666,7 @@ export default function Marketplace() {
         setInstalledSkillListingIds(prev => new Set([...prev, String(listingId)]));
       }
       await fetchListings();
+      await fetchInstalledSkills();
     } finally {
       setQuickInstallingIds(prev => {
         const next = new Set(prev);
@@ -962,7 +963,7 @@ export default function Marketplace() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {(listings || []).map(listing => {
+            {(listings || []).filter(l => typeFilter === 'all' || l?.type === typeFilter).map(listing => {
               if (!listing || !listing.id) {
                 console.warn('[Marketplace] Skipping invalid listing:', listing);
                 return null;
@@ -994,6 +995,7 @@ export default function Marketplace() {
                 setInstalledSkillListingIds(prev => new Set([...prev, String(listingId)]));
               }
               fetchListings();
+              fetchInstalledSkills();
             }}
             onRated={() => {
               fetchListings();

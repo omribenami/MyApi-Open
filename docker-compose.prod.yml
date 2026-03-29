@@ -32,9 +32,6 @@ services:
     container_name: myapi
     restart: unless-stopped
 
-    env_file:
-      - .env.local       # your secrets — copy from .env.docker and fill in
-
     environment:
       NODE_ENV: production
       PORT: 4500
