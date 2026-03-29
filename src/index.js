@@ -1528,6 +1528,11 @@ function authenticate(req, res, next) {
     req.authType = 'session';
     // session users are treated as "full" for MVP; we will add RBAC later.
     req.tokenMeta = { tokenId: `sess_${req.user.id}`, scope: 'full', ownerId: String(req.user.id), label: 'session' };
+    
+    // Set workspace ID from session for multi-tenancy filtering
+    if (req.session.currentWorkspace) {
+      req.workspaceId = req.session.currentWorkspace;
+    }
 
     // SKIP device approval entirely for session auth.
     // Browsers don't have "devices" in the master-token sense; they have sessions.
