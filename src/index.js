@@ -8452,8 +8452,19 @@ app.post('/api/v1/marketplace/:id/install', authenticate, (req, res) => {
           return res.status(500).json({ error: 'Failed to create skill' });
         }
 
-        // Assign skill to current workspace if available
-        const workspaceId = req.workspaceId || req.session?.currentWorkspace;
+        // Assign skill to current workspace
+        // For session auth (dashboard): get user's workspace
+        // For API token auth: use tokenMeta.workspaceId
+        let workspaceId = req.workspaceId;
+        if (!workspaceId && req.session?.user?.id) {
+          // Session auth: get user's current workspace from database
+          const userWorkspace = db.prepare('SELECT workspace_id FROM workspace_members WHERE user_id = ? LIMIT 1').get(req.session.user.id);
+          workspaceId = userWorkspace?.workspace_id;
+        }
+        if (!workspaceId && req.tokenMeta?.workspaceId) {
+          workspaceId = req.tokenMeta.workspaceId;
+        }
+        
         if (workspaceId && newSkill.id) {
           db.prepare('UPDATE skills SET workspace_id = ? WHERE id = ? AND owner_id = ?').run(workspaceId, newSkill.id, ownerId);
         }
