@@ -2008,7 +2008,7 @@ function bootstrap() {
   if (!masterExists) {
     rawMaster = 'myapi_' + crypto.randomBytes(32).toString("hex");
     const hash = bcrypt.hashSync(rawMaster, 10);
-    createAccessToken(hash, "owner", "full", "Master Token", null, null, null, rawMaster);
+    createAccessToken(hash, "owner", "full", "Master Token", null, null, null, rawMaster, 'master');
     console.log("=== MyApi Platform Started ===");
     console.log("Master token created for bootstrap (hidden in logs for security)");
   } else {
@@ -3215,7 +3215,7 @@ app.post('/api/v1/tokens/master/regenerate', authRateLimit, authenticate, (req, 
     revokeExistingMasterTokens(ownerId);
     const rawToken = 'myapi_' + crypto.randomBytes(32).toString("hex");
     const hash = bcrypt.hashSync(rawToken, 10);
-    const tokenId = createAccessToken(hash, ownerId, 'full', 'Master Token', null, null, null, rawToken);
+    const tokenId = createAccessToken(hash, ownerId, 'full', 'Master Token', null, null, null, rawToken, 'master');
 
     createAuditLog({
       requesterId: req.tokenMeta.tokenId,
@@ -3322,7 +3322,7 @@ app.post('/api/v1/tokens/master/bootstrap', authenticate, (req, res) => {
 
     const rawToken = 'myapi_' + crypto.randomBytes(32).toString("hex");
     const hash = bcrypt.hashSync(rawToken, 10);
-    const tokenId = createAccessToken(hash, ownerId, 'full', 'Master Token (Dashboard Session)', null, null, null, rawToken);
+    const tokenId = createAccessToken(hash, ownerId, 'full', 'Master Token (Dashboard Session)', null, null, null, rawToken, 'master');
 
     if (req.session) {
       req.session.masterTokenRaw = rawToken;
@@ -4812,7 +4812,7 @@ app.post('/api/v1/auth/oauth-signup/complete', async (req, res) => {
 
   const rawMasterToken = 'myapi_' + crypto.randomBytes(32).toString('hex');
   const hash = bcrypt.hashSync(rawMasterToken, 10);
-  const tokenId = createAccessToken(hash, createdUser.id, 'full', 'Master Token (OAuth Signup Session)', null, null, null, rawMasterToken);
+  const tokenId = createAccessToken(hash, createdUser.id, 'full', 'Master Token (OAuth Signup Session)', null, null, null, rawMasterToken, 'master');
 
   await regenerateSession(req);
 

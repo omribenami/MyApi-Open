@@ -1140,6 +1140,11 @@ function initDatabase() {
     try { db.exec(migration); } catch (e) {}
   }
 
+  // token_type: distinguish 'master' from 'guest' tokens
+  try { db.exec("ALTER TABLE access_tokens ADD COLUMN token_type TEXT DEFAULT 'guest'"); } catch (e) {}
+  // Backfill: full-scope tokens with an encrypted raw token stored are master tokens
+  try { db.exec("UPDATE access_tokens SET token_type = 'master' WHERE scope = 'full' AND encrypted_token IS NOT NULL AND (token_type IS NULL OR token_type = 'guest')"); } catch (e) {}
+
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_access_tokens_shareable ON access_tokens(is_shareable);
     CREATE INDEX IF NOT EXISTS idx_access_tokens_guest ON access_tokens(is_guest_token);
@@ -1397,7 +1402,7 @@ function decryptRawToken(encryptedJson) {
   return null;
 }
 
-function createAccessToken(hash, ownerId, scope, label, expiresAt = null, allowedPersonas = null, workspaceId = null, rawToken = null) {
+function createAccessToken(hash, ownerId, scope, label, expiresAt = null, allowedPersonas = null, workspaceId = null, rawToken = null, tokenType = 'guest') {
   const id = 'tok_' + crypto.randomBytes(16).toString('hex');
   const now = new Date().toISOString();
   const allowedPersonasJson = allowedPersonas && allowedPersonas.length > 0
@@ -1408,11 +1413,11 @@ function createAccessToken(hash, ownerId, scope, label, expiresAt = null, allowe
   const encryptedToken = rawToken ? encryptRawToken(rawToken) : null;
 
   const stmt = db.prepare(`
-    INSERT INTO access_tokens (id, hash, owner_id, scope, label, created_at, revoked_at, expires_at, allowed_personas, workspace_id, encrypted_token)
-    VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)
+    INSERT INTO access_tokens (id, hash, owner_id, scope, label, created_at, revoked_at, expires_at, allowed_personas, workspace_id, encrypted_token, token_type)
+    VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)
   `);
 
-  stmt.run(id, hash, ownerId, scope, label, now, expiresAt, allowedPersonasJson, workspaceId, encryptedToken);
+  stmt.run(id, hash, ownerId, scope, label, now, expiresAt, allowedPersonasJson, workspaceId, encryptedToken, tokenType);
   return id;
 }
 
@@ -1475,7 +1480,8 @@ function getAccessTokens(ownerId = null, workspaceId = null) {
     expiresAt: row.expires_at,
     active: !row.revoked_at,
     allowedPersonas: row.allowed_personas ? JSON.parse(row.allowed_personas) : null,
-    workspaceId: row.workspace_id
+    workspaceId: row.workspace_id,
+    tokenType: row.token_type || 'guest'
   }));
 }
 
