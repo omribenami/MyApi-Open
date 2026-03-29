@@ -36,9 +36,10 @@ services:
       - .env.local       # your secrets — copy from .env.docker and fill in
 
     environment:
-      NODE_ENV: ${NODE_ENV:-production}
-      PORT: ${PORT:-4500}
-      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}
+      NODE_ENV: production
+      PORT: 4500
+      SESSION_COOKIE_SECURE: true
+      DATABASE_TYPE: sqlite
       DB_PATH: /app/data/myapi.db
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-REMOVED_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-REMOVED_SECRET}
