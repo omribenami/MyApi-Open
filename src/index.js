@@ -4828,6 +4828,12 @@ app.post('/api/v1/auth/oauth-signup/complete', async (req, res) => {
     roles: createdUser.roles || 'user',
   };
 
+  // Set default workspace for new user
+  const userWorkspaces = getWorkspaces(createdUser.id);
+  if (userWorkspaces?.length > 0) {
+    req.session.currentWorkspace = userWorkspaces[0].id;
+  }
+
   req.session.masterTokenRaw = rawMasterToken;
   req.session.masterTokenId = tokenId;
   req.session.isFirstLogin = true;
@@ -5085,6 +5091,12 @@ app.post('/api/v1/auth/2fa/challenge', twoFactorRateLimit, (req, res) => {
 
     req.session.user = pendingUser;
     delete req.session.pending_2fa_user;
+    
+    // Set default workspace after 2FA
+    const userWorkspaces = getWorkspaces(pendingUser.id);
+    if (userWorkspaces?.length > 0) {
+      req.session.currentWorkspace = userWorkspaces[0].id;
+    }
 
     if (!req.session.masterTokenRaw) {
       // Try to retrieve existing master token — never create one during login flows.
@@ -6255,6 +6267,7 @@ app.get([
     if (req.session.user && typeof getWorkspaces === 'function') {
       const ws = getWorkspaces(req.session.user.id);
       if (ws?.length) {
+        req.session.currentWorkspace = ws[0].id;
         incrementUsageDaily(ws[0].id, new Date().toISOString().slice(0, 10), {
           active_services: countConnectedOAuthServices(req.session.user.id),
         });
@@ -6556,6 +6569,12 @@ app.post("/api/v1/oauth/confirm", (req, res) => {
     };
 
     console.log(`[OAuth Confirm] Setting session.user to ${pending.userId}`);
+    
+    // Set default workspace for this user
+    const userWorkspaces = getWorkspaces(pending.userId);
+    if (userWorkspaces?.length > 0) {
+      req.session.currentWorkspace = userWorkspaces[0].id;
+    }
 
     // Clear pending login and token
     delete req.session.oauth_login_pending;
