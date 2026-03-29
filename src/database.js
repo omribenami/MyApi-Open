@@ -4110,21 +4110,25 @@ function addServiceMethod(serviceId, methodName, httpMethod, endpoint, descripti
 function createApprovedDevice(tokenId, userId, fingerprintHash, deviceName, deviceInfo, ipAddress) {
   const id = 'device_' + crypto.randomBytes(16).toString('hex');
   const now = new Date().toISOString();
-  
-  // Create a serialized version of the fingerprint data as the raw fingerprint
+
   const deviceFingerprintRaw = JSON.stringify({
     hash: fingerprintHash,
     deviceInfo: deviceInfo,
     ipAddress: ipAddress,
     timestamp: now
   });
-  
-  const stmt = db.prepare(`
-    INSERT INTO approved_devices (
+
+  const result = db.prepare(`
+    INSERT OR IGNORE INTO approved_devices (
       id, token_id, user_id, device_fingerprint, device_fingerprint_hash, device_name, device_info_json, ip_address, approved_at, created_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  stmt.run(id, tokenId, userId, deviceFingerprintRaw, fingerprintHash, deviceName, JSON.stringify(deviceInfo), ipAddress, now, now);
+  `).run(id, tokenId, userId, deviceFingerprintRaw, fingerprintHash, deviceName, JSON.stringify(deviceInfo), ipAddress, now, now);
+
+  if (result.changes === 0) {
+    // Already exists — return the existing device's id
+    const existing = db.prepare('SELECT id FROM approved_devices WHERE user_id = ? AND device_fingerprint_hash = ?').get(userId, fingerprintHash);
+    return existing?.id || id;
+  }
   return id;
 }
 
