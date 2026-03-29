@@ -8468,6 +8468,7 @@ app.post('/api/v1/marketplace/:id/install', authenticate, (req, res) => {
     if (!listing) return res.status(404).json({ error: 'Listing not found' });
 
     let provisioned = null;
+    let alreadyInstalled = false;
 
     // Concrete local provisioning for API listings
     if (listing.type === 'api') {
@@ -8643,6 +8644,7 @@ app.post('/api/v1/marketplace/:id/install', authenticate, (req, res) => {
       });
 
       if (existingSkill) {
+        alreadyInstalled = true;
         provisioned = {
           type: 'skill',
           skillId: existingSkill.id,
@@ -8739,6 +8741,7 @@ app.post('/api/v1/marketplace/:id/install', authenticate, (req, res) => {
       `).get(ownerId, sourceTokenId);
 
       if (existingGuestToken) {
+        alreadyInstalled = true;
         provisioned = {
           type: 'guest_token',
           tokenId: existingGuestToken.id,

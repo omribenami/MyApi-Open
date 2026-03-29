@@ -3127,7 +3127,7 @@ function createSkill(name, description, version, author, category, scriptContent
   const configValue = typeof configJson === 'object' ? JSON.stringify(configJson) : (configJson || null);
   const row = db.prepare(`
     INSERT INTO skills (name, description, version, author, category, script_content, config_json, repo_url, active, created_at, updated_at, owner_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
     RETURNING id
   `).get(name, description || null, version || '1.0.0', author || null, category || 'custom', scriptContent || null, configValue, repoUrl || null, now, now, owner);
   return getSkillById(row?.id ?? null, owner);
