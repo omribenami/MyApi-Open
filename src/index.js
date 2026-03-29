@@ -8416,8 +8416,22 @@ app.post('/api/v1/marketplace/:id/install', authenticate, (req, res) => {
         installed_at: new Date().toISOString(),
       };
 
-      // Get the current user's ID (owner) from token metadata
-      const ownerId = req.tokenMeta.ownerId || req.tokenMeta.userId || 'owner';
+      // Get the current user's ID (owner) - handle both session and API token auth
+      let ownerId = null;
+      if (req.session?.user?.id) {
+        // Session auth (dashboard login)
+        ownerId = req.session.user.id;
+      } else if (req.tokenMeta?.ownerId) {
+        // API token auth
+        ownerId = req.tokenMeta.ownerId;
+      } else if (req.tokenMeta?.userId) {
+        // Alternative token field
+        ownerId = req.tokenMeta.userId;
+      }
+      
+      if (!ownerId) {
+        return res.status(401).json({ error: 'Authentication required to install skills' });
+      }
 
       // Idempotency by marketplace listing id for skill installs
       const existingSkill = getSkills(ownerId).find((s) => {
@@ -8484,14 +8498,26 @@ app.post('/api/v1/marketplace/:id/install', authenticate, (req, res) => {
       incrementInstallCount(listingId);
       trackWorkspaceUsage(req, { installs: 1 });
     }
-    trackWorkspaceUsage(req, { active_services: countConnectedOAuthServices(req.tokenMeta.ownerId) });
+    
+    // Get requesterId - handle both session and API token auth
+    let requesterId = null;
+    if (req.session?.user?.id) {
+      requesterId = req.session.user.id;
+    } else if (req.tokenMeta?.tokenId) {
+      requesterId = req.tokenMeta.tokenId;
+    }
+    
+    // Track connected services (safe for both auth types)
+    const ownerId = req.session?.user?.id || req.tokenMeta?.ownerId || 'owner';
+    trackWorkspaceUsage(req, { active_services: countConnectedOAuthServices(ownerId) });
+    
     const updated = getMarketplaceListing(listingId);
 
     createAuditLog({
-      requesterId: req.tokenMeta.tokenId,
+      requesterId: requesterId || 'unknown',
       action: 'marketplace_install',
       resource: `/api/v1/marketplace/${listingId}/install`,
-      scope: req.tokenMeta.scope,
+      scope: req.tokenMeta?.scope || 'session',
       ip: req.ip,
       details: {
         listingId,
