@@ -4340,7 +4340,7 @@ app.post("/api/v1/auth/login", authRateLimit, (req, res) => {
       };
       
       // Set current workspace
-      req.session.currentWorkspace = workspace;
+      req.session.currentWorkspace = workspace.id;
       
       // Save session
       req.session.save((saveErr) => {
