@@ -267,7 +267,7 @@ const {
 } = require('./lib/billing');
 
 const app = express();
-app.set('trust proxy', true);
+app.set('trust proxy', 1); // 1 hop behind reverse proxy (nginx/cloudflare)
 const PORT = process.env.PORT || 4500;
 const WORKSPACE_ROOT = path.join(__dirname, '..', '..', '..');
 const USER_MD_PATH = path.join(WORKSPACE_ROOT, 'USER.md');
@@ -8410,10 +8410,11 @@ app.post('/api/v1/marketplace/:id/install', authenticate, (req, res) => {
           WHERE id = ?
         `).run(serviceLabel, description, authType, apiEndpoint, documentationUrl, service.id);
       } else {
-        const result = db.prepare(`
+        const newServiceRow = db.prepare(`
           INSERT INTO services (name, label, category_id, icon, description, auth_type, api_endpoint, documentation_url, active, created_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
-        `).run(
+          RETURNING id
+        `).get(
           serviceName,
           serviceLabel,
           category.id,
@@ -8424,7 +8425,7 @@ app.post('/api/v1/marketplace/:id/install', authenticate, (req, res) => {
           documentationUrl,
           now
         );
-        service = db.prepare('SELECT * FROM services WHERE id = ?').get(result.lastInsertRowid);
+        service = db.prepare('SELECT * FROM services WHERE id = ?').get(newServiceRow?.id);
       }
 
       // Provision API methods (idempotent upsert by service_id + method_name)

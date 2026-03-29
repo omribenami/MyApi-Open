@@ -1954,13 +1954,13 @@ function revokeHandshake(handshakeId) {
 function createPersona(name, soulContent, description, templateData = null, ownerId = 'owner', workspaceId = null) {
   const now = new Date().toISOString();
   const owner = normalizeOwnerId(ownerId);
-  const stmt = db.prepare(`
+  const row = db.prepare(`
     INSERT INTO personas (name, soul_content, description, active, created_at, updated_at, template_data, owner_id, workspace_id)
     VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?)
-  `);
-  const result = stmt.run(name, soulContent, description || null, now, now, templateData ? JSON.stringify(templateData) : null, owner, workspaceId || null);
+    RETURNING id
+  `).get(name, soulContent, description || null, now, now, templateData ? JSON.stringify(templateData) : null, owner, workspaceId || null);
   return {
-    id: result.lastInsertRowid,
+    id: row?.id ?? null,
     name,
     soul_content: soulContent,
     description,
@@ -3099,13 +3099,13 @@ function getPersonaSkillPackages(personaId, ownerId = 'owner') {
 function createSkill(name, description, version, author, category, scriptContent, configJson, repoUrl, ownerId = 'owner') {
   const now = new Date().toISOString();
   const owner = normalizeOwnerId(ownerId);
-  const stmt = db.prepare(`
+  const configValue = typeof configJson === 'object' ? JSON.stringify(configJson) : (configJson || null);
+  const row = db.prepare(`
     INSERT INTO skills (name, description, version, author, category, script_content, config_json, repo_url, active, created_at, updated_at, owner_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
-  `);
-  const configValue = typeof configJson === 'object' ? JSON.stringify(configJson) : (configJson || null);
-  const result = stmt.run(name, description || null, version || '1.0.0', author || null, category || 'custom', scriptContent || null, configValue, repoUrl || null, now, now, owner);
-  return getSkillById(result.lastInsertRowid, owner);
+    RETURNING id
+  `).get(name, description || null, version || '1.0.0', author || null, category || 'custom', scriptContent || null, configValue, repoUrl || null, now, now, owner);
+  return getSkillById(row?.id ?? null, owner);
 }
 
 function getSkills(ownerId = 'owner', workspaceId = null) {
@@ -3261,21 +3261,20 @@ function createSkillVersion(skillId, versionNumber, contentHash, creatorId, rele
   const now = new Date().toISOString();
   const configStr = typeof configJson === 'object' ? JSON.stringify(configJson) : configJson;
   
-  const stmt = db.prepare(`
+  const row = db.prepare(`
     INSERT INTO skill_versions (skill_id, version_number, content_hash, created_at, creator_id, release_notes, script_content, config_json)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  
-  const result = stmt.run(skillId, versionNumber, contentHash, now, creatorId, releaseNotes || null, scriptContent || null, configStr || null);
-  
+    RETURNING id
+  `).get(skillId, versionNumber, contentHash, now, creatorId, releaseNotes || null, scriptContent || null, configStr || null);
+
   // Update skill to reference this version
   db.prepare(`
     UPDATE skills SET version = ?, updated_at = ?, published_at = COALESCE(published_at, ?)
     WHERE id = ? AND owner_id = ?
   `).run(versionNumber, now, now, skillId, owner);
-  
+
   return {
-    id: result.lastInsertRowid,
+    id: row?.id ?? null,
     skillId,
     versionNumber,
     contentHash,
@@ -3335,13 +3334,12 @@ function createSkillFork(originalSkillId, newSkillId, forkedByUserId, ownerId = 
   if (!skill) return null;
   
   const now = new Date().toISOString();
-  const stmt = db.prepare(`
+  const forkRow = db.prepare(`
     INSERT INTO skill_forks (original_skill_id, fork_skill_id, forked_by_user_id, created_at)
     VALUES (?, ?, ?, ?)
-  `);
-  
-  const result = stmt.run(originalSkillId, newSkillId, forkedByUserId, now);
-  
+    RETURNING id
+  `).get(originalSkillId, newSkillId, forkedByUserId, now);
+
   // Update the fork skill with fork information
   const originalSkill = db.prepare('SELECT * FROM skills WHERE id = ?').get(originalSkillId);
   if (originalSkill) {
@@ -3353,9 +3351,9 @@ function createSkillFork(originalSkillId, newSkillId, forkedByUserId, ownerId = 
       WHERE id = ? AND owner_id = ?
     `).run(originalSkill.origin_owner || originalSkill.author, null, newSkillId, owner);
   }
-  
+
   return {
-    id: result.lastInsertRowid,
+    id: forkRow?.id ?? null,
     originalSkillId,
     forkSkillId: newSkillId,
     forkedByUserId,
@@ -3455,12 +3453,12 @@ function createOwnershipClaim(skillId, claimantUserId, githubUsername = null, ma
     ON CONFLICT (skill_id, claimant_user_id) DO UPDATE SET
       github_username = excluded.github_username,
       marketplace_user_id = excluded.marketplace_user_id
+    RETURNING id
   `);
   
-  const result = stmt.run(skillId, claimantUserId, githubUsername || null, marketplaceUserId || null, now);
-  
+  const claimRow = stmt.get(skillId, claimantUserId, githubUsername || null, marketplaceUserId || null, now);
   return {
-    id: result.lastInsertRowid,
+    id: claimRow?.id ?? null,
     skillId,
     claimantUserId,
     githubUsername,
@@ -3549,12 +3547,12 @@ function _formatListing(row) {
 function createMarketplaceListing(ownerId, type, title, description, content, tags, price) {
   const now = new Date().toISOString();
   const contentStr = content ? (typeof content === 'object' ? JSON.stringify(content) : content) : null;
-  const stmt = db.prepare(`
+  const row = db.prepare(`
     INSERT INTO marketplace_listings (owner_id, type, title, description, content, tags, price, status, avg_rating, rating_count, install_count, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, 'active', 0, 0, 0, ?, ?)
-  `);
-  const result = stmt.run(ownerId, type, title, description || null, contentStr, tags || '', price || 'free', now, now);
-  return getMarketplaceListing(result.lastInsertRowid);
+    RETURNING id
+  `).get(ownerId, type, title, description || null, contentStr, tags || '', price || 'free', now, now);
+  return getMarketplaceListing(row?.id ?? null);
 }
 
 function getMarketplaceListings({ type, sort, search, tags, provider, price, rating, official, status = 'active' } = {}) {
