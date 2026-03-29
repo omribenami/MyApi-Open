@@ -1402,7 +1402,7 @@ const dashboardSpaRateLimit = expressRateLimit({
 // Security: DB integrity check on startup - detect direct tampering
 // Only runs in SQLite mode; PostgreSQL uses row-level security instead
 function checkDbIntegrity() {
-  if (!db || !db.prepare) return; // Skip in PostgreSQL mode
+  if (!db || !db.prepare || db.pool) return; // Skip in PostgreSQL mode (db.pool exists for PG adapter)
   try {
     const tokens = db.prepare("SELECT id, owner_id, scope, label, created_at FROM access_tokens WHERE revoked_at IS NULL").all();
     const hash = require('crypto').createHash('sha256').update(JSON.stringify(tokens)).digest('hex');
