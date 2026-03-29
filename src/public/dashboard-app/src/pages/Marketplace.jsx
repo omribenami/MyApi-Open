@@ -3,7 +3,8 @@ import { useAuthStore } from '../stores/authStore';
 
 const TYPE_CONFIG = {
   persona: { label: 'Persona', color: 'bg-purple-900 bg-opacity-60 text-purple-300 border-purple-700' },
-  api: { label: 'API', color: 'bg-blue-900 bg-opacity-60 text-blue-300 border-blue-700' },
+  api: { label: 'Token', color: 'bg-cyan-900 bg-opacity-60 text-cyan-300 border-cyan-700' },
+  token: { label: 'Token', color: 'bg-cyan-900 bg-opacity-60 text-cyan-300 border-cyan-700' },
   skill: { label: 'Skill', color: 'bg-green-900 bg-opacity-60 text-green-300 border-green-700' },
 };
 
@@ -655,7 +656,7 @@ export default function Marketplace() {
   const tabs = [
     { id: 'all', label: 'All' },
     { id: 'persona', label: 'Personas' },
-    { id: 'api', label: 'APIs' },
+    { id: 'token', label: 'Tokens' },
     { id: 'skill', label: 'Skills' },
   ];
 
@@ -963,7 +964,12 @@ export default function Marketplace() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {(listings || []).filter(l => typeFilter === 'all' || l?.type === typeFilter).map(listing => {
+            {(listings || []).filter(l => {
+              if (typeFilter === 'all') return true;
+              // Map 'token' tab to show 'api' type listings
+              if (typeFilter === 'token') return l?.type === 'api';
+              return l?.type === typeFilter;
+            }).map(listing => {
               if (!listing || !listing.id) {
                 console.warn('[Marketplace] Skipping invalid listing:', listing);
                 return null;
