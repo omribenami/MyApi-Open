@@ -4519,13 +4519,10 @@ function markNotificationAsRead(notificationId, workspaceId, userId) {
 }
 
 function deleteNotification(notificationId, workspaceId, userId) {
-  const deleteQueue = db.prepare(`DELETE FROM notification_queue WHERE notification_id = ?`);
-  const deleteNotif = db.prepare(`DELETE FROM notifications WHERE id = ? AND workspace_id = ? AND user_id = ?`);
-
-  return db.transaction(() => {
-    deleteQueue.run(notificationId);
-    return deleteNotif.run(notificationId, workspaceId, userId).changes > 0;
-  })();
+  // Delete child rows in notification_queue first to avoid FK constraint failure
+  db.prepare(`DELETE FROM notification_queue WHERE notification_id = ?`).run(notificationId);
+  return db.prepare(`DELETE FROM notifications WHERE id = ? AND workspace_id = ? AND user_id = ?`)
+    .run(notificationId, workspaceId, userId).changes > 0;
 }
 
 function getUnreadNotificationCount(workspaceId, userId) {
