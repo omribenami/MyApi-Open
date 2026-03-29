@@ -191,9 +191,9 @@ class PostgreSQLAdapter extends DatabaseAdapter {
     
     this.pool = new Pool({
       connectionString: connectionString,
-      max: 20,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 2000,
+      max: 5,                          // Supabase free tier has limited connections
+      idleTimeoutMillis: 20000,        // Release idle connections after 20s (before Supabase's ~30s timeout)
+      connectionTimeoutMillis: 10000,  // Allow 10s to acquire a connection (Supabase can be slow)
     });
 
     // Handle errors on the pool itself
