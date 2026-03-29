@@ -498,13 +498,13 @@ function ListingCard({
           {listingTags.length > 3 && <span className="text-slate-500 text-xs">+{listingTags.length - 3}</span>}
         </div>
       )}
-      <div className="mt-4 flex items-center justify-between gap-2">
-        <span className="text-xs font-medium text-blue-400 group-hover:text-blue-300 transition-colors">View Details →</span>
+      <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-2">
+        <span className="text-xs font-medium text-blue-400 group-hover:text-blue-300 transition-colors hidden sm:block">View Details →</span>
         {masterToken && (
           <button
             onClick={handleQuickInstall}
             disabled={isInstalled || quickInstalling}
-            className="px-3 py-1.5 text-xs rounded-md bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white"
+            className="w-full sm:w-auto px-3 py-1.5 text-xs rounded-md bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium"
           >
             {quickInstalling ? 'Installing...' : isInstalled ? 'Installed' : 'Install'}
           </button>
