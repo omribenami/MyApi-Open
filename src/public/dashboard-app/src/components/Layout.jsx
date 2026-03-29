@@ -68,11 +68,19 @@ function Layout({ children, onLogout }) {
   const location = useLocation();
   const { user } = useAuthStore();
   const unreadCount = useNotificationStore(state => state.unreadCount);
+  const fetchUnreadCount = useNotificationStore(state => state.fetchUnreadCount);
   const toasts = useNotificationStore(state => state.toasts) || [];
   const removeToast = useNotificationStore(state => state.removeToast);
   const [menuOpen, setMenuOpen] = useState(false);
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const [notificationDropdownOpen, setNotificationDropdownOpen] = useState(false);
+
+  // Fetch unread notification count on mount and periodically
+  useEffect(() => {
+    fetchUnreadCount();
+    const interval = setInterval(() => fetchUnreadCount(), 30000); // Poll every 30s
+    return () => clearInterval(interval);
+  }, [fetchUnreadCount]);
 
   const tokenData = (() => {
     try { return JSON.parse(localStorage.getItem('tokenData') || '{}'); } catch { return {}; }
