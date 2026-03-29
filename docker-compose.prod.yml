@@ -6,8 +6,8 @@
 # served by the Express backend at /dashboard/.
 #
 # QUICK START:
-#   1. cp .env.docker .env.local
-#   2. Edit .env.local with your real secrets
+#   1. cp .env.docker .env
+#   2. Edit .env with your real secrets
 #   3. docker-compose up -d
 #   4. Access: http://localhost:4500
 #
@@ -32,16 +32,15 @@ services:
     container_name: myapi
     restart: unless-stopped
 
+    env_file:
+      - .env
+
     environment:
-      NODE_ENV: production
-      PORT: 4500
-      SESSION_COOKIE_SECURE: true
-      DATABASE_TYPE: sqlite
       DB_PATH: /app/data/myapi.db
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-REMOVED_CLIENT_ID}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-REMOVED_SECRET}
-      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-https://www.myapiai.com/api/v1/oauth/callback/google}
-      GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL:-https://www.myapiai.com/api/v1/oauth/callback/google}
+
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
 
     ports:
       - "${PORT:-4500}:${PORT:-4500}"
@@ -66,7 +65,7 @@ services:
   # ============================================================================
   # Optional: Cloudflare Tunnel (for public HTTPS access without opening ports)
   # ============================================================================
-  # Uncomment and set CLOUDFLARE_TUNNEL_TOKEN in .env.local to enable.
+  # Uncomment and set CLOUDFLARE_TUNNEL_TOKEN in .env to enable.
   #
   # cloudflared:
   #   image: cloudflare/cloudflared:latest
@@ -87,3 +86,7 @@ volumes:
 networks:
   myapi-network:
     driver: bridge
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: "fd00:db8::/64"

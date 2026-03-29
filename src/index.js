@@ -256,7 +256,7 @@ const {
 } = require('./lib/billing');
 
 const app = express();
-app.set('trust proxy', true);
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 4500;
 const WORKSPACE_ROOT = path.join(__dirname, '..', '..', '..');
 const USER_MD_PATH = path.join(WORKSPACE_ROOT, 'USER.md');
@@ -1439,24 +1439,13 @@ app.get('/api/v1/skills/public/list', async (req, res) => {
   try {
     let skills = [];
     
-    // Check if using MongoDB (database-mongodb adapter)
-    if (process.env.DATABASE_URL) {
-      // MongoDB path
-      const skillsCollection = db.collection('skills');
-      skills = await skillsCollection
-        .find({ active: { $ne: false } })
-        .sort({ created_at: -1 })
-        .toArray();
-    } else {
-      // SQLite path
-      skills = db.prepare(`
+    skills = db.prepare(`
         SELECT id, name, description, version, author, category,
                active, created_at, updated_at
         FROM skills
         WHERE active = 1
         ORDER BY created_at DESC
       `).all();
-    }
 
     res.json({ 
       data: skills.map(skill => ({
@@ -8506,10 +8495,11 @@ app.post('/api/v1/marketplace/:id/install', authenticate, (req, res) => {
           WHERE id = ?
         `).run(serviceLabel, description, authType, apiEndpoint, documentationUrl, service.id);
       } else {
-        const result = db.prepare(`
+        const inserted = db.prepare(`
           INSERT INTO services (name, label, category_id, icon, description, auth_type, api_endpoint, documentation_url, active, created_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
-        `).run(
+          RETURNING id
+        `).get(
           serviceName,
           serviceLabel,
           category.id,
@@ -8520,7 +8510,7 @@ app.post('/api/v1/marketplace/:id/install', authenticate, (req, res) => {
           documentationUrl,
           now
         );
-        service = db.prepare('SELECT * FROM services WHERE id = ?').get(result.lastInsertRowid);
+        service = db.prepare('SELECT * FROM services WHERE id = ?').get(inserted?.id);
       }
 
       // Provision API methods (idempotent upsert by service_id + method_name)

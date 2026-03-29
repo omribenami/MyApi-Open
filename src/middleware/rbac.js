@@ -339,8 +339,10 @@ const roleManagement = {
     const createdAt = new Date().toISOString();
 
     await db.run(
-      `INSERT OR REPLACE INTO user_roles (id, user_id, role_id, workspace_id, created_at, assigned_by_user_id)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO user_roles (id, user_id, role_id, workspace_id, created_at, assigned_by_user_id)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT (user_id, role_id, workspace_id) DO UPDATE SET
+         assigned_by_user_id = excluded.assigned_by_user_id`,
       [id, userId, roleId, workspaceId, createdAt, assignedByUserId]
     );
 
@@ -386,8 +388,9 @@ const roleManagement = {
     const createdAt = new Date().toISOString();
 
     await db.run(
-      `INSERT OR REPLACE INTO role_permissions (id, role_id, permission_id, created_at)
-       VALUES (?, ?, ?, ?)`,
+      `INSERT INTO role_permissions (id, role_id, permission_id, created_at)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT (role_id, permission_id) DO UPDATE SET created_at = excluded.created_at`,
       [id, roleId, permissionId, createdAt]
     );
 

@@ -21,9 +21,9 @@ const isPostgreSQLMode = dbType === 'postgres' || dbType === 'postgresql' || (pr
 const isSQLiteMode = !isPostgreSQLMode;
 const isMongoDBMode = false; // Deprecated - kept for code that checks this
 
-// Initialize database using abstraction layer
+// Initialize database using abstraction layer (use singleton so db-wrapper shares the same pool)
 try {
-  const dbAdapterInstance = dbAbstraction.createDatabaseAdapter();
+  const dbAdapterInstance = dbAbstraction.getDatabase();
   db = dbAdapterInstance; // For sync compatibility (has .prepare() for SQLite)
   dbAsync = dbWrapper; // For async operations
   
@@ -75,11 +75,16 @@ function checkDatabaseHealth() {
   try {
     if (isSQLiteMode && db.pragma) {
       const result = db.pragma('quick_check', { simple: true });
+      // simple:true returns plain string 'ok'
       if (result === 'ok' || result === undefined) {
         return { healthy: true };
       }
+      // db-abstraction shim may return array of objects: [{"quick_check":"ok"}]
+      if (Array.isArray(result) && result[0]?.quick_check === 'ok') {
+        return { healthy: true };
+      }
       // pragma returns an object in some versions, check for ok property
-      if (typeof result === 'object' && result.ok) {
+      if (typeof result === 'object' && result !== null && !Array.isArray(result) && result.ok) {
         return { healthy: true };
       }
       return { healthy: false, error: `quick_check returned: ${JSON.stringify(result)}` };
@@ -938,8 +943,9 @@ function initDatabase() {
   for (const lic of defaultLicenses) {
     try {
       db.prepare(`
-        INSERT OR IGNORE INTO skill_licenses (license_name, description, can_fork, can_sell, can_modify, attribution_required, created_at)
+        INSERT INTO skill_licenses (license_name, description, can_fork, can_sell, can_modify, attribution_required, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT DO NOTHING
       `).run(lic.name, lic.desc, lic.can_fork, lic.can_sell, lic.can_modify, lic.attribution_required, new Date().toISOString());
     } catch (e) {}
   }
@@ -1500,8 +1506,9 @@ function seedDefaultScopes() {
 
   const now = new Date().toISOString();
   const insertStmt = db.prepare(`
-    INSERT OR IGNORE INTO scope_definitions (scope_name, description, category, permissions, created_at)
+    INSERT INTO scope_definitions (scope_name, description, category, permissions, created_at)
     VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT DO NOTHING
   `);
 
   const updateStmt = db.prepare(`
@@ -1540,8 +1547,9 @@ function getAllScopes() {
 function grantScopes(tokenId, scopeNames) {
   const now = new Date().toISOString();
   const insertStmt = db.prepare(`
-    INSERT OR IGNORE INTO access_token_scopes (token_id, scope_name, granted_at)
+    INSERT INTO access_token_scopes (token_id, scope_name, granted_at)
     VALUES (?, ?, ?)
+    ON CONFLICT DO NOTHING
   `);
 
   for (const scopeName of scopeNames) {
@@ -1706,6 +1714,13 @@ function createUser(username, displayName, email, timezone, password, plan = 'fr
 
 function getUsersTableColumns() {
   try {
+    // PostgreSQL: use information_schema instead of PRAGMA
+    if (db.pool) {
+      const cols = db.prepare(
+        "SELECT column_name as name FROM information_schema.columns WHERE table_name = 'users' AND table_schema = 'public'"
+      ).all();
+      return new Set(cols.map((c) => c.name));
+    }
     const cols = db.prepare('PRAGMA table_info(users)').all();
     return new Set(cols.map((c) => c.name));
   } catch (_) {
@@ -1964,13 +1979,13 @@ function revokeHandshake(handshakeId) {
 function createPersona(name, soulContent, description, templateData = null, ownerId = 'owner', workspaceId = null) {
   const now = new Date().toISOString();
   const owner = normalizeOwnerId(ownerId);
-  const stmt = db.prepare(`
+  const row = db.prepare(`
     INSERT INTO personas (name, soul_content, description, active, created_at, updated_at, template_data, owner_id, workspace_id)
     VALUES (?, ?, ?, 0, ?, ?, ?, ?, ?)
-  `);
-  const result = stmt.run(name, soulContent, description || null, now, now, templateData ? JSON.stringify(templateData) : null, owner, workspaceId || null);
+    RETURNING id
+  `).get(name, soulContent, description || null, now, now, templateData ? JSON.stringify(templateData) : null, owner, workspaceId || null);
   return {
-    id: result.lastInsertRowid,
+    id: row?.id ?? null,
     name,
     soul_content: soulContent,
     description,
@@ -3109,13 +3124,13 @@ function getPersonaSkillPackages(personaId, ownerId = 'owner') {
 function createSkill(name, description, version, author, category, scriptContent, configJson, repoUrl, ownerId = 'owner') {
   const now = new Date().toISOString();
   const owner = normalizeOwnerId(ownerId);
-  const stmt = db.prepare(`
+  const configValue = typeof configJson === 'object' ? JSON.stringify(configJson) : (configJson || null);
+  const row = db.prepare(`
     INSERT INTO skills (name, description, version, author, category, script_content, config_json, repo_url, active, created_at, updated_at, owner_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
-  `);
-  const configValue = typeof configJson === 'object' ? JSON.stringify(configJson) : (configJson || null);
-  const result = stmt.run(name, description || null, version || '1.0.0', author || null, category || 'custom', scriptContent || null, configValue, repoUrl || null, now, now, owner);
-  return getSkillById(result.lastInsertRowid, owner);
+    RETURNING id
+  `).get(name, description || null, version || '1.0.0', author || null, category || 'custom', scriptContent || null, configValue, repoUrl || null, now, now, owner);
+  return getSkillById(row?.id ?? null, owner);
 }
 
 function getSkills(ownerId = 'owner', workspaceId = null) {
@@ -3271,21 +3286,20 @@ function createSkillVersion(skillId, versionNumber, contentHash, creatorId, rele
   const now = new Date().toISOString();
   const configStr = typeof configJson === 'object' ? JSON.stringify(configJson) : configJson;
   
-  const stmt = db.prepare(`
+  const row = db.prepare(`
     INSERT INTO skill_versions (skill_id, version_number, content_hash, created_at, creator_id, release_notes, script_content, config_json)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  
-  const result = stmt.run(skillId, versionNumber, contentHash, now, creatorId, releaseNotes || null, scriptContent || null, configStr || null);
-  
+    RETURNING id
+  `).get(skillId, versionNumber, contentHash, now, creatorId, releaseNotes || null, scriptContent || null, configStr || null);
+
   // Update skill to reference this version
   db.prepare(`
     UPDATE skills SET version = ?, updated_at = ?, published_at = COALESCE(published_at, ?)
     WHERE id = ? AND owner_id = ?
   `).run(versionNumber, now, now, skillId, owner);
-  
+
   return {
-    id: result.lastInsertRowid,
+    id: row?.id ?? null,
     skillId,
     versionNumber,
     contentHash,
@@ -3345,13 +3359,12 @@ function createSkillFork(originalSkillId, newSkillId, forkedByUserId, ownerId = 
   if (!skill) return null;
   
   const now = new Date().toISOString();
-  const stmt = db.prepare(`
+  const forkRow = db.prepare(`
     INSERT INTO skill_forks (original_skill_id, fork_skill_id, forked_by_user_id, created_at)
     VALUES (?, ?, ?, ?)
-  `);
-  
-  const result = stmt.run(originalSkillId, newSkillId, forkedByUserId, now);
-  
+    RETURNING id
+  `).get(originalSkillId, newSkillId, forkedByUserId, now);
+
   // Update the fork skill with fork information
   const originalSkill = db.prepare('SELECT * FROM skills WHERE id = ?').get(originalSkillId);
   if (originalSkill) {
@@ -3363,9 +3376,9 @@ function createSkillFork(originalSkillId, newSkillId, forkedByUserId, ownerId = 
       WHERE id = ? AND owner_id = ?
     `).run(originalSkill.origin_owner || originalSkill.author, null, newSkillId, owner);
   }
-  
+
   return {
-    id: result.lastInsertRowid,
+    id: forkRow?.id ?? null,
     originalSkillId,
     forkSkillId: newSkillId,
     forkedByUserId,
@@ -3460,14 +3473,17 @@ function createOwnershipClaim(skillId, claimantUserId, githubUsername = null, ma
   
   const now = new Date().toISOString();
   const stmt = db.prepare(`
-    INSERT OR REPLACE INTO skill_ownership_claims (skill_id, claimant_user_id, github_username, marketplace_user_id, created_at)
+    INSERT INTO skill_ownership_claims (skill_id, claimant_user_id, github_username, marketplace_user_id, created_at)
     VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT (skill_id, claimant_user_id) DO UPDATE SET
+      github_username = excluded.github_username,
+      marketplace_user_id = excluded.marketplace_user_id
+    RETURNING id
   `);
   
-  const result = stmt.run(skillId, claimantUserId, githubUsername || null, marketplaceUserId || null, now);
-  
+  const claimRow = stmt.get(skillId, claimantUserId, githubUsername || null, marketplaceUserId || null, now);
   return {
-    id: result.lastInsertRowid,
+    id: claimRow?.id ?? null,
     skillId,
     claimantUserId,
     githubUsername,
@@ -3556,12 +3572,12 @@ function _formatListing(row) {
 function createMarketplaceListing(ownerId, type, title, description, content, tags, price) {
   const now = new Date().toISOString();
   const contentStr = content ? (typeof content === 'object' ? JSON.stringify(content) : content) : null;
-  const stmt = db.prepare(`
+  const row = db.prepare(`
     INSERT INTO marketplace_listings (owner_id, type, title, description, content, tags, price, status, avg_rating, rating_count, install_count, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, 'active', 0, 0, 0, ?, ?)
-  `);
-  const result = stmt.run(ownerId, type, title, description || null, contentStr, tags || '', price || 'free', now, now);
-  return getMarketplaceListing(result.lastInsertRowid);
+    RETURNING id
+  `).get(ownerId, type, title, description || null, contentStr, tags || '', price || 'free', now, now);
+  return getMarketplaceListing(row?.id ?? null);
 }
 
 function getMarketplaceListings({ type, sort, search, tags, provider, price, rating, official, status = 'active' } = {}) {
@@ -3970,8 +3986,9 @@ function seedServices() {
   const getCategoryId = db.prepare('SELECT id FROM service_categories WHERE name = ?');
   const now = new Date().toISOString();
   const insertStmt = db.prepare(`
-    INSERT OR IGNORE INTO services (name, label, category_id, icon, auth_type, api_endpoint, documentation_url, created_at)
+    INSERT INTO services (name, label, category_id, icon, auth_type, api_endpoint, documentation_url, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT DO NOTHING
   `);
 
   for (const srv of services) {
@@ -3993,9 +4010,10 @@ function seedServices() {
   const falService = db.prepare(`SELECT id FROM services WHERE name = 'fal'`).get();
   if (falService?.id) {
     const insertMethod = db.prepare(`
-      INSERT OR IGNORE INTO service_api_methods
+      INSERT INTO service_api_methods
         (service_id, method_name, http_method, endpoint, description, parameters, response_example, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT DO NOTHING
     `);
     const nowMethods = new Date().toISOString();
     insertMethod.run(
@@ -4182,9 +4200,9 @@ function createPendingApproval(tokenId, userId, fingerprintHash, deviceInfo, ipA
 function getPendingApprovals(userId, tokenId = null, limit = null) {
   let query = `
     SELECT * FROM device_approvals_pending 
-    WHERE user_id = ? AND status = 'pending' AND expires_at > datetime('now')
+    WHERE user_id = ? AND status = 'pending' AND expires_at > ?
   `;
-  const params = [userId];
+  const params = [userId, new Date().toISOString()];
   
   if (tokenId) {
     query += ' AND token_id = ?';
@@ -4955,8 +4973,9 @@ function getOrEnsureUserWorkspace(userId) {
     // Add user as owner
     const memberId = 'wm_' + crypto.randomBytes(16).toString('hex');
     db.prepare(`
-      INSERT OR IGNORE INTO workspace_members (id, workspace_id, user_id, role, joined_at)
+      INSERT INTO workspace_members (id, workspace_id, user_id, role, joined_at)
       VALUES (?, ?, ?, 'owner', ?)
+      ON CONFLICT DO NOTHING
     `).run(memberId, id, userId, now);
     
     return id;
@@ -4971,8 +4990,9 @@ function addWorkspaceMember(workspaceId, userId, role = 'member') {
   const now = new Date().toISOString();
   
   const stmt = db.prepare(`
-    INSERT OR IGNORE INTO workspace_members (id, workspace_id, user_id, role, joined_at)
+    INSERT INTO workspace_members (id, workspace_id, user_id, role, joined_at)
     VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT DO NOTHING
   `);
   
   stmt.run(id, workspaceId, userId, role, now);
@@ -5437,28 +5457,31 @@ function seedDefaultPricingPlans() {
 }
 
 /**
- * Run pending database migrations
- * Called during application startup
+ * Run pending database migrations with retry for transient connection failures
+ * (e.g. Docker DNS not ready at startup)
  */
-function runMigrations() {
-  try {
-    const migrationRunner = new MigrationRunner(db);
-    
-    // Initialize migration tracking table
-    migrationRunner.initMigrationTable();
-    
-    // Run all pending migrations
-    const result = migrationRunner.runPendingMigrations();
-    
-    console.log('[Migrations]', result.message);
-    if (result.failed && result.failed.length > 0) {
-      console.warn('[Migrations] Failed migrations:', result.failed);
+async function runMigrations(retries = 20, delayMs = 3000) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const migrationRunner = new MigrationRunner(db);
+      await migrationRunner.initMigrationTable();
+      const result = await migrationRunner.runPendingMigrations();
+      console.log('[Migrations]', result.message);
+      if (result.failed && result.failed.length > 0) {
+        console.warn('[Migrations] Failed migrations:', result.failed);
+      }
+      return result;
+    } catch (error) {
+      const isTransient = ['EAI_AGAIN', 'ENOTFOUND', 'ECONNREFUSED', 'ETIMEDOUT', 'ECONNRESET', '57P01', 'EPIPE'].includes(error.code)
+        || /connection terminated|connection reset|connection refused|econnreset|epipe/i.test(error.message);
+      console.error(`[Migrations] Error (attempt ${attempt}/${retries}):`, error.message);
+      if (isTransient && attempt < retries) {
+        console.log(`[Migrations] Retrying in ${delayMs / 1000}s...`);
+        await new Promise(r => setTimeout(r, delayMs));
+      } else {
+        throw error;
+      }
     }
-    
-    return result;
-  } catch (error) {
-    console.error('[Migrations] Error running migrations:', error.message);
-    throw error;
   }
 }
 
@@ -5719,7 +5742,7 @@ function removeRoleFromUser(userId, roleId, workspaceId) {
 
 function recordSchemaMigration(name, checksum = null) {
   try {
-    const stmt = db.prepare(`INSERT OR IGNORE INTO schema_migrations (id, name, applied_at, checksum) VALUES (?, ?, ?, ?)`);
+    const stmt = db.prepare(`INSERT INTO schema_migrations (id, name, applied_at, checksum) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING`);
     const id = 'mig_' + crypto.randomBytes(10).toString('hex');
     stmt.run(id, name, Math.floor(Date.now() / 1000), checksum);
     return true;

@@ -14,7 +14,7 @@ const db = new Database('./src/data/myapi.db');
  * Create agent_approvals table if it doesn't exist
  */
 function initializeAgentApprovalsTable() {
-  db.exec(`
+  Promise.resolve(db.exec(`
     CREATE TABLE IF NOT EXISTS agent_approvals (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id TEXT NOT NULL,
@@ -28,7 +28,7 @@ function initializeAgentApprovalsTable() {
       last_seen_at DATETIME,
       UNIQUE(user_id, agent_fingerprint)
     );
-  `);
+  `)).catch(() => {});
 }
 
 /**

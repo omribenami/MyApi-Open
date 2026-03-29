@@ -241,7 +241,7 @@ router.post('/logout', (req, res) => {
         // Revoke all access tokens (API tokens)
         const accessTokenStmt = db.prepare(`
           UPDATE access_tokens 
-          SET revoked_at = datetime('now')
+          SET revoked_at = CURRENT_TIMESTAMP
           WHERE owner_id = ? AND revoked_at IS NULL
         `);
         const revokedAccessTokens = accessTokenStmt.run(userId).changes;

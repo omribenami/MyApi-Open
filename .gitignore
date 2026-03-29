@@ -41,6 +41,10 @@ logs/
 # Backups (may contain sensitive data)
 backups/
 
+# Throwaway test/debug scripts
+test-db-query.js
+test-*.js
+
 # SSL certificates (sensitive)
 certs/
 certbot/

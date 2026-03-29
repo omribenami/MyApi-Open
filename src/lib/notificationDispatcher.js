@@ -7,7 +7,7 @@
 
 // NOTE: Database is handled by database.js which detects MongoDB or SQLite
 // No need to create a separate instance here
-const { createNotification, queueNotificationForDelivery } = require('../database');
+const { db, createNotification, queueNotificationForDelivery } = require('../database');
 
 class NotificationDispatcher {
   /**
