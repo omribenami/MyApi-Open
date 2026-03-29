@@ -317,23 +317,31 @@ function CreateTokenModal({ isOpen, onClose }) {
             <div className="space-y-2 max-h-60 overflow-y-auto">
               {scopes.length > 0 ? (
                 scopes
-                  .filter((scope) =>
-                    scope.toLowerCase().includes(searchScopes.toLowerCase())
-                  )
-                  .map((scope) => (
-                    <label
-                      key={scope}
-                      className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-700 cursor-pointer"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={formData.selectedScopes.includes(scope)}
-                        onChange={() => handleScopeToggle(scope)}
-                        className="w-4 h-4 rounded border border-slate-600 bg-slate-900 text-blue-600 cursor-pointer"
-                      />
-                      <span className="text-sm text-slate-300">{scope}</span>
-                    </label>
-                  ))
+                  .filter((scope) => {
+                    const name = typeof scope === 'object' ? scope.name : scope;
+                    return name.toLowerCase().includes(searchScopes.toLowerCase());
+                  })
+                  .map((scope) => {
+                    const scopeName = typeof scope === 'object' ? scope.name : scope;
+                    const scopeDesc = typeof scope === 'object' ? scope.description : null;
+                    return (
+                      <label
+                        key={scopeName}
+                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-700 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={formData.selectedScopes.includes(scopeName)}
+                          onChange={() => handleScopeToggle(scopeName)}
+                          className="w-4 h-4 rounded border border-slate-600 bg-slate-900 text-blue-600 cursor-pointer"
+                        />
+                        <div>
+                          <span className="text-sm text-slate-300">{scopeName}</span>
+                          {scopeDesc && <p className="text-xs text-slate-500">{scopeDesc}</p>}
+                        </div>
+                      </label>
+                    );
+                  })
               ) : (
                 <p className="text-sm text-slate-400 text-center py-4">No scopes available</p>
               )}
