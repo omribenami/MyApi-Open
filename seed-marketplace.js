@@ -405,7 +405,7 @@ const listings = skills.map(s => ({
   description: s.description,
   tags: JSON.stringify(s.tags),
   price: 0,
-  status: 'published',
+  status: 'active',
   avg_rating: (4.2 + Math.random() * 0.7).toFixed(1),
   rating_count: Math.floor(Math.random() * 200) + 20,
   install_count: Math.floor(Math.random() * 2000) + 100,
