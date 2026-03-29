@@ -7311,11 +7311,15 @@ const kbUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
   fileFilter: (req, file, cb) => {
-    const allowedMimeTypes = ['text/plain', 'text/markdown', 'application/pdf', 'application/json', 'text/csv'];
-    if (allowedMimeTypes.includes(file.mimetype)) {
+    // Accept all files and let the route handler reject unsupported types with a clear error
+    // Using cb(null, false) for rejection avoids multer propagating errors that would give 500
+    const allowedMimeTypes = ['text/plain', 'text/markdown', 'application/pdf', 'application/json', 'text/csv', 'application/octet-stream'];
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    const allowedExts = ['.txt', '.md', '.pdf', '.csv', '.json'];
+    if (allowedMimeTypes.includes(file.mimetype) || allowedExts.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error(`Unsupported file type: ${file.mimetype}`), false);
+      cb(null, false); // Silently skip — handler will return 400 with clear message
     }
   }
 });
@@ -7639,6 +7643,7 @@ app.post('/api/v1/brain/knowledge-base', authenticate, async (req, res) => {
 app.post('/api/v1/brain/knowledge-base/upload', authenticate, kbUploadFields, async (req, res) => {
   try {
     const uploadedFile = req.files?.file?.[0] || req.files?.document?.[0] || req.files?.upload?.[0] || req.files?.kbFile?.[0];
+    console.log('[KB Upload] files received:', JSON.stringify(Object.keys(req.files || {})), 'file:', uploadedFile ? `${uploadedFile.originalname} (${uploadedFile.mimetype}, ${uploadedFile.size}b)` : 'none');
     if (!uploadedFile) {
       return res.status(400).json({
         error: 'No file received. Use multipart/form-data with one of these field names: file, document, upload, kbFile.',
