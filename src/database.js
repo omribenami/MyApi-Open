@@ -4231,30 +4231,36 @@ function approvePendingDevice(approvalId, deviceName) {
   const approval = getPendingApprovalById(approvalId);
   if (!approval) return null;
 
-  // If this fingerprint is already approved for the user, do not try to insert duplicate.
-  const existing = getApprovedDeviceByHash(approval.user_id, approval.device_fingerprint_hash);
-  let deviceId = existing?.id || null;
+  const now = new Date().toISOString();
+  const resolvedName = deviceName || 'Approved Device';
 
-  if (!deviceId) {
-    // Create approved device
+  // Check for any existing device with this fingerprint (including revoked ones)
+  const anyExisting = db.prepare(
+    'SELECT id, revoked_at FROM approved_devices WHERE user_id = ? AND device_fingerprint_hash = ?'
+  ).get(approval.user_id, approval.device_fingerprint_hash);
+
+  let deviceId;
+  if (anyExisting) {
+    // Re-approve: clear revoked_at and update name/approved_at
+    db.prepare(`
+      UPDATE approved_devices SET revoked_at = NULL, device_name = ?, approved_at = ? WHERE id = ?
+    `).run(resolvedName, now, anyExisting.id);
+    deviceId = anyExisting.id;
+  } else {
     deviceId = createApprovedDevice(
       approval.token_id,
       approval.user_id,
       approval.device_fingerprint_hash,
-      deviceName || 'Approved Device',
+      resolvedName,
       JSON.parse(approval.device_info_json || '{}'),
       approval.ip_address
     );
-  } else {
-    // Touch last used on existing device when approving duplicate pending request
-    updateDeviceLastUsed(deviceId);
   }
 
   // Mark approval as approved
-  const now = new Date().toISOString();
   db.prepare(`
-    UPDATE device_approvals_pending 
-    SET status = 'approved', approved_at = ? 
+    UPDATE device_approvals_pending
+    SET status = 'approved', approved_at = ?
     WHERE id = ?
   `).run(now, approvalId);
 
