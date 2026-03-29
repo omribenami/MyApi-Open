@@ -1593,9 +1593,9 @@ function hasPermission(tokenScopes, requiredScopes) {
 
 function expandScopeTemplate(template) {
   const templates = {
-    'read': ['identity:read', 'vault:read', 'services:read', 'brain:read', 'audit:read', 'skills:read'],
-    'professional': ['identity:read'],
-    'availability': ['identity:read'],
+    'read': ['identity:read'],
+    'professional': ['identity:read', 'skills:read'],
+    'availability': ['identity:read', 'calendar:read'],
     'guest': ['identity:read'],
     'admin': ['admin:*']
   };
