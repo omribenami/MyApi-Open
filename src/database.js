@@ -1120,6 +1120,26 @@ function initDatabase() {
   db.exec('CREATE INDEX IF NOT EXISTS idx_marketplace_listings_provider ON marketplace_listings(provider)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_marketplace_listings_official ON marketplace_listings(official)');
 
+  // Phase: Guest Token Sharing - Add fields to access_tokens for token marketplace
+  const guestTokenMigrations = [
+    "ALTER TABLE access_tokens ADD COLUMN is_shareable INTEGER DEFAULT 0",
+    "ALTER TABLE access_tokens ADD COLUMN is_guest_token INTEGER DEFAULT 0",
+    "ALTER TABLE access_tokens ADD COLUMN source_token_id TEXT",
+    "ALTER TABLE access_tokens ADD COLUMN marketplace_listing_id INTEGER",
+    "ALTER TABLE access_tokens ADD COLUMN scope_bundle TEXT",
+    "ALTER TABLE access_tokens ADD COLUMN read_only INTEGER DEFAULT 0"
+  ];
+  
+  for (const migration of guestTokenMigrations) {
+    try { db.exec(migration); } catch (e) {}
+  }
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_access_tokens_shareable ON access_tokens(is_shareable);
+    CREATE INDEX IF NOT EXISTS idx_access_tokens_guest ON access_tokens(is_guest_token);
+    CREATE INDEX IF NOT EXISTS idx_access_tokens_source ON access_tokens(source_token_id);
+  `);
+
   // Seed initial pricing plans if table is empty
   seedDefaultPricingPlans();
 

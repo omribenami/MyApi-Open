@@ -4245,8 +4245,197 @@ app.get("/api/v1/audit", authenticate, (req, res) => {
 });
 
 // ============================
-// PUBLIC AUTH (Register + Login)
+// TOKEN SHARING (Guest Tokens)
 // ============================
+
+// POST /api/v1/tokens/:id/make-shareable - Publish a token to marketplace
+app.post('/api/v1/tokens/:id/make-shareable', authenticate, (req, res) => {
+  try {
+    const tokenId = req.params.id;
+    const { scopePersonaId, description } = req.body;
+    
+    const ownerId = req.tokenMeta?.ownerId || req.session?.user?.id;
+    if (!ownerId) return res.status(401).json({ error: 'Not authenticated' });
+
+    // Get token to verify ownership
+    const token = db.prepare('SELECT * FROM access_tokens WHERE id = ? AND owner_id = ?').get(tokenId, ownerId);
+    if (!token) return res.status(404).json({ error: 'Token not found' });
+    if (token.revoked_at) return res.status(400).json({ error: 'Cannot share a revoked token' });
+    if (token.is_shareable) return res.status(400).json({ error: 'Token is already being shared' });
+
+    // Create marketplace listing for this token
+    const now = new Date().toISOString();
+    const scopeBundle = scopePersonaId ? JSON.stringify({ persona_id: scopePersonaId }) : null;
+    const listingTitle = `Guest Token: ${token.label}`;
+    const listingDescription = description || `Private access token shared by ${ownerId}`;
+
+    const listingResult = db.prepare(`
+      INSERT INTO marketplace_listings (owner_id, type, title, description, content, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      ownerId,
+      'token',
+      listingTitle,
+      listingDescription,
+      JSON.stringify({ token_id: tokenId, scope_persona_id: scopePersonaId }),
+      'active',
+      now,
+      now
+    );
+
+    const listingId = listingResult.lastInsertRowid;
+
+    // Update token to mark as shareable
+    db.prepare(`
+      UPDATE access_tokens 
+      SET is_shareable = 1, marketplace_listing_id = ?, scope_bundle = ?
+      WHERE id = ?
+    `).run(listingId, scopeBundle, tokenId);
+
+    createAuditLog({
+      requesterId: ownerId,
+      action: 'token_make_shareable',
+      resource: `/tokens/${tokenId}`,
+      scope: req.tokenMeta?.scope || 'session',
+      ip: req.ip,
+      details: { listingId, scopePersonaId }
+    });
+
+    res.json({
+      data: {
+        tokenId,
+        listingId,
+        title: listingTitle,
+        description: listingDescription,
+        shareableAt: now
+      }
+    });
+  } catch (err) {
+    console.error('[Token Sharing] make-shareable error:', err);
+    res.status(500).json({ error: 'Failed to make token shareable' });
+  }
+});
+
+// POST /api/v1/tokens/:id/unpublish - Remove token from marketplace
+app.post('/api/v1/tokens/:id/unpublish', authenticate, (req, res) => {
+  try {
+    const tokenId = req.params.id;
+    const ownerId = req.tokenMeta?.ownerId || req.session?.user?.id;
+    if (!ownerId) return res.status(401).json({ error: 'Not authenticated' });
+
+    // Get token
+    const token = db.prepare('SELECT * FROM access_tokens WHERE id = ? AND owner_id = ?').get(tokenId, ownerId);
+    if (!token) return res.status(404).json({ error: 'Token not found' });
+    if (!token.is_shareable) return res.status(400).json({ error: 'Token is not being shared' });
+
+    const listingId = token.marketplace_listing_id;
+
+    // Deactivate marketplace listing
+    if (listingId) {
+      db.prepare('UPDATE marketplace_listings SET status = ? WHERE id = ?').run('inactive', listingId);
+    }
+
+    // Update token
+    db.prepare(`
+      UPDATE access_tokens 
+      SET is_shareable = 0, marketplace_listing_id = NULL
+      WHERE id = ?
+    `).run(tokenId);
+
+    createAuditLog({
+      requesterId: ownerId,
+      action: 'token_unpublish',
+      resource: `/tokens/${tokenId}`,
+      scope: req.tokenMeta?.scope || 'session',
+      ip: req.ip,
+      details: { listingId }
+    });
+
+    res.json({ data: { tokenId, unpublishedAt: new Date().toISOString() } });
+  } catch (err) {
+    console.error('[Token Sharing] unpublish error:', err);
+    res.status(500).json({ error: 'Failed to unpublish token' });
+  }
+});
+
+// GET /api/v1/vault/my-tokens - Get user's tokens (including guest tokens)
+app.get('/api/v1/vault/my-tokens', authenticate, (req, res) => {
+  try {
+    const ownerId = req.tokenMeta?.ownerId || req.session?.user?.id;
+    if (!ownerId) return res.status(401).json({ error: 'Not authenticated' });
+
+    // Get all tokens for this user
+    const tokens = db.prepare(`
+      SELECT id, label, scope, created_at, is_shareable, is_guest_token, source_token_id, marketplace_listing_id, read_only
+      FROM access_tokens 
+      WHERE owner_id = ? AND revoked_at IS NULL
+      ORDER BY created_at DESC
+    `).all(ownerId);
+
+    // Separate into user's tokens and guest tokens installed
+    const yourTokens = tokens.filter(t => !t.is_guest_token).map(t => ({
+      ...t,
+      type: 'own',
+      isPublished: t.is_shareable ? true : false,
+      listingId: t.marketplace_listing_id
+    }));
+
+    const guestTokens = tokens.filter(t => t.is_guest_token).map(t => ({
+      ...t,
+      type: 'guest',
+      sourceTokenId: t.source_token_id,
+      readOnly: t.read_only ? true : false
+    }));
+
+    res.json({
+      data: {
+        yourTokens,
+        guestTokens,
+        summary: {
+          yourTokensCount: yourTokens.length,
+          guestTokensCount: guestTokens.length
+        }
+      }
+    });
+  } catch (err) {
+    console.error('[Token Sharing] my-tokens error:', err);
+    res.status(500).json({ error: 'Failed to fetch tokens' });
+  }
+});
+
+// DELETE /api/v1/vault/:tokenId/revoke - Revoke a guest token
+app.delete('/api/v1/vault/:tokenId/revoke', authenticate, (req, res) => {
+  try {
+    const tokenId = req.params.tokenId;
+    const ownerId = req.tokenMeta?.ownerId || req.session?.user?.id;
+    if (!ownerId) return res.status(401).json({ error: 'Not authenticated' });
+
+    // Get token
+    const token = db.prepare('SELECT * FROM access_tokens WHERE id = ? AND owner_id = ?').get(tokenId, ownerId);
+    if (!token) return res.status(404).json({ error: 'Token not found' });
+    if (!token.is_guest_token) return res.status(400).json({ error: 'Can only revoke guest tokens this way' });
+
+    const now = new Date().toISOString();
+    db.prepare('UPDATE access_tokens SET revoked_at = ? WHERE id = ?').run(now, tokenId);
+
+    createAuditLog({
+      requesterId: ownerId,
+      action: 'guest_token_revoke',
+      resource: `/tokens/${tokenId}`,
+      scope: req.tokenMeta?.scope || 'session',
+      ip: req.ip
+    });
+
+    res.json({ data: { tokenId, revokedAt: now } });
+  } catch (err) {
+    console.error('[Token Sharing] revoke error:', err);
+    res.status(500).json({ error: 'Failed to revoke token' });
+  }
+});
+
+// ============================
+// PUBLIC AUTH (Register + Login)
+// =============================
 app.post("/api/v1/auth/register", (req, res) => {
   const { username, password, display_name, email, timezone } = req.body;
   if (!username || !password) return res.status(400).json({ error: "username and password are required" });
@@ -8491,9 +8680,100 @@ app.post('/api/v1/marketplace/:id/install', authenticate, (req, res) => {
           skillCategory: newSkill.category,
         };
       }
-    }
+    } else if (listing.type === 'token') {
+      // Handle guest token installation
+      let content = listing.content;
+      if (typeof content === 'string') {
+        try {
+          content = JSON.parse(content);
+        } catch {
+          content = {};
+        }
+      }
+      if (!content || typeof content !== 'object') {
+        return res.status(400).json({ error: 'Token listing content is malformed' });
+      }
 
-    const alreadyInstalled = !!(provisioned && provisioned.alreadyInstalled);
+      // Get the current user's ID (owner) - handle both session and API token auth
+      let ownerId = null;
+      if (req.session?.user?.id) {
+        ownerId = req.session.user.id;
+      } else if (req.tokenMeta?.ownerId) {
+        ownerId = req.tokenMeta.ownerId;
+      } else if (req.tokenMeta?.userId) {
+        ownerId = req.tokenMeta.userId;
+      }
+      
+      if (!ownerId) {
+        return res.status(401).json({ error: 'Authentication required to install tokens' });
+      }
+
+      // Get the original shared token
+      const sourceTokenId = content.token_id;
+      const sourceToken = db.prepare('SELECT * FROM access_tokens WHERE id = ?').get(sourceTokenId);
+      if (!sourceToken) {
+        return res.status(404).json({ error: 'Source token no longer available' });
+      }
+      if (!sourceToken.is_shareable) {
+        return res.status(400).json({ error: 'Token is no longer being shared' });
+      }
+
+      // Idempotency: check if already installed
+      const existingGuestToken = db.prepare(`
+        SELECT id FROM access_tokens 
+        WHERE owner_id = ? AND is_guest_token = 1 AND source_token_id = ?
+      `).get(ownerId, sourceTokenId);
+
+      if (existingGuestToken) {
+        provisioned = {
+          type: 'guest_token',
+          tokenId: existingGuestToken.id,
+          label: sourceToken.label,
+          alreadyInstalled: true,
+        };
+      } else {
+        // Create a copy of the token for the current user with read-only access
+        const guestTokenId = 'tok_' + crypto.randomBytes(16).toString('hex');
+        const guestTokenHash = bcrypt.hashSync('myapi_' + crypto.randomBytes(32).toString('hex'), 10);
+        const now = new Date().toISOString();
+        const guestLabel = `${sourceToken.label} (Guest)`;
+        const scopeBundle = sourceToken.scope_bundle || null;
+
+        const result = db.prepare(`
+          INSERT INTO access_tokens (
+            id, hash, owner_id, scope, label, created_at, 
+            is_guest_token, source_token_id, scope_bundle, read_only, workspace_id
+          )
+          VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, 1, ?)
+        `).run(
+          guestTokenId,
+          guestTokenHash,
+          ownerId,
+          'guest',  // scope for guest tokens
+          guestLabel,
+          now,
+          sourceTokenId,
+          scopeBundle,
+          req.workspaceId || (req.session?.user?.id ? 
+            db.prepare('SELECT workspace_id FROM workspace_members WHERE user_id = ? LIMIT 1').get(req.session.user.id)?.workspace_id 
+            : null)
+        );
+
+        // Add guest scope to the token's scopes
+        db.prepare(`
+          INSERT INTO access_token_scopes (token_id, scope_name, created_at)
+          VALUES (?, 'guest', ?)
+        `).run(guestTokenId, now);
+
+        provisioned = {
+          type: 'guest_token',
+          tokenId: guestTokenId,
+          label: guestLabel,
+          sourceTokenId,
+          readOnly: true,
+        };
+      }
+    }
     if (!alreadyInstalled) {
       incrementInstallCount(listingId);
       trackWorkspaceUsage(req, { installs: 1 });
