@@ -558,10 +558,8 @@ const isAdapterConfigured = (adapter) => {
   );
 };
 const isOAuthServiceEnabled = (service) => {
-  // A service is active if it has credentials configured.
-  // oauth.json `enabled: false` is the only way to explicitly disable a service
-  // that has credentials (e.g. temporarily turn off a working integration).
-  // No entry in oauth.json, or `enabled: true`, is not required — credentials alone suffice.
+  // Rule: credentials present in env → service is active. No config file changes needed.
+  // The only override is setting enabled:false in oauth.json to hard-disable a credentialed service.
   const adapter = oauthAdapters[service];
   const explicitlyDisabled = oauthConfig[service]?.enabled === false;
   return Boolean(!explicitlyDisabled && isAdapterConfigured(adapter));
