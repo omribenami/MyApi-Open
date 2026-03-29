@@ -75,11 +75,16 @@ function checkDatabaseHealth() {
   try {
     if (isSQLiteMode && db.pragma) {
       const result = db.pragma('quick_check', { simple: true });
+      // simple:true returns plain string 'ok'
       if (result === 'ok' || result === undefined) {
         return { healthy: true };
       }
+      // db-abstraction shim may return array of objects: [{"quick_check":"ok"}]
+      if (Array.isArray(result) && result[0]?.quick_check === 'ok') {
+        return { healthy: true };
+      }
       // pragma returns an object in some versions, check for ok property
-      if (typeof result === 'object' && result.ok) {
+      if (typeof result === 'object' && result !== null && !Array.isArray(result) && result.ok) {
         return { healthy: true };
       }
       return { healthy: false, error: `quick_check returned: ${JSON.stringify(result)}` };

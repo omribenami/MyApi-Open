@@ -218,14 +218,14 @@ class MigrationRunner {
             client.release();
           }
         } else {
-          // SQLite: synchronous transaction
-          const runInTransaction = this.db.transaction(() => {
-            this.db.exec(sql);
-            this.db.prepare(
+          // SQLite: synchronous transaction via raw better-sqlite3 API
+          const rawDb = this.db.getRawDB ? this.db.getRawDB() : this.db;
+          rawDb.transaction(() => {
+            rawDb.exec(sql);
+            rawDb.prepare(
               'INSERT INTO migrations (filename, executed_at, checksum, batch) VALUES (?, ?, ?, ?)'
             ).run(filename, new Date().toISOString(), checksum, batch);
-          });
-          runInTransaction();
+          })();
         }
 
         applied.push(filename);

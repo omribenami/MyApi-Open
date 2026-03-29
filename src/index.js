@@ -1,17 +1,6 @@
 const path = require("path");
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 require('dotenv').config(); // fallback to current working dir .env if present
-
-// Register process-level error handlers immediately so nothing crashes
-// before the server starts (e.g. pg-pool connection failures at startup)
-process.on('uncaughtException', (error) => {
-  console.error('[CRITICAL] Uncaught Exception:', error.message);
-  // Don't exit during startup — let retry logic handle transient DB errors
-});
-process.on('unhandledRejection', (reason) => {
-  console.error('[CRITICAL] Unhandled Promise Rejection:', String(reason));
-  // Don't exit — log only
-});
 const express = require("express");
 const helmet = require("helmet");
 const cors = require("cors");
@@ -267,7 +256,7 @@ const {
 } = require('./lib/billing');
 
 const app = express();
-app.set('trust proxy', 1); // 1 hop behind reverse proxy (nginx/cloudflare)
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 4500;
 const WORKSPACE_ROOT = path.join(__dirname, '..', '..', '..');
 const USER_MD_PATH = path.join(WORKSPACE_ROOT, 'USER.md');
@@ -355,11 +344,8 @@ function renderLegalPage({ title, markdownContent }) {
 // Initialize database
 initDatabase();
 
-// Run database migrations (async — server start waits for this)
-const migrationPromise = runMigrations().catch(err => {
-  console.error('[Migrations] Fatal migration error:', err.message);
-  process.exit(1);
-});
+// Run database migrations
+runMigrations();
 
 // Startup database integrity check
 const startupHealth = checkDatabaseHealth();
@@ -1400,9 +1386,7 @@ const dashboardSpaRateLimit = expressRateLimit({
 });
 
 // Security: DB integrity check on startup - detect direct tampering
-// Only runs in SQLite mode; PostgreSQL uses row-level security instead
 function checkDbIntegrity() {
-  if (!db || !db.prepare || db.pool) return; // Skip in PostgreSQL mode (db.pool exists for PG adapter)
   try {
     const tokens = db.prepare("SELECT id, owner_id, scope, label, created_at FROM access_tokens WHERE revoked_at IS NULL").all();
     const hash = require('crypto').createHash('sha256').update(JSON.stringify(tokens)).digest('hex');
@@ -1455,24 +1439,13 @@ app.get('/api/v1/skills/public/list', async (req, res) => {
   try {
     let skills = [];
     
-    // Check if using MongoDB (database-mongodb adapter)
-    if (process.env.DATABASE_URL) {
-      // MongoDB path
-      const skillsCollection = db.collection('skills');
-      skills = await skillsCollection
-        .find({ active: { $ne: false } })
-        .sort({ created_at: -1 })
-        .toArray();
-    } else {
-      // SQLite path
-      skills = db.prepare(`
+    skills = db.prepare(`
         SELECT id, name, description, version, author, category,
                active, created_at, updated_at
         FROM skills
         WHERE active = 1
         ORDER BY created_at DESC
       `).all();
-    }
 
     res.json({ 
       data: skills.map(skill => ({
@@ -3740,43 +3713,47 @@ app.post('/api/v1/billing/downgrade-confirm', authenticate, async (req, res) => 
       return res.status(400).json({ error: 'This is not a downgrade' });
     }
 
-    // Delete excess personas (keep oldest)
-    const maxPersonas = newPlanId === 'free' ? 1 : (newPlanId === 'pro' ? 5 : -1);
-    if (maxPersonas > 0) {
-      const personas = db.prepare('SELECT id FROM personas WHERE owner_id = ? ORDER BY created_at DESC').all(ownerId);
-      if (personas.length > maxPersonas) {
-        const toDelete = personas.slice(0, personas.length - maxPersonas).map(p => p.id);
-        for (const pid of toDelete) {
-          try { db.prepare('DELETE FROM persona_documents WHERE persona_id = ?').run(pid); } catch (e) {}
-          try { db.prepare('DELETE FROM persona_skills WHERE persona_id = ?').run(pid); } catch (e) {}
-          db.prepare('DELETE FROM personas WHERE id = ?').run(pid);
+    const tx = db.transaction(() => {
+      // Delete excess personas (keep oldest)
+      const maxPersonas = newPlanId === 'free' ? 1 : (newPlanId === 'pro' ? 5 : -1);
+      if (maxPersonas > 0) {
+        const personas = db.prepare('SELECT id FROM personas WHERE owner_id = ? ORDER BY created_at DESC').all(ownerId);
+        if (personas.length > maxPersonas) {
+          const toDelete = personas.slice(0, personas.length - maxPersonas).map(p => p.id);
+          for (const id of toDelete) {
+            db.prepare('DELETE FROM persona_documents WHERE persona_id = ?').run(id);
+            db.prepare('DELETE FROM persona_skills WHERE persona_id = ?').run(id);
+            db.prepare('DELETE FROM personas WHERE id = ?').run(id);
+          }
         }
       }
-    }
 
-    // Delete excess service connections (keep oldest)
-    if (newPlanDef.maxServices > 0) {
-      const services = db.prepare(`SELECT id FROM oauth_tokens WHERE user_id = ? ORDER BY created_at DESC`).all(ownerId);
-      if (services.length > newPlanDef.maxServices) {
-        const toDelete = services.slice(0, services.length - newPlanDef.maxServices).map(s => s.id);
-        for (const sid of toDelete) {
-          db.prepare('DELETE FROM oauth_tokens WHERE id = ?').run(sid);
+      // Delete excess service connections (keep oldest)
+      if (newPlanDef.maxServices > 0) {
+        const services = db.prepare(`SELECT id FROM oauth_tokens WHERE user_id = ? ORDER BY created_at DESC`).all(ownerId);
+        if (services.length > newPlanDef.maxServices) {
+          const toDelete = services.slice(0, services.length - newPlanDef.maxServices).map(s => s.id);
+          for (const id of toDelete) {
+            db.prepare('DELETE FROM oauth_tokens WHERE id = ?').run(id);
+          }
         }
       }
-    }
 
-    // Update user's plan
-    db.prepare('UPDATE users SET plan = ? WHERE id = ?').run(newPlanId, req.user?.id || ownerId);
+      // Update user's plan
+      db.prepare('UPDATE users SET plan = ? WHERE id = ?').run(newPlanId, req.user?.id || ownerId);
 
-    // Update workspace subscription
-    const workspaceId = getRequestWorkspaceId(req);
-    if (workspaceId) {
-      upsertBillingSubscription(workspaceId, {
-        stripe_subscription_id: `manual_downgrade_${Date.now()}`,
-        plan_id: newPlanId,
-        status: 'active',
-      });
-    }
+      // Update workspace subscription
+      const workspaceId = getRequestWorkspaceId(req);
+      if (workspaceId) {
+        upsertBillingSubscription(workspaceId, {
+          stripe_subscription_id: `manual_downgrade_${Date.now()}`,
+          plan_id: newPlanId,
+          status: 'active',
+        });
+      }
+    });
+
+    tx();
 
     // Cancel Stripe subscription if downgrading from paid plan to lower/free plan
     const paidPlans = ['pro', 'enterprise'];
@@ -4517,35 +4494,35 @@ app.delete('/api/v1/account', authenticate, (req, res) => {
       return res.status(400).json({ error: 'Cannot delete power user account from self-service endpoint' });
     }
 
-    const selfDeleteStatements = [
-      ['DELETE FROM oauth_tokens WHERE user_id = ?', [userId]],
-      ['DELETE FROM vault_tokens WHERE user_id = ?', [userId]],
-      ['DELETE FROM access_tokens WHERE owner_id = ?', [userId]],
-      ['DELETE FROM approved_devices WHERE user_id = ?', [userId]],
-      ['DELETE FROM device_approvals_pending WHERE user_id = ?', [userId]],
-      ['DELETE FROM handshakes WHERE user_id = ?', [userId]],
-      ['DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)', [userId]],
-      ['DELETE FROM conversations WHERE user_id = ?', [userId]],
-      ['DELETE FROM notifications WHERE user_id = ?', [userId]],
-      ['DELETE FROM notification_preferences WHERE user_id = ?', [userId]],
-      ['DELETE FROM service_preferences WHERE user_id = ?', [userId]],
-      ['DELETE FROM activity_log WHERE user_id = ?', [userId]],
-      ['DELETE FROM email_queue WHERE user_id = ?', [userId]],
-      ['DELETE FROM rate_limits WHERE user_id = ?', [userId]],
-      ['DELETE FROM subscriptions WHERE user_id = ?', [userId]],
-      ['DELETE FROM two_factor_backup_codes WHERE user_id = ?', [userId]],
-      ['DELETE FROM team_invitations WHERE sender_id = ? OR recipient_id = ?', [userId, userId]],
-      ['DELETE FROM marketplace_listings WHERE owner_id = ?', [userId]],
-      ['DELETE FROM persona_documents WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)', [userId]],
-      ['DELETE FROM persona_skills WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)', [userId]],
-      ['DELETE FROM skills WHERE owner_id = ?', [userId]],
-      ['DELETE FROM personas WHERE owner_id = ?', [userId]],
-      ['DELETE FROM kb_documents WHERE owner_id = ?', [userId]],
-      ['DELETE FROM users WHERE id = ?', [userId]],
-    ];
-    for (const [sql, params] of selfDeleteStatements) {
-      try { db.prepare(sql).run(...params); } catch (e) { /* table may not exist */ }
-    }
+    const tx = db.transaction((uid) => {
+      // Delete from all tables that reference this user (in dependency order)
+      db.prepare('DELETE FROM oauth_tokens WHERE user_id = ?').run(uid);
+      db.prepare('DELETE FROM vault_tokens WHERE user_id = ?').run(uid);
+      db.prepare('DELETE FROM access_tokens WHERE owner_id = ?').run(uid);
+      db.prepare('DELETE FROM approved_devices WHERE user_id = ?').run(uid);
+      db.prepare('DELETE FROM device_approvals_pending WHERE user_id = ?').run(uid);
+      db.prepare('DELETE FROM handshakes WHERE user_id = ?').run(uid);
+      db.prepare('DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)').run(uid);
+      db.prepare('DELETE FROM conversations WHERE user_id = ?').run(uid);
+      db.prepare('DELETE FROM notifications WHERE user_id = ?').run(uid);
+      db.prepare('DELETE FROM notification_preferences WHERE user_id = ?').run(uid);
+      db.prepare('DELETE FROM service_preferences WHERE user_id = ?').run(uid);
+      db.prepare('DELETE FROM activity_log WHERE user_id = ?').run(uid);
+      db.prepare('DELETE FROM email_queue WHERE user_id = ?').run(uid);
+      db.prepare('DELETE FROM rate_limits WHERE user_id = ?').run(uid);
+      db.prepare('DELETE FROM subscriptions WHERE user_id = ?').run(uid);
+      db.prepare('DELETE FROM two_factor_backup_codes WHERE user_id = ?').run(uid);
+      db.prepare('DELETE FROM team_invitations WHERE sender_id = ? OR recipient_id = ?').run(uid, uid);
+      db.prepare('DELETE FROM marketplace_listings WHERE owner_id = ?').run(uid);
+      db.prepare('DELETE FROM persona_documents WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)').run(uid);
+      db.prepare('DELETE FROM persona_skills WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)').run(uid);
+      db.prepare('DELETE FROM skills WHERE owner_id = ?').run(uid);
+      db.prepare('DELETE FROM personas WHERE owner_id = ?').run(uid);
+      db.prepare('DELETE FROM kb_documents WHERE owner_id = ?').run(uid);
+      db.prepare('DELETE FROM users WHERE id = ?').run(uid);
+    });
+
+    tx(userId);
 
     if (req.session) {
       req.session.destroy(() => {});
@@ -4606,78 +4583,7 @@ app.post('/api/v1/auth/oauth-signup/complete', async (req, res) => {
   if (email) {
     const emailMatch = getUsers().find((u) => String(u.email || '').toLowerCase() === email.toLowerCase());
     if (emailMatch) {
-      // Auto sign-in the existing user instead of rejecting with 409
-      const existingUser = emailMatch;
-      const rawMasterToken = 'myapi_' + crypto.randomBytes(32).toString('hex');
-      const hash = bcrypt.hashSync(rawMasterToken, 10);
-      const tokenId = createAccessToken(hash, existingUser.id, 'full', 'Master Token (OAuth Login)', null, null, null, rawMasterToken);
-
-      await regenerateSession(req);
-
-      req.session.user = {
-        id: existingUser.id,
-        username: existingUser.username,
-        display_name: existingUser.displayName || existingUser.username,
-        displayName: existingUser.displayName || existingUser.username,
-        email: existingUser.email || null,
-        avatar_url: existingUser.avatarUrl || null,
-        avatarUrl: existingUser.avatarUrl || null,
-        two_factor_enabled: Boolean(existingUser.twoFactorEnabled),
-        roles: existingUser.roles || 'user',
-      };
-
-      req.session.masterTokenRaw = rawMasterToken;
-      req.session.masterTokenId = tokenId;
-
-      if (pending.oauthToken) {
-        const t = pending.oauthToken;
-        storeOAuthToken(
-          pending.service,
-          existingUser.id,
-          t.accessToken,
-          t.refreshToken || null,
-          t.expiresAt || null,
-          t.scope || null,
-        );
-      }
-
-      // Update avatar if it changed
-      if (pending.avatarUrl) {
-        updateUserOAuthProfile(existingUser.id, {
-          avatarUrl: pending.avatarUrl,
-        });
-      }
-
-      delete req.session.oauth_signup;
-
-      res.cookie('myapi_master_token', rawMasterToken, {
-        httpOnly: false,
-        secure: secureCookie,
-        path: '/',
-        maxAge: 7 * 24 * 60 * 60 * 1000,
-        sameSite: 'lax'
-      });
-
-      res.cookie('myapi_user', JSON.stringify(req.session.user), {
-        httpOnly: false,
-        secure: secureCookie,
-        path: '/',
-        maxAge: 7 * 24 * 60 * 60 * 1000,
-        sameSite: 'lax'
-      });
-
-      createAuditLog({
-        requesterId: existingUser.id,
-        action: 'oauth_login_existing_account',
-        resource: `/users/${existingUser.id}`,
-        scope: 'session',
-        ip: req.ip,
-        details: { service: pending.service, providerUserId: pending.providerUserId || null }
-      });
-
-      return req.session.save(() => {
-        res.json({ ok: true, data: { user: req.session.user, bootstrap: { masterToken: rawMasterToken, tokenId } } });
-      });
+      return res.status(409).json({ error: 'An account with this email already exists. Please sign in instead.' });
     }
   }
 
@@ -5177,37 +5083,34 @@ app.delete('/api/v1/users/:id', authenticate, (req, res) => {
       return res.status(400).json({ error: 'Cannot delete power user account' });
     }
 
-    // Delete from all tables that reference this user (in dependency order)
-    // Each wrapped in try/catch to gracefully skip tables that may not exist
-    const deleteStatements = [
-      ['DELETE FROM oauth_tokens WHERE user_id = ?', [id]],
-      ['DELETE FROM vault_tokens WHERE user_id = ?', [id]],
-      ['DELETE FROM access_tokens WHERE owner_id = ?', [id]],
-      ['DELETE FROM approved_devices WHERE user_id = ?', [id]],
-      ['DELETE FROM device_approvals_pending WHERE user_id = ?', [id]],
-      ['DELETE FROM handshakes WHERE user_id = ?', [id]],
-      ['DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)', [id]],
-      ['DELETE FROM conversations WHERE user_id = ?', [id]],
-      ['DELETE FROM notifications WHERE user_id = ?', [id]],
-      ['DELETE FROM notification_preferences WHERE user_id = ?', [id]],
-      ['DELETE FROM service_preferences WHERE user_id = ?', [id]],
-      ['DELETE FROM activity_log WHERE user_id = ?', [id]],
-      ['DELETE FROM email_queue WHERE user_id = ?', [id]],
-      ['DELETE FROM rate_limits WHERE user_id = ?', [id]],
-      ['DELETE FROM subscriptions WHERE user_id = ?', [id]],
-      ['DELETE FROM two_factor_backup_codes WHERE user_id = ?', [id]],
-      ['DELETE FROM team_invitations WHERE sender_id = ? OR recipient_id = ?', [id, id]],
-      ['DELETE FROM marketplace_listings WHERE owner_id = ?', [id]],
-      ['DELETE FROM persona_documents WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)', [id]],
-      ['DELETE FROM persona_skills WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)', [id]],
-      ['DELETE FROM skills WHERE owner_id = ?', [id]],
-      ['DELETE FROM personas WHERE owner_id = ?', [id]],
-      ['DELETE FROM kb_documents WHERE owner_id = ?', [id]],
-      ['DELETE FROM users WHERE id = ?', [id]],
-    ];
-    for (const [sql, params] of deleteStatements) {
-      try { db.prepare(sql).run(...params); } catch (e) { /* table may not exist */ }
-    }
+    const tx = db.transaction((userId) => {
+      // Delete from all tables that reference this user (in dependency order)
+      db.prepare('DELETE FROM oauth_tokens WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM vault_tokens WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM access_tokens WHERE owner_id = ?').run(userId);
+      db.prepare('DELETE FROM approved_devices WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM device_approvals_pending WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM handshakes WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)').run(userId);
+      db.prepare('DELETE FROM conversations WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM notifications WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM notification_preferences WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM service_preferences WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM activity_log WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM email_queue WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM rate_limits WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM subscriptions WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM two_factor_backup_codes WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM team_invitations WHERE sender_id = ? OR recipient_id = ?').run(userId, userId);
+      db.prepare('DELETE FROM marketplace_listings WHERE owner_id = ?').run(userId);
+      db.prepare('DELETE FROM persona_documents WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)').run(userId);
+      db.prepare('DELETE FROM persona_skills WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)').run(userId);
+      db.prepare('DELETE FROM skills WHERE owner_id = ?').run(userId);
+      db.prepare('DELETE FROM personas WHERE owner_id = ?').run(userId);
+      db.prepare('DELETE FROM kb_documents WHERE owner_id = ?').run(userId);
+      db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+    });
+    tx(id);
 
     createAuditLog({ requesterId: req.tokenMeta.tokenId, action: 'delete_user', resource: `/users/${id}`, scope: req.tokenMeta.scope, ip: req.ip, details: { email: user.email || null } });
     res.json({ ok: true, deletedUserId: id });
@@ -5225,25 +5128,23 @@ app.post('/api/v1/users/cleanup-test-users', authenticate, (req, res) => {
   try {
     const users = db.prepare('SELECT id, email, username FROM users WHERE username LIKE ?').all(`${prefix}%`);
     let deleted = 0;
-    for (const u of users) {
-      const cleanupSqls = [
-        ['DELETE FROM oauth_tokens WHERE user_id = ?', [u.id]],
-        ['DELETE FROM access_tokens WHERE owner_id = ?', [u.id]],
-        ['DELETE FROM handshakes WHERE user_id = ?', [u.id]],
-        ['DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)', [u.id]],
-        ['DELETE FROM conversations WHERE user_id = ?', [u.id]],
-        ['DELETE FROM persona_documents WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)', [u.id]],
-        ['DELETE FROM persona_skills WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)', [u.id]],
-        ['DELETE FROM skills WHERE owner_id = ?', [u.id]],
-        ['DELETE FROM personas WHERE owner_id = ?', [u.id]],
-        ['DELETE FROM kb_documents WHERE owner_id = ?', [u.id]],
-      ];
-      for (const [sql, params] of cleanupSqls) {
-        try { db.prepare(sql).run(...params); } catch (e) { /* table may not exist */ }
+    const tx = db.transaction((list) => {
+      for (const u of list) {
+        db.prepare('DELETE FROM oauth_tokens WHERE user_id = ?').run(u.id);
+        db.prepare('DELETE FROM access_tokens WHERE owner_id = ?').run(u.id);
+        db.prepare('DELETE FROM handshakes WHERE user_id = ?').run(u.id);
+        db.prepare('DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)').run(u.id);
+        db.prepare('DELETE FROM conversations WHERE user_id = ?').run(u.id);
+        db.prepare('DELETE FROM persona_documents WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)').run(u.id);
+        db.prepare('DELETE FROM persona_skills WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)').run(u.id);
+        db.prepare('DELETE FROM skills WHERE owner_id = ?').run(u.id);
+        db.prepare('DELETE FROM personas WHERE owner_id = ?').run(u.id);
+        db.prepare('DELETE FROM kb_documents WHERE owner_id = ?').run(u.id);
+        const r = db.prepare('DELETE FROM users WHERE id = ?').run(u.id);
+        if (r.changes > 0) deleted += 1;
       }
-      const r = db.prepare('DELETE FROM users WHERE id = ?').run(u.id);
-      if (r.changes > 0) deleted += 1;
-    }
+    });
+    tx(users);
 
     createAuditLog({ requesterId: req.tokenMeta.tokenId, action: 'cleanup_test_users', resource: '/users/cleanup-test-users', scope: req.tokenMeta.scope, ip: req.ip, details: { prefix, deleted } });
     res.json({ ok: true, prefix, deleted });
@@ -7311,15 +7212,11 @@ const kbUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
   fileFilter: (req, file, cb) => {
-    // Accept all files and let the route handler reject unsupported types with a clear error
-    // Using cb(null, false) for rejection avoids multer propagating errors that would give 500
-    const allowedMimeTypes = ['text/plain', 'text/markdown', 'application/pdf', 'application/json', 'text/csv', 'application/octet-stream'];
-    const ext = path.extname(file.originalname || '').toLowerCase();
-    const allowedExts = ['.txt', '.md', '.pdf', '.csv', '.json'];
-    if (allowedMimeTypes.includes(file.mimetype) || allowedExts.includes(ext)) {
+    const allowedMimeTypes = ['text/plain', 'text/markdown', 'application/pdf', 'application/json', 'text/csv'];
+    if (allowedMimeTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(null, false); // Silently skip — handler will return 400 with clear message
+      cb(new Error(`Unsupported file type: ${file.mimetype}`), false);
     }
   }
 });
@@ -7643,7 +7540,6 @@ app.post('/api/v1/brain/knowledge-base', authenticate, async (req, res) => {
 app.post('/api/v1/brain/knowledge-base/upload', authenticate, kbUploadFields, async (req, res) => {
   try {
     const uploadedFile = req.files?.file?.[0] || req.files?.document?.[0] || req.files?.upload?.[0] || req.files?.kbFile?.[0];
-    console.log('[KB Upload] files received:', JSON.stringify(Object.keys(req.files || {})), 'file:', uploadedFile ? `${uploadedFile.originalname} (${uploadedFile.mimetype}, ${uploadedFile.size}b)` : 'none');
     if (!uploadedFile) {
       return res.status(400).json({
         error: 'No file received. Use multipart/form-data with one of these field names: file, document, upload, kbFile.',
@@ -8410,7 +8306,7 @@ app.post('/api/v1/marketplace/:id/install', authenticate, (req, res) => {
           WHERE id = ?
         `).run(serviceLabel, description, authType, apiEndpoint, documentationUrl, service.id);
       } else {
-        const newServiceRow = db.prepare(`
+        const inserted = db.prepare(`
           INSERT INTO services (name, label, category_id, icon, description, auth_type, api_endpoint, documentation_url, active, created_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
           RETURNING id
@@ -8425,7 +8321,7 @@ app.post('/api/v1/marketplace/:id/install', authenticate, (req, res) => {
           documentationUrl,
           now
         );
-        service = db.prepare('SELECT * FROM services WHERE id = ?').get(newServiceRow?.id);
+        service = db.prepare('SELECT * FROM services WHERE id = ?').get(inserted?.id);
       }
 
       // Provision API methods (idempotent upsert by service_id + method_name)
@@ -9057,8 +8953,8 @@ function cleanupExpiredSessions() {
 
 // --- Start ---
 if (process.env.NODE_ENV !== 'test') {
-  // Wait for DB connections and migrations before starting server
-  Promise.all([mongodbReady, migrationPromise]).then(() => {
+  // Wait for MongoDB if using it, then start server
+  mongodbReady.then(() => {
     // Validate required secrets BEFORE bootstrap
     validateRequiredSecrets();
 

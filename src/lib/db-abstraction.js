@@ -4,6 +4,10 @@
  * Routes database operations to the appropriate adapter based on configuration
  */
 
+// Force IPv4 DNS resolution to prevent ECONNREFUSED on IPv6 Supabase endpoints
+const dns = require('dns');
+dns.setDefaultResultOrder('ipv4first');
+
 const path = require('path');
 const fs = require('fs');
 
@@ -191,42 +195,91 @@ class PostgreSQLAdapter extends DatabaseAdapter {
     
     this.pool = new Pool({
       connectionString: connectionString,
-      max: 5,                          // Supabase free tier has limited connections
-      idleTimeoutMillis: 20000,        // Release idle connections after 20s (before Supabase's ~30s timeout)
-      connectionTimeoutMillis: 10000,  // Allow 10s to acquire a connection (Supabase can be slow)
+      max: 5,
+      idleTimeoutMillis: 20000,
+      connectionTimeoutMillis: 10000,
     });
 
-    // Handle errors on the pool itself
     this.pool.on('error', (err) => {
-      console.error('[Database] PostgreSQL pool error:', err.message);
-    });
-
-    // Attach error handlers to each client to prevent uncaught EventEmitter throws
-    this.pool.on('connect', (client) => {
-      client.on('error', (err) => {
-        console.error('[Database] PostgreSQL client error:', err.message);
-      });
+      console.error('[Database] PostgreSQL pool error:', err);
     });
 
     console.log('[Database] PostgreSQL initialized via Supabase');
   }
 
-  /**
-   * Convert SQLite ? placeholders to PostgreSQL $1, $2, $3 ...
-   */
-  _convertPlaceholders(sql) {
-    let i = 0;
-    return sql.replace(/\?/g, () => `$${++i}`);
+  async all(sql, params = []) {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(sql, params);
+      return result.rows;
+    } finally {
+      client.release();
+    }
+  }
+
+  async get(sql, params = []) {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(sql, params);
+      return result.rows[0] || null;
+    } finally {
+      client.release();
+    }
+  }
+
+  async run(sql, params = []) {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(sql, params);
+      return {
+        lastID: null, // PostgreSQL doesn't return lastID the same way
+        changes: result.rowCount
+      };
+    } finally {
+      client.release();
+    }
+  }
+
+  async transaction(fn) {
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const result = await fn();
+      await client.query('COMMIT');
+      return result;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  async ping() {
+    try {
+      await this.get('SELECT 1');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async close() {
+    await this.pool.end();
   }
 
   /**
-   * Synchronous prepare() shim so all existing SQLite-style CRUD code works with PostgreSQL.
-   * Uses deasync to block the event loop until the async pg query resolves.
+   * Synchronous prepare() shim for backward compatibility with SQLite-style code.
+   * Uses deasync to block until the async pg query resolves.
+   * Returns an object with .get(), .all(), .run(), .iterate() methods.
    */
   prepare(sql) {
     const deasync = require('deasync');
-    const pgSql = this._convertPlaceholders(sql);
     const pool = this.pool;
+
+    // Convert SQLite ? placeholders to PostgreSQL $1, $2, ...
+    let i = 0;
+    const pgSql = sql.replace(/\?/g, () => `$${++i}`);
 
     const syncQuery = deasync(function (querySql, params, cb) {
       pool.query(querySql, params, (err, result) => cb(err, result));
@@ -276,16 +329,28 @@ class PostgreSQLAdapter extends DatabaseAdapter {
   }
 
   /**
-   * SQLite pragma shim — no-op for PostgreSQL
+   * exec() - runs raw SQL via the pool (returns a Promise for .catch() compatibility)
+   * Also works synchronously via the deasync shim when awaited is not possible.
+   */
+  exec(sql) {
+    // Return a real Promise so callers can do .catch() on it
+    return this.pool.query(sql).catch(err => {
+      console.error('[DB exec]', err.message);
+    });
+  }
+
+  /**
+   * SQLite pragma() shim - no-op for PostgreSQL
    */
   pragma() {
     return null;
   }
 
   /**
-   * SQLite transaction shim — wraps fn in BEGIN/COMMIT for PostgreSQL synchronously via deasync
+   * SQLite transaction() shim - wraps fn in BEGIN/COMMIT via deasync
    */
   transaction(fn) {
+    // Override the async transaction() with a sync version for backward compat
     const deasync = require('deasync');
     const pool = this.pool;
     return function (...args) {
@@ -306,64 +371,6 @@ class PostgreSQLAdapter extends DatabaseAdapter {
       return result;
     };
   }
-
-  /**
-   * Execute one or more SQL statements with no parameters (DDL, multi-statement migrations)
-   */
-  async exec(sql) {
-    const client = await this.pool.connect();
-    try {
-      await client.query(sql);
-    } finally {
-      client.release();
-    }
-  }
-
-  async all(sql, params = []) {
-    const client = await this.pool.connect();
-    try {
-      const result = await client.query(sql, params);
-      return result.rows;
-    } finally {
-      client.release();
-    }
-  }
-
-  async get(sql, params = []) {
-    const client = await this.pool.connect();
-    try {
-      const result = await client.query(sql, params);
-      return result.rows[0] || null;
-    } finally {
-      client.release();
-    }
-  }
-
-  async run(sql, params = []) {
-    const client = await this.pool.connect();
-    try {
-      const result = await client.query(sql, params);
-      return {
-        lastID: null, // PostgreSQL doesn't return lastID the same way
-        changes: result.rowCount
-      };
-    } finally {
-      client.release();
-    }
-  }
-
-  async ping() {
-    try {
-      await this.get('SELECT 1');
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  async close() {
-    await this.pool.end();
-  }
 }
 
 // ============================================================================
@@ -371,18 +378,28 @@ class PostgreSQLAdapter extends DatabaseAdapter {
 // ============================================================================
 
 function createDatabaseAdapter() {
-  const dbType = process.env.DATABASE_TYPE || 'sqlite';
-  const dbPath = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'myapi.db');
   const dbUrl = process.env.DATABASE_URL;
+  const dbPath = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'myapi.db');
+  
+  // Auto-detect database type from DATABASE_TYPE or DATABASE_URL
+  let dbType = process.env.DATABASE_TYPE;
+  if (!dbType && dbUrl) {
+    // Auto-detect from DATABASE_URL
+    dbType = dbUrl.includes('postgresql') || dbUrl.includes('postgres') ? 'postgresql' : 'sqlite';
+  }
+  dbType = dbType || 'sqlite'; // Final fallback to SQLite
 
   console.log(`[Database] Detected database type: ${dbType}`);
+  if (dbUrl) {
+    console.log(`[Database] Using DATABASE_URL: ${dbUrl.substring(0, 50)}...`);
+  }
 
   if (dbType === 'postgres' || dbType === 'postgresql') {
     if (!dbUrl) {
       throw new Error('DATABASE_URL environment variable is required for PostgreSQL mode');
     }
     return new PostgreSQLAdapter(dbUrl);
-  } else if (dbType === 'sqlite' || !dbType) {
+  } else if (dbType === 'sqlite') {
     return new SQLiteAdapter(dbPath);
   } else {
     throw new Error(`Unsupported database type: ${dbType}`);

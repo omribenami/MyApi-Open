@@ -328,7 +328,7 @@ router.post('/approve/:approval_id', requireAuth, (req, res) => {
       actorId: req.userId,
       result: 'success',
       ipAddress: req.ip,
-    }).catch(err => console.error('Failed to log device_approved activity:', err));
+    });
     
     db.createAuditLog({
       requesterId: req.userId,

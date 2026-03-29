@@ -5,9 +5,9 @@ const { db } = require('./database');
 
 const router = express.Router();
 
-// Ensure users table has auth columns (IF NOT EXISTS for PostgreSQL; .catch for async exec)
-db.exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS roles TEXT DEFAULT 'user'`).catch(() => {});
-db.exec(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TEXT`).catch(() => {});
+// Ensure users table has auth columns (.catch handles both SQLite duplicate-column and PostgreSQL IF NOT EXISTS)
+try { db.exec(`ALTER TABLE users ADD COLUMN roles TEXT DEFAULT 'user'`); } catch (_) {}
+try { db.exec(`ALTER TABLE users ADD COLUMN last_login TEXT`); } catch (_) {}
 
 // Register
 router.post('/auth/register', (req, res) => {
