@@ -1,23 +1,98 @@
 {
   "google": {
     "enabled": true,
-    "clientId": "REMOVED_CLIENT_ID",
-    "clientSecret": "REMOVED_SECRET",
-    "redirectUri": "https://www.myapiai.com/api/v1/oauth/callback/google"
+    "clientId": "${GOOGLE_CLIENT_ID}",
+    "clientSecret": "${GOOGLE_CLIENT_SECRET}",
+    "redirectUri": "${GOOGLE_REDIRECT_URI}"
   },
   "github": {
-    "enabled": false
+    "enabled": true,
+    "clientId": "${GITHUB_CLIENT_ID}",
+    "clientSecret": "${GITHUB_CLIENT_SECRET}",
+    "redirectUri": "${GITHUB_REDIRECT_URI}"
   },
   "slack": {
-    "enabled": false
+    "enabled": true,
+    "clientId": "${SLACK_CLIENT_ID}",
+    "clientSecret": "${SLACK_CLIENT_SECRET}",
+    "redirectUri": "${SLACK_REDIRECT_URI}"
   },
   "discord": {
-    "enabled": false
+    "enabled": true,
+    "clientId": "${DISCORD_CLIENT_ID}",
+    "clientSecret": "${DISCORD_CLIENT_SECRET}",
+    "redirectUri": "${DISCORD_REDIRECT_URI}"
   },
   "twitter": {
-    "enabled": false
+    "enabled": true,
+    "clientId": "${TWITTER_CLIENT_ID}",
+    "clientSecret": "${TWITTER_CLIENT_SECRET}",
+    "redirectUri": "${TWITTER_REDIRECT_URI}"
+  },
+  "facebook": {
+    "enabled": true,
+    "clientId": "${FACEBOOK_CLIENT_ID}",
+    "clientSecret": "${FACEBOOK_CLIENT_SECRET}",
+    "redirectUri": "${FACEBOOK_REDIRECT_URI}"
+  },
+  "instagram": {
+    "enabled": true,
+    "clientId": "${INSTAGRAM_CLIENT_ID}",
+    "clientSecret": "${INSTAGRAM_CLIENT_SECRET}",
+    "redirectUri": "${INSTAGRAM_REDIRECT_URI}"
+  },
+  "tiktok": {
+    "enabled": true,
+    "clientId": "${TIKTOK_CLIENT_KEY}",
+    "clientSecret": "${TIKTOK_CLIENT_SECRET}",
+    "redirectUri": "${TIKTOK_REDIRECT_URI}"
+  },
+  "linkedin": {
+    "enabled": true,
+    "clientId": "${LINKEDIN_CLIENT_ID}",
+    "clientSecret": "${LINKEDIN_CLIENT_SECRET}",
+    "redirectUri": "${LINKEDIN_REDIRECT_URI}"
+  },
+  "notion": {
+    "enabled": true,
+    "clientId": "${NOTION_CLIENT_ID}",
+    "clientSecret": "${NOTION_CLIENT_SECRET}",
+    "redirectUri": "${NOTION_REDIRECT_URI}"
+  },
+  "dropbox": {
+    "enabled": true,
+    "clientId": "${DROPBOX_CLIENT_ID}",
+    "clientSecret": "${DROPBOX_CLIENT_SECRET}",
+    "redirectUri": "${DROPBOX_REDIRECT_URI}"
+  },
+  "zoom": {
+    "enabled": true,
+    "clientId": "${ZOOM_CLIENT_ID}",
+    "clientSecret": "${ZOOM_CLIENT_SECRET}",
+    "redirectUri": "${ZOOM_REDIRECT_URI}"
+  },
+  "jira": {
+    "enabled": true,
+    "clientId": "${JIRA_CLIENT_ID}",
+    "clientSecret": "${JIRA_CLIENT_SECRET}",
+    "redirectUri": "${JIRA_REDIRECT_URI}"
   },
   "whatsapp": {
+    "enabled": false
+  },
+  "reddit": {
+    "enabled": false
+  },
+  "microsoft365": {
+    "enabled": false
+  },
+  "trello": {
+    "enabled": false
+  },
+  "hubspot": {
+    "enabled": false
+  },
+  "salesforce": {
     "enabled": false
   }
 }
