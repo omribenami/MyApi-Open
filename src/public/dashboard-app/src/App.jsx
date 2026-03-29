@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard';
 import DashboardHome from './pages/DashboardHome';
 import ServiceConnectors from './pages/ServiceConnectors';
 import TokenVault from './pages/TokenVault';
+import GuestTokenVault from './pages/GuestTokenVault';
 import AccessTokens from './pages/AccessTokens';
 import Personas from './pages/Personas';
 import KnowledgeBase from './pages/KnowledgeBase';
@@ -178,6 +179,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <TokenVault />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/vault-guest-tokens"
+              element={
+                <ProtectedRoute>
+                  <GuestTokenVault />
                 </ProtectedRoute>
               }
             />
