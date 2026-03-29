@@ -8452,6 +8452,12 @@ app.post('/api/v1/marketplace/:id/install', authenticate, (req, res) => {
           return res.status(500).json({ error: 'Failed to create skill' });
         }
 
+        // Assign skill to current workspace if available
+        const workspaceId = req.workspaceId || req.session?.currentWorkspace;
+        if (workspaceId && newSkill.id) {
+          db.prepare('UPDATE skills SET workspace_id = ? WHERE id = ? AND owner_id = ?').run(workspaceId, newSkill.id, ownerId);
+        }
+
         provisioned = {
           type: 'skill',
           skillId: newSkill.id,
