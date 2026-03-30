@@ -403,9 +403,9 @@ const oauthAdapters = {
   instagram: new GenericOAuthAdapter({
     serviceName: 'instagram',
     authUrl: 'https://www.instagram.com/oauth/authorize',
-    tokenUrl: 'https://graph.instagram.com/v19.0/oauth/access_token',
-    verifyUrl: 'https://graph.instagram.com/v19.0/me?fields=id,username,name',
-    scope: 'instagram_business_basic,instagram_business_manage_messages',
+    tokenUrl: 'https://graph.instagram.com/v18.0/oauth/access_token',
+    verifyUrl: 'https://graph.instagram.com/v18.0/me?fields=id,username',
+    scope: 'user_profile',
     redirectUri: process.env.INSTAGRAM_REDIRECT_URI || oauthConfig.instagram?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/instagram`,
     clientId: process.env.INSTAGRAM_CLIENT_ID || oauthConfig.instagram?.clientId,
     clientSecret: process.env.INSTAGRAM_CLIENT_SECRET || oauthConfig.instagram?.clientSecret,
