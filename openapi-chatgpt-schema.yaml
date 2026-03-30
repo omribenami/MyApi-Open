@@ -1,0 +1,190 @@
+openapi: 3.0.0
+info:
+  title: MyApi Service Proxy
+  description: Access all your integrated OAuth services (Twitter, Google, Slack, Facebook, GitHub, Discord, etc.) through a unified API
+  version: 1.0.0
+  contact:
+    name: MyApi Support
+    url: https://www.myapiai.com
+
+servers:
+  - url: https://www.myapiai.com/api/v1
+    description: Production
+
+security:
+  - BearerAuth: []
+
+paths:
+  /services/{service}/proxy:
+    post:
+      summary: Call any integrated OAuth service
+      description: |
+        Route API calls to connected services. Authenticate with your MyApi token.
+        
+        Service names: twitter, google, slack, facebook, instagram, github, discord, linkedin, notion, dropbox, threads, tiktok, microsoft365, reddit, trello, zoom, hubspot, salesforce, jira, whatsapp
+        
+        Current connected services: Twitter, Google, Slack, Facebook, GitHub, Discord, LinkedIn, Notion, Dropbox
+      
+      tags:
+        - Services
+      
+      parameters:
+        - name: service
+          in: path
+          required: true
+          schema:
+            type: string
+            enum:
+              - twitter
+              - google
+              - slack
+              - facebook
+              - instagram
+              - github
+              - discord
+              - linkedin
+              - notion
+              - dropbox
+              - threads
+              - tiktok
+              - microsoft365
+              - reddit
+              - trello
+              - zoom
+              - hubspot
+              - salesforce
+              - jira
+              - whatsapp
+          description: |
+            The OAuth service to call. Examples:
+            - twitter: Post tweets, read timeline
+            - google: Access Gmail, Calendar, Drive
+            - slack: Post messages, read channels
+            - facebook: Post to feed, read posts
+            - github: Create repos, push code
+            - discord: Send messages, read servers
+      
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - method
+                - path
+              properties:
+                method:
+                  type: string
+                  enum: [GET, POST, PUT, DELETE, PATCH]
+                  description: HTTP method for the API call
+                  example: POST
+
+                path:
+                  type: string
+                  description: |
+                    API endpoint path. Examples:
+                    - Twitter: /2/tweets, /2/tweets/{id}, /2/users/me
+                    - Google: /calendar/v3/calendars/primary/events, /gmail/v1/users/me/messages
+                    - Slack: /chat.postMessage, /channels.list
+                    - Facebook: /me/feed, /me, /me/friends
+                    - GitHub: /user/repos, /user, /repos/{owner}/{repo}
+                    - Discord: /channels/{id}/messages, /users/@me
+                  example: /2/tweets
+
+                body:
+                  type: object
+                  description: |
+                    Request body for POST, PUT, PATCH requests.
+                    Structure depends on the service API.
+                  example:
+                    text: "Hello from ChatGPT"
+                    summary: "Example event"
+
+                params:
+                  type: object
+                  description: |
+                    Query parameters for the API call.
+                    Example for Google Calendar: {"timeMin": "2026-03-30T00:00:00Z", "timeMax": "2026-03-31T23:59:59Z"}
+                  additionalProperties: true
+
+      responses:
+        '200':
+          description: Successful API call
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Response from the service API
+                additionalProperties: true
+              examples:
+                TwitterSuccess:
+                  value:
+                    data:
+                      id: "1234567890"
+                      text: "Hello from ChatGPT"
+                
+                GoogleCalendarSuccess:
+                  value:
+                    id: "abc123def456"
+                    summary: "Meeting"
+                    start:
+                      dateTime: "2026-03-31T14:00:00Z"
+
+        '400':
+          description: Bad request - invalid parameters
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Invalid request body"
+
+        '401':
+          description: Unauthorized - check authentication token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Invalid or missing Authorization header"
+
+        '404':
+          description: Service not connected - authenticate first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Service 'instagram' not connected. Please authenticate at https://www.myapiai.com/dashboard"
+
+        '500':
+          description: API error from service
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: object
+                    description: Original error from the service
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: |
+        MyApi Bearer token. Get yours at https://www.myapiai.com/dashboard/tokens
+        
+        Format: Authorization: Bearer myapi_xxxxx...
+
+tags:
+  - name: Services
+    description: Route calls to integrated OAuth services

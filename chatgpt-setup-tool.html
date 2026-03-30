@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MyApi ChatGPT Setup Tool</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 700px;
+            width: 100%;
+            padding: 40px;
+        }
+
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .section {
+            margin-bottom: 35px;
+        }
+
+        .section-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .step-number {
+            background: #667eea;
+            color: white;
+            border-radius: 50%;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #333;
+            font-size: 14px;
+        }
+
+        input[type="text"],
+        input[type="password"],
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            transition: border-color 0.2s;
+        }
+
+        input[type="text"]:focus,
+        input[type="password"]:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+            font-size: 12px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        button {
+            flex: 1;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+            border: 1px solid #ddd;
+        }
+
+        .btn-secondary:hover {
+            background: #e8e8e8;
+        }
+
+        .info-box {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 15px;
+            font-size: 13px;
+            color: #555;
+        }
+
+        .warning-box {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 15px;
+            font-size: 13px;
+            color: #856404;
+        }
+
+        .success-box {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 15px;
+            font-size: 13px;
+            color: #155724;
+        }
+
+        .error-box {
+            background: #f8d7da;
+            border-left: 4px solid #dc3545;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 15px;
+            font-size: 13px;
+            color: #721c24;
+            display: none;
+        }
+
+        .copied {
+            background: #28a745;
+            color: white;
+        }
+
+        .step-content {
+            display: none;
+        }
+
+        .step-content.active {
+            display: block;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: #e0e0e0;
+            border-radius: 2px;
+            margin-bottom: 30px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #667eea;
+            transition: width 0.3s;
+        }
+
+        .copy-button {
+            background: #667eea;
+            color: white;
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            margin-top: 8px;
+        }
+
+        .copy-button:hover {
+            background: #5568d3;
+        }
+
+        .token-instructions {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 15px;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .token-instructions ol {
+            margin-left: 20px;
+        }
+
+        .token-instructions li {
+            margin-bottom: 8px;
+        }
+
+        .code-block {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 12px;
+            border-radius: 4px;
+            margin: 10px 0;
+            overflow-x: auto;
+            font-size: 12px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .checklist {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 15px;
+        }
+
+        .checklist-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            font-size: 13px;
+        }
+
+        .checklist-item input[type="checkbox"] {
+            width: auto;
+            margin-right: 10px;
+            cursor: pointer;
+        }
+
+        .finish-section {
+            text-align: center;
+            padding: 30px 0;
+        }
+
+        .finish-section h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+
+        .finish-section .emoji {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 MyApi ChatGPT Setup Tool</h1>
+        <p class="subtitle">Connect your MyApi account to ChatGPT in 5 minutes</p>
+
+        <div class="progress-bar">
+            <div class="progress-fill" id="progressFill"></div>
+        </div>
+
+        <!-- Step 1: Get Token -->
+        <div class="section step-content active" id="step1">
+            <div class="section-title">
+                <span class="step-number">1</span>
+                Get Your MyApi Token
+            </div>
+
+            <p style="margin-bottom: 15px; color: #555; font-size: 14px;">
+                First, you need a MyApi token. This grants ChatGPT access to your connected services.
+            </p>
+
+            <div class="token-instructions">
+                <strong>How to get your token:</strong>
+                <ol>
+                    <li>Open <strong><a href="https://www.myapiai.com/dashboard/tokens" target="_blank">https://www.myapiai.com/dashboard/tokens</a></strong></li>
+                    <li>Look for a token starting with <code>myapi_</code></li>
+                    <li>Copy the entire token</li>
+                    <li>Paste it below</li>
+                </ol>
+            </div>
+
+            <div class="warning-box">
+                ⚠️ <strong>Security:</strong> This tool runs entirely in your browser. Your token is never sent to any server except MyApi and ChatGPT. Clear your browser history if you want to remove stored tokens.
+            </div>
+
+            <div class="form-group">
+                <label for="tokenInput">MyApi Token (myapi_...)</label>
+                <input 
+                    type="password" 
+                    id="tokenInput" 
+                    placeholder="myapi_" 
+                    autocomplete="off"
+                >
+                <button class="copy-button" onclick="toggleTokenVisibility()">👁️ Show Token</button>
+            </div>
+
+            <div class="button-group">
+                <button class="btn-primary" onclick="validateAndGoToStep2()">Next: Setup Custom GPT →</button>
+            </div>
+
+            <div id="error1" class="error-box"></div>
+        </div>
+
+        <!-- Step 2: Create Custom GPT -->
+        <div class="section step-content" id="step2">
+            <div class="section-title">
+                <span class="step-number">2</span>
+                Create a Custom GPT
+            </div>
+
+            <p style="margin-bottom: 15px; color: #555; font-size: 14px;">
+                Open ChatGPT and follow these steps to create a new Custom GPT.
+            </p>
+
+            <div class="token-instructions">
+                <strong>Step by step:</strong>
+                <ol>
+                    <li>Go to <strong><a href="https://chatgpt.com/gpts/mine" target="_blank">https://chatgpt.com/gpts/mine</a></strong> (requires ChatGPT Plus)</li>
+                    <li>Click <strong>"Create a GPT"</strong> button</li>
+                    <li>Name: <code>MyApi Services</code></li>
+                    <li>Description: <code>Access my connected OAuth services (Twitter, Google, Slack, Facebook, etc.)</code></li>
+                    <li>Click <strong>"Create"</strong></li>
+                    <li>You should now be in the GPT editor</li>
+                </ol>
+            </div>
+
+            <div class="info-box">
+                ℹ️ You need <strong>ChatGPT Plus</strong> ($20/month) to create Custom GPTs.
+            </div>
+
+            <div class="button-group">
+                <button class="btn-secondary" onclick="goToStep1()">← Back</button>
+                <button class="btn-primary" onclick="goToStep3()">Next: Add Instructions →</button>
+            </div>
+        </div>
+
+        <!-- Step 3: Add Instructions -->
+        <div class="section step-content" id="step3">
+            <div class="section-title">
+                <span class="step-number">3</span>
+                Add Instructions
+            </div>
+
+            <p style="margin-bottom: 15px; color: #555; font-size: 14px;">
+                In the ChatGPT editor, find the <strong>"Instructions"</strong> section and paste this:
+            </p>
+
+            <textarea id="instructionsText" readonly></textarea>
+            <button class="copy-button" onclick="copyInstructions()">📋 Copy Instructions</button>
+
+            <div class="info-box">
+                In ChatGPT: Click the text area under "Instructions" (in the Configure tab), paste the text above, and scroll down to see "Actions".
+            </div>
+
+            <div class="button-group">
+                <button class="btn-secondary" onclick="goToStep2()">← Back</button>
+                <button class="btn-primary" onclick="goToStep4()">Next: Add Action →</button>
+            </div>
+        </div>
+
+        <!-- Step 4: Add Action -->
+        <div class="section step-content" id="step4">
+            <div class="section-title">
+                <span class="step-number">4</span>
+                Add API Action
+            </div>
+
+            <p style="margin-bottom: 15px; color: #555; font-size: 14px;">
+                In ChatGPT, scroll down to <strong>"Actions"</strong> section and add a new action.
+            </p>
+
+            <div class="token-instructions">
+                <strong>Steps:</strong>
+                <ol>
+                    <li>Under "Actions", click <strong>"Create new action"</strong></li>
+                    <li>Click <strong>"Import from URL"</strong></li>
+                    <li>Paste this URL:
+                        <div class="code-block">https://raw.githubusercontent.com/omribenami/MyApi/main/openapi-chatgpt-schema.yaml</div>
+                    </li>
+                    <li>Click <strong>"Import"</strong></li>
+                </ol>
+            </div>
+
+            <div class="info-box">
+                If the URL import doesn't work, you can manually paste the OpenAPI schema. Contact support for the raw schema.
+            </div>
+
+            <div class="button-group">
+                <button class="btn-secondary" onclick="goToStep3()">← Back</button>
+                <button class="btn-primary" onclick="goToStep5()">Next: Add Authentication →</button>
+            </div>
+        </div>
+
+        <!-- Step 5: Authentication -->
+        <div class="section step-content" id="step5">
+            <div class="section-title">
+                <span class="step-number">5</span>
+                Set Authentication
+            </div>
+
+            <p style="margin-bottom: 15px; color: #555; font-size: 14px;">
+                After importing the action, you'll see an "Authentication" section.
+            </p>
+
+            <div class="token-instructions">
+                <strong>Configure authentication:</strong>
+                <ol>
+                    <li>Find the <strong>"Authentication"</strong> section in the action</li>
+                    <li>Select <strong>"API Key"</strong> from dropdown</li>
+                    <li>Set <strong>Auth Type</strong> to: <code>Bearer</code></li>
+                    <li>Leave <strong>"API Key Name"</strong> blank</li>
+                    <li>Set <strong>"API Key Value"</strong> to your MyApi token (from Step 1)</li>
+                </ol>
+            </div>
+
+            <div class="form-group">
+                <label>Your API Key Value (for reference):</label>
+                <input type="password" id="tokenDisplay" readonly>
+                <button class="copy-button" onclick="copyTokenForAuth()">📋 Copy Token</button>
+            </div>
+
+            <div class="warning-box">
+                ⚠️ <strong>Keep this token private!</strong> Anyone with this token can access your connected OAuth services.
+            </div>
+
+            <div class="button-group">
+                <button class="btn-secondary" onclick="goToStep4()">← Back</button>
+                <button class="btn-primary" onclick="goToStep6()">Next: Finish Setup →</button>
+            </div>
+        </div>
+
+        <!-- Step 6: Finish -->
+        <div class="section step-content" id="step6">
+            <div class="finish-section">
+                <div class="emoji">🎉</div>
+                <h2>You're All Set!</h2>
+                <p style="color: #666; margin-bottom: 20px;">Your ChatGPT Custom GPT is now connected to MyApi</p>
+
+                <div class="success-box">
+                    ✅ Your Custom GPT can now access: Twitter, Google, Slack, Facebook, GitHub, Discord, LinkedIn, Notion, Dropbox, and more!
+                </div>
+
+                <div style="margin-top: 25px; padding: 20px; background: #f8f9fa; border-radius: 6px;">
+                    <h3 style="margin-bottom: 15px; color: #333;">Test It Out</h3>
+                    <p style="margin-bottom: 10px; font-size: 13px; color: #666;">Try asking ChatGPT:</p>
+                    <div class="code-block">"List my connected services"
+"Send a tweet saying hello"
+"What's on my calendar today?"
+"Create a GitHub repo called test"</div>
+                </div>
+
+                <div class="checklist">
+                    <h4 style="margin-bottom: 10px; color: #333;">Quick Checklist:</h4>
+                    <div class="checklist-item">
+                        <input type="checkbox" id="check1">
+                        <label for="check1" style="margin: 0;">Custom GPT created in ChatGPT</label>
+                    </div>
+                    <div class="checklist-item">
+                        <input type="checkbox" id="check2">
+                        <label for="check2" style="margin: 0;">Instructions pasted</label>
+                    </div>
+                    <div class="checklist-item">
+                        <input type="checkbox" id="check3">
+                        <label for="check3" style="margin: 0;">Action imported with API schema</label>
+                    </div>
+                    <div class="checklist-item">
+                        <input type="checkbox" id="check4">
+                        <label for="check4" style="margin: 0;">Authentication configured with token</label>
+                    </div>
+                    <div class="checklist-item">
+                        <input type="checkbox" id="check5">
+                        <label for="check5" style="margin: 0;">Test message sent successfully</label>
+                    </div>
+                </div>
+
+                <div class="button-group" style="margin-top: 25px;">
+                    <button class="btn-primary" onclick="goToChatGPT()">🚀 Open ChatGPT</button>
+                    <button class="btn-secondary" onclick="goToStep1()">↻ Start Over</button>
+                </div>
+
+                <div style="margin-top: 20px; padding: 15px; background: #f0f7ff; border-radius: 6px; font-size: 12px; color: #003d82;">
+                    <strong>Tip:</strong> Save this tool by bookmarking it. You can always come back if you need to reset or create another Custom GPT.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentStep = 1;
+        let userToken = '';
+
+        // Load token from localStorage if exists
+        window.addEventListener('DOMContentLoaded', () => {
+            const saved = localStorage.getItem('myapi_token');
+            if (saved) {
+                userToken = saved;
+                document.getElementById('tokenInput').value = saved;
+            }
+            updateInstructions();
+            updateProgressBar();
+        });
+
+        function updateProgressBar() {
+            const progress = (currentStep / 6) * 100;
+            document.getElementById('progressFill').style.width = progress + '%';
+        }
+
+        function toggleTokenVisibility() {
+            const input = document.getElementById('tokenInput');
+            if (input.type === 'password') {
+                input.type = 'text';
+            } else {
+                input.type = 'password';
+            }
+        }
+
+        function validateAndGoToStep2() {
+            const token = document.getElementById('tokenInput').value.trim();
+            const errorBox = document.getElementById('error1');
+
+            if (!token) {
+                errorBox.textContent = '❌ Please enter your MyApi token';
+                errorBox.style.display = 'block';
+                return;
+            }
+
+            if (!token.startsWith('myapi_')) {
+                errorBox.textContent = '❌ Token should start with "myapi_"';
+                errorBox.style.display = 'block';
+                return;
+            }
+
+            errorBox.style.display = 'none';
+            userToken = token;
+            localStorage.setItem('myapi_token', token);
+            goToStep(2);
+        }
+
+        function updateInstructions() {
+            const instructions = `You are an AI assistant connected to MyApi, a unified OAuth service integration platform.
+
+You have access to the user's connected OAuth services through the MyApi proxy API.
+
+Available services (if connected): Twitter, Google Workspace, Slack, Facebook, GitHub, Discord, LinkedIn, Notion, Dropbox, Instagram, Threads, TikTok, Microsoft 365, Reddit, Trello, Zoom, HubSpot, Salesforce, and Jira.
+
+When the user asks you to:
+- Send/post something → Use the service proxy API to call the appropriate endpoint
+- Read/check something → Query the service's read endpoints
+- Manage data → Use create/update/delete endpoints as needed
+
+Always:
+1. Ask for clarification if needed
+2. Confirm the action before executing
+3. Explain what you're about to do
+4. Report the result clearly
+5. If a service returns an error, help debug by explaining common causes
+
+For API calls, use POST to https://www.myapiai.com/api/v1/services/{service}/proxy with:
+{
+  "method": "GET|POST|PUT|DELETE",
+  "path": "/api/endpoint/path",
+  "body": {...optional request body...}
+}
+
+Example: To send a tweet, call:
+{
+  "method": "POST",
+  "path": "/2/tweets",
+  "body": {"text": "The tweet content"}
+}
+
+Known limitations:
+- Twitter: Read-only (tweet.write not yet granted)
+- Google: Calendar/Gmail read-only
+- Facebook: Cannot post to feed (publish_actions not granted)
+
+Be helpful, clear, and always respect the user's privacy and the security of their connected accounts.`;
+
+            document.getElementById('instructionsText').value = instructions;
+        }
+
+        function copyInstructions() {
+            const text = document.getElementById('instructionsText').value;
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = event.target;
+                const originalText = btn.textContent;
+                btn.textContent = '✅ Copied!';
+                btn.classList.add('copied');
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.classList.remove('copied');
+                }, 2000);
+            });
+        }
+
+        function copyTokenForAuth() {
+            navigator.clipboard.writeText(userToken).then(() => {
+                const btn = event.target;
+                const originalText = btn.textContent;
+                btn.textContent = '✅ Copied!';
+                btn.classList.add('copied');
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.classList.remove('copied');
+                }, 2000);
+            });
+        }
+
+        function goToStep(step) {
+            // Hide all steps
+            for (let i = 1; i <= 6; i++) {
+                document.getElementById(`step${i}`).classList.remove('active');
+            }
+            // Show current step
+            currentStep = step;
+            document.getElementById(`step${currentStep}`).classList.add('active');
+            updateProgressBar();
+            window.scrollTo(0, 0);
+
+            // Update token display
+            if (currentStep === 5) {
+                document.getElementById('tokenDisplay').value = userToken;
+            }
+        }
+
+        function goToStep1() { goToStep(1); }
+        function goToStep2() { goToStep(2); }
+        function goToStep3() { goToStep(3); }
+        function goToStep4() { goToStep(4); }
+        function goToStep5() { goToStep(5); }
+        function goToStep6() { goToStep(6); }
+
+        function goToChatGPT() {
+            window.open('https://chatgpt.com/gpts/mine', '_blank');
+        }
+    </script>
+</body>
+</html>
