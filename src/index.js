@@ -411,6 +411,17 @@ const oauthAdapters = {
     clientSecret: process.env.INSTAGRAM_CLIENT_SECRET || oauthConfig.instagram?.clientSecret,
     extraAuthParams: { force_reauth: true, response_type: 'code' },
   }),
+  threads: new GenericOAuthAdapter({
+    serviceName: 'threads',
+    authUrl: 'https://threads.net/oauth/authorize',
+    tokenUrl: 'https://graph.threads.net/oauth/access_token',
+    verifyUrl: 'https://graph.threads.net/v19.0/me?fields=id,username',
+    scope: 'threads_basic_access,threads_manage_metadata',
+    redirectUri: process.env.THREADS_REDIRECT_URI || oauthConfig.threads?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/threads`,
+    clientId: process.env.THREADS_CLIENT_ID || oauthConfig.threads?.clientId,
+    clientSecret: process.env.THREADS_CLIENT_SECRET || oauthConfig.threads?.clientSecret,
+    extraAuthParams: { response_type: 'code' },
+  }),
   tiktok: new GenericOAuthAdapter({
     serviceName: 'tiktok',
     authUrl: 'https://www.tiktok.com/v2/auth/authorize/',
