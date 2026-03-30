@@ -245,7 +245,7 @@ function Skills() {
       });
       if (!res.ok) throw new Error('Failed to fetch skills');
       const data = await res.json();
-      setSkills(data.data || []);
+      setSkills(data.skills || data.data || []);
     } catch (err) {
       setFetchError(err.message);
     } finally {

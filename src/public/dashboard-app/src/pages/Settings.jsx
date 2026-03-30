@@ -1147,7 +1147,7 @@ function AuditLogsSection() {
                         {log.status || 'unknown'}
                       </span>
                     </td>
-                    <td className="px-4 py-2 text-slate-400 text-xs max-w-xs truncate">{log.details || '-'}</td>
+                    <td className="px-4 py-2 text-slate-400 text-xs max-w-xs truncate">{typeof log.details === 'object' && log.details !== null ? JSON.stringify(log.details) : (log.details || '-')}</td>
                   </tr>
                 ))}
               </tbody>

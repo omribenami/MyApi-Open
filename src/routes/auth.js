@@ -235,29 +235,18 @@ router.post('/logout', (req, res) => {
   try {
     const userId = req.session?.user?.id;
 
-    // **STEP 1: Revoke all tokens in database**
+    // **STEP 1: Session-only logout — never touch master tokens or service OAuth tokens**
+    // - Master tokens are permanent API keys; revoking them on logout breaks all integrations.
+    //   They are only replaced via POST /api/v1/tokens/master/regenerate.
+    // - oauth_tokens (Google, GitHub, Slack…) are persistent service connections,
+    //   not session credentials — deleting them on logout would disconnect all services.
+    // - Guest tokens belong to external callers; they must not be revoked silently.
+    // Nothing to revoke here — the session destruction below is the entire logout action.
     if (userId) {
       try {
-        // Revoke all access tokens (API tokens)
-        const accessTokenStmt = db.prepare(`
-          UPDATE access_tokens 
-          SET revoked_at = CURRENT_TIMESTAMP
-          WHERE owner_id = ? AND revoked_at IS NULL
-        `);
-        const revokedAccessTokens = accessTokenStmt.run(userId).changes;
-        
-        // Delete all OAuth tokens (service connections)
-        // We delete instead of marking revoked because OAuth tokens are sensitive
-        const oauthStmt = db.prepare(`
-          DELETE FROM oauth_tokens 
-          WHERE user_id = ?
-        `);
-        const deletedOAuthTokens = oauthStmt.run(userId).changes;
-        
-        console.log(`[Logout] User ${userId}: revoked ${revokedAccessTokens} access tokens, deleted ${deletedOAuthTokens} OAuth tokens`);
+        console.log(`[Logout] User ${userId}: session destroyed (master token and service connections preserved)`);
       } catch (err) {
-        console.error('[Logout] Error revoking tokens in DB:', err);
-        // Don't fail the logout if this fails, but log it
+        console.error('[Logout] Error during logout:', err);
       }
     }
 

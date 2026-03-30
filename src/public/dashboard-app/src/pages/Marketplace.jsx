@@ -151,10 +151,11 @@ function ListingModal({ listing, onClose, onInstall, onRated, masterToken, initi
       try {
         const res = await fetch('/api/v1/skills', {
           headers: { 'Authorization': `Bearer ${masterToken}` },
+          credentials: 'include',
         });
         if (!res.ok) return;
         const payload = await res.json();
-        const skillsData = Array.isArray(payload?.data) ? payload.data : [];
+        const skillsData = Array.isArray(payload?.skills) ? payload.skills : (Array.isArray(payload?.data) ? payload.data : []);
         const exists = skillsData.some((s) => {
           const cfg = s?.config_json && typeof s.config_json === 'object' ? s.config_json : null;
           return String(cfg?.marketplace_listing_id || '') === String(listingId);
@@ -180,6 +181,7 @@ function ListingModal({ listing, onClose, onInstall, onRated, masterToken, initi
       const installRes = await fetch(`/api/v1/marketplace/${listingId}/install`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${masterToken}` },
+        credentials: 'include',
       });
       const installData = await installRes.json().catch(() => ({}));
       if (!installRes.ok) {
@@ -439,6 +441,7 @@ function ListingCard({
       const res = await fetch(`/api/v1/marketplace/${listingId}/install`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${masterToken}` },
+        credentials: 'include',
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -634,10 +637,11 @@ export default function Marketplace() {
     try {
       const res = await fetch('/api/v1/skills', {
         headers: { 'Authorization': `Bearer ${masterToken}` },
+        credentials: 'include',
       });
       if (!res.ok) return;
       const payload = await res.json();
-      const ids = (payload.data || [])
+      const ids = (payload.skills || payload.data || [])
         .map((s) => {
           const cfg = s.config_json && typeof s.config_json === 'object' ? s.config_json : null;
           return cfg?.marketplace_listing_id ? String(cfg.marketplace_listing_id) : null;

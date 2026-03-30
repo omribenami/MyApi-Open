@@ -1140,6 +1140,11 @@ function initDatabase() {
     try { db.exec(migration); } catch (e) {}
   }
 
+  // token_type: distinguish 'master' from 'guest' tokens
+  try { db.exec("ALTER TABLE access_tokens ADD COLUMN token_type TEXT DEFAULT 'guest'"); } catch (e) {}
+  // Backfill: full-scope tokens with an encrypted raw token stored are master tokens
+  try { db.exec("UPDATE access_tokens SET token_type = 'master' WHERE scope = 'full' AND encrypted_token IS NOT NULL AND (token_type IS NULL OR token_type = 'guest')"); } catch (e) {}
+
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_access_tokens_shareable ON access_tokens(is_shareable);
     CREATE INDEX IF NOT EXISTS idx_access_tokens_guest ON access_tokens(is_guest_token);
@@ -1397,7 +1402,7 @@ function decryptRawToken(encryptedJson) {
   return null;
 }
 
-function createAccessToken(hash, ownerId, scope, label, expiresAt = null, allowedPersonas = null, workspaceId = null, rawToken = null) {
+function createAccessToken(hash, ownerId, scope, label, expiresAt = null, allowedPersonas = null, workspaceId = null, rawToken = null, tokenType = 'guest') {
   const id = 'tok_' + crypto.randomBytes(16).toString('hex');
   const now = new Date().toISOString();
   const allowedPersonasJson = allowedPersonas && allowedPersonas.length > 0
@@ -1408,11 +1413,11 @@ function createAccessToken(hash, ownerId, scope, label, expiresAt = null, allowe
   const encryptedToken = rawToken ? encryptRawToken(rawToken) : null;
 
   const stmt = db.prepare(`
-    INSERT INTO access_tokens (id, hash, owner_id, scope, label, created_at, revoked_at, expires_at, allowed_personas, workspace_id, encrypted_token)
-    VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)
+    INSERT INTO access_tokens (id, hash, owner_id, scope, label, created_at, revoked_at, expires_at, allowed_personas, workspace_id, encrypted_token, token_type)
+    VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)
   `);
 
-  stmt.run(id, hash, ownerId, scope, label, now, expiresAt, allowedPersonasJson, workspaceId, encryptedToken);
+  stmt.run(id, hash, ownerId, scope, label, now, expiresAt, allowedPersonasJson, workspaceId, encryptedToken, tokenType);
   return id;
 }
 
@@ -1475,7 +1480,8 @@ function getAccessTokens(ownerId = null, workspaceId = null) {
     expiresAt: row.expires_at,
     active: !row.revoked_at,
     allowedPersonas: row.allowed_personas ? JSON.parse(row.allowed_personas) : null,
-    workspaceId: row.workspace_id
+    workspaceId: row.workspace_id,
+    tokenType: row.token_type || 'guest'
   }));
 }
 
@@ -1488,38 +1494,34 @@ function revokeAccessToken(id) {
 // Scope Definitions
 function seedDefaultScopes() {
   const scopes = [
-    { name: 'identity:read', category: 'identity', description: 'Read user identity information' },
-    { name: 'identity:write', category: 'identity', description: 'Write user identity information' },
-    { name: 'vault:read', category: 'vault', description: 'Read vault tokens' },
-    { name: 'vault:write', category: 'vault', description: 'Create and manage vault tokens' },
-    { name: 'services:read', category: 'services', description: 'Read service connectors' },
-    { name: 'services:write', category: 'services', description: 'Create and manage service connectors' },
-    { name: 'brain:chat', category: 'brain', description: 'Chat with brain AI' },
-    { name: 'brain:read', category: 'brain', description: 'Read brain conversations and context' },
-    { name: 'audit:read', category: 'audit', description: 'Read audit logs' },
-    { name: 'personas:read', category: 'personas', description: 'Read persona definitions' },
-    { name: 'personas:write', category: 'personas', description: 'Create and manage personas' },
-    { name: 'skills:read', category: 'skills', description: 'Read skills and skill metadata' },
-    { name: 'skills:write', category: 'skills', description: 'Create and manage skills' },
-    { name: 'admin:*', category: 'admin', description: 'Full admin access (grants all scopes)' },
+    { name: 'basic',          category: 'profile',   description: 'Name, role, company' },
+    { name: 'professional',   category: 'profile',   description: 'Skills, education, experience' },
+    { name: 'availability',   category: 'profile',   description: 'Calendar, timezone' },
+    { name: 'personas',       category: 'personas',  description: 'Public persona profiles' },
+    { name: 'knowledge',      category: 'brain',     description: 'Knowledge/context read access' },
+    { name: 'chat',           category: 'brain',     description: 'Conversation and messaging' },
+    { name: 'skills:read',    category: 'skills',    description: 'Read skills and metadata' },
+    { name: 'skills:write',   category: 'skills',    description: 'Create and manage skills' },
+    { name: 'services:read',  category: 'services',  description: 'Proxy GET requests to connected OAuth services' },
+    { name: 'services:write', category: 'services',  description: 'Proxy POST/PUT/DELETE requests to connected OAuth services' },
+    { name: 'admin:*',        category: 'admin',     description: 'Full admin access (grants all scopes)' },
   ];
 
+  // Remove legacy scope names that were replaced in this schema
+  const legacyScopes = ['audit:read','brain:chat','brain:read','identity:read','identity:write','personas:read','personas:write','vault:read','vault:write'];
+  const removeLegacyRef = db.prepare('DELETE FROM access_token_scopes WHERE scope_name = ?');
+  const removeLegacyDef = db.prepare('DELETE FROM scope_definitions WHERE scope_name = ?');
+  legacyScopes.forEach(s => { try { removeLegacyRef.run(s); removeLegacyDef.run(s); } catch(_) {} });
+
   const now = new Date().toISOString();
-  const insertStmt = db.prepare(`
+  const upsertStmt = db.prepare(`
     INSERT INTO scope_definitions (scope_name, description, category, permissions, created_at)
     VALUES (?, ?, ?, ?, ?)
-    ON CONFLICT DO NOTHING
-  `);
-
-  const updateStmt = db.prepare(`
-    UPDATE scope_definitions
-    SET description = ?, category = ?
-    WHERE scope_name = ?
+    ON CONFLICT(scope_name) DO UPDATE SET description = excluded.description, category = excluded.category
   `);
 
   for (const scope of scopes) {
-    insertStmt.run(scope.name, scope.description, scope.category, null, now);
-    updateStmt.run(scope.description, scope.category, scope.name);
+    upsertStmt.run(scope.name, scope.description, scope.category, null, now);
   }
 }
 
@@ -3127,7 +3129,7 @@ function createSkill(name, description, version, author, category, scriptContent
   const configValue = typeof configJson === 'object' ? JSON.stringify(configJson) : (configJson || null);
   const row = db.prepare(`
     INSERT INTO skills (name, description, version, author, category, script_content, config_json, repo_url, active, created_at, updated_at, owner_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
     RETURNING id
   `).get(name, description || null, version || '1.0.0', author || null, category || 'custom', scriptContent || null, configValue, repoUrl || null, now, now, owner);
   return getSkillById(row?.id ?? null, owner);
@@ -4110,21 +4112,25 @@ function addServiceMethod(serviceId, methodName, httpMethod, endpoint, descripti
 function createApprovedDevice(tokenId, userId, fingerprintHash, deviceName, deviceInfo, ipAddress) {
   const id = 'device_' + crypto.randomBytes(16).toString('hex');
   const now = new Date().toISOString();
-  
-  // Create a serialized version of the fingerprint data as the raw fingerprint
+
   const deviceFingerprintRaw = JSON.stringify({
     hash: fingerprintHash,
     deviceInfo: deviceInfo,
     ipAddress: ipAddress,
     timestamp: now
   });
-  
-  const stmt = db.prepare(`
-    INSERT INTO approved_devices (
+
+  const result = db.prepare(`
+    INSERT OR IGNORE INTO approved_devices (
       id, token_id, user_id, device_fingerprint, device_fingerprint_hash, device_name, device_info_json, ip_address, approved_at, created_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  stmt.run(id, tokenId, userId, deviceFingerprintRaw, fingerprintHash, deviceName, JSON.stringify(deviceInfo), ipAddress, now, now);
+  `).run(id, tokenId, userId, deviceFingerprintRaw, fingerprintHash, deviceName, JSON.stringify(deviceInfo), ipAddress, now, now);
+
+  if (result.changes === 0) {
+    // Already exists — return the existing device's id
+    const existing = db.prepare('SELECT id FROM approved_devices WHERE user_id = ? AND device_fingerprint_hash = ?').get(userId, fingerprintHash);
+    return existing?.id || id;
+  }
   return id;
 }
 
@@ -4227,30 +4233,36 @@ function approvePendingDevice(approvalId, deviceName) {
   const approval = getPendingApprovalById(approvalId);
   if (!approval) return null;
 
-  // If this fingerprint is already approved for the user, do not try to insert duplicate.
-  const existing = getApprovedDeviceByHash(approval.user_id, approval.device_fingerprint_hash);
-  let deviceId = existing?.id || null;
+  const now = new Date().toISOString();
+  const resolvedName = deviceName || 'Approved Device';
 
-  if (!deviceId) {
-    // Create approved device
+  // Check for any existing device with this fingerprint (including revoked ones)
+  const anyExisting = db.prepare(
+    'SELECT id, revoked_at FROM approved_devices WHERE user_id = ? AND device_fingerprint_hash = ?'
+  ).get(approval.user_id, approval.device_fingerprint_hash);
+
+  let deviceId;
+  if (anyExisting) {
+    // Re-approve: clear revoked_at and update name/approved_at
+    db.prepare(`
+      UPDATE approved_devices SET revoked_at = NULL, device_name = ?, approved_at = ? WHERE id = ?
+    `).run(resolvedName, now, anyExisting.id);
+    deviceId = anyExisting.id;
+  } else {
     deviceId = createApprovedDevice(
       approval.token_id,
       approval.user_id,
       approval.device_fingerprint_hash,
-      deviceName || 'Approved Device',
+      resolvedName,
       JSON.parse(approval.device_info_json || '{}'),
       approval.ip_address
     );
-  } else {
-    // Touch last used on existing device when approving duplicate pending request
-    updateDeviceLastUsed(deviceId);
   }
 
   // Mark approval as approved
-  const now = new Date().toISOString();
   db.prepare(`
-    UPDATE device_approvals_pending 
-    SET status = 'approved', approved_at = ? 
+    UPDATE device_approvals_pending
+    SET status = 'approved', approved_at = ?
     WHERE id = ?
   `).run(now, approvalId);
 
@@ -4519,12 +4531,10 @@ function markNotificationAsRead(notificationId, workspaceId, userId) {
 }
 
 function deleteNotification(notificationId, workspaceId, userId) {
-  const stmt = db.prepare(`
-    DELETE FROM notifications
-    WHERE id = ? AND workspace_id = ? AND user_id = ?
-  `);
-  
-  return stmt.run(notificationId, workspaceId, userId).changes > 0;
+  // Delete child rows in notification_queue first to avoid FK constraint failure
+  db.prepare(`DELETE FROM notification_queue WHERE notification_id = ?`).run(notificationId);
+  return db.prepare(`DELETE FROM notifications WHERE id = ? AND workspace_id = ? AND user_id = ?`)
+    .run(notificationId, workspaceId, userId).changes > 0;
 }
 
 function getUnreadNotificationCount(workspaceId, userId) {

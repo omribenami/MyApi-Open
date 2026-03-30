@@ -569,11 +569,11 @@ const isAdapterConfigured = (adapter) => {
   );
 };
 const isOAuthServiceEnabled = (service) => {
-  // All OAuth services follow the same pattern:
-  // Check if the service config allows it AND the adapter has credentials configured
+  // Rule: credentials present in env → service is active. No config file changes needed.
+  // The only override is setting enabled:false in oauth.json to hard-disable a credentialed service.
   const adapter = oauthAdapters[service];
-  const enabledByConfig = oauthConfig[service]?.enabled !== false;
-  return Boolean(enabledByConfig && isAdapterConfigured(adapter));
+  const explicitlyDisabled = oauthConfig[service]?.enabled === false;
+  return Boolean(!explicitlyDisabled && isAdapterConfigured(adapter));
 };
 
 // --- Middleware ---
@@ -1975,15 +1975,34 @@ function pruneRedundantMasterTokens(ownerId, keep = 3) {
   }
 }
 
-// --- Scope Filter (Brain logic) ---
+// --- Scope helpers ---
+
+// Returns true for master tokens and session (dashboard) users — full access.
+function isMaster(req) {
+  return req.tokenMeta?.scope === 'full' ||
+    req.tokenMeta?.tokenType === 'master' ||
+    String(req.tokenMeta?.tokenId || '').startsWith('sess_');
+}
+
+// Returns true if the request's token carries `scope` (or is a master token).
+// Checks the access_token_scopes table for guest tokens.
+function hasScope(req, scope) {
+  if (isMaster(req)) return true;
+  const tokenScopes = getTokenScopes(req.tokenMeta?.tokenId || '');
+  return tokenScopes.includes('admin:*') || tokenScopes.includes(scope);
+}
+
+// --- Scope Filter (identity data) ---
 function filterByScope(data, scope) {
-  if (scope === "full") return data;
+  if (scope === "full" || !scope) return data;
   const scopeFields = {
-    "professional": ["name", "role", "company", "skills", "education"],
+    "basic":        ["name", "role", "company"],
+    "professional": ["name", "role", "company", "skills", "education", "experience"],
     "availability": ["availability", "timezone", "calendar"],
-    "read": ["name", "role", "company"],
+    // legacy aliases
+    "read":         ["name", "role", "company"],
   };
-  const allowed = scopeFields[scope] || scopeFields["read"];
+  const allowed = scopeFields[scope] || scopeFields["basic"];
   const filtered = {};
   for (const key of allowed) {
     if (data[key] !== undefined) filtered[key] = data[key];
@@ -2019,7 +2038,7 @@ function bootstrap() {
   if (!masterExists) {
     rawMaster = 'myapi_' + crypto.randomBytes(32).toString("hex");
     const hash = bcrypt.hashSync(rawMaster, 10);
-    createAccessToken(hash, "owner", "full", "Master Token", null, null, null, rawMaster);
+    createAccessToken(hash, "owner", "full", "Master Token", null, null, null, rawMaster, 'master');
     console.log("=== MyApi Platform Started ===");
     console.log("Master token created for bootstrap (hidden in logs for security)");
   } else {
@@ -2116,15 +2135,15 @@ function parseFlexibleBoolean(value) {
 }
 
 function getEffectiveScopes(req) {
-  if (req.tokenMeta?.scope === 'full' || String(req.tokenMeta?.tokenId || '').startsWith('sess_')) return ['admin:*'];
+  if (isMaster(req)) return ['admin:*'];
   return getTokenScopes(req.tokenMeta?.tokenId || '');
 }
 
 function buildCapabilitiesForRequest(req) {
   const scopes = getEffectiveScopes(req);
   const allowedPersonas = req.tokenMeta?.allowedPersonas || null;
-  const canReadBrain = hasPermission(scopes, ['brain:read']) || hasPermission(scopes, ['admin:*']);
-  const canReadVault = hasPermission(scopes, ['vault:read']) || hasPermission(scopes, ['admin:*']);
+  const canReadBrain = hasPermission(scopes, ['knowledge']) || hasPermission(scopes, ['chat']) || hasPermission(scopes, ['admin:*']);
+  const canReadVault = hasPermission(scopes, ['admin:*']);
 
   const auth = {
     style: req.authType === 'session' ? 'session-cookie' : 'bearer-token',
@@ -2810,13 +2829,16 @@ app.get('/.well-known/ai-plugin.json', (req, res) => {
 
 // --- IDENTITY ---
 app.get("/api/v1/identity", authenticate, (req, res) => {
+  if (!hasScope(req, 'basic')) return res.status(403).json({ error: "Requires 'basic' scope" });
   const identity = vault.identityDocs["owner"] || {};
-  const filtered = filterByScope(identity, req.tokenMeta.scope);
+  const effectiveScope = isMaster(req) ? "full" : "basic";
+  const filtered = filterByScope(identity, effectiveScope);
   createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "read_identity", resource: "/identity", scope: req.tokenMeta.scope, ip: req.ip });
-  res.json({ data: filtered, meta: { scope: req.tokenMeta.scope } });
+  res.json({ data: filtered, meta: { scope: effectiveScope } });
 });
 
 app.get("/api/v1/identity/professional", authenticate, (req, res) => {
+  if (!hasScope(req, 'professional')) return res.status(403).json({ error: "Requires 'professional' scope" });
   const identity = vault.identityDocs["owner"] || {};
   const filtered = filterByScope(identity, "professional");
   createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "read_identity_professional", resource: "/identity/professional", scope: req.tokenMeta.scope, ip: req.ip });
@@ -2824,6 +2846,7 @@ app.get("/api/v1/identity/professional", authenticate, (req, res) => {
 });
 
 app.get("/api/v1/identity/availability", authenticate, (req, res) => {
+  if (!hasScope(req, 'availability')) return res.status(403).json({ error: "Requires 'availability' scope" });
   const identity = vault.identityDocs["owner"] || {};
   const filtered = filterByScope(identity, "availability");
   createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "read_availability", resource: "/identity/availability", scope: req.tokenMeta.scope, ip: req.ip });
@@ -2832,13 +2855,13 @@ app.get("/api/v1/identity/availability", authenticate, (req, res) => {
 
 // --- PREFERENCES ---
 app.get("/api/v1/preferences", authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Insufficient scope" });
+  if (!isMaster(req)) return res.status(403).json({ error: "Insufficient scope" });
   createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "read_preferences", resource: "/preferences", scope: req.tokenMeta.scope, ip: req.ip });
   res.json({ data: vault.preferences["owner"] || {} });
 });
 
 app.put("/api/v1/preferences", authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Insufficient scope" });
+  if (!isMaster(req)) return res.status(403).json({ error: "Insufficient scope" });
   vault.preferences["owner"] = { ...vault.preferences["owner"], ...req.body };
   createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "update_preferences", resource: "/preferences", scope: req.tokenMeta.scope, ip: req.ip });
   res.json({ data: vault.preferences["owner"] });
@@ -2846,7 +2869,7 @@ app.put("/api/v1/preferences", authenticate, (req, res) => {
 
 // --- VAULT TOKENS (encrypted external API keys) ---
 app.post("/api/v1/vault/tokens", authenticate, async (req, res) => {
-  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can add vault tokens" });
+  if (!isMaster(req)) return res.status(403).json({ error: "Only master token can add vault tokens" });
 
   try {
     const { name, label, description, token, service, websiteUrl, url, apiUrl, discoverApi } = req.body || {};
@@ -2921,7 +2944,7 @@ app.post("/api/v1/vault/tokens", authenticate, async (req, res) => {
 });
 
 app.post('/api/v1/vault/discover-api', authenticate, async (req, res) => {
-  if (req.tokenMeta.scope !== 'full') return res.status(403).json({ error: 'Only master token can discover API metadata' });
+  if (!isMaster(req)) return res.status(403).json({ error: 'Only master token can discover API metadata' });
 
   try {
     const { websiteUrl, url, apiUrl } = req.body || {};
@@ -2945,7 +2968,7 @@ app.post('/api/v1/vault/discover-api', authenticate, async (req, res) => {
 });
 
 app.get("/api/v1/vault/tokens", authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can view vault tokens" });
+  if (!isMaster(req)) return res.status(403).json({ error: "Only master token can view vault tokens" });
 
   const ownerId = getRequestOwnerId(req);
   // Always show all tokens for the owner regardless of active workspace.
@@ -2964,7 +2987,7 @@ app.get("/api/v1/vault/tokens", authenticate, (req, res) => {
 });
 
 app.get("/api/v1/vault/tokens/:id/reveal", authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can decrypt vault tokens" });
+  if (!isMaster(req)) return res.status(403).json({ error: "Only master token can decrypt vault tokens" });
   // BUG-14: Enforce workspace scoping by passing ownerId and workspaceId
   const ownerId = getRequestOwnerId(req);
   const workspaceId = req.workspaceId || req.session?.currentWorkspace || null;
@@ -2975,7 +2998,7 @@ app.get("/api/v1/vault/tokens/:id/reveal", authenticate, (req, res) => {
 });
 
 app.delete("/api/v1/vault/tokens/:id", authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can delete vault tokens" });
+  if (!isMaster(req)) return res.status(403).json({ error: "Only master token can delete vault tokens" });
   // BUG-14: Enforce workspace scoping by passing ownerId and workspaceId
   const ownerId = getRequestOwnerId(req);
   const workspaceId = req.workspaceId || req.session?.currentWorkspace || null;
@@ -2989,7 +3012,7 @@ app.delete("/api/v1/vault/tokens/:id", authenticate, (req, res) => {
 
 // Create a new guest token with fine-grained scopes
 app.post("/api/v1/tokens", authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can create tokens" });
+  if (!isMaster(req)) return res.status(403).json({ error: "Only master token can create tokens" });
 
   const { label = "Guest Token", scopes, expiresInHours, description, allowedPersonas } = req.body;
 
@@ -3081,7 +3104,7 @@ app.post("/api/v1/tokens", authenticate, (req, res) => {
 
 // Get details of a specific token with its scopes
 app.get("/api/v1/tokens/:id", authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can view token details" });
+  if (!isMaster(req)) return res.status(403).json({ error: "Only master token can view token details" });
 
   // Do not filter by userId or workspaceId here — the bootstrap master token has
   // owner_id='owner' and workspace_id=NULL, which wouldn't match session filters.
@@ -3118,7 +3141,7 @@ app.get("/api/v1/tokens/:id", authenticate, (req, res) => {
 
 // Update token scopes
 app.put("/api/v1/tokens/:id", authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can update tokens" });
+  if (!isMaster(req)) return res.status(403).json({ error: "Only master token can update tokens" });
 
   const { scopes } = req.body;
   if (!scopes || (!Array.isArray(scopes) && typeof scopes !== 'string')) {
@@ -3190,7 +3213,7 @@ app.put("/api/v1/tokens/:id", authenticate, (req, res) => {
 
 // List available scopes (requires admin:* or special access)
 app.get("/api/v1/scopes", authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can list scopes" });
+  if (!isMaster(req)) return res.status(403).json({ error: "Only master token can list scopes" });
 
   const scopes = getAllScopes();
 
@@ -3206,11 +3229,10 @@ app.get("/api/v1/scopes", authenticate, (req, res) => {
     data: {
       scopes: scopes,
       templates: {
-        read: ['identity:read', 'vault:read', 'services:read', 'brain:read', 'audit:read', 'skills:read'],
-        professional: ['identity:read'],
-        availability: ['identity:read'],
-        guest: ['identity:read'],
-        admin: ['admin:*']
+        readonly:   ['basic', 'professional', 'availability'],
+        agent:      ['basic', 'professional', 'knowledge', 'chat', 'skills:read', 'services:read'],
+        full_agent: ['basic', 'professional', 'availability', 'personas', 'knowledge', 'chat', 'skills:read', 'skills:write', 'services:read', 'services:write'],
+        admin:      ['admin:*']
       }
     }
   });
@@ -3219,14 +3241,14 @@ app.get("/api/v1/scopes", authenticate, (req, res) => {
 // Regenerate master token (creates a new full-scope master token).
 // NOTE: must be registered before /:id/regenerate so "master" is not captured as a token id.
 app.post('/api/v1/tokens/master/regenerate', authRateLimit, authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== 'full') return res.status(403).json({ error: 'Only master token can regenerate master token' });
+  if (!isMaster(req)) return res.status(403).json({ error: 'Only master token can regenerate master token' });
 
   try {
     const ownerId = req.tokenMeta.ownerId || 'admin';
     revokeExistingMasterTokens(ownerId);
     const rawToken = 'myapi_' + crypto.randomBytes(32).toString("hex");
     const hash = bcrypt.hashSync(rawToken, 10);
-    const tokenId = createAccessToken(hash, ownerId, 'full', 'Master Token', null, null, null, rawToken);
+    const tokenId = createAccessToken(hash, ownerId, 'full', 'Master Token', null, null, null, rawToken, 'master');
 
     createAuditLog({
       requesterId: req.tokenMeta.tokenId,
@@ -3257,7 +3279,7 @@ app.post('/api/v1/tokens/master/regenerate', authRateLimit, authenticate, (req, 
 
 // Regenerate token secret (returns a new raw token for the same token id/scopes)
 app.post("/api/v1/tokens/:id/regenerate", authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can regenerate tokens" });
+  if (!isMaster(req)) return res.status(403).json({ error: "Only master token can regenerate tokens" });
 
   const tokens = getAccessTokens();
   const token = tokens.find(t => t.tokenId === req.params.id);
@@ -3333,7 +3355,7 @@ app.post('/api/v1/tokens/master/bootstrap', authenticate, (req, res) => {
 
     const rawToken = 'myapi_' + crypto.randomBytes(32).toString("hex");
     const hash = bcrypt.hashSync(rawToken, 10);
-    const tokenId = createAccessToken(hash, ownerId, 'full', 'Master Token (Dashboard Session)', null, null, null, rawToken);
+    const tokenId = createAccessToken(hash, ownerId, 'full', 'Master Token (Dashboard Session)', null, null, null, rawToken, 'master');
 
     if (req.session) {
       req.session.masterTokenRaw = rawToken;
@@ -3372,7 +3394,7 @@ app.post('/api/v1/tokens/master/bootstrap', authenticate, (req, res) => {
 
 // Revoke (delete) a token
 app.delete("/api/v1/tokens/:id", authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can revoke tokens" });
+  if (!isMaster(req)) return res.status(403).json({ error: "Only master token can revoke tokens" });
   const revoked = revokeAccessToken(req.params.id);
   if (!revoked) return res.status(404).json({ error: "Token not found" });
 
@@ -3402,7 +3424,7 @@ app.delete("/api/v1/tokens/:id", authenticate, (req, res) => {
 
 // List all tokens (legacy endpoint with scopes)
 app.get("/api/v1/tokens", authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can list tokens" });
+  if (!isMaster(req)) return res.status(403).json({ error: "Only master token can list tokens" });
 
   // Resolve workspace from middleware context (set for both session and Bearer token
   // auth after the extractWorkspaceContext fix) or fall back to any explicit source.
@@ -4115,13 +4137,13 @@ app.post('/api/v1/billing/webhook', async (req, res) => {
 
 // --- CONNECTORS ---
 app.get("/api/v1/connectors", authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Insufficient scope" });
+  if (!isMaster(req)) return res.status(403).json({ error: "Insufficient scope" });
   createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "list_connectors", resource: "/connectors", scope: req.tokenMeta.scope, ip: req.ip });
   res.json({ data: getConnectors() });
 });
 
 app.post("/api/v1/connectors", authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Insufficient scope" });
+  if (!isMaster(req)) return res.status(403).json({ error: "Insufficient scope" });
   const { type, config, label } = req.body;
   if (!type || !label) return res.status(400).json({ error: "type and label are required" });
 
@@ -4137,7 +4159,7 @@ app.post("/api/v1/connectors", authenticate, (req, res) => {
 // --- GATEWAY CONTEXT ASSEMBLY ---
 app.get("/api/v1/gateway/context", authenticate, (req, res) => {
   // Only master token can access full context
-  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can access gateway context" });
+  if (!isMaster(req)) return res.status(403).json({ error: "Only master token can access gateway context" });
 
   try {
     // SECURITY: Do NOT expose USER.md via API
@@ -4241,7 +4263,7 @@ app.get("/api/v1/gateway/context", authenticate, (req, res) => {
 
 // --- AUDIT LOG ---
 app.get("/api/v1/audit", authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can view audit log" });
+  if (!isMaster(req)) return res.status(403).json({ error: "Only master token can view audit log" });
   const page = parseInt(req.query.page) || 1;
   const limit = Math.min(parseInt(req.query.limit) || 50, 100);
   const offset = (page - 1) * limit;
@@ -4823,7 +4845,7 @@ app.post('/api/v1/auth/oauth-signup/complete', async (req, res) => {
 
   const rawMasterToken = 'myapi_' + crypto.randomBytes(32).toString('hex');
   const hash = bcrypt.hashSync(rawMasterToken, 10);
-  const tokenId = createAccessToken(hash, createdUser.id, 'full', 'Master Token (OAuth Signup Session)', null, null, null, rawMasterToken);
+  const tokenId = createAccessToken(hash, createdUser.id, 'full', 'Master Token (OAuth Signup Session)', null, null, null, rawMasterToken, 'master');
 
   await regenerateSession(req);
 
@@ -5195,7 +5217,7 @@ const isStrongPassword = (pw) => {
 };
 
 app.post("/api/v1/users", authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can create users" });
+  if (!isMaster(req)) return res.status(403).json({ error: "Only master token can create users" });
   if (!requirePowerUser(req, res)) return;
   const { username, displayName, email, timezone, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: "username and password are required" });
@@ -5217,14 +5239,14 @@ app.post("/api/v1/users", authenticate, (req, res) => {
 });
 
 app.get("/api/v1/users", authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can list users" });
+  if (!isMaster(req)) return res.status(403).json({ error: "Only master token can list users" });
   if (!requirePowerUser(req, res)) return;
   createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "list_users", resource: "/users", scope: req.tokenMeta.scope, ip: req.ip });
   res.json({ data: getUsers() });
 });
 
 app.put('/api/v1/users/:id/plan', planFeatureRateLimit, authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== 'full') return res.status(403).json({ error: 'Only master token can manage plans' });
+  if (!isMaster(req)) return res.status(403).json({ error: 'Only master token can manage plans' });
   if (!requirePowerUser(req, res)) return;
   try {
     const { id } = req.params;
@@ -5263,7 +5285,7 @@ app.put('/api/v1/users/:id/plan', planFeatureRateLimit, authenticate, (req, res)
 });
 
 app.put('/api/v1/users/:id/subscription', planFeatureRateLimit, authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== 'full') return res.status(403).json({ error: 'Only master token can manage subscriptions' });
+  if (!isMaster(req)) return res.status(403).json({ error: 'Only master token can manage subscriptions' });
   if (!requirePowerUser(req, res)) return;
   try {
     const { id } = req.params;
@@ -5289,7 +5311,7 @@ app.put('/api/v1/users/:id/subscription', planFeatureRateLimit, authenticate, (r
 });
 
 app.delete('/api/v1/users/:id', authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== 'full') return res.status(403).json({ error: 'Only master token can delete users' });
+  if (!isMaster(req)) return res.status(403).json({ error: 'Only master token can delete users' });
   if (!requirePowerUser(req, res)) return;
 
   try {
@@ -5338,7 +5360,7 @@ app.delete('/api/v1/users/:id', authenticate, (req, res) => {
 });
 
 app.post('/api/v1/users/cleanup-test-users', authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== 'full') return res.status(403).json({ error: 'Only master token can cleanup users' });
+  if (!isMaster(req)) return res.status(403).json({ error: 'Only master token can cleanup users' });
   if (!requirePowerUser(req, res)) return;
 
   const prefix = String(req.body?.prefix || 'phase12a_');
@@ -5420,7 +5442,7 @@ app.get("/api/v1/handshakes/:id/status", (req, res) => {
 
 // ADMIN: List handshakes (with optional status filter)
 app.get("/api/v1/handshakes", authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can view handshakes" });
+  if (!isMaster(req)) return res.status(403).json({ error: "Only master token can view handshakes" });
   const status = req.query.status || null;
   const handshakes = getHandshakes(status);
   createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "list_handshakes", resource: "/handshakes", scope: req.tokenMeta.scope, ip: req.ip });
@@ -5429,7 +5451,7 @@ app.get("/api/v1/handshakes", authenticate, (req, res) => {
 
 // ADMIN: Approve a handshake → creates scoped token for the agent
 app.post("/api/v1/handshakes/:id/approve", authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can approve handshakes" });
+  if (!isMaster(req)) return res.status(403).json({ error: "Only master token can approve handshakes" });
   const result = approveHandshake(req.params.id);
   if (!result) return res.status(404).json({ error: "Handshake not found or not pending" });
   createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "handshake_approve", resource: `/handshakes/${req.params.id}`, scope: req.tokenMeta.scope, ip: req.ip,
@@ -5449,7 +5471,7 @@ app.post("/api/v1/handshakes/:id/approve", authenticate, (req, res) => {
 
 // ADMIN: Deny a handshake
 app.post("/api/v1/handshakes/:id/deny", authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can deny handshakes" });
+  if (!isMaster(req)) return res.status(403).json({ error: "Only master token can deny handshakes" });
   const denied = denyHandshake(req.params.id);
   if (!denied) return res.status(404).json({ error: "Handshake not found" });
   createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "handshake_deny", resource: `/handshakes/${req.params.id}`, scope: req.tokenMeta.scope, ip: req.ip });
@@ -5458,7 +5480,7 @@ app.post("/api/v1/handshakes/:id/deny", authenticate, (req, res) => {
 
 // ADMIN: Revoke a handshake (also revokes the associated token)
 app.post("/api/v1/handshakes/:id/revoke", authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can revoke handshakes" });
+  if (!isMaster(req)) return res.status(403).json({ error: "Only master token can revoke handshakes" });
   const revoked = revokeHandshake(req.params.id);
   if (!revoked) return res.status(404).json({ error: "Handshake not found" });
   createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "handshake_revoke", resource: `/handshakes/${req.params.id}`, scope: req.tokenMeta.scope, ip: req.ip });
@@ -5480,7 +5502,7 @@ app.get("/api/v1/handshakes/:id/status", (req, res) => {
 
 // POST /api/v1/personas - Create new persona
 app.post("/api/v1/personas", authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can create personas" });
+  if (!isMaster(req)) return res.status(403).json({ error: "Only master token can create personas" });
   const { name, soul_content, description, templateData } = req.body;
   if (!name || !soul_content) return res.status(400).json({ error: "name and soul_content are required" });
 
@@ -5517,7 +5539,7 @@ app.post("/api/v1/personas", authenticate, (req, res) => {
 
 // GET /api/v1/personas - List all personas
 app.get("/api/v1/personas", authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can list personas" });
+  if (!hasScope(req, 'personas')) return res.status(403).json({ error: "Requires 'personas' scope" });
   
   // Multi-tenancy: Filter personas by workspace
   const workspaceId = req.workspaceId || req.session?.currentWorkspace;
@@ -5558,7 +5580,7 @@ app.get("/api/v1/personas", authenticate, (req, res) => {
 
 // GET /api/v1/personas/:id - Get specific persona (including soul_content)
 app.get("/api/v1/personas/:id", authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can view personas" });
+  if (!hasScope(req, 'personas')) return res.status(403).json({ error: "Requires 'personas' scope" });
   const ownerId = getRequestOwnerId(req);
   const persona = getPersonaById(parseInt(req.params.id), ownerId);
   if (!persona) return res.status(404).json({ error: "Persona not found" });
@@ -5587,7 +5609,7 @@ app.get("/api/v1/personas/:id", authenticate, (req, res) => {
 
 // PUT /api/v1/personas/:id - Update persona or set as active
 app.put("/api/v1/personas/:id", authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can update personas" });
+  if (!isMaster(req)) return res.status(403).json({ error: "Only master token can update personas" });
   const personaId = parseInt(req.params.id);
   const ownerId = getRequestOwnerId(req);
   const persona = getPersonaById(personaId, ownerId);
@@ -5646,7 +5668,7 @@ app.put("/api/v1/personas/:id", authenticate, (req, res) => {
 
 // DELETE /api/v1/personas/:id - Remove persona (if not the only one)
 app.delete("/api/v1/personas/:id", authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Only master token can delete personas" });
+  if (!isMaster(req)) return res.status(403).json({ error: "Only master token can delete personas" });
   const personaId = parseInt(req.params.id);
   const ownerId = getRequestOwnerId(req);
   const deleted = deletePersona(personaId, ownerId);
@@ -5677,7 +5699,7 @@ app.get("/api/v1/personas/:id/documents", authenticate, (req, res) => {
 
 // POST /api/v1/personas/:id/documents - Attach a KB document
 app.post("/api/v1/personas/:id/documents", authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Insufficient scope" });
+  if (!isMaster(req)) return res.status(403).json({ error: "Insufficient scope" });
   const personaId = parseInt(req.params.id);
   const { documentId } = req.body;
   if (!documentId) return res.status(400).json({ error: "documentId required" });
@@ -5695,7 +5717,7 @@ app.post("/api/v1/personas/:id/documents", authenticate, (req, res) => {
 
 // DELETE /api/v1/personas/:id/documents/:docId - Detach a KB document
 app.delete("/api/v1/personas/:id/documents/:docId", authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== "full") return res.status(403).json({ error: "Insufficient scope" });
+  if (!isMaster(req)) return res.status(403).json({ error: "Insufficient scope" });
   const personaId = parseInt(req.params.id);
   const { docId } = req.params;
   detachDocumentFromPersona(personaId, docId);
@@ -5711,7 +5733,7 @@ app.get('/api/v1/personas/:id/skills', authenticate, (req, res) => {
 });
 
 app.post('/api/v1/personas/:id/skills', authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== 'full') return res.status(403).json({ error: 'Insufficient scope' });
+  if (!isMaster(req)) return res.status(403).json({ error: 'Insufficient scope' });
   const personaId = parseInt(req.params.id);
   const skillId = parseInt(req.body?.skillId);
 
@@ -5733,7 +5755,7 @@ app.post('/api/v1/personas/:id/skills', authenticate, (req, res) => {
 });
 
 app.delete('/api/v1/personas/:id/skills/:skillId', authenticate, (req, res) => {
-  if (req.tokenMeta.scope !== 'full') return res.status(403).json({ error: 'Insufficient scope' });
+  if (!isMaster(req)) return res.status(403).json({ error: 'Insufficient scope' });
   const personaId = parseInt(req.params.id);
   const skillId = parseInt(req.params.skillId);
   detachSkillFromPersona(personaId, skillId);
@@ -6992,6 +7014,12 @@ app.get('/api/v1/services/:serviceName/test', authenticate, async (req, res) => 
 
 // Execute a service API call (AI communication layer)
 app.post('/api/v1/services/:serviceName/execute', authenticate, async (req, res) => {
+  // Determine read vs write based on the method's HTTP verb (resolved after service lookup)
+  // Use services:read as the minimum required; write-methods will be caught at execution time if needed.
+  // Default to requiring services:read; POST/PUT/DELETE methods require services:write.
+  if (!hasScope(req, 'services:read') && !hasScope(req, 'services:write')) {
+    return res.status(403).json({ error: "Requires 'services:read' or 'services:write' scope" });
+  }
   try {
     const { serviceName } = req.params;
     const { method, params } = req.body;
@@ -7117,21 +7145,12 @@ app.post('/api/v1/services/:serviceName/proxy', authenticate, async (req, res) =
     }
 
     // Service scope enforcement
-    const { checkScopes } = require('./middleware/scope-validator');
-    const rawScope = req.tokenMeta?.scope || req.tokenData?.scope || '';
-    const tokenScopes = rawScope === 'full' ? ['admin:*'] : rawScope.split(',').map(s => s.trim()).filter(Boolean);
     const isWrite = ['POST', 'PUT', 'PATCH', 'DELETE'].includes((httpMethod || 'GET').toUpperCase());
-    const requiredScopes = [
-      `services:${serviceName}:${isWrite ? 'write' : 'read'}`,  // specific: services:github:read
-      `services:${serviceName}`,                                   // service-level: services:github
-      'services:*',                                                // wildcard
-      `services:${isWrite ? 'write' : 'read'}`,                  // generic: services:read
-    ];
-    const hasScope = tokenScopes.includes('admin:*') || requiredScopes.some(s => tokenScopes.includes(s));
-    if (!hasScope) {
+    const requiredScope = isWrite ? 'services:write' : 'services:read';
+    if (!hasScope(req, requiredScope)) {
       return res.status(403).json({
         error: 'Insufficient scope',
-        message: `Token needs one of: ${requiredScopes.join(', ')}`,
+        message: `Token needs '${requiredScope}' scope`,
         hint: 'Update token scope to include service access'
       });
     }
@@ -7551,6 +7570,7 @@ function scoreByQuery(content = '', query = '') {
 
 // POST /api/v1/brain/chat - Chat with context-aware AI
 app.post('/api/v1/brain/chat', authenticate, async (req, res) => {
+  if (!hasScope(req, 'chat')) return res.status(403).json({ error: "Requires 'chat' scope" });
   try {
     const { message, conversationId, model, temperature, personaId } = req.body;
 
@@ -7676,6 +7696,7 @@ app.post('/api/v1/brain/chat', authenticate, async (req, res) => {
 
 // GET /api/v1/brain/conversations - List conversations
 app.get('/api/v1/brain/conversations', authenticate, (req, res) => {
+  if (!hasScope(req, 'chat')) return res.status(403).json({ error: "Requires 'chat' scope" });
   try {
     const conversations = getConversations(req.tokenMeta.tokenId);
 
@@ -7696,6 +7717,7 @@ app.get('/api/v1/brain/conversations', authenticate, (req, res) => {
 
 // GET /api/v1/brain/conversations/:id - Get conversation with history
 app.get('/api/v1/brain/conversations/:id', authenticate, (req, res) => {
+  if (!hasScope(req, 'chat')) return res.status(403).json({ error: "Requires 'chat' scope" });
   try {
     const { id } = req.params;
     const conversation = getConversation(id);
@@ -7844,6 +7866,7 @@ app.post('/api/v1/brain/knowledge-base/upload', authenticate, kbUploadFields, as
 
 // GET /api/v1/brain/knowledge-base - List KB documents
 app.get('/api/v1/brain/knowledge-base', authenticate, (req, res) => {
+  if (!hasScope(req, 'knowledge')) return res.status(403).json({ error: "Requires 'knowledge' scope" });
   try {
     const ownerId = getRequestOwnerId(req);
     const documents = getKBDocuments(ownerId);
@@ -7865,6 +7888,7 @@ app.get('/api/v1/brain/knowledge-base', authenticate, (req, res) => {
 
 // GET /api/v1/brain/knowledge-base/:id - Get full KB document
 app.get('/api/v1/brain/knowledge-base/:id', authenticate, (req, res) => {
+  if (!hasScope(req, 'knowledge')) return res.status(403).json({ error: "Requires 'knowledge' scope" });
   try {
     const { id } = req.params;
     const ownerId = getRequestOwnerId(req);
@@ -7941,6 +7965,7 @@ app.delete('/api/v1/brain/knowledge-base/:id', authenticate, (req, res) => {
 
 // GET /api/v1/brain/context - Get current assembled context
 app.get('/api/v1/brain/context', authenticate, async (req, res) => {
+  if (!hasScope(req, 'knowledge')) return res.status(403).json({ error: "Requires 'knowledge' scope" });
   try {
     const { conversationId, personaId } = req.query;
 
@@ -8153,6 +8178,7 @@ function runSkillScanner({ readme = '', skillDoc = '', pkg = null, repo = null }
 }
 
 app.get('/api/v1/skills', authenticate, (req, res) => {
+  if (!hasScope(req, 'skills:read')) return res.status(403).json({ error: "Requires 'skills:read' scope" });
   try {
     const ownerId = getRequestOwnerId(req);
     
@@ -8177,6 +8203,7 @@ app.get('/api/v1/skills', authenticate, (req, res) => {
 });
 
 app.get('/api/v1/skills/:id', authenticate, (req, res) => {
+  if (!hasScope(req, 'skills:read')) return res.status(403).json({ error: "Requires 'skills:read' scope" });
   try {
     const ownerId = getRequestOwnerId(req);
     const skill = getSkillById(req.params.id, ownerId);
@@ -8189,6 +8216,7 @@ app.get('/api/v1/skills/:id', authenticate, (req, res) => {
 });
 
 app.post('/api/v1/skills', authenticate, (req, res) => {
+  if (!hasScope(req, 'skills:write')) return res.status(403).json({ error: "Requires 'skills:write' scope" });
   try {
     const { name, description, version, author, category, script_content, config_json, repo_url } = req.body;
     if (!name) return res.status(400).json({ error: 'Name is required' });
@@ -8251,6 +8279,7 @@ app.post('/api/v1/skills/from-repo', authenticate, async (req, res) => {
 });
 
 app.put('/api/v1/skills/:id', authenticate, (req, res) => {
+  if (!hasScope(req, 'skills:write')) return res.status(403).json({ error: "Requires 'skills:write' scope" });
   try {
     const ownerId = getRequestOwnerId(req);
     const skill = updateSkill(req.params.id, req.body, ownerId);
@@ -8263,6 +8292,7 @@ app.put('/api/v1/skills/:id', authenticate, (req, res) => {
 });
 
 app.get('/api/v1/skills/:id/attachments', authenticate, (req, res) => {
+  if (!hasScope(req, 'skills:read')) return res.status(403).json({ error: "Requires 'skills:read' scope" });
   try {
     const ownerId = getRequestOwnerId(req);
     const personaRefs = db.prepare(`
@@ -8281,6 +8311,7 @@ app.get('/api/v1/skills/:id/attachments', authenticate, (req, res) => {
 });
 
 app.delete('/api/v1/skills/:id', authenticate, (req, res) => {
+  if (!hasScope(req, 'skills:write')) return res.status(403).json({ error: "Requires 'skills:write' scope" });
   try {
     const ownerId = getRequestOwnerId(req);
     const result = deleteSkill(req.params.id, ownerId);
@@ -8293,6 +8324,7 @@ app.delete('/api/v1/skills/:id', authenticate, (req, res) => {
 });
 
 app.put('/api/v1/skills/:id/activate', authenticate, (req, res) => {
+  if (!hasScope(req, 'skills:write')) return res.status(403).json({ error: "Requires 'skills:write' scope" });
   try {
     const ownerId = getRequestOwnerId(req);
     const skill = setActiveSkill(req.params.id, ownerId);
@@ -8305,6 +8337,7 @@ app.put('/api/v1/skills/:id/activate', authenticate, (req, res) => {
 });
 
 app.get('/api/v1/skills/:id/documents', authenticate, (req, res) => {
+  if (!hasScope(req, 'skills:read')) return res.status(403).json({ error: "Requires 'skills:read' scope" });
   try {
     const ownerId = getRequestOwnerId(req);
     const docs = getSkillDocuments(req.params.id, ownerId);
@@ -8316,6 +8349,7 @@ app.get('/api/v1/skills/:id/documents', authenticate, (req, res) => {
 });
 
 app.post('/api/v1/skills/:id/documents', authenticate, (req, res) => {
+  if (!hasScope(req, 'skills:write')) return res.status(403).json({ error: "Requires 'skills:write' scope" });
   try {
     const ownerId = getRequestOwnerId(req);
     const { document_id } = req.body;
@@ -8479,6 +8513,7 @@ app.post('/api/v1/marketplace/:id/install', authenticate, (req, res) => {
     if (!listing) return res.status(404).json({ error: 'Listing not found' });
 
     let provisioned = null;
+    let alreadyInstalled = false;
 
     // Concrete local provisioning for API listings
     if (listing.type === 'api') {
@@ -8654,6 +8689,7 @@ app.post('/api/v1/marketplace/:id/install', authenticate, (req, res) => {
       });
 
       if (existingSkill) {
+        alreadyInstalled = true;
         provisioned = {
           type: 'skill',
           skillId: existingSkill.id,
@@ -8750,6 +8786,7 @@ app.post('/api/v1/marketplace/:id/install', authenticate, (req, res) => {
       `).get(ownerId, sourceTokenId);
 
       if (existingGuestToken) {
+        alreadyInstalled = true;
         provisioned = {
           type: 'guest_token',
           tokenId: existingGuestToken.id,
