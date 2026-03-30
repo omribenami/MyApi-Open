@@ -1494,38 +1494,34 @@ function revokeAccessToken(id) {
 // Scope Definitions
 function seedDefaultScopes() {
   const scopes = [
-    { name: 'identity:read', category: 'identity', description: 'Read user identity information' },
-    { name: 'identity:write', category: 'identity', description: 'Write user identity information' },
-    { name: 'vault:read', category: 'vault', description: 'Read vault tokens' },
-    { name: 'vault:write', category: 'vault', description: 'Create and manage vault tokens' },
-    { name: 'services:read', category: 'services', description: 'Read service connectors' },
-    { name: 'services:write', category: 'services', description: 'Create and manage service connectors' },
-    { name: 'brain:chat', category: 'brain', description: 'Chat with brain AI' },
-    { name: 'brain:read', category: 'brain', description: 'Read brain conversations and context' },
-    { name: 'audit:read', category: 'audit', description: 'Read audit logs' },
-    { name: 'personas:read', category: 'personas', description: 'Read persona definitions' },
-    { name: 'personas:write', category: 'personas', description: 'Create and manage personas' },
-    { name: 'skills:read', category: 'skills', description: 'Read skills and skill metadata' },
-    { name: 'skills:write', category: 'skills', description: 'Create and manage skills' },
-    { name: 'admin:*', category: 'admin', description: 'Full admin access (grants all scopes)' },
+    { name: 'basic',          category: 'profile',   description: 'Name, role, company' },
+    { name: 'professional',   category: 'profile',   description: 'Skills, education, experience' },
+    { name: 'availability',   category: 'profile',   description: 'Calendar, timezone' },
+    { name: 'personas',       category: 'personas',  description: 'Public persona profiles' },
+    { name: 'knowledge',      category: 'brain',     description: 'Knowledge/context read access' },
+    { name: 'chat',           category: 'brain',     description: 'Conversation and messaging' },
+    { name: 'skills:read',    category: 'skills',    description: 'Read skills and metadata' },
+    { name: 'skills:write',   category: 'skills',    description: 'Create and manage skills' },
+    { name: 'services:read',  category: 'services',  description: 'Proxy GET requests to connected OAuth services' },
+    { name: 'services:write', category: 'services',  description: 'Proxy POST/PUT/DELETE requests to connected OAuth services' },
+    { name: 'admin:*',        category: 'admin',     description: 'Full admin access (grants all scopes)' },
   ];
 
+  // Remove legacy scope names that were replaced in this schema
+  const legacyScopes = ['audit:read','brain:chat','brain:read','identity:read','identity:write','personas:read','personas:write','vault:read','vault:write'];
+  const removeLegacyRef = db.prepare('DELETE FROM access_token_scopes WHERE scope_name = ?');
+  const removeLegacyDef = db.prepare('DELETE FROM scope_definitions WHERE scope_name = ?');
+  legacyScopes.forEach(s => { try { removeLegacyRef.run(s); removeLegacyDef.run(s); } catch(_) {} });
+
   const now = new Date().toISOString();
-  const insertStmt = db.prepare(`
+  const upsertStmt = db.prepare(`
     INSERT INTO scope_definitions (scope_name, description, category, permissions, created_at)
     VALUES (?, ?, ?, ?, ?)
-    ON CONFLICT DO NOTHING
-  `);
-
-  const updateStmt = db.prepare(`
-    UPDATE scope_definitions
-    SET description = ?, category = ?
-    WHERE scope_name = ?
+    ON CONFLICT(scope_name) DO UPDATE SET description = excluded.description, category = excluded.category
   `);
 
   for (const scope of scopes) {
-    insertStmt.run(scope.name, scope.description, scope.category, null, now);
-    updateStmt.run(scope.description, scope.category, scope.name);
+    upsertStmt.run(scope.name, scope.description, scope.category, null, now);
   }
 }
 
