@@ -25,11 +25,14 @@ class GoogleAdapter {
       throw new Error('Google OAuth is not configured (missing GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REDIRECT_URI)');
     }
 
+    // Allow override via GOOGLE_SCOPE env var
+    const defaultScope = process.env.GOOGLE_SCOPE || 'https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly';
+
     const params = {
       client_id: this.clientId,
       redirect_uri: this.redirectUri,
       response_type: 'code',
-      scope: 'https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly',
+      scope: defaultScope,
       state: state,
       access_type: 'offline',
       prompt: 'consent', // always force consent screen so Google returns a fresh refresh_token
