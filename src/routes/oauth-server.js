@@ -110,10 +110,12 @@ function renderConsentPage({ clientName, username, clientId, redirectUri, state,
     }
     .not-logged-in { text-align: center; padding: 1rem 0; }
     .login-link {
-      display: inline-block; margin-top: 1rem; padding: .75rem 1.5rem;
+      display: inline-flex; align-items: center; gap: .5rem;
+      margin-top: 1rem; padding: .75rem 1.5rem;
       background: #3b82f6; color: white; border-radius: .5rem;
-      text-decoration: none; font-weight: 600;
+      text-decoration: none; font-weight: 600; font-size: .9rem;
     }
+    .login-link:hover { opacity: .85; }
   </style>
 </head>
 <body>
@@ -150,11 +152,12 @@ function renderConsentPage({ clientName, username, clientId, redirectUri, state,
       </div>
     </form>
     ` : `
-    <h1>Sign in required</h1>
-    <p class="subtitle">${clientName} wants to connect to your MyApi account.</p>
+    <h1>Sign in to authorize</h1>
+    <p class="subtitle">${clientName} wants to connect to your MyApi account. Sign in first to continue.</p>
     <div class="not-logged-in">
-      <p style="color:#64748b;font-size:.875rem;">Sign in to your MyApi dashboard, then return to this page to complete authorization.</p>
-      <a href="/dashboard/" class="login-link">Sign in to MyApi</a>
+      <a href="/api/v1/oauth/authorize/google?mode=login&forcePrompt=0&returnTo=${encodeURIComponent(`/api/v1/oauth-server/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state || '')}&scope=${scope || 'full'}`)}&redirect=1" class="login-link">
+        Sign in with Google
+      </a>
     </div>
     `}
   </div>
@@ -166,6 +169,7 @@ function renderConsentPage({ clientName, username, clientId, redirectUri, state,
 
 // GET /api/v1/oauth-server/authorize
 router.get('/authorize', (req, res) => {
+  console.log('[OAuthServer] GET /authorize hit — query:', JSON.stringify(req.query), '| session user:', req.session?.user?.id || 'none');
   const { response_type, client_id, redirect_uri, state, scope } = req.query;
 
   if (response_type !== 'code') {
@@ -182,15 +186,10 @@ router.get('/authorize', (req, res) => {
   }
 
   const user = req.session?.user;
-
-  // If not logged in, redirect to dashboard login with a return URL
-  if (!user?.id) {
-    const base = (process.env.PUBLIC_URL || `http://localhost:${process.env.PORT || 4500}`).replace(/\/$/, '');
-    const returnTo = encodeURIComponent(req.originalUrl);
-    return res.redirect(`${base}/dashboard/login?returnTo=${returnTo}`);
-  }
-
-  const username = user?.username || user?.display_name || user?.email || null;
+  // Don't redirect — render the consent page directly.
+  // If not logged in, the page shows a "Sign in with Google" button that
+  // goes through the OAuth login flow and returns here after login.
+  const username = user?.id ? (user.username || user.display_name || user.email || null) : null;
 
   res.send(renderConsentPage({
     clientName: client.client_name,
@@ -297,12 +296,19 @@ async function handleTokenExchange(params, res) {
 
 // POST /api/v1/oauth-server/token — standard OAuth token exchange
 router.post('/token', express.urlencoded({ extended: false }), express.json(), async (req, res) => {
-  await handleTokenExchange(req.body, res);
+  console.log('[OAuthServer] POST /token body:', JSON.stringify(req.body));
+  const params = { ...req.body };
+  if (!params.grant_type && params.code) params.grant_type = 'authorization_code';
+  await handleTokenExchange(params, res);
 });
 
 // GET /api/v1/oauth-server/token — some clients (ChatGPT) use GET with query params
 router.get('/token', async (req, res) => {
-  await handleTokenExchange(req.query, res);
+  console.log('[OAuthServer] GET /token params:', JSON.stringify(req.query));
+  // ChatGPT may omit grant_type — infer it when code is present
+  const params = { ...req.query };
+  if (!params.grant_type && params.code) params.grant_type = 'authorization_code';
+  await handleTokenExchange(params, res);
 });
 
 // GET /api/v1/oauth-server/credentials — returns OAuth setup info for the dashboard
