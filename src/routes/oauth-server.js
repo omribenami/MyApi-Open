@@ -254,9 +254,9 @@ router.get('/deny', (req, res) => {
   }
 });
 
-// POST /api/v1/oauth-server/token — exchange auth code for access token
-router.post('/token', express.urlencoded({ extended: false }), express.json(), async (req, res) => {
-  const { grant_type, code, redirect_uri, client_id, client_secret } = req.body;
+// Token exchange handler — shared by POST and GET
+async function handleTokenExchange(params, res) {
+  const { grant_type, code, redirect_uri, client_id, client_secret } = params;
 
   if (grant_type !== 'authorization_code') {
     return res.status(400).json({ error: 'unsupported_grant_type' });
@@ -293,6 +293,16 @@ router.post('/token', express.urlencoded({ extended: false }), express.json(), a
     token_type: 'bearer',
     scope: authCode.scope || 'full',
   });
+}
+
+// POST /api/v1/oauth-server/token — standard OAuth token exchange
+router.post('/token', express.urlencoded({ extended: false }), express.json(), async (req, res) => {
+  await handleTokenExchange(req.body, res);
+});
+
+// GET /api/v1/oauth-server/token — some clients (ChatGPT) use GET with query params
+router.get('/token', async (req, res) => {
+  await handleTokenExchange(req.query, res);
 });
 
 // GET /api/v1/oauth-server/credentials — returns OAuth setup info for the dashboard
