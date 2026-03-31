@@ -4,13 +4,14 @@ import { useNotificationStore } from '../stores/notificationStore';
 
 export default function NotificationBell() {
   const currentWorkspace = useAuthStore((state) => state.currentWorkspace);
-  const { 
-    unreadCount, 
-    notifications, 
-    fetchUnreadCount, 
+  const {
+    unreadCount,
+    notifications,
+    fetchUnreadCount,
     fetchNotifications,
     markAsRead,
-    deleteNotification 
+    deleteNotification,
+    clearAll,
   } = useNotificationStore();
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -52,6 +53,10 @@ export default function NotificationBell() {
     }
   };
 
+  const handleClearAll = async () => {
+    await clearAll();
+  };
+
   const getNotificationIcon = (type) => {
     switch (type) {
       case 'oauth_connected': return '🔐';
@@ -90,15 +95,26 @@ export default function NotificationBell() {
             <h3 className="text-sm font-semibold text-white">
               Notifications {unreadCount > 0 && <span className="text-red-400">({unreadCount})</span>}
             </h3>
-            {unreadCount > 0 && (
-              <button
-                onClick={handleMarkAllAsRead}
-                className="text-xs font-medium text-blue-400 hover:text-blue-300 transition-colors"
-                title="Mark all as read"
-              >
-                Mark all as read
-              </button>
-            )}
+            <div className="flex items-center gap-3">
+              {unreadCount > 0 && (
+                <button
+                  onClick={handleMarkAllAsRead}
+                  className="text-xs font-medium text-blue-400 hover:text-blue-300 transition-colors"
+                  title="Mark all as read"
+                >
+                  Mark all read
+                </button>
+              )}
+              {notifications.length > 0 && (
+                <button
+                  onClick={handleClearAll}
+                  className="text-xs font-medium text-slate-400 hover:text-red-400 transition-colors"
+                  title="Clear all notifications"
+                >
+                  Clear all
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="max-h-96 overflow-y-auto">

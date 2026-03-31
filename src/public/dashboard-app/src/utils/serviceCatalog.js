@@ -213,8 +213,9 @@ export function formatCategoryLabel(category, categoryLabel) {
 }
 
 export function normalizeService(rawService, oauthMeta) {
-  const serviceName = rawService.name || rawService.service || 'unknown';
-  const label = rawService.label || toDisplayLabel(serviceName, serviceName);
+  // Use id as the canonical identifier (e.g. 'microsoft365'), name is the display label (e.g. 'Microsoft 365')
+  const serviceName = rawService.id || rawService.name || rawService.service || 'unknown';
+  const label = rawService.label || rawService.name || toDisplayLabel(serviceName, serviceName);
   // Use oauthMeta.auth_type if available (from /api/v1/oauth/status), otherwise fall back to rawService
   const inferredAuthType = inferAuthType(serviceName, oauthMeta?.auth_type || rawService.auth_type || rawService.authType || null);
   const apiEndpoint = rawService.api_endpoint || rawService.apiEndpoint || API_ROOT_FALLBACKS[String(serviceName).toLowerCase()] || null;

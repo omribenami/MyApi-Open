@@ -7,12 +7,12 @@ import ServiceScopeSelector from '../components/ServiceScopeSelector';
 import RevokeConfirmationModal from '../components/RevokeConfirmationModal';
 
 const GUEST_SCOPES = [
-  { value: 'read', label: 'Basic Read', description: 'Name, role, company' },
+  { value: 'basic', label: 'Basic Read', description: 'Name, role, company' },
   { value: 'professional', label: 'Professional', description: 'Skills, education, experience' },
   { value: 'availability', label: 'Availability', description: 'Calendar, timezone' },
-  { value: 'personas:read', label: 'Personas', description: 'Public persona profiles' },
-  { value: 'brain:read', label: 'Knowledge', description: 'Knowledge/context read access' },
-  { value: 'brain:chat', label: 'Chat', description: 'Conversation and messaging' },
+  { value: 'personas', label: 'Personas', description: 'Public persona profiles' },
+  { value: 'knowledge', label: 'Knowledge', description: 'Knowledge/context read access' },
+  { value: 'chat', label: 'Chat', description: 'Conversation and messaging' },
   { value: 'skills:read', label: 'Skills (Read)', description: 'Read skills and metadata' },
   { value: 'skills:write', label: 'Skills (Write)', description: 'Create and manage skills' },
   { value: 'services:read', label: 'Services (Read)', description: 'Proxy GET requests to connected OAuth services' },

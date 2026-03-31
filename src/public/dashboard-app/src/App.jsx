@@ -25,6 +25,7 @@ import ActivityLog from './pages/ActivityLog';
 import NotificationCenter from './pages/NotificationCenter';
 import TeamSettings from './pages/TeamSettings';
 import Connectors from './pages/Connectors';
+import OAuthAuthorize from './pages/OAuthAuthorize';
 import Layout from './components/Layout';
 
 // Create React Query client
@@ -154,6 +155,7 @@ function App() {
           {!isAuthenticated && (
             <>
               <Route path="/" element={<Login />} />
+              <Route path="/authorize" element={<OAuthAuthorize />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </>
           )}
@@ -161,6 +163,8 @@ function App() {
           {/* Authenticated Routes */}
           {isAuthenticated && (
             <>
+              {/* OAuth consent page — no Layout/sidebar, standalone */}
+              <Route path="/authorize" element={<OAuthAuthorize />} />
               <Route
                 path="/*"
                 element={

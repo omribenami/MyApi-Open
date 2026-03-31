@@ -198,6 +198,20 @@ function Dashboard() {
     const oauthStatus = params.get('oauth_status');
     const oauthService = params.get('oauth_service');
 
+    // pending_2fa during an OAuth authorize flow — the Bearer token already authenticates
+    // the user, so skip 2FA and redirect back to the authorize consent page if we have
+    // the original OAuth params stored in sessionStorage.
+    if (oauthStatus === 'pending_2fa') {
+      const storedOAuthParams = sessionStorage.getItem('pendingOAuthParams');
+      if (storedOAuthParams) {
+        sessionStorage.removeItem('pendingOAuthParams');
+        navigate(`/authorize?${storedOAuthParams}`, { replace: true });
+      }
+      // Clear the pending_2fa params from URL to avoid re-triggering
+      window.history.replaceState({}, document.title, '/dashboard/');
+      return;
+    }
+
     if (oauthStatus && oauthService) {
       const rawNext = params.get('next');
       let targetPath = '/services'; // default

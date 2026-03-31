@@ -82,11 +82,11 @@ export const useNotificationStore = create((set) => ({
           credentials: 'include',
         }
       );
-      
+
       if (response.ok) {
         set(state => ({
           notifications: state.notifications.map(n =>
-            n.id === notificationId ? { ...n, read_at: new Date().toISOString() } : n
+            n.id === notificationId ? { ...n, isRead: true, read_at: new Date().toISOString() } : n
           ),
           unreadCount: Math.max(0, state.unreadCount - 1),
         }));
@@ -144,6 +144,23 @@ export const useNotificationStore = create((set) => ({
     toasts: state.toasts.filter(t => t.id !== id),
   })),
   
+  // Clear all notifications
+  clearAll: async (masterToken) => {
+    try {
+      const headers = masterToken ? { Authorization: `Bearer ${masterToken}` } : {};
+      const response = await fetch('/api/v1/notifications', {
+        method: 'DELETE',
+        headers,
+        credentials: 'include',
+      });
+      if (response.ok) {
+        set({ notifications: [], unreadCount: 0 });
+      }
+    } catch (error) {
+      console.error('Error clearing all notifications:', error);
+    }
+  },
+
   // Add notification (from real-time events)
   addNotification: (notification) => {
     set(state => ({

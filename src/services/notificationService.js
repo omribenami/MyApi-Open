@@ -92,76 +92,90 @@ class NotificationService {
    * Generate HTML email template for notification
    */
   static generateEmailTemplate(type, title, message, options = {}) {
-    const baseStyles = `
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      background-color: #f3f4f6;
-      padding: 20px;
-      color: #374151;
-    `;
-    
-    const templates = {
-      device_approval_requested: `
-        <div style="${baseStyles}">
-          <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; padding: 30px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-            <h2 style="color: #dc2626; margin: 0 0 20px 0;">🔐 ${title}</h2>
-            <p>${message}</p>
-            <p style="background: #fef2f2; padding: 15px; border-radius: 6px; border-left: 4px solid #dc2626;">
-              <strong>Device Info:</strong><br>
-              ${options.data?.deviceInfo || 'Unknown Device'}<br>
-              IP: ${options.data?.ipAddress || 'Unknown'}
-            </p>
-            <p>
-              <a href="${options.actionUrl || 'https://www.myapiai.com/dashboard/devices'}" style="display: inline-block; background: #2563eb; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: bold;">
-                Review & Approve
-              </a>
-            </p>
-            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
-            <p style="font-size: 12px; color: #9ca3af;">
-              This is an automated notification from MyApi. <a href="https://www.myapiai.com/settings#notifications" style="color: #2563eb;">Manage your notification preferences</a>
-            </p>
-          </div>
-        </div>
-      `,
-      
-      skill_liked: `
-        <div style="${baseStyles}">
-          <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; padding: 30px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-            <h2 style="color: #dc2626; margin: 0 0 20px 0;">❤️ ${title}</h2>
-            <p>${message}</p>
-            <p>
-              <a href="${options.actionUrl || 'https://www.myapiai.com/dashboard/skills'}" style="display: inline-block; background: #2563eb; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: bold;">
-                View Skill
-              </a>
-            </p>
-            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
-            <p style="font-size: 12px; color: #9ca3af;">
-              This is an automated notification from MyApi. <a href="https://www.myapiai.com/settings#notifications" style="color: #2563eb;">Manage your notification preferences</a>
-            </p>
-          </div>
-        </div>
-      `,
-      
-      // Default template for other types
-      default: `
-        <div style="${baseStyles}">
-          <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; padding: 30px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-            <h2 style="color: #1f2937; margin: 0 0 20px 0;">${title}</h2>
-            <p>${message}</p>
-            <p>
-              <a href="https://www.myapiai.com/dashboard" style="display: inline-block; background: #2563eb; color: white; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: bold;">
-                View Details
-              </a>
-            </p>
-            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
-            <p style="font-size: 12px; color: #9ca3af;">
-              This is an automated notification from MyApi. <a href="https://www.myapiai.com/settings#notifications" style="color: #2563eb;">Manage your notification preferences</a>
-            </p>
-          </div>
-        </div>
-      `,
+    const appUrl = process.env.APP_BASE_URL || 'https://www.myapiai.com';
+    const settingsUrl = `${appUrl}/dashboard/settings`;
+
+    const typeConfig = {
+      device_approval_requested: { icon: '🔐', accentColor: '#dc2626', ctaLabel: 'Review & Approve', ctaUrl: `${appUrl}/dashboard/devices` },
+      device_approved:           { icon: '✅', accentColor: '#16a34a', ctaLabel: 'View Devices',     ctaUrl: `${appUrl}/dashboard/devices` },
+      device_revoked:            { icon: '⛔', accentColor: '#dc2626', ctaLabel: 'Manage Devices',   ctaUrl: `${appUrl}/dashboard/devices` },
+      skill_liked:               { icon: '❤️', accentColor: '#db2777', ctaLabel: 'View Skill',       ctaUrl: `${appUrl}/dashboard/skills` },
+      skill_used:                { icon: '▶️', accentColor: '#7c3aed', ctaLabel: 'View Skill',       ctaUrl: `${appUrl}/dashboard/skills` },
+      persona_invoked:           { icon: '🤖', accentColor: '#0891b2', ctaLabel: 'View Personas',    ctaUrl: `${appUrl}/dashboard/personas` },
+      guest_token_used:          { icon: '👤', accentColor: '#0369a1', ctaLabel: 'Manage Tokens',    ctaUrl: `${appUrl}/dashboard/access-tokens` },
+      token_revoked:             { icon: '⛔', accentColor: '#dc2626', ctaLabel: 'Manage Tokens',    ctaUrl: `${appUrl}/dashboard/access-tokens` },
+      service_connected:         { icon: '🔗', accentColor: '#2563eb', ctaLabel: 'View Services',    ctaUrl: `${appUrl}/dashboard/services` },
     };
-    
-    return templates[type] || templates.default;
+
+    const cfg = typeConfig[type] || { icon: '📢', accentColor: '#2563eb', ctaLabel: 'Open MyApi', ctaUrl: `${appUrl}/dashboard` };
+    const ctaUrl = options.actionUrl || cfg.ctaUrl;
+
+    let extraBlock = '';
+    if (type === 'device_approval_requested' && (options.data?.deviceInfo || options.data?.ipAddress)) {
+      extraBlock = `
+        <tr>
+          <td style="padding:0 28px 16px 28px;">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;">
+              <tr>
+                <td style="padding:14px 16px;font-size:14px;color:#7f1d1d;line-height:1.7;">
+                  <strong>Device info:</strong> ${options.data?.deviceInfo || 'Unknown device'}<br>
+                  <strong>IP address:</strong> ${options.data?.ipAddress || 'Unknown'}
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>`;
+    }
+
+    return `<!doctype html>
+<html>
+  <body style="margin:0;background:#f3f6fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;color:#0f172a;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding:24px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e2e8f0;box-shadow:0 10px 25px rgba(2,6,23,0.08);">
+            <tr>
+              <td style="background:linear-gradient(120deg,#2563eb 0%,#7c3aed 100%);padding:20px 24px;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                  <tr>
+                    <td style="vertical-align:middle;">
+                      <span style="display:inline-block;vertical-align:middle;color:#fff;font-size:20px;font-weight:700;letter-spacing:0.2px;">MyApi</span>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding:28px 28px 12px 28px;">
+                <p style="margin:0 0 4px 0;font-size:22px;">${cfg.icon}</p>
+                <h1 style="margin:8px 0 10px 0;font-size:20px;line-height:1.3;color:#0f172a;">${title}</h1>
+                <p style="margin:0;font-size:15px;line-height:1.6;color:#334155;">${message}</p>
+              </td>
+            </tr>
+
+            ${extraBlock}
+
+            <tr>
+              <td style="padding:20px 28px 28px 28px;">
+                <a href="${ctaUrl}" style="display:inline-block;background:${cfg.accentColor};color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 20px;border-radius:10px;">${cfg.ctaLabel}</a>
+                <p style="margin:12px 0 0 0;font-size:12px;color:#64748b;">Or copy this URL: <span style="color:#334155;word-break:break-all;">${ctaUrl}</span></p>
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding:14px 28px 22px 28px;border-top:1px solid #e2e8f0;">
+                <p style="margin:0;font-size:12px;line-height:1.6;color:#94a3b8;">
+                  This notification was sent from MyApi. <a href="${settingsUrl}" style="color:#2563eb;">Manage notification preferences</a>
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
   }
   
   /**

@@ -1,13 +1,15 @@
 const express = require('express');
 const crypto = require('crypto');
-const { 
-  createNotification, 
-  getNotifications, 
+const {
+  createNotification,
+  getNotifications,
   markNotificationAsRead,
   deleteNotification,
+  deleteAllNotifications,
   getUnreadNotificationCount,
   getOrCreateNotificationSettings,
   updateNotificationPreferences,
+  updateNotificationTypeSettings,
   getOrEnsureUserWorkspace,
   queueNotificationForDelivery
 } = require('../database');
@@ -42,7 +44,26 @@ const router = express.Router();
         offset
       };
 
-      const notifications = getNotifications(workspaceId, userId, filters);
+      const allNotifications = getNotifications(workspaceId, userId, filters);
+      // Deduplicate: legacy types (service_connected, device_approved) were superseded by
+      // oauth_connected and security_device_approved. Filter out legacy if a modern
+      // equivalent exists within 10 seconds of the same timestamp.
+      const LEGACY_TO_MODERN = { service_connected: 'oauth_connected', device_approved: 'security_device_approved' };
+      const modernTimestamps = new Set(
+        allNotifications
+          .filter(n => Object.values(LEGACY_TO_MODERN).includes(n.type))
+          .map(n => `${n.type}:${n.created_at}`)
+      );
+      const notifications = allNotifications.filter(n => {
+        const modernType = LEGACY_TO_MODERN[n.type];
+        if (!modernType) return true;
+        // Drop legacy if a modern equivalent exists within 10 seconds
+        for (const key of modernTimestamps) {
+          const [mType, mTs] = key.split(':');
+          if (mType === modernType && Math.abs(n.created_at - Number(mTs)) <= 10) return false;
+        }
+        return true;
+      });
       const normalized = notifications.map(n => ({
         id: n.id,
         type: n.type,
@@ -189,6 +210,20 @@ const router = express.Router();
     }
   });
 
+  // DELETE /api/v1/notifications - Clear all notifications
+  router.delete('/', (req, res) => {
+    try {
+      const userId = req.user?.id || req.tokenMeta?.userId || req.tokenMeta?.ownerId;
+      if (!userId) return res.status(401).json({ error: 'Authentication required' });
+      const workspaceId = req.workspaceId || req.session?.currentWorkspace || getOrEnsureUserWorkspace(userId);
+      const deleted = deleteAllNotifications(workspaceId, userId);
+      res.json({ ok: true, data: { deleted } });
+    } catch (err) {
+      console.error('Error clearing all notifications:', err);
+      res.status(500).json({ error: 'Failed to clear notifications' });
+    }
+  });
+
   const LEGACY_NOTIFICATION_TYPES = [
     'device_approval_requested',
     'device_approved',
@@ -207,13 +242,20 @@ const router = express.Router();
     const emailFreq = settings.email?.frequency || 'immediate';
     const emailDigestType = emailFreq === 'none' ? 'disabled' : emailFreq;
 
-    const flat = {
-      email_digest_type: emailDigestType
-    };
+    let inAppTypeSettings = {};
+    let emailTypeSettings = {};
+    try { inAppTypeSettings = JSON.parse(settings.inApp?.type_settings || '{}'); } catch (_) {}
+    try { emailTypeSettings = JSON.parse(settings.email?.type_settings || '{}'); } catch (_) {}
+
+    const flat = { email_digest_type: emailDigestType };
 
     for (const type of LEGACY_NOTIFICATION_TYPES) {
-      flat[`${type}_web`] = inAppEnabled ? 1 : 0;
-      flat[`${type}_email`] = emailEnabled ? 1 : 0;
+      flat[`${type}_web`] = inAppEnabled
+        ? (inAppTypeSettings[type] !== undefined ? inAppTypeSettings[type] : 1)
+        : 0;
+      flat[`${type}_email`] = emailEnabled
+        ? (emailTypeSettings[type] !== undefined ? emailTypeSettings[type] : 1)
+        : 0;
     }
 
     return flat;
@@ -267,25 +309,36 @@ const router = express.Router();
         });
       }
 
-      // Map legacy *_web and *_email toggles to channel-level enabled flags
-      const webKeys = Object.keys(payload).filter((k) => k.endsWith('_web'));
+      // Map legacy *_web keys to per-type settings on the in-app channel
+      const webKeys = Object.keys(payload).filter((k) => k.endsWith('_web') && LEGACY_NOTIFICATION_TYPES.includes(k.slice(0, -4)));
       if (webKeys.length > 0) {
-        const inAppEnabled = webKeys.some((k) => Number(payload[k]) !== 0);
+        for (const key of webKeys) {
+          const type = key.slice(0, -4); // strip '_web'
+          updateNotificationTypeSettings(workspaceId, userId, 'in-app', type, Number(payload[key]) !== 0);
+        }
+        // Ensure the channel itself is enabled if it was disabled
         const current = getOrCreateNotificationSettings(workspaceId, userId);
-        updateNotificationPreferences(workspaceId, userId, 'in-app', {
-          enabled: inAppEnabled,
-          frequency: current.inApp?.frequency || 'immediate'
-        });
+        if (current.inApp?.enabled !== 1) {
+          updateNotificationPreferences(workspaceId, userId, 'in-app', {
+            enabled: true,
+            frequency: current.inApp?.frequency || 'immediate'
+          });
+        }
       }
 
-      const emailKeys = Object.keys(payload).filter((k) => k.endsWith('_email'));
+      const emailKeys = Object.keys(payload).filter((k) => k.endsWith('_email') && LEGACY_NOTIFICATION_TYPES.includes(k.slice(0, -6)));
       if (emailKeys.length > 0) {
-        const emailEnabled = emailKeys.some((k) => Number(payload[k]) !== 0);
+        for (const key of emailKeys) {
+          const type = key.slice(0, -6); // strip '_email'
+          updateNotificationTypeSettings(workspaceId, userId, 'email', type, Number(payload[key]) !== 0);
+        }
         const current = getOrCreateNotificationSettings(workspaceId, userId);
-        updateNotificationPreferences(workspaceId, userId, 'email', {
-          enabled: emailEnabled,
-          frequency: current.email?.frequency || 'immediate'
-        });
+        if (current.email?.enabled !== 1) {
+          updateNotificationPreferences(workspaceId, userId, 'email', {
+            enabled: true,
+            frequency: current.email?.frequency || 'immediate'
+          });
+        }
       }
 
       const settings = getOrCreateNotificationSettings(workspaceId, userId);

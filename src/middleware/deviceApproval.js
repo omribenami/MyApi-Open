@@ -60,6 +60,8 @@ function deviceApprovalMiddleware(req, res, next) {
   // Extract user context from token metadata ONLY (no session fallback)
   const userId = req.tokenMeta?.ownerId;
   const tokenId = req.tokenMeta?.tokenId;
+  const isMasterToken = req.tokenMeta?.tokenType === 'master' || req.tokenMeta?.scope === 'full';
+  const tokenKind = isMasterToken ? 'master' : 'guest';
   
   console.log('[Device Approval Middleware]', {
     userId,
@@ -122,14 +124,15 @@ function deviceApprovalMiddleware(req, res, next) {
         error: 'device_not_approved',
         message: 'Device not approved for this token.',
         code: 'DEVICE_NOT_APPROVED',
+        token: { kind: tokenKind, name: tokenName },
         approval_pending: false,
         approval_id: null,
       });
     }
 
     // Get token info for device name generation
-    const tokenInfo = db.db.prepare('SELECT label FROM access_tokens WHERE id = ?').get(tokenId);
-    const tokenName = tokenInfo?.label || 'MyApi';
+    const tokenInfo = db.db.prepare('SELECT label, token_type FROM access_tokens WHERE id = ?').get(tokenId);
+    const tokenName = tokenInfo?.label || (isMasterToken ? 'Master Token' : 'Guest Token');
 
     // Create pending approval if not already exists
     let approvalId = null;
@@ -146,9 +149,9 @@ function deviceApprovalMiddleware(req, res, next) {
       
       // Emit notification and log activity for new device approval request
       const deviceInfo = `${currentFingerprint.summary.os} · ${currentFingerprint.summary.browser}`;
-      NotificationService.emitNotification(userId, 'device_approval_requested', 
-        `New Device Requesting Access`,
-        `A new device is requesting access from ${currentFingerprint.fingerprint.ipAddress}`,
+      NotificationService.emitNotification(userId, 'device_approval_requested',
+        `New Device Requesting Access (${tokenKind === 'master' ? 'Master Token' : 'Guest Token'}: "${tokenName}")`,
+        `A new device is requesting access via ${tokenKind} token "${tokenName}" from ${currentFingerprint.fingerprint.ipAddress}`,
         {
           relatedEntityType: 'device',
           relatedEntityId: approvalId,
@@ -157,8 +160,10 @@ function deviceApprovalMiddleware(req, res, next) {
             ipAddress: currentFingerprint.fingerprint.ipAddress,
             os: currentFingerprint.summary.os,
             browser: currentFingerprint.summary.browser,
+            tokenKind,
+            tokenName,
           },
-          actionUrl: '/dashboard/device-management',
+          actionUrl: '/dashboard/devices',
         }
       ).catch(err => console.error('Failed to emit device approval notification:', err));
       
@@ -239,6 +244,10 @@ function deviceApprovalMiddleware(req, res, next) {
       error: 'device_not_approved',
       code: 'DEVICE_APPROVAL_REQUIRED',
       message: 'This device requires approval to access MyApi',
+      token: {
+        kind: tokenKind,
+        name: tokenName,
+      },
       approval: {
         id: approvalId,
         status: 'pending',

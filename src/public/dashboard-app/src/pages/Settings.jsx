@@ -152,6 +152,37 @@ function ProfileSection() {
     }
   }, [profileSuccess]);
 
+  const [avatarUploading, setAvatarUploading] = useState(false);
+
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAvatarUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('avatar', file);
+      const authHeaders = masterToken ? { Authorization: `Bearer ${masterToken}` } : {};
+      const res = await fetch('/api/v1/users/me/avatar', {
+        method: 'POST',
+        headers: authHeaders,
+        credentials: 'include',
+        body: formData,
+      });
+      if (!res.ok) throw new Error('Upload failed');
+      const data = await res.json();
+      updateProfileDraft('avatarUrl', data.avatarUrl);
+      setAvatarLoadError(false);
+      // Persist immediately so it survives a page reload
+      localStorage.setItem('profileAvatarUrl', data.avatarUrl || '');
+    } catch (err) {
+      setProfileError('Failed to upload image. Max 5 MB, images only.');
+    } finally {
+      setAvatarUploading(false);
+      // Reset file input so the same file can be re-selected
+      e.target.value = '';
+    }
+  };
+
   const handleSave = async (e) => {
     e.preventDefault();
     if (!profileDraft) return;
@@ -215,17 +246,28 @@ function ProfileSection() {
           )}
           <div className="w-full">
             <p className="text-white font-medium">{profileDraft?.displayName || 'User'}</p>
-            <p className="text-slate-400 text-sm mb-2">{profileDraft?.email || ''}</p>
-            <input
-              type="url"
-              value={profileDraft?.avatarUrl || ''}
-              onChange={(e) => {
-                updateProfileDraft('avatarUrl', e.target.value);
-                setAvatarLoadError(false);  // Reset error when user changes URL
-              }}
-              placeholder="https://.../avatar.png"
-              className="w-full sm:max-w-md px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-            />
+            <p className="text-slate-400 text-sm mb-3">{profileDraft?.email || ''}</p>
+            <div className="flex items-center gap-3">
+              <label className={`cursor-pointer px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-medium rounded-lg transition-colors ${avatarUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleAvatarUpload}
+                  disabled={avatarUploading}
+                />
+                {avatarUploading ? 'Uploading…' : 'Change Photo'}
+              </label>
+              {profileDraft?.avatarUrl && (
+                <button
+                  type="button"
+                  onClick={() => { updateProfileDraft('avatarUrl', ''); setAvatarLoadError(false); }}
+                  className="text-xs text-slate-500 hover:text-red-400 transition-colors"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
           </div>
         </div>
 

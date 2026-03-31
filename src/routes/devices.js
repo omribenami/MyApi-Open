@@ -172,18 +172,6 @@ router.post('/:device_id/revoke', requireAuth, (req, res) => {
         .catch(err => console.error('Notification dispatch error:', err));
     }
     
-    // Legacy notification (for backward compatibility)
-    NotificationService.emitNotification(req.userId, 'device_revoked',
-      'Device Access Revoked',
-      `Your device "${device.device_name}" has been revoked and can no longer access your account`,
-      {
-        relatedEntityType: 'device',
-        relatedEntityId: req.params.device_id,
-        data: { deviceName: device.device_name },
-        actionUrl: '/dashboard/device-management',
-      }
-    ).catch(err => console.error('Failed to emit device_revoked notification:', err));
-    
     // Log activity
     NotificationService.logActivity(req.userId, 'device_revoked', 'device', {
       resourceId: req.params.device_id,
@@ -307,18 +295,6 @@ router.post('/approve/:approval_id', requireAuth, (req, res) => {
       NotificationDispatcher.onDeviceApproved(ws[0].id, req.userId, finalDeviceName)
         .catch(err => console.error('Notification dispatch error:', err));
     }
-    
-    // Legacy notification (for backward compatibility)
-    NotificationService.emitNotification(req.userId, 'device_approved',
-      'Device Approved',
-      `Your device "${finalDeviceName}" has been approved and can now access your account`,
-      {
-        relatedEntityType: 'device',
-        relatedEntityId: deviceId,
-        data: { deviceName: finalDeviceName },
-        actionUrl: '/dashboard/device-management',
-      }
-    ).catch(err => console.error('Failed to emit device_approved notification:', err));
     
     // Log activity
     NotificationService.logActivity(req.userId, 'device_approved', 'device', {

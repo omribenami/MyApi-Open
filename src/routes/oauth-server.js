@@ -186,10 +186,18 @@ router.get('/authorize', (req, res) => {
   }
 
   const user = req.session?.user;
-  // Don't redirect — render the consent page directly.
-  // If not logged in, the page shows a "Sign in with Google" button that
-  // goes through the OAuth login flow and returns here after login.
-  const username = user?.id ? (user.username || user.display_name || user.email || null) : null;
+
+  // If no session (common in cross-site popup context — ChatGPT opens from chat.openai.com),
+  // redirect to the React dashboard app. It has a Bearer token in memory and can authorize
+  // without needing a session cookie.
+  if (!user?.id) {
+    const base = (process.env.PUBLIC_URL || `http://localhost:${process.env.PORT || 4500}`).replace(/\/$/, '');
+    return res.redirect(
+      `${base}/dashboard/authorize?response_type=${encodeURIComponent(response_type)}&client_id=${encodeURIComponent(client_id)}&redirect_uri=${encodeURIComponent(redirect_uri)}&state=${encodeURIComponent(state || '')}&scope=${encodeURIComponent(scope || 'full')}&client_name=${encodeURIComponent(client.client_name)}`
+    );
+  }
+
+  const username = user.username || user.display_name || user.email || null;
 
   res.send(renderConsentPage({
     clientName: client.client_name,
@@ -332,6 +340,42 @@ router.get('/credentials', (req, res) => {
     scope: 'full',
     client_name: client.client_name,
   });
+});
+
+// POST /api/v1/oauth-server/authorize-token
+// Called by the React dashboard (Bearer auth) to approve an OAuth consent request.
+// Returns a redirect URL that the frontend should navigate to.
+router.post('/authorize-token', express.json(), (req, res) => {
+  const userId = req.session?.user?.id || req.tokenMeta?.userId;
+  if (!userId) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+
+  const { client_id, redirect_uri, state, scope } = req.body;
+
+  const client = getOAuthServerClient(client_id);
+  if (!client) {
+    return res.status(400).json({ error: 'invalid_client' });
+  }
+
+  if (!isRedirectUriAllowed(client.redirectUris, redirect_uri)) {
+    return res.status(400).json({ error: 'invalid_redirect_uri' });
+  }
+
+  const code = crypto.randomBytes(32).toString('hex');
+  createOAuthServerAuthCode({
+    code,
+    clientId: client_id,
+    userId: String(userId),
+    redirectUri: redirect_uri,
+    scope: scope || 'full',
+  });
+
+  const redirectUrl = new URL(redirect_uri);
+  redirectUrl.searchParams.set('code', code);
+  if (state) redirectUrl.searchParams.set('state', state);
+
+  res.json({ redirectUrl: redirectUrl.toString() });
 });
 
 // GET /api/v1/oauth-server/openapi.yaml — serves the ChatGPT OpenAPI schema
