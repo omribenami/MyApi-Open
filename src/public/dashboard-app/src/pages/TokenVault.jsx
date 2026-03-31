@@ -5,7 +5,14 @@ function TokenVault() {
   const masterToken = useAuthStore((state) => state.masterToken);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const currentWorkspace = useAuthStore((state) => state.currentWorkspace);
+  
+  // External tokens (API keys, etc.)
   const [tokens, setTokens] = useState([]);
+  
+  // Guest tokens
+  const [createdGuestTokens, setCreatedGuestTokens] = useState([]);
+  const [installedGuestTokens, setInstalledGuestTokens] = useState([]);
+  
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -16,6 +23,12 @@ function TokenVault() {
   const [revealingId, setRevealingId] = useState(null);
   const [editingToken, setEditingToken] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  
+  // Guest token modal
+  const [shareModal, setShareModal] = useState(null);
+  const [sharePersonaId, setSharePersonaId] = useState('');
+  const [shareDescription, setShareDescription] = useState('');
+  const [sharing, setSharing] = useState(false);
 
   const services = [
     { id: 'openai', name: 'OpenAI' },
@@ -30,13 +43,14 @@ function TokenVault() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      fetchTokens();
+      fetchAllTokens();
     }
   }, [isAuthenticated, masterToken, currentWorkspace?.id]);
 
-  const fetchTokens = async () => {
+  const fetchAllTokens = async () => {
     setIsLoading(true);
     try {
+      // Fetch external tokens
       const headers = { 'Content-Type': 'application/json' };
       if (masterToken) headers['Authorization'] = `Bearer ${masterToken}`;
       const response = await fetch('/api/v1/vault/tokens', {
@@ -49,12 +63,26 @@ function TokenVault() {
       } else {
         console.error('Failed to fetch vault tokens:', response.status);
       }
+
+      // Fetch guest tokens
+      if (masterToken) {
+        const guestRes = await fetch('/api/v1/vault/my-tokens', {
+          headers: { 'Authorization': `Bearer ${masterToken}` },
+        });
+        if (guestRes.ok) {
+          const guestData = await guestRes.json();
+          setCreatedGuestTokens(guestData.data?.yourTokens || []);
+          setInstalledGuestTokens(guestData.data?.guestTokens || []);
+        }
+      }
     } catch (err) {
-      console.error('Error fetching vault tokens:', err);
+      console.error('Error fetching tokens:', err);
     } finally {
       setIsLoading(false);
     }
   };
+
+  const fetchTokens = fetchAllTokens;
 
   const handleDiscoverApi = async () => {
     if (!formData.websiteUrl) {
@@ -243,6 +271,68 @@ function TokenVault() {
     return service?.name || serviceId || 'Unknown';
   };
 
+  // Guest token handlers
+  const handleMakeShareable = async (tokenId) => {
+    if (!shareModal || !masterToken) return;
+    setSharing(true);
+    setError('');
+    try {
+      const res = await fetch(`/api/v1/tokens/${tokenId}/make-shareable`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${masterToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          scopePersonaId: sharePersonaId || null,
+          description: shareDescription,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to make token shareable');
+      }
+      setShareModal(null);
+      setSharePersonaId('');
+      setShareDescription('');
+      await fetchAllTokens();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSharing(false);
+    }
+  };
+
+  const handleUnpublish = async (tokenId) => {
+    if (!masterToken || !window.confirm('Remove this token from marketplace?')) return;
+    setError('');
+    try {
+      const res = await fetch(`/api/v1/tokens/${tokenId}/unpublish`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${masterToken}` },
+      });
+      if (!res.ok) throw new Error('Failed to unpublish');
+      await fetchAllTokens();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleRevoke = async (tokenId) => {
+    if (!masterToken || !window.confirm('Revoke this guest token?')) return;
+    setError('');
+    try {
+      const res = await fetch(`/api/v1/vault/${tokenId}/revoke`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${masterToken}` },
+      });
+      if (!res.ok) throw new Error('Failed to revoke');
+      await fetchAllTokens();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -372,6 +462,116 @@ function TokenVault() {
         </div>
       )}
 
+      {/* My Created Guest Tokens */}
+      <div className="space-y-4 mt-12 pt-8 border-t border-slate-700">
+        <div>
+          <h2 className="text-2xl font-semibold text-white mb-2">My Created Guest Tokens</h2>
+          <p className="text-slate-400 text-sm">Tokens you created. Can be published to marketplace for others to use.</p>
+        </div>
+
+        {createdGuestTokens.length === 0 ? (
+          <div className="ui-card border-2 border-dashed p-8 text-center">
+            <p className="text-slate-400">No created guest tokens yet</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {createdGuestTokens.map((token) => (
+              <div key={token.id} className="bg-slate-800 border border-emerald-700/40 rounded-lg p-5 hover:border-emerald-700/60 transition-colors">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <h3 className="font-semibold text-white">{token.label || token.name || 'Untitled'}</h3>
+                      {token.isPublished && (
+                        <span className="px-2 py-0.5 bg-emerald-900/60 text-emerald-300 text-xs rounded border border-emerald-700">
+                          Published
+                        </span>
+                      )}
+                    </div>
+                    {token.description && (
+                      <p className="text-sm text-slate-400 mb-2">{token.description}</p>
+                    )}
+                    <p className="text-xs text-slate-500">Scope: {token.scope || 'default'}</p>
+                    <p className="text-xs text-slate-500 mt-1">Created: {new Date(token.created_at || token.createdAt).toLocaleDateString()}</p>
+                  </div>
+
+                  <div className="flex flex-col gap-2 flex-shrink-0">
+                    {token.isPublished ? (
+                      <button
+                        onClick={() => handleUnpublish(token.id)}
+                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10 px-3 py-2 rounded transition-colors text-sm border border-red-700/40 hover:border-red-700"
+                      >
+                        Unpublish
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setShareModal(token.id)}
+                        className="text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 px-3 py-2 rounded transition-colors text-sm border border-emerald-700/40 hover:border-emerald-700"
+                      >
+                        Publish
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setDeleteTarget({ ...token, type: 'created' })}
+                      className="text-red-400 hover:text-red-300 hover:bg-red-500/10 px-3 py-2 rounded transition-colors text-sm border border-red-700/40 hover:border-red-700"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Installed Guest Tokens */}
+      <div className="space-y-4 mt-12 pt-8 border-t border-slate-700">
+        <div>
+          <h2 className="text-2xl font-semibold text-white mb-2">Installed Guest Tokens</h2>
+          <p className="text-slate-400 text-sm">Tokens from marketplace, created by other users. Read-only access.</p>
+        </div>
+
+        {installedGuestTokens.length === 0 ? (
+          <div className="ui-card border-2 border-dashed p-8 text-center">
+            <p className="text-slate-400">No installed guest tokens yet</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {installedGuestTokens.map((token) => (
+              <div key={token.id} className="bg-slate-800 border border-cyan-700/40 rounded-lg p-5 hover:border-cyan-700/60 transition-colors">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <h3 className="font-semibold text-white">{token.label || token.name || 'Untitled'}</h3>
+                      <span className="px-2 py-0.5 bg-cyan-900/60 text-cyan-300 text-xs rounded border border-cyan-700">
+                        Installed
+                      </span>
+                      {token.readOnly && (
+                        <span className="px-2 py-0.5 bg-amber-900/60 text-amber-300 text-xs rounded border border-amber-700">
+                          Read-Only
+                        </span>
+                      )}
+                    </div>
+                    {token.description && (
+                      <p className="text-sm text-slate-400 mb-2">{token.description}</p>
+                    )}
+                    <p className="text-xs text-slate-500">Scope: {token.scope || 'default'}</p>
+                    <p className="text-xs text-slate-500 mt-1">Installed: {new Date(token.created_at || token.createdAt).toLocaleDateString()}</p>
+                  </div>
+
+                  <button
+                    onClick={() => setDeleteTarget({ ...token, type: 'installed' })}
+                    className="text-red-400 hover:text-red-300 hover:bg-red-500/10 px-3 py-2 rounded transition-colors text-sm border border-red-700/40 hover:border-red-700 flex-shrink-0"
+                  >
+                    Revoke
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Add Token Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -474,9 +674,11 @@ function TokenVault() {
       {deleteTarget && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-red-800 rounded-lg max-w-md w-full p-6">
-            <h3 className="text-lg font-semibold text-red-300 mb-2">Delete token?</h3>
+            <h3 className="text-lg font-semibold text-red-300 mb-2">
+              {deleteTarget.type === 'installed' ? 'Revoke guest token?' : 'Delete token?'}
+            </h3>
             <p className="text-sm text-slate-300 mb-5">
-              Are you sure you want to delete <span className="font-semibold text-white">{deleteTarget.name || deleteTarget.label}</span>?
+              Are you sure you want to {deleteTarget.type === 'installed' ? 'revoke' : 'delete'} <span className="font-semibold text-white">{deleteTarget.name || deleteTarget.label}</span>?
               This action cannot be undone.
             </p>
             <div className="flex gap-3">
@@ -488,12 +690,92 @@ function TokenVault() {
               </button>
               <button
                 onClick={async () => {
-                  await handleDeleteToken(deleteTarget.id);
+                  if (deleteTarget.type === 'installed') {
+                    await handleRevoke(deleteTarget.id);
+                  } else if (deleteTarget.type === 'created') {
+                    await handleDeleteToken(deleteTarget.id);
+                  } else {
+                    await handleDeleteToken(deleteTarget.id);
+                  }
                   setDeleteTarget(null);
                 }}
                 className="flex-1 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white"
               >
-                Delete
+                {deleteTarget.type === 'installed' ? 'Revoke' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Publish Token Modal */}
+      {shareModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-lg max-w-md w-full p-6">
+            <h2 className="text-xl font-bold text-white mb-4">Publish Token to Marketplace</h2>
+            <p className="text-slate-400 text-sm mb-6">This will make your token available for others to install with read-only access.</p>
+
+            {error && (
+              <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-sm">
+                {error}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-slate-300 mb-2">Token Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g., My OpenAI Key"
+                  className="w-full px-3 py-2 ui-input focus:border-slate-500 focus:outline-none"
+                  disabled
+                />
+                <p className="text-xs text-slate-500 mt-1">Name is auto-filled from your token</p>
+              </div>
+
+              <div>
+                <label className="block text-sm text-slate-300 mb-2">Description</label>
+                <textarea
+                  value={shareDescription}
+                  onChange={(e) => setShareDescription(e.target.value)}
+                  placeholder="What does this token do? Why would others find it useful?"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-800 text-white text-sm focus:border-blue-500 focus:outline-none resize-none"
+                  rows={3}
+                />
+                <p className="text-xs text-slate-500 mt-1">Helpful descriptions get more installs</p>
+              </div>
+
+              <div>
+                <label className="block text-sm text-slate-300 mb-2">Scope to Persona (Optional)</label>
+                <input
+                  type="text"
+                  value={sharePersonaId}
+                  onChange={(e) => setSharePersonaId(e.target.value)}
+                  placeholder="Persona ID (if restricted to specific persona)"
+                  className="w-full px-3 py-2 ui-input focus:border-slate-500 focus:outline-none"
+                />
+                <p className="text-xs text-slate-500 mt-1">Leave empty for unrestricted access</p>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShareModal(null);
+                  setSharePersonaId('');
+                  setShareDescription('');
+                  setError('');
+                }}
+                className="flex-1 px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleMakeShareable(shareModal)}
+                disabled={sharing}
+                className="flex-1 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-medium transition-colors"
+              >
+                {sharing ? 'Publishing...' : 'Publish'}
               </button>
             </div>
           </div>

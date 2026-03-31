@@ -134,7 +134,6 @@ function Layout({ children, onLogout }) {
       label: 'Security',
       items: [
         { path: '/tokens', label: 'Token Vault' },
-        { path: '/vault-guest-tokens', label: 'Guest Tokens (Shared)' },
         { path: '/devices', label: 'Device Management' },
       ]
     },
