@@ -9,6 +9,9 @@ COPY . .
 # Install dependencies
 RUN npm install --no-audit
 
+# Build frontend (React/Vite dashboard)
+RUN cd src/public/dashboard-app && npm run build
+
 # Ensure directories exist
 RUN mkdir -p data logs && chmod -R 755 data logs
 
