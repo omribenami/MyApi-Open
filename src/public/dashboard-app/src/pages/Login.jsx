@@ -250,7 +250,9 @@ function Login() {
       const masterToken = result?.data?.bootstrap?.masterToken || null;
       if (masterToken) setMasterToken(masterToken);
       if (sessionUser) setUser(sessionUser);
-      window.location.href = '/dashboard/';
+      const pending = sessionStorage.getItem('pendingOAuthReturn') || new URLSearchParams(window.location.search).get('returnTo');
+      if (pending) { sessionStorage.removeItem('pendingOAuthReturn'); window.location.href = pending; }
+      else { window.location.href = '/dashboard/'; }
     } catch {
       setError('Failed to verify 2FA code. Please try again.');
     } finally {

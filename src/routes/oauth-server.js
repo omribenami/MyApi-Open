@@ -155,10 +155,20 @@ function renderConsentPage({ clientName, username, clientId, redirectUri, state,
     <h1>Sign in to authorize</h1>
     <p class="subtitle">${clientName} wants to connect to your MyApi account. Sign in first to continue.</p>
     <div class="not-logged-in">
-      <a href="/api/v1/oauth/authorize/google?mode=login&forcePrompt=0&returnTo=${encodeURIComponent(`/api/v1/oauth-server/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state || '')}&scope=${scope || 'full'}`)}&redirect=1" class="login-link">
+      <a id="signin-btn" href="#" class="login-link" onclick="startLogin(event)">
         Sign in with Google
       </a>
     </div>
+    <script>
+      // Store the authorize URL in sessionStorage so the login page can return here
+      // after any multi-step auth (including 2FA).
+      var authorizeUrl = '/api/v1/oauth-server/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${encodeURIComponent(state || '')}&scope=${scope || 'full'}';
+      sessionStorage.setItem('pendingOAuthReturn', authorizeUrl);
+      function startLogin(e) {
+        e.preventDefault();
+        window.location.href = '/api/v1/oauth/authorize/google?mode=login&forcePrompt=0&returnTo=' + encodeURIComponent(authorizeUrl) + '&redirect=1';
+      }
+    </script>
     `}
   </div>
 </body>
