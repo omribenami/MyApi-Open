@@ -47,16 +47,24 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
   const [availableDocuments, setAvailableDocuments] = useState([]);
   const [availableSkills, setAvailableSkills] = useState([]);
   const masterToken = useAuthStore((state) => state.masterToken);
+  const currentWorkspace = useAuthStore((state) => state.currentWorkspace);
 
   useEffect(() => {
     fetchDocuments();
     fetchSkills();
-  }, [masterToken]);
+  }, [masterToken, currentWorkspace?.id]);
+
+  const authHeaders = () => {
+    const h = {};
+    if (masterToken) h['Authorization'] = `Bearer ${masterToken}`;
+    if (currentWorkspace?.id) h['X-Workspace-ID'] = currentWorkspace.id;
+    return h;
+  };
 
   const fetchDocuments = async () => {
     try {
       const response = await fetch('/api/v1/brain/knowledge-base', {
-        headers: masterToken ? { Authorization: `Bearer ${masterToken}` } : {},
+        headers: authHeaders(),
       });
       if (response.ok) {
         const data = await response.json();
@@ -70,7 +78,7 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
   const fetchSkills = async () => {
     try {
       const response = await fetch('/api/v1/skills', {
-        headers: masterToken ? { Authorization: `Bearer ${masterToken}` } : {},
+        headers: authHeaders(),
       });
       if (response.ok) {
         const data = await response.json();
@@ -204,7 +212,7 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
           { id: 'identity', label: '👤 Identity' },
           { id: 'personality', label: '🎭 Personality' },
           { id: 'rules', label: '⚙️ Rules' },
-          { id: 'documents', label: '📚 Documents' },
+          { id: 'documents', label: '📚 Knowledge' },
           { id: 'preview', label: '👁️ Preview' },
         ].map(t => (
           <button
