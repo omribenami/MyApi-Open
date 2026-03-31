@@ -184,6 +184,8 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
         name: formData.name,
         soul_content: systemPrompt,
         description: `${formData.title || 'Custom Persona'} - ${formData.coreGoal || 'Expert AI'}`,
+        attachedDocuments: formData.attachedDocuments,
+        attachedSkills: formData.attachedSkills,
         templateData: {
           ...formData,
           createdAt: new Date().toISOString()
