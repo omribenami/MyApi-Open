@@ -79,6 +79,7 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
     try {
       const response = await fetch('/api/v1/skills', {
         headers: authHeaders(),
+        credentials: 'include',
       });
       if (response.ok) {
         const data = await response.json();
