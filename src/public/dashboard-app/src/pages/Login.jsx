@@ -250,7 +250,10 @@ function Login() {
       const masterToken = result?.data?.bootstrap?.masterToken || null;
       if (masterToken) setMasterToken(masterToken);
       if (sessionUser) setUser(sessionUser);
-      const pending = sessionStorage.getItem('pendingOAuthReturn') || new URLSearchParams(window.location.search).get('returnTo');
+      // Server returns pendingReturnTo when 2FA was triggered mid-OAuth flow
+      const serverReturnTo = result?.data?.pendingReturnTo || null;
+      const clientReturnTo = sessionStorage.getItem('pendingOAuthReturn') || new URLSearchParams(window.location.search).get('returnTo');
+      const pending = serverReturnTo || clientReturnTo;
       if (pending) { sessionStorage.removeItem('pendingOAuthReturn'); window.location.href = pending; }
       else { window.location.href = '/dashboard/'; }
     } catch {

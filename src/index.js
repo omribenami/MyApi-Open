@@ -5194,8 +5194,10 @@ app.post('/api/v1/auth/2fa/challenge', twoFactorRateLimit, (req, res) => {
     }
 
     req.session.user = pendingUser;
+    const pendingReturnTo = req.session.pending_2fa_returnTo || null;
     delete req.session.pending_2fa_user;
-    
+    delete req.session.pending_2fa_returnTo;
+
     // Set default workspace after 2FA
     const userWorkspaces = getWorkspaces(pendingUser.id);
     if (userWorkspaces?.length > 0) {
@@ -5213,7 +5215,7 @@ app.post('/api/v1/auth/2fa/challenge', twoFactorRateLimit, (req, res) => {
 
     createAuditLog({ requesterId: String(pendingUser.id), action: '2fa_challenge_passed', resource: '/auth/2fa/challenge', scope: 'session', ip: req.ip });
     return req.session.save(() => {
-      res.json({ ok: true, data: { user: req.session.user, bootstrap: { masterToken: req.session.masterTokenRaw, tokenId: req.session.masterTokenId || null } } });
+      res.json({ ok: true, data: { user: req.session.user, bootstrap: { masterToken: req.session.masterTokenRaw, tokenId: req.session.masterTokenId || null }, pendingReturnTo } });
     });
   } catch (error) {
     return res.status(500).json({ error: `2FA challenge failed: ${error.message}` });
@@ -6236,6 +6238,10 @@ app.get([
           twoFactorEnabled: true,
           createdAt: new Date().toISOString(),
         };
+        // Preserve returnTo so it survives the 2FA challenge step
+        if (safeReturnTo && safeReturnTo !== '/dashboard/') {
+          req.session.pending_2fa_returnTo = safeReturnTo;
+        }
         console.log(`[OAuth Callback] 2FA required for user: ${appUser.id}, routing to 2FA challenge`);
         return req.session.save((err) => {
           if (err) console.error('[OAuth Callback] Session save error before 2FA redirect:', err);
