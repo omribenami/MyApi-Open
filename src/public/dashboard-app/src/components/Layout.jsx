@@ -47,20 +47,33 @@ function NavDropdown({ label, items, isActiveFn, onMobileClick }) {
       {open && (
         <div className="absolute left-0 top-full pt-1 w-48 z-50">
           <div className="rounded-xl border border-slate-700 bg-slate-900 shadow-xl py-1">
-            {items.map((item) => (
-              <Link
-                key={item.path}
-                to={item.path}
-                onClick={() => { setOpen(false); if (onMobileClick) onMobileClick(); }}
-                className={`block px-4 py-2 text-sm transition-all ${
-                  isActiveFn(item.path)
-                    ? 'text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.8)] bg-slate-800/50'
-                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                }`}
-              >
-                {item.label}
-              </Link>
-            ))}
+            {items.map((item) =>
+              item.external ? (
+                <a
+                  key={item.path}
+                  href={item.path}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => { setOpen(false); if (onMobileClick) onMobileClick(); }}
+                  className="block px-4 py-2 text-sm transition-all text-slate-300 hover:bg-slate-800 hover:text-white"
+                >
+                  {item.label}
+                </a>
+              ) : (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  onClick={() => { setOpen(false); if (onMobileClick) onMobileClick(); }}
+                  className={`block px-4 py-2 text-sm transition-all ${
+                    isActiveFn(item.path)
+                      ? 'text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.8)] bg-slate-800/50'
+                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              )
+            )}
           </div>
         </div>
       )}
@@ -148,6 +161,7 @@ function Layout({ children, onLogout }) {
         { path: '/activity', label: 'Activity Log' },
         { path: '/platform-docs', label: 'Platform Docs' },
         { path: '/api-docs', label: 'API Docs' },
+        { path: 'https://discord.gg/WPp4sCN4xB', label: 'Get Support', external: true },
       ]
     }
   ];
@@ -317,16 +331,29 @@ function Layout({ children, onLogout }) {
               {navGroups.map((group) => (
                 <div key={group.label} className="space-y-1">
                   <h3 className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">{group.label}</h3>
-                  {group.items.map((item) => (
-                    <Link 
-                      key={item.path} 
-                      to={item.path} 
-                      onClick={() => setMenuOpen(false)} 
-                      className={`flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-all ${isActive(item.path) ? 'text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.8)] bg-blue-900/20 border border-blue-500/30' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
-                    >
-                      {item.label}
-                    </Link>
-                  ))}
+                  {group.items.map((item) =>
+                    item.external ? (
+                      <a
+                        key={item.path}
+                        href={item.path}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => setMenuOpen(false)}
+                        className="flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-all text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                      >
+                        {item.label}
+                      </a>
+                    ) : (
+                      <Link
+                        key={item.path}
+                        to={item.path}
+                        onClick={() => setMenuOpen(false)}
+                        className={`flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-all ${isActive(item.path) ? 'text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.8)] bg-blue-900/20 border border-blue-500/30' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}
+                      >
+                        {item.label}
+                      </Link>
+                    )
+                  )}
                 </div>
               ))}
             </div>
@@ -343,6 +370,8 @@ function Layout({ children, onLogout }) {
             <a href="/privacy" className="hover:text-slate-200 transition-colors">Privacy Policy</a>
             <span aria-hidden="true">·</span>
             <a href="/terms" className="hover:text-slate-200 transition-colors">Terms of Use</a>
+            <span aria-hidden="true">·</span>
+            <a href="https://discord.gg/WPp4sCN4xB" target="_blank" rel="noopener noreferrer" className="hover:text-slate-200 transition-colors">Get Support</a>
           </div>
         </div>
       </footer>

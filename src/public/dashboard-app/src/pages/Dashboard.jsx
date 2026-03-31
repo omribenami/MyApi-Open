@@ -682,17 +682,19 @@ function Dashboard() {
           <div>
             <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest mb-3">Support</h3>
             <p className="text-xs text-slate-400 mb-4 leading-relaxed">
-              Need help? Check our documentation or contact our support team.
+              Need help? Join our Discord community for support and updates.
             </p>
-            <Link
-              to="/platform-docs"
+            <a
+              href="https://discord.gg/WPp4sCN4xB"
+              target="_blank"
+              rel="noopener noreferrer"
               className="text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors inline-flex items-center gap-1"
             >
               Get Support
               <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
-            </Link>
+            </a>
           </div>
         </div>
       </div>

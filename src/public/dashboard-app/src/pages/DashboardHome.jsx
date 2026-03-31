@@ -337,10 +337,11 @@ function DashboardHome() {
       {/* Footer */}
       <div className="text-center text-sm text-slate-500 pt-8 border-t border-slate-800">
         <p>
-          Need help? Check our{' '}
-          <Link to="/platform-docs" className="text-slate-300 hover:text-slate-200">
-            documentation
-          </Link>
+          Need help?{' '}
+          <a href="https://discord.gg/WPp4sCN4xB" target="_blank" rel="noopener noreferrer" className="text-slate-300 hover:text-slate-200">
+            Join our Discord
+          </a>
+          {' '}for support and updates.
         </p>
       </div>
     </div>
