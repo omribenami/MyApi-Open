@@ -133,6 +133,82 @@ paths:
                     type: integer
                     description: Number of connected services
 
+  # ── Gmail ────────────────────────────────────────────────────
+  /api/v1/google/gmail/messages:
+    get:
+      operationId: listGmailMessages
+      summary: List Gmail messages
+      description: Returns recent Gmail messages with subject, from, date, and snippet. Supports Gmail search queries.
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+            maximum: 50
+          description: Number of messages to return (max 50)
+        - name: q
+          in: query
+          schema:
+            type: string
+          description: Gmail search query (e.g. "is:unread", "from:boss@company.com", "subject:invoice")
+        - name: pageToken
+          in: query
+          schema:
+            type: string
+          description: Pagination token from a previous response
+      responses:
+        "200":
+          description: Gmail messages
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      messages:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/GmailMessage"
+                      nextPageToken:
+                        type: string
+                        nullable: true
+                      resultSizeEstimate:
+                        type: integer
+        "401":
+          description: Google not connected or token expired
+
+  /api/v1/google/gmail/messages/{id}:
+    get:
+      operationId: getGmailMessage
+      summary: Get full Gmail message
+      description: Returns the complete content (body) of a specific Gmail message by ID.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Gmail message ID (from listGmailMessages)
+      responses:
+        "200":
+          description: Full Gmail message with body
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    $ref: "#/components/schemas/GmailMessageFull"
+        "401":
+          description: Google not connected or token expired
+
   # ── Brain / Context ───────────────────────────────────────────
   /api/v1/brain/context:
     get:
@@ -261,6 +337,54 @@ components:
           type: string
           format: date-time
           nullable: true
+
+    GmailMessage:
+      type: object
+      properties:
+        id:
+          type: string
+        threadId:
+          type: string
+        subject:
+          type: string
+        from:
+          type: string
+        to:
+          type: string
+        date:
+          type: string
+        snippet:
+          type: string
+          description: Short preview of message content
+        labelIds:
+          type: array
+          items:
+            type: string
+
+    GmailMessageFull:
+      type: object
+      properties:
+        id:
+          type: string
+        threadId:
+          type: string
+        subject:
+          type: string
+        from:
+          type: string
+        to:
+          type: string
+        date:
+          type: string
+        snippet:
+          type: string
+        body:
+          type: string
+          description: Full message body (plain text)
+        labelIds:
+          type: array
+          items:
+            type: string
 
     Notification:
       type: object

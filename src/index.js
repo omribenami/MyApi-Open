@@ -1820,6 +1820,9 @@ app.use('/api/v1/fal', authenticate, falImagesRoutes);
 const oauthServerRoutes = require('./routes/oauth-server');
 app.use('/api/v1/oauth-server', oauthServerRoutes);
 
+const createGoogleRoutes = require('./routes/google');
+app.use('/api/v1/google', createGoogleRoutes());
+
 // --- PUBLIC: BILLING PLANS ENDPOINT (no auth required) ---
 app.get('/api/v1/billing/plans', (req, res) => {
   try {
@@ -9439,8 +9442,10 @@ if (process.env.NODE_ENV !== 'test') {
           redirectUris,
           ownerId: null,
         });
-        console.log(`[OAuthServer] ChatGPT client bootstrapped (client_id: ${chatgptClientId})`);
-        console.log(`[OAuthServer] Client secret (set CHATGPT_OAUTH_CLIENT_SECRET to fix): ${rawSecret}`);
+        const secretSource = process.env.CHATGPT_OAUTH_CLIENT_SECRET
+          ? '✓ locked via CHATGPT_OAUTH_CLIENT_SECRET env var'
+          : '⚠ derived from ENCRYPTION_KEY — set CHATGPT_OAUTH_CLIENT_SECRET in .env to lock it';
+        console.log(`[OAuthServer] ChatGPT client bootstrapped (client_id: ${chatgptClientId}) | secret: ${secretSource}`);
       } catch (e) {
         console.error('[OAuthServer] Failed to bootstrap ChatGPT client:', e.message);
       }

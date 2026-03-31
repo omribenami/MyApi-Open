@@ -6,7 +6,22 @@ const {
   deleteServicePreference,
   createAuditLog,
   getOAuthToken,
+  isTokenExpired,
+  refreshOAuthToken,
 } = require('../database');
+
+// Token URLs for auto-refresh (keyed by service id)
+const TOKEN_REFRESH_URLS = {
+  google:     { tokenUrl: 'https://oauth2.googleapis.com/token',          clientId: () => process.env.GOOGLE_CLIENT_ID,     clientSecret: () => process.env.GOOGLE_CLIENT_SECRET },
+  github:     { tokenUrl: 'https://github.com/login/oauth/access_token',  clientId: () => process.env.GITHUB_CLIENT_ID,     clientSecret: () => process.env.GITHUB_CLIENT_SECRET },
+  slack:      { tokenUrl: 'https://slack.com/api/oauth.v2.access',        clientId: () => process.env.SLACK_CLIENT_ID,      clientSecret: () => process.env.SLACK_CLIENT_SECRET },
+  discord:    { tokenUrl: 'https://discord.com/api/oauth2/token',         clientId: () => process.env.DISCORD_CLIENT_ID,    clientSecret: () => process.env.DISCORD_CLIENT_SECRET },
+  notion:     { tokenUrl: 'https://api.notion.com/v1/oauth/token',        clientId: () => process.env.NOTION_CLIENT_ID,     clientSecret: () => process.env.NOTION_CLIENT_SECRET },
+  linkedin:   { tokenUrl: 'https://www.linkedin.com/oauth/v2/accessToken',clientId: () => process.env.LINKEDIN_CLIENT_ID,   clientSecret: () => process.env.LINKEDIN_CLIENT_SECRET },
+  dropbox:    { tokenUrl: 'https://api.dropboxapi.com/oauth2/token',      clientId: () => process.env.DROPBOX_CLIENT_ID,    clientSecret: () => process.env.DROPBOX_CLIENT_SECRET },
+  zoom:       { tokenUrl: 'https://zoom.us/oauth/token',                  clientId: () => process.env.ZOOM_CLIENT_ID,       clientSecret: () => process.env.ZOOM_CLIENT_SECRET },
+  hubspot:    { tokenUrl: 'https://api.hubapi.com/oauth/v1/token',        clientId: () => process.env.HUBSPOT_CLIENT_ID,    clientSecret: () => process.env.HUBSPOT_CLIENT_SECRET },
+};
 
 const SERVICE_CATALOG = [
   { id: 'github', name: 'GitHub', description: 'Version control and collaboration', icon: 'github', category: 'Developer Tools', auth_type: 'oauth2', api_endpoint: 'https://api.github.com' },
@@ -44,7 +59,7 @@ function createServicesRoutes() {
     return String(req.session?.user?.id || req.user?.id || req.tokenMeta?.ownerId || req.tokenMeta?.userId || 'owner');
   }
 
-  function getConnectionMetadata(serviceId, userId) {
+  async function getConnectionMetadata(serviceId, userId) {
     if (serviceId === 'fal') {
       const prefs = getServicePreference(userId, 'fal');
       const perUserKey = String(prefs?.preferences?.fal_api_key || prefs?.preferences?.api_key || '').trim();
@@ -61,6 +76,18 @@ function createServicesRoutes() {
     try {
       const token = getOAuthToken(serviceId, userId);
       if (token && !token.revokedAt) {
+        // Auto-refresh if expired and we know the token URL
+        if (isTokenExpired(token) && token.refreshToken && TOKEN_REFRESH_URLS[serviceId]) {
+          const { tokenUrl, clientId, clientSecret } = TOKEN_REFRESH_URLS[serviceId];
+          try {
+            const refreshResult = await refreshOAuthToken(serviceId, userId, tokenUrl, clientId(), clientSecret());
+            if (refreshResult?.ok) {
+              return { connected: true, created_at: token.createdAt || null, expires_at: refreshResult.token?.expiresAt || null };
+            }
+          } catch {
+            // refresh failed — still show as connected (token exists, just expired)
+          }
+        }
         return {
           connected: true,
           created_at: token.createdAt || null,
@@ -75,20 +102,22 @@ function createServicesRoutes() {
   }
 
   // GET /api/v1/services - List all services with their connection status
-  router.get('/', (req, res) => {
+  router.get('/', async (req, res) => {
     try {
       const userId = resolveUserId(req);
 
-      const servicesWithStatus = SERVICE_CATALOG.map((svc) => {
-        const conn = getConnectionMetadata(svc.id, userId);
-        return {
-          ...svc,
-          status: conn.status || (conn.connected ? 'connected' : 'available'),
-          connectedAt: conn.created_at,
-          expiresAt: conn.expires_at,
-          configMissing: conn.configMissing || [],
-        };
-      });
+      const servicesWithStatus = await Promise.all(
+        SERVICE_CATALOG.map(async (svc) => {
+          const conn = await getConnectionMetadata(svc.id, userId);
+          return {
+            ...svc,
+            status: conn.status || (conn.connected ? 'connected' : 'available'),
+            connectedAt: conn.created_at,
+            expiresAt: conn.expires_at,
+            configMissing: conn.configMissing || [],
+          };
+        })
+      );
 
       res.json({
         success: true,
@@ -120,7 +149,7 @@ function createServicesRoutes() {
   });
 
   // GET /api/v1/services/:serviceName - Service detail
-  router.get('/:serviceName', (req, res, next) => {
+  router.get('/:serviceName', async (req, res, next) => {
     const blocked = new Set(['available', 'preferences', 'categories']);
     if (blocked.has(String(req.params.serviceName || '').toLowerCase())) {
       return next();
@@ -135,7 +164,7 @@ function createServicesRoutes() {
         return res.status(404).json({ error: 'Service not found' });
       }
 
-      const conn = getConnectionMetadata(service.id, userId);
+      const conn = await getConnectionMetadata(service.id, userId);
       return res.json({
         success: true,
         data: {

@@ -182,6 +182,14 @@ router.get('/authorize', (req, res) => {
   }
 
   const user = req.session?.user;
+
+  // If not logged in, redirect to dashboard login with a return URL
+  if (!user?.id) {
+    const base = (process.env.PUBLIC_URL || `http://localhost:${process.env.PORT || 4500}`).replace(/\/$/, '');
+    const returnTo = encodeURIComponent(req.originalUrl);
+    return res.redirect(`${base}/dashboard/login?returnTo=${returnTo}`);
+  }
+
   const username = user?.username || user?.display_name || user?.email || null;
 
   res.send(renderConsentPage({

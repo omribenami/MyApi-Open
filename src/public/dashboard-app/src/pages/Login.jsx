@@ -62,9 +62,17 @@ function Login() {
 
   // Check for direct signup deep-link. If OAuth callback params are present,
   // let handleOAuthCallback() process them first.
+  // Also capture any returnTo param (e.g. from OAuth server authorize redirect).
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const hasOAuthCallback = params.get('oauth_service') || params.get('oauth_status') || params.get('error');
+
+    // Preserve returnTo so we can redirect after login (survives OAuth round-trip via sessionStorage)
+    const returnTo = params.get('returnTo');
+    if (returnTo && !hasOAuthCallback) {
+      sessionStorage.setItem('pendingOAuthReturn', returnTo);
+    }
+
     if (!hasOAuthCallback && params.get('signup') === 'true') {
       setViewMode('login');
       setIsSignup(true);
@@ -106,8 +114,9 @@ function Login() {
               }
               // Extract user object from response (not the entire response)
               setUser(sessionUser.user || sessionUser);
-              window.history.replaceState({}, document.title, '/dashboard/');
-              window.location.href = '/dashboard/';
+              const pending = sessionStorage.getItem('pendingOAuthReturn');
+              if (pending) { sessionStorage.removeItem('pendingOAuthReturn'); window.location.href = pending; }
+              else { window.history.replaceState({}, document.title, '/dashboard/'); window.location.href = '/dashboard/'; }
             }
           })
           .catch(() => {
@@ -127,8 +136,9 @@ function Login() {
               }
               // Extract user object from response (not the entire response)
               setUser(sessionUser.user || sessionUser);
-              window.history.replaceState({}, document.title, '/dashboard/');
-              window.location.href = '/dashboard/';
+              const pending = sessionStorage.getItem('pendingOAuthReturn');
+              if (pending) { sessionStorage.removeItem('pendingOAuthReturn'); window.location.href = pending; }
+              else { window.history.replaceState({}, document.title, '/dashboard/'); window.location.href = '/dashboard/'; }
             }
           });
       } else if (callback.status === 'signup_required') {
@@ -188,8 +198,19 @@ function Login() {
     loadPlans();
   }, []);
 
+  // After login, redirect to returnTo if set (e.g. ChatGPT OAuth authorize URL), else dashboard
+  function redirectAfterLogin() {
+    const pending = sessionStorage.getItem('pendingOAuthReturn');
+    if (pending) {
+      sessionStorage.removeItem('pendingOAuthReturn');
+      window.location.href = pending;
+    } else {
+      window.location.href = '/dashboard/';
+    }
+  }
+
   if (isAuthenticated) {
-    window.location.href = '/dashboard/';
+    redirectAfterLogin();
     return null;
   }
 
