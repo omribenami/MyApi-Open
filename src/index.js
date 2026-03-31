@@ -602,7 +602,7 @@ app.use(helmet({
       frameSrc: ["'self'"],
       objectSrc: ["'none'"],
       baseUri: ["'self'"],
-      formAction: ["'self'"],
+      formAction: ["'self'", "https://chat.openai.com", "https://chatgpt.com"],
       frameAncestors: ["'self'"],
     },
   },
@@ -4711,11 +4711,14 @@ app.get("/api/v1/auth/me", (req, res) => {
   // Cookie-session auth (OAuth login path)
   if (req.session && req.session.user) {
     const sessionUser = req.session.user;
+    // Enrich with full user profile from DB so callers get a complete user object
+    const dbUser = sessionUser.id ? getUserById(String(sessionUser.id)) : null;
+    const merged = dbUser ? { ...dbUser, ...sessionUser } : sessionUser;
     const normalizedUser = {
-      ...sessionUser,
-      displayName: sessionUser.displayName || sessionUser.display_name || sessionUser.username || null,
-      avatarUrl: sessionUser.avatarUrl || sessionUser.avatar_url || null,
-      email: sessionUser.email || null,
+      ...merged,
+      displayName: merged.displayName || merged.display_name || merged.username || null,
+      avatarUrl: merged.avatarUrl || merged.avatar_url || null,
+      email: merged.email || null,
     };
 
     // Keep backward compatibility (flat shape) while exposing canonical user payload.
@@ -4724,7 +4727,7 @@ app.get("/api/v1/auth/me", (req, res) => {
       ...normalizedUser,
       user: normalizedUser,
       // SECURITY: Do NOT expose masterToken in plaintext
-      // The frontend should use httpOnly session cookie, not bearer token
+      // The frontend uses the masterToken from localStorage (set during login/2FA flow)
       bootstrap: req.session.masterTokenId
         ? { tokenId: req.session.masterTokenId, hasToken: true }
         : null,
