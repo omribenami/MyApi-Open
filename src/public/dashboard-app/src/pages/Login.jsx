@@ -198,9 +198,13 @@ function Login() {
     loadPlans();
   }, []);
 
-  // After login, redirect to returnTo if set (e.g. ChatGPT OAuth authorize URL), else dashboard
+  // After login, redirect to returnTo if set (e.g. ChatGPT OAuth authorize URL), else dashboard.
+  // Read returnTo directly from URL params too — sessionStorage may not be set yet if
+  // isAuthenticated is true on first render (effect runs after render, not before).
   function redirectAfterLogin() {
-    const pending = sessionStorage.getItem('pendingOAuthReturn');
+    const fromStorage = sessionStorage.getItem('pendingOAuthReturn');
+    const fromUrl = new URLSearchParams(window.location.search).get('returnTo');
+    const pending = fromStorage || fromUrl;
     if (pending) {
       sessionStorage.removeItem('pendingOAuthReturn');
       window.location.href = pending;
