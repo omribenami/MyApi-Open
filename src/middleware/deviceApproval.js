@@ -45,16 +45,12 @@ function checkApprovalRateLimit(tokenId) {
  * Should be applied to all API endpoints that require device approval
  */
 function deviceApprovalMiddleware(req, res, next) {
-  // CRITICAL: This middleware should ONLY apply to Bearer token (agent/API) auth,
-  // not to session-based OAuth auth. Sessions are browser-based and protected by CORS + HttpOnly cookies.
-  // If session auth reaches here, something went wrong in authenticate() — fail closed.
+  // Session-authenticated requests (dashboard users) do not require device approval.
+  // Sessions are protected by CORS + HttpOnly cookies — no agent fingerprinting needed.
+  // The dashboard sends both a session cookie AND a Bearer masterToken; if the session
+  // is valid, skip device approval regardless of whether a token is also present.
   if (req.authType === 'session' || (req.session && req.session.user)) {
-    console.error('[Device Approval] ERROR: Session user reached device approval middleware. This is a security bug.');
-    return res.status(403).json({
-      error: 'invalid_auth_flow',
-      message: 'Session users should not require device approval.',
-      code: 'INVALID_AUTH_FLOW',
-    });
+    return next();
   }
 
   // Extract user context from token metadata ONLY (no session fallback)
