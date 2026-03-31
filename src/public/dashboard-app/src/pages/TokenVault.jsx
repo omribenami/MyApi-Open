@@ -29,6 +29,7 @@ function TokenVault() {
   const [sharePersonaId, setSharePersonaId] = useState('');
   const [shareDescription, setShareDescription] = useState('');
   const [sharing, setSharing] = useState(false);
+  const [availablePersonas, setAvailablePersonas] = useState([]);
 
   const services = [
     { id: 'openai', name: 'OpenAI' },
@@ -272,6 +273,23 @@ function TokenVault() {
   };
 
   // Guest token handlers
+  const fetchPersonasForShare = async () => {
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (masterToken) headers['Authorization'] = `Bearer ${masterToken}`;
+      const response = await fetch('/api/v1/personas', {
+        headers,
+        credentials: 'include',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setAvailablePersonas(data.data || data.personas || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch personas:', err);
+    }
+  };
+
   const handleMakeShareable = async (tokenId) => {
     if (!shareModal || !masterToken) return;
     setSharing(true);
@@ -295,6 +313,7 @@ function TokenVault() {
       setShareModal(null);
       setSharePersonaId('');
       setShareDescription('');
+      setAvailablePersonas([]);
       await fetchAllTokens();
     } catch (err) {
       setError(err.message);
@@ -712,8 +731,10 @@ function TokenVault() {
       {shareModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-700 rounded-lg max-w-md w-full p-6">
-            <h2 className="text-xl font-bold text-white mb-4">Publish Token to Marketplace</h2>
-            <p className="text-slate-400 text-sm mb-6">This will make your token available for others to install with read-only access.</p>
+            <h2 className="text-xl font-bold text-white mb-2">Publish Token to Marketplace</h2>
+            <p className="text-slate-400 text-sm mb-6">
+              Share read-only access. Optionally scope to a specific persona (includes persona + skills + knowledge).
+            </p>
 
             {error && (
               <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-sm">
@@ -722,17 +743,6 @@ function TokenVault() {
             )}
 
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm text-slate-300 mb-2">Token Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g., My OpenAI Key"
-                  className="w-full px-3 py-2 ui-input focus:border-slate-500 focus:outline-none"
-                  disabled
-                />
-                <p className="text-xs text-slate-500 mt-1">Name is auto-filled from your token</p>
-              </div>
-
               <div>
                 <label className="block text-sm text-slate-300 mb-2">Description</label>
                 <textarea
@@ -746,15 +756,34 @@ function TokenVault() {
               </div>
 
               <div>
-                <label className="block text-sm text-slate-300 mb-2">Scope to Persona (Optional)</label>
-                <input
-                  type="text"
+                <label className="block text-sm text-slate-300 mb-2">Restrict to Persona (Optional)</label>
+                <p className="text-xs text-slate-400 mb-2">
+                  If set, guest users can ONLY use this token with the selected persona and its bundle.
+                </p>
+                <select
                   value={sharePersonaId}
                   onChange={(e) => setSharePersonaId(e.target.value)}
-                  placeholder="Persona ID (if restricted to specific persona)"
-                  className="w-full px-3 py-2 ui-input focus:border-slate-500 focus:outline-none"
-                />
-                <p className="text-xs text-slate-500 mt-1">Leave empty for unrestricted access</p>
+                  onClick={availablePersonas.length === 0 ? fetchPersonasForShare : undefined}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-800 text-white text-sm focus:border-blue-500 focus:outline-none"
+                >
+                  <option value="">🌐 Unrestricted (all personas & skills)</option>
+                  {availablePersonas.map((persona) => (
+                    <option key={persona.id} value={persona.id}>
+                      📌 {persona.name || persona.label || persona.id}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-slate-500 mt-2">
+                  {sharePersonaId ? (
+                    <>
+                      ✓ This token can only be used with the selected persona and its attached skills/knowledge
+                    </>
+                  ) : (
+                    <>
+                      Guest users can use this token with any of your personas, skills, and knowledge
+                    </>
+                  )}
+                </p>
               </div>
             </div>
 

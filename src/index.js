@@ -5629,7 +5629,25 @@ app.get("/api/v1/personas", authenticate, (req, res) => {
   }
   
   const ownerId = getRequestOwnerId(req);
-  const personas = getPersonas(ownerId, workspaceId);
+  let personas = getPersonas(ownerId, workspaceId);
+  
+  // If this is a guest token with persona scope, only return that persona
+  if (req.tokenMeta?.is_guest_token && req.tokenMeta?.scope_bundle) {
+    try {
+      const scopeBundle = typeof req.tokenMeta.scope_bundle === 'string' 
+        ? JSON.parse(req.tokenMeta.scope_bundle) 
+        : req.tokenMeta.scope_bundle;
+      
+      if (scopeBundle.persona_id) {
+        personas = personas.filter(p => p.id === scopeBundle.persona_id);
+        if (personas.length === 0) {
+          return res.status(404).json({ error: "Scoped persona not found" });
+        }
+      }
+    } catch (err) {
+      console.error('[Guest Token] Error parsing scope_bundle:', err);
+    }
+  }
   
   createAuditLog({
     requesterId: req.tokenMeta.tokenId,
@@ -5657,8 +5675,26 @@ app.get("/api/v1/personas", authenticate, (req, res) => {
 // GET /api/v1/personas/:id - Get specific persona (including soul_content)
 app.get("/api/v1/personas/:id", authenticate, (req, res) => {
   if (!hasScope(req, 'personas')) return res.status(403).json({ error: "Requires 'personas' scope" });
+  
+  const personaId = parseInt(req.params.id);
+  
+  // If guest token with persona scope, verify requested ID matches scope
+  if (req.tokenMeta?.is_guest_token && req.tokenMeta?.scope_bundle) {
+    try {
+      const scopeBundle = typeof req.tokenMeta.scope_bundle === 'string' 
+        ? JSON.parse(req.tokenMeta.scope_bundle) 
+        : req.tokenMeta.scope_bundle;
+      
+      if (scopeBundle.persona_id && scopeBundle.persona_id !== String(personaId)) {
+        return res.status(403).json({ error: "This token is scoped to a different persona" });
+      }
+    } catch (err) {
+      console.error('[Guest Token] Error parsing scope_bundle:', err);
+    }
+  }
+  
   const ownerId = getRequestOwnerId(req);
-  const persona = getPersonaById(parseInt(req.params.id), ownerId);
+  const persona = getPersonaById(personaId, ownerId);
   if (!persona) return res.status(404).json({ error: "Persona not found" });
 
   createAuditLog({
@@ -5768,6 +5804,22 @@ app.delete("/api/v1/personas/:id", authenticate, (req, res) => {
 // GET /api/v1/personas/:id/documents - Get attached KB documents
 app.get("/api/v1/personas/:id/documents", authenticate, (req, res) => {
   const personaId = parseInt(req.params.id);
+  
+  // If guest token with persona scope, verify this is the scoped persona
+  if (req.tokenMeta?.is_guest_token && req.tokenMeta?.scope_bundle) {
+    try {
+      const scopeBundle = typeof req.tokenMeta.scope_bundle === 'string' 
+        ? JSON.parse(req.tokenMeta.scope_bundle) 
+        : req.tokenMeta.scope_bundle;
+      
+      if (scopeBundle.persona_id && scopeBundle.persona_id !== String(personaId)) {
+        return res.status(403).json({ error: "This token is scoped to a different persona" });
+      }
+    } catch (err) {
+      console.error('[Guest Token] Error parsing scope_bundle:', err);
+    }
+  }
+  
   const ownerId = getRequestOwnerId(req);
   const docs = getPersonaDocuments(personaId, ownerId);
   res.json({ data: docs });
@@ -5803,6 +5855,22 @@ app.delete("/api/v1/personas/:id/documents/:docId", authenticate, (req, res) => 
 // --- Persona Skills ---
 app.get('/api/v1/personas/:id/skills', authenticate, (req, res) => {
   const personaId = parseInt(req.params.id);
+  
+  // If guest token with persona scope, verify this is the scoped persona
+  if (req.tokenMeta?.is_guest_token && req.tokenMeta?.scope_bundle) {
+    try {
+      const scopeBundle = typeof req.tokenMeta.scope_bundle === 'string' 
+        ? JSON.parse(req.tokenMeta.scope_bundle) 
+        : req.tokenMeta.scope_bundle;
+      
+      if (scopeBundle.persona_id && scopeBundle.persona_id !== String(personaId)) {
+        return res.status(403).json({ error: "This token is scoped to a different persona" });
+      }
+    } catch (err) {
+      console.error('[Guest Token] Error parsing scope_bundle:', err);
+    }
+  }
+  
   const ownerId = getRequestOwnerId(req);
   const skills = getPersonaSkills(personaId, ownerId);
   res.json({ data: skills });
