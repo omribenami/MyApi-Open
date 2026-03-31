@@ -82,7 +82,7 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
       });
       if (response.ok) {
         const data = await response.json();
-        setAvailableSkills(data.data || []);
+        setAvailableSkills(data.skills || data.data || []);
       }
     } catch (err) {
       console.error('Failed to fetch skills:', err);
