@@ -58,6 +58,10 @@ export const redirectToLoginOnce = () => {
 
   notifyAuthExpired();
 
+  // Don't redirect away from the OAuth authorize page — it renders its own
+  // sign-in UI and must preserve the ChatGPT/OAuth params in the URL.
+  if (window.location.pathname === '/dashboard/authorize') return;
+
   const onDashboard = window.location.pathname.startsWith('/dashboard');
   if (onDashboard) {
     window.history.replaceState({}, document.title, '/');

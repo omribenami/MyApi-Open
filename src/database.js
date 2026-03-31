@@ -29,12 +29,22 @@ try {
   
   console.log(`[Database] Initialized: ${isPostgreSQLMode ? 'PostgreSQL' : 'SQLite'}`);
   
-  // For SQLite, configure pragmas for better concurrency
+  // For SQLite, configure pragmas for better concurrency and crash resilience
   if (isSQLiteMode && db.pragma) {
     db.pragma('journal_mode = WAL');
     db.pragma('busy_timeout = 10000');
     db.pragma('synchronous = NORMAL');
-    db.pragma('wal_autocheckpoint = 1000');
+    // Checkpoint every 200 pages (~1.6MB) instead of 1000 to keep WAL small
+    // and reduce data loss / corruption window on unclean shutdown.
+    db.pragma('wal_autocheckpoint = 200');
+    // Force a full checkpoint on startup to flush any partially-written WAL
+    // left over from a previous crash (prevents "block checksum mismatch").
+    try {
+      db.pragma('wal_checkpoint(TRUNCATE)');
+      console.log('[Database] WAL checkpoint completed on startup');
+    } catch (checkpointErr) {
+      console.warn('[Database] WAL checkpoint on startup failed (non-fatal):', checkpointErr.message);
+    }
   }
 } catch (err) {
   console.error('[Database] Failed to initialize:', err.message);
@@ -1459,10 +1469,13 @@ function getExistingMasterToken(ownerId) {
     if (ownerId !== 'owner') ownerIds.push('owner');
 
     for (const oid of ownerIds) {
-      const row = db.prepare(
-        "SELECT id, encrypted_token FROM access_tokens WHERE owner_id = ? AND scope = 'full' AND revoked_at IS NULL AND encrypted_token IS NOT NULL ORDER BY created_at DESC LIMIT 1"
-      ).get(oid);
-      if (row && row.encrypted_token) {
+      const rows = db.prepare(
+        "SELECT id, encrypted_token, hash FROM access_tokens WHERE owner_id = ? AND scope = 'full' AND token_type = 'master' AND revoked_at IS NULL AND encrypted_token IS NOT NULL ORDER BY created_at DESC LIMIT 10"
+      ).all(oid);
+      for (const row of rows) {
+        // Skip tokens with non-bcrypt hashes (e.g. SHA-256 hashes created by oauth-server flow)
+        if (!row.hash || !row.hash.startsWith('$2')) continue;
+        if (!row.encrypted_token) continue;
         const rawToken = decryptRawToken(row.encrypted_token);
         if (rawToken) {
           return { tokenId: row.id, rawToken };

@@ -185,28 +185,14 @@ router.get('/authorize', (req, res) => {
     return res.status(400).send('invalid_redirect_uri');
   }
 
-  const user = req.session?.user;
-
-  // If no session (common in cross-site popup context — ChatGPT opens from chat.openai.com),
-  // redirect to the React dashboard app. It has a Bearer token in memory and can authorize
-  // without needing a session cookie.
-  if (!user?.id) {
-    const base = (process.env.PUBLIC_URL || `http://localhost:${process.env.PORT || 4500}`).replace(/\/$/, '');
-    return res.redirect(
-      `${base}/dashboard/authorize?response_type=${encodeURIComponent(response_type)}&client_id=${encodeURIComponent(client_id)}&redirect_uri=${encodeURIComponent(redirect_uri)}&state=${encodeURIComponent(state || '')}&scope=${encodeURIComponent(scope || 'full')}&client_name=${encodeURIComponent(client.client_name)}`
-    );
-  }
-
-  const username = user.username || user.display_name || user.email || null;
-
-  res.send(renderConsentPage({
-    clientName: client.client_name,
-    username,
-    clientId: client_id,
-    redirectUri: redirect_uri,
-    state,
-    scope,
-  }));
+  // Always redirect to the React consent page — it uses Bearer token auth (not session
+  // cookies) so it works in cross-site popup contexts (e.g. ChatGPT opening from
+  // chat.openai.com). The React page also avoids the CSP form-action issue that the
+  // server-rendered HTML form has when the redirect chain crosses origins.
+  const base = (process.env.PUBLIC_URL || `http://localhost:${process.env.PORT || 4500}`).replace(/\/$/, '');
+  return res.redirect(
+    `${base}/dashboard/authorize?response_type=${encodeURIComponent(response_type)}&client_id=${encodeURIComponent(client_id)}&redirect_uri=${encodeURIComponent(redirect_uri)}&state=${encodeURIComponent(state || '')}&scope=${encodeURIComponent(scope || 'full')}&client_name=${encodeURIComponent(client.client_name)}`
+  );
 });
 
 // POST /api/v1/oauth-server/authorize — user approves consent
@@ -290,7 +276,7 @@ async function handleTokenExchange(params, res) {
 
   // Generate a new MyApi access token scoped to this user
   const rawToken = 'myapi_' + crypto.randomBytes(32).toString('hex');
-  const hash = crypto.createHash('sha256').update(rawToken).digest('hex');
+  const hash = await bcrypt.hash(rawToken, 10);
   const label = `${client.client_name} (OAuth)`;
 
   createAccessToken(hash, authCode.user_id, authCode.scope || 'full', label, null, null, null, rawToken, 'guest');
@@ -346,7 +332,9 @@ router.get('/credentials', (req, res) => {
 // Called by the React dashboard (Bearer auth) to approve an OAuth consent request.
 // Returns a redirect URL that the frontend should navigate to.
 router.post('/authorize-token', express.json(), (req, res) => {
-  const userId = req.session?.user?.id || req.tokenMeta?.userId;
+  const userId = req.session?.user?.id
+    || req.tokenMeta?.ownerId
+    || req.tokenMeta?.userId;
   if (!userId) {
     return res.status(401).json({ error: 'unauthorized' });
   }
