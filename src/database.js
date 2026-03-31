@@ -1145,11 +1145,37 @@ function initDatabase() {
   // Backfill: full-scope tokens with an encrypted raw token stored are master tokens
   try { db.exec("UPDATE access_tokens SET token_type = 'master' WHERE scope = 'full' AND encrypted_token IS NOT NULL AND (token_type IS NULL OR token_type = 'guest')"); } catch (e) {}
 
+  // Per-type notification settings stored as JSON in notification_preferences
+  safeMigration("ALTER TABLE notification_preferences ADD COLUMN type_settings TEXT DEFAULT NULL");
+
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_access_tokens_shareable ON access_tokens(is_shareable);
     CREATE INDEX IF NOT EXISTS idx_access_tokens_guest ON access_tokens(is_guest_token);
     CREATE INDEX IF NOT EXISTS idx_access_tokens_source ON access_tokens(source_token_id);
   `);
+
+  // OAuth Server (MyApi as authorization server for external AI clients)
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS oauth_server_clients (
+        client_id TEXT PRIMARY KEY,
+        client_secret_hash TEXT NOT NULL,
+        client_name TEXT NOT NULL,
+        redirect_uris TEXT NOT NULL,
+        owner_id TEXT,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS oauth_server_auth_codes (
+        code TEXT PRIMARY KEY,
+        client_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        redirect_uri TEXT NOT NULL,
+        scope TEXT,
+        expires_at INTEGER NOT NULL,
+        used INTEGER DEFAULT 0
+      );
+    `);
+  } catch (e) { /* tables already exist */ }
 
   // Seed initial pricing plans if table is empty
   seedDefaultPricingPlans();
@@ -1603,10 +1629,10 @@ function hasPermission(tokenScopes, requiredScopes) {
 
 function expandScopeTemplate(template) {
   const templates = {
-    'read': ['identity:read'],
-    'professional': ['identity:read', 'skills:read'],
-    'availability': ['identity:read', 'calendar:read'],
-    'guest': ['identity:read'],
+    'read': ['basic'],
+    'professional': ['basic', 'professional'],
+    'availability': ['basic', 'availability'],
+    'guest': ['basic'],
     'admin': ['admin:*']
   };
 
@@ -4639,6 +4665,25 @@ function updateNotificationPreferences(workspaceId, userId, channel, updates) {
   `).get(workspaceId, userId, channel);
 }
 
+function deleteAllNotifications(workspaceId, userId) {
+  // Remove queue entries first (FK constraint)
+  const notifIds = db.prepare(`SELECT id FROM notifications WHERE workspace_id = ? AND user_id = ?`).all(workspaceId, userId).map(r => r.id);
+  for (const nid of notifIds) {
+    db.prepare(`DELETE FROM notification_queue WHERE notification_id = ?`).run(nid);
+  }
+  return db.prepare(`DELETE FROM notifications WHERE workspace_id = ? AND user_id = ?`).run(workspaceId, userId).changes;
+}
+
+function updateNotificationTypeSettings(workspaceId, userId, channel, typeKey, enabled) {
+  const row = db.prepare(`SELECT type_settings FROM notification_preferences WHERE workspace_id = ? AND user_id = ? AND channel = ?`).get(workspaceId, userId, channel);
+  if (!row) return;
+  let ts = {};
+  try { ts = JSON.parse(row.type_settings || '{}'); } catch (_) {}
+  ts[typeKey] = enabled ? 1 : 0;
+  const now = Math.floor(Date.now() / 1000);
+  db.prepare(`UPDATE notification_preferences SET type_settings = ?, updated_at = ? WHERE workspace_id = ? AND user_id = ? AND channel = ?`).run(JSON.stringify(ts), now, workspaceId, userId, channel);
+}
+
 function queueNotificationForDelivery(notificationId, channels = ['in-app']) {
   const deliveryChannels = Array.isArray(channels) ? channels : [channels];
   const queued = [];
@@ -6155,6 +6200,44 @@ function updateSSOConfiguration(id, updates) {
   }
 }
 
+// ============================================================================
+// OAuth Server CRUD (MyApi as authorization server)
+// ============================================================================
+
+function upsertOAuthServerClient({ clientId, clientSecretHash, clientName, redirectUris, ownerId }) {
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO oauth_server_clients (client_id, client_secret_hash, client_name, redirect_uris, owner_id, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(client_id) DO UPDATE SET
+      client_secret_hash = excluded.client_secret_hash,
+      client_name = excluded.client_name,
+      redirect_uris = excluded.redirect_uris
+  `).run(clientId, clientSecretHash, clientName, JSON.stringify(redirectUris), ownerId || null, now);
+}
+
+function getOAuthServerClient(clientId) {
+  const row = db.prepare('SELECT * FROM oauth_server_clients WHERE client_id = ?').get(clientId);
+  if (!row) return null;
+  return { ...row, redirectUris: JSON.parse(row.redirect_uris || '[]') };
+}
+
+function createOAuthServerAuthCode({ code, clientId, userId, redirectUri, scope }) {
+  const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+  db.prepare(`
+    INSERT INTO oauth_server_auth_codes (code, client_id, user_id, redirect_uri, scope, expires_at, used)
+    VALUES (?, ?, ?, ?, ?, ?, 0)
+  `).run(code, clientId, userId, redirectUri, scope || 'full', expiresAt);
+}
+
+function consumeOAuthServerAuthCode(code) {
+  const row = db.prepare('SELECT * FROM oauth_server_auth_codes WHERE code = ? AND used = 0').get(code);
+  if (!row) return null;
+  if (row.expires_at < Date.now()) return null;
+  db.prepare('UPDATE oauth_server_auth_codes SET used = 1 WHERE code = ?').run(code);
+  return row;
+}
+
 module.exports = {
   db,
   initDatabase,
@@ -6403,4 +6486,11 @@ module.exports = {
   createComplianceAuditLog,
   getComplianceAuditLogs,
   executeRetentionCleanup,
+  deleteAllNotifications,
+  updateNotificationTypeSettings,
+  // OAuth Server (MyApi as authorization server)
+  upsertOAuthServerClient,
+  getOAuthServerClient,
+  createOAuthServerAuthCode,
+  consumeOAuthServerAuthCode,
 };

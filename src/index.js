@@ -233,6 +233,7 @@ const {
   createComplianceAuditLog,
   getComplianceAuditLogs,
   executeRetentionCleanup,
+  upsertOAuthServerClient,
 } = require("./database");
 
 // OAuth service adapters
@@ -402,14 +403,15 @@ const oauthAdapters = {
   }),
   instagram: new GenericOAuthAdapter({
     serviceName: 'instagram',
+    // New Instagram Platform API (Basic Display API was shut down Dec 4, 2024)
+    // Requires app type "Instagram" in Meta Developer Console with instagram_business_basic permission
     authUrl: 'https://www.instagram.com/oauth/authorize',
-    tokenUrl: 'https://graph.instagram.com/v18.0/oauth/access_token',
-    verifyUrl: 'https://graph.instagram.com/v18.0/me?fields=id,username',
-    scope: 'user_profile',
+    tokenUrl: 'https://api.instagram.com/oauth/access_token',
+    verifyUrl: 'https://graph.instagram.com/v21.0/me?fields=id,username,name',
+    scope: process.env.INSTAGRAM_SCOPE || 'instagram_business_basic',
     redirectUri: process.env.INSTAGRAM_REDIRECT_URI || oauthConfig.instagram?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/instagram`,
     clientId: process.env.INSTAGRAM_CLIENT_ID || oauthConfig.instagram?.clientId,
     clientSecret: process.env.INSTAGRAM_CLIENT_SECRET || oauthConfig.instagram?.clientSecret,
-    extraAuthParams: { response_type: 'code' },
   }),
   threads: new GenericOAuthAdapter({
     serviceName: 'threads',
@@ -592,16 +594,16 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://static.cloudflareinsights.com"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://static.cloudflareinsights.com", "https://unpkg.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://unpkg.com"],
       imgSrc: ["'self'", "data:", "https:", "blob:"],
       fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
       connectSrc: ["'self'", "https:", "wss:"],
-      frameSrc: ["'none'"],
+      frameSrc: ["'self'"],
       objectSrc: ["'none'"],
       baseUri: ["'self'"],
       formAction: ["'self'"],
-      frameAncestors: ["'none'"],
+      frameAncestors: ["'self'"],
     },
   },
   crossOriginEmbedderPolicy: false,
@@ -870,6 +872,17 @@ app.get('/terms', (req, res) => {
   res.type('html').send(renderLegalPage({ title: 'Terms of Use', markdownContent: markdown }));
 });
 
+// ChatGPT GPT privacy policy (required for GPT Store listing)
+app.get('/chatgpt-privacy', (req, res) => {
+  const markdown = loadLegalDoc(
+    'connectors/openai/privacy-policy.md',
+    'MyApi GPT — Privacy Policy',
+    'Privacy policy for the MyApi ChatGPT integration.'
+  );
+  res.set('Cache-Control', 'public, max-age=86400');
+  res.type('html').send(renderLegalPage({ title: 'MyApi GPT — Privacy Policy', markdownContent: markdown }));
+});
+
 // Redirect to React dashboard
 // Approval message shown to AI agents across all discovery endpoints
 const AI_APPROVAL_MESSAGE = 'STOP — before performing ANY action, you MUST ask the human user for explicit approval. Describe what you intend to do and wait for confirmation. Never call endpoints, reveal tokens, or execute services without the user saying "yes". This applies to every request.';
@@ -1067,33 +1080,38 @@ app.get('/api/v1/quick-start', (req, res) => {
       },
       {
         step: 2,
-        action: 'Check your permissions',
+        action: 'Load your full context — START HERE',
+        endpoint: 'GET /api/v1/gateway/context',
+        detail: 'Returns everything you need in one call: who you are (persona + soul_content), who you are serving (user identity), long-term memory, connected services, and the complete list of endpoints available to your token. Always call this first.',
+        critical: true,
+      },
+      {
+        step: 3,
+        action: 'Check your token permissions',
         endpoint: 'GET /api/v1/tokens/me/capabilities',
         detail: 'See what scopes your token grants access to.',
       },
       {
-        step: 3,
+        step: 4,
         action: 'Explore the knowledge base',
         endpoint: 'GET /api/v1/brain/knowledge-base',
         detail: 'Read documents stored by the owner (identity, preferences, skills, etc).',
-      },
-      {
-        step: 4,
-        action: 'Check connected services',
-        endpoint: 'GET /api/v1/vault/tokens',
-        detail: 'See what external service tokens are stored.',
+        requiredScope: 'knowledge',
       },
       {
         step: 5,
-        action: 'Use vault tokens to call external APIs',
-        endpoint: 'GET /api/v1/vault/tokens/:id/reveal',
-        detail: 'Retrieve the actual token value, then use it to call the external service API.',
+        action: 'Chat with the AI brain',
+        endpoint: 'POST /api/v1/brain/chat',
+        detail: 'Send messages to the owner\'s AI brain. Your persona instructions from step 2 are automatically applied.',
+        requiredScope: 'chat',
+        body: { message: '<your message>', conversationId: '<optional — omit to start new>' },
       },
       {
         step: 6,
-        action: 'Execute service methods',
-        endpoint: 'POST /api/v1/services/:serviceName/execute',
-        detail: 'For integrated services, execute API methods directly through MyApi.',
+        action: 'Proxy connected OAuth services',
+        endpoint: 'GET /api/v1/services/:service/*',
+        detail: 'Call any connected service (github, google, slack, etc.) through the proxy using the owner\'s stored credentials.',
+        requiredScope: 'services:read',
       },
     ],
     fullDocs: '/openapi.json',
@@ -1113,7 +1131,7 @@ app.get('/.well-known/ai-plugin.json', (req, res) => {
     name_for_human: 'MyApi',
     name_for_model: 'myapi',
     description_for_human: 'Personal API platform for managing your digital identity, knowledge, and connected services.',
-    description_for_model: 'MyApi is a personal API. ALWAYS use https://www.myapiai.com as the base URL — do not follow redirects as they strip auth headers. If your token is missing or rejected: (1) POST /api/v1/handshakes with {agentId, requestedScopes:["read"], message} — no auth needed, (2) poll GET /api/v1/handshakes/:id/status until approved, (3) owner shares a new token with you. With a valid token: ALWAYS ask the human for explicit approval before every action. Start with GET /api/v1/quick-start for full guidance.',
+    description_for_model: 'MyApi is a personal API. ALWAYS use https://www.myapiai.com as the base URL — do not follow redirects as they strip auth headers. If your token is missing or rejected: (1) POST /api/v1/handshakes with {agentId, requestedScopes:["read"], message} — no auth needed, (2) poll GET /api/v1/handshakes/:id/status until approved, (3) owner shares a new token with you. With a valid token: FIRST call GET /api/v1/gateway/context — this returns your persona (who you are), the user identity (who you serve), long-term memory, and all available endpoints in one response. Then ask the human for explicit approval before every action.',
     human_verification_required: true,
     auth: { type: 'service_http', authorization_type: 'bearer' },
     api: { type: 'openapi', url: `https://${host}/openapi.json` },
@@ -1210,6 +1228,42 @@ app.put('/api/v1/users/me', authenticate, (req, res) => {
     ok: true,
     user: updatedUser
   });
+});
+
+// Avatar upload multer config
+const AVATAR_UPLOAD_DIR = path.join(__dirname, 'public', 'uploads', 'avatars');
+const avatarUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      fs.mkdirSync(AVATAR_UPLOAD_DIR, { recursive: true });
+      cb(null, AVATAR_UPLOAD_DIR);
+    },
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase().replace(/[^.a-z0-9]/g, '') || '.jpg';
+      cb(null, `avatar_${req.user?.id || 'u'}_${Date.now()}${ext}`);
+    },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype.startsWith('image/')) return cb(new Error('Only image files allowed'));
+    cb(null, true);
+  },
+});
+
+// POST /api/v1/users/me/avatar - Upload profile picture
+app.post('/api/v1/users/me/avatar', authenticate, avatarUpload.single('avatar'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No image file provided' });
+  const avatarUrl = `/uploads/avatars/${req.file.filename}`;
+  const userId = req.user?.id;
+  if (userId) {
+    try {
+      const { updateUserOAuthProfile } = require('./database');
+      updateUserOAuthProfile(userId, { avatarUrl });
+        } catch (err) {
+      console.error('Failed to save avatar URL to DB:', err);
+    }
+  }
+  res.json({ ok: true, avatarUrl });
 });
 
 // API Exposure policy
@@ -1504,6 +1558,7 @@ function authenticate(req, res, next) {
   const fullPath = req.baseUrl + req.path;
   const publicPaths = [
     /^\/api\/v1\/oauth\/(authorize|callback|confirm)/,  // authorize, callback, and confirm are public; status requires auth
+    /^\/api\/v1\/oauth-server\/(authorize|token|deny)/,  // OAuth server public endpoints
     /^\/api\/v1\/auth\/login/,
     /^\/api\/v1\/auth\/signup/,
     /^\/api\/v1\/auth\/me/,
@@ -1619,9 +1674,7 @@ function authenticate(req, res, next) {
     return next();
   }
 
-  // BUG-8: Removed SKIP_DEVICE_APPROVAL bypass - device approval is now mandatory for all API access
-
-  // Apply device approval for agents on protected routes
+  // Apply device approval only for guest/scoped tokens (external API access)
   return deviceApprovalMiddleware(req, res, next);
 }
 
@@ -1762,6 +1815,10 @@ app.use('/api/v1/vault', authenticate, createVaultInstructionsRoutes(db, null, c
 // FAL Image Generation API
 const falImagesRoutes = require('./routes/fal-images');
 app.use('/api/v1/fal', authenticate, falImagesRoutes);
+
+// OAuth Server — MyApi as authorization server for external AI clients (ChatGPT, etc.)
+const oauthServerRoutes = require('./routes/oauth-server');
+app.use('/api/v1/oauth-server', oauthServerRoutes);
 
 // --- PUBLIC: BILLING PLANS ENDPOINT (no auth required) ---
 app.get('/api/v1/billing/plans', (req, res) => {
@@ -4158,87 +4215,98 @@ app.post("/api/v1/connectors", authenticate, (req, res) => {
 
 // --- GATEWAY CONTEXT ASSEMBLY ---
 app.get("/api/v1/gateway/context", authenticate, (req, res) => {
-  // Only master token can access full context
   if (!isMaster(req)) return res.status(403).json({ error: "Only master token can access gateway context" });
 
   try {
-    // SECURITY: Do NOT expose USER.md via API
-    // User profile should only be available via /auth/me
-    let userProfile = {
-      available: false,
-      reason: "User profile is not exposed via gateway context for security reasons"
-    };
+    const ownerId = getRequestOwnerId(req);
 
-    // Get active persona from database (safe metadata only)
-    let soulProfile = {};
-    const activePersona = getActivePersona();
-    if (activePersona) {
-      // SECURITY: Only expose persona ID and name, not soul_content
-      soulProfile = {
-        id: activePersona.id,
-        name: activePersona.name,
-        active: activePersona.active
-      };
-    }
+    // Active persona — full soul_content so AI agents know their operating instructions
+    const activePersona = getActivePersona(ownerId);
+    const persona = activePersona ? {
+      id: activePersona.id,
+      name: activePersona.name,
+      description: activePersona.description || '',
+      soul_content: activePersona.soul_content || '',
+      active: activePersona.active,
+    } : null;
 
-    // SECURITY: Do NOT expose MEMORY.md via API
-    // Memory is sensitive context that should only exist locally
-    // Serving it via API exposes all project secrets to anyone with token
-    let memoryContext = {
-      available: false,
-      reason: "Memory context is not exposed via API for security reasons"
-    };
+    // User identity from DB (what the AI needs to know about the person it's serving)
+    // Prefer DB user record; fall back to vault.identityDocs for file-based setups
+    const dbUser = getUserById(ownerId) || getUserById('owner');
+    const vaultIdentity = vault.identityDocs[ownerId] || vault.identityDocs['owner'] || {};
+    const userProfile = dbUser ? {
+      ...vaultIdentity,  // file-based extras (role, company, etc.) — overridden by DB below
+      name: dbUser.displayName || dbUser.username || vaultIdentity.name || 'User',
+      email: dbUser.email || vaultIdentity.email || null,
+      timezone: dbUser.timezone || vaultIdentity.timezone || null,
+      plan: dbUser.plan || 'free',
+    } : (Object.keys(vaultIdentity).length > 0 ? vaultIdentity : null);
 
-    // Get available connectors
-    const connectors = getConnectors();
+    // Long-term memory bullets the owner has recorded (from MEMORY.md)
+    const memory = contextEngine.loadMemory();
 
-    // Get vault tokens (without exposing values)
+    // Vault tokens (metadata only — never the actual token values)
     const vaultTokens = getVaultTokens().map(t => ({
       id: t.id,
       label: t.label,
       description: t.description,
       createdAt: t.createdAt,
-      // Never include the actual token value
     }));
 
-    // Get all personas (for meta)
-    const allPersonas = getPersonas(getRequestOwnerId(req));
-    const personaList = allPersonas.map(p => ({
+    // All personas (so AI can switch or reference other personas)
+    const allPersonas = getPersonas(ownerId).map(p => ({
       id: p.id,
       name: p.name,
       active: p.active,
-      created_at: p.created_at
+      created_at: p.created_at,
     }));
 
-    // Assemble gateway context
+    // Endpoint manifest — every endpoint this token can call, so the AI knows immediately
+    const ENDPOINT_MANIFEST = [
+      { method: 'GET',    path: '/api/v1/gateway/context',               description: 'Full AI context: persona, identity, memory, endpoints (this endpoint)' },
+      { method: 'GET',    path: '/api/v1/brain/context',                 description: 'Assembled LLM system prompt + conversation context', scope: 'knowledge' },
+      { method: 'POST',   path: '/api/v1/brain/chat',                    description: 'Send a chat message and get an AI response', scope: 'chat' },
+      { method: 'GET',    path: '/api/v1/brain/conversations',           description: 'List past conversations', scope: 'chat' },
+      { method: 'GET',    path: '/api/v1/brain/conversations/:id',       description: 'Get a conversation with messages', scope: 'chat' },
+      { method: 'GET',    path: '/api/v1/identity',                      description: 'Owner name, role, company', scope: 'basic' },
+      { method: 'GET',    path: '/api/v1/identity/professional',         description: 'Skills, education, experience', scope: 'professional' },
+      { method: 'GET',    path: '/api/v1/identity/availability',         description: 'Calendar, timezone, availability', scope: 'availability' },
+      { method: 'GET',    path: '/api/v1/personas',                      description: 'List all personas', scope: 'personas' },
+      { method: 'GET',    path: '/api/v1/personas/:id',                  description: 'Get a specific persona', scope: 'personas' },
+      { method: 'GET',    path: '/api/v1/brain/knowledge-base',          description: 'List knowledge base documents', scope: 'knowledge' },
+      { method: 'GET',    path: '/api/v1/brain/knowledge-base/:id',      description: 'Get a knowledge base document', scope: 'knowledge' },
+      { method: 'GET',    path: '/api/v1/skills',                        description: 'List available skills', scope: 'skills:read' },
+      { method: 'GET',    path: '/api/v1/skills/:id',                    description: 'Get skill details', scope: 'skills:read' },
+      { method: 'POST',   path: '/api/v1/skills',                        description: 'Create a new skill', scope: 'skills:write' },
+      { method: 'PUT',    path: '/api/v1/skills/:id',                    description: 'Update a skill', scope: 'skills:write' },
+      { method: 'DELETE', path: '/api/v1/skills/:id',                    description: 'Delete a skill', scope: 'skills:write' },
+      { method: 'GET',    path: '/api/v1/services/:service/*',           description: 'Proxy GET to a connected OAuth service', scope: 'services:read' },
+      { method: 'POST',   path: '/api/v1/services/:service/*',           description: 'Proxy POST/PUT/DELETE to a connected OAuth service', scope: 'services:write' },
+      { method: 'GET',    path: '/api/v1/oauth/status',                  description: 'List all connected OAuth services and their status' },
+    ];
+
     const context = {
       timestamp: new Date().toISOString(),
-      version: "1.0",
-      user: {
-        profile: userProfile,
-        persona: {
-          identity: soulProfile,
-          preferences: vault.preferences["owner"] || {},
-        },
-      },
-      services: {
-        connectors: connectors,
-        vault: {
-          tokens: vaultTokens,
-        },
-      },
-      memory: {
-        context: memoryContext,
-      },
+      version: "2.0",
+      // Who this AI is — full soul_content so it can set its own instructions
+      persona,
+      // Who the AI is serving — full identity from the database
+      user: userProfile,
+      // Long-term memory bullets the owner has recorded
+      memory: memory.memories || [],
+      // Connected services metadata (no credentials)
+      vault: { tokens: vaultTokens },
+      // All available personas
+      personas: allPersonas,
+      // Every endpoint this token can call
+      endpoints: ENDPOINT_MANIFEST,
       meta: {
         requesterId: req.tokenMeta.tokenId,
-        timestamp: new Date().toISOString(),
-        personas: personaList,
-        activePersonaId: activePersona ? activePersona.id : null,
+        ownerId,
+        activePersonaId: activePersona?.id ?? null,
       },
     };
 
-    // Log the request
     createAuditLog({
       requesterId: req.tokenMeta.tokenId,
       action: "gateway_context_fetch",
@@ -6313,13 +6381,6 @@ app.get([
       const workspaceId = ws?.[0]?.id || 'default';
       NotificationDispatcher.onServiceConnected(workspaceId, req.session.user.id, service)
         .catch(err => console.error('Notification dispatch error:', err));
-
-      // Legacy notification (keep for compatibility)
-      NotificationService.emitNotification(req.session.user.id, 'service_connected',
-        `${service.charAt(0).toUpperCase() + service.slice(1)} Connected`,
-        `Your ${service} account has been successfully connected to MyApi`,
-        { relatedEntityType: 'service', relatedEntityId: service, actionUrl: '/dashboard/services' }
-      ).catch(err => console.error('Notification error:', err));
       NotificationService.logActivity(req.session.user.id, 'service_connected', 'service', {
         resourceId: service, resourceName: service, actorType: 'user', actorId: req.session.user.id, result: 'success', ipAddress: req.ip,
       });
@@ -9359,6 +9420,31 @@ if (process.env.NODE_ENV !== 'test') {
     if (WebSocketServer) {
       console.log(`WebSocket ready on ws://0.0.0.0:${PORT}`);
     }
+
+    // Bootstrap ChatGPT OAuth client if not already registered
+    (async () => {
+      try {
+        const chatgptClientId = process.env.CHATGPT_OAUTH_CLIENT_ID || 'chatgpt';
+        const rawSecret = process.env.CHATGPT_OAUTH_CLIENT_SECRET || (() => {
+          // Derive a stable secret from ENCRYPTION_KEY so it survives restarts
+          const base = process.env.ENCRYPTION_KEY || process.env.JWT_SECRET || 'default';
+          return require('crypto').createHash('sha256').update('chatgpt-oauth-secret:' + base).digest('hex');
+        })();
+        const secretHash = await require('bcrypt').hash(rawSecret, 10);
+        const redirectUris = (process.env.CHATGPT_OAUTH_REDIRECT_URIS || 'https://chat.openai.com/aip/g-*/oauth/callback,https://chatgpt.com/aip/g-*/oauth/callback').split(',').map(s => s.trim());
+        upsertOAuthServerClient({
+          clientId: chatgptClientId,
+          clientSecretHash: secretHash,
+          clientName: 'ChatGPT',
+          redirectUris,
+          ownerId: null,
+        });
+        console.log(`[OAuthServer] ChatGPT client bootstrapped (client_id: ${chatgptClientId})`);
+        console.log(`[OAuthServer] Client secret (set CHATGPT_OAUTH_CLIENT_SECRET to fix): ${rawSecret}`);
+      } catch (e) {
+        console.error('[OAuthServer] Failed to bootstrap ChatGPT client:', e.message);
+      }
+    })();
 
     // BUG-11: Cleanup expired OAuth state tokens every hour
     // BUG-10: Also cleanup old rate limit records

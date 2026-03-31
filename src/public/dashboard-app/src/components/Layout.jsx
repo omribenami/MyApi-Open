@@ -118,6 +118,7 @@ function Layout({ children, onLogout }) {
     {
       label: 'AI & Data',
       items: [
+        { path: '/connectors', label: 'Connectors' },
         { path: '/identity', label: 'Identity' },
         { path: '/personas', label: 'Personas' },
         { path: '/skills', label: 'Skills' },

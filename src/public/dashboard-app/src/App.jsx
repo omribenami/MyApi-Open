@@ -24,6 +24,7 @@ import DeviceManagement from './pages/DeviceManagement';
 import ActivityLog from './pages/ActivityLog';
 import NotificationCenter from './pages/NotificationCenter';
 import TeamSettings from './pages/TeamSettings';
+import Connectors from './pages/Connectors';
 import Layout from './components/Layout';
 
 // Create React Query client
@@ -166,6 +167,14 @@ function App() {
                   <Layout onLogout={handleLogout}>
                     <Routes>
             <Route path="/" element={<Dashboard />} />
+            <Route
+              path="/connectors"
+              element={
+                <ProtectedRoute>
+                  <Connectors />
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="/services"
               element={

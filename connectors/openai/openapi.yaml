@@ -1,0 +1,280 @@
+openapi: 3.1.0
+info:
+  title: MyApi Personal AI Assistant
+  description: |
+    Access your MyApi account — identity, personas, knowledge base, and connected services.
+    All requests are authenticated with your personal OAuth access token.
+  version: 1.0.0
+servers:
+  - url: https://www.myapiai.com
+
+security:
+  - oauth2: []
+
+paths:
+  # ── Identity ────────────────────────────────────────────────
+  /api/v1/identity:
+    get:
+      operationId: getIdentity
+      summary: Get your identity and profile
+      description: Returns your personal identity data — name, role, company, bio, and other fields you've stored.
+      responses:
+        "200":
+          description: Identity data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    description: Key-value identity fields
+
+  # ── Personas ─────────────────────────────────────────────────
+  /api/v1/personas:
+    get:
+      operationId: listPersonas
+      summary: List all AI personas
+      description: Returns all configured AI personas for this account, including which one is currently active.
+      responses:
+        "200":
+          description: List of personas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Persona"
+
+  /api/v1/personas/{id}:
+    get:
+      operationId: getPersona
+      summary: Get a specific persona
+      description: Returns the full persona definition including soul content (instructions and personality).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Persona detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Persona"
+
+  # ── Knowledge Base ────────────────────────────────────────────
+  /api/v1/brain/knowledge-base:
+    get:
+      operationId: listKnowledgeDocs
+      summary: List knowledge base documents
+      description: Returns all documents in your knowledge base — text, PDFs, notes.
+      responses:
+        "200":
+          description: Knowledge base documents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/KBDocumentSummary"
+
+  /api/v1/brain/knowledge-base/{id}:
+    get:
+      operationId: getKnowledgeDoc
+      summary: Get full content of a knowledge document
+      description: Returns the complete text content of a specific knowledge base document.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Full document
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/KBDocument"
+
+  # ── Services ─────────────────────────────────────────────────
+  /api/v1/services:
+    get:
+      operationId: listServices
+      summary: List connected services
+      description: Returns all available integrations and which ones are currently connected (Google, GitHub, Slack, etc.).
+      responses:
+        "200":
+          description: Services list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Service"
+                  connected:
+                    type: integer
+                    description: Number of connected services
+
+  # ── Brain / Context ───────────────────────────────────────────
+  /api/v1/brain/context:
+    get:
+      operationId: getBrainContext
+      summary: Get your full AI context
+      description: Returns the assembled context — user profile, active persona, recent memory, and linked knowledge.
+      responses:
+        "200":
+          description: Full context
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    type: object
+                    description: Your identity profile
+                  persona:
+                    $ref: "#/components/schemas/Persona"
+                  systemPrompt:
+                    type: string
+                    description: The assembled system prompt used for AI interactions
+
+  # ── Notifications ─────────────────────────────────────────────
+  /api/v1/notifications:
+    get:
+      operationId: listNotifications
+      summary: List your notifications
+      description: Returns recent notifications for your account.
+      parameters:
+        - name: unread
+          in: query
+          schema:
+            type: boolean
+          description: Filter to unread only
+      responses:
+        "200":
+          description: Notifications
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Notification"
+
+components:
+  securitySchemes:
+    oauth2:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://www.myapiai.com/api/v1/oauth-server/authorize
+          tokenUrl: https://www.myapiai.com/api/v1/oauth-server/token
+          scopes:
+            full: Full access to your MyApi account
+
+  schemas:
+    Persona:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        soul_content:
+          type: string
+          description: The persona's instructions and personality definition
+        active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    KBDocumentSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        source:
+          type: string
+        content_preview:
+          type: string
+          description: First ~200 characters of the document
+        created_at:
+          type: string
+          format: date-time
+
+    KBDocument:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        source:
+          type: string
+        content:
+          type: string
+          description: Full document text
+        created_at:
+          type: string
+          format: date-time
+
+    Service:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+        status:
+          type: string
+          enum: [connected, available]
+        connectedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    Notification:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        message:
+          type: string
+        type:
+          type: string
+        read:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
