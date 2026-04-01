@@ -566,6 +566,121 @@ const oauthAdapters = {
     clientSecret: process.env.JIRA_CLIENT_SECRET || oauthConfig.jira?.clientSecret,
     extraAuthParams: { audience: 'api.atlassian.com', prompt: 'consent' },
   }),
+  confluence: new GenericOAuthAdapter({
+    serviceName: 'confluence',
+    authUrl: 'https://auth.atlassian.com/authorize',
+    tokenUrl: 'https://auth.atlassian.com/oauth/token',
+    verifyUrl: 'https://api.atlassian.com/me',
+    scope: process.env.CONFLUENCE_SCOPE || 'read:confluence-content.all read:confluence-user write:confluence-content offline_access',
+    redirectUri: process.env.CONFLUENCE_REDIRECT_URI || oauthConfig.confluence?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/confluence`,
+    clientId: process.env.CONFLUENCE_CLIENT_ID || oauthConfig.confluence?.clientId,
+    clientSecret: process.env.CONFLUENCE_CLIENT_SECRET || oauthConfig.confluence?.clientSecret,
+    extraAuthParams: { audience: 'api.atlassian.com', prompt: 'consent' },
+  }),
+  asana: new GenericOAuthAdapter({
+    serviceName: 'asana',
+    authUrl: 'https://app.asana.com/-/oauth_authorize',
+    tokenUrl: 'https://app.asana.com/-/oauth_token',
+    verifyUrl: 'https://app.asana.com/api/1.0/users/me',
+    scope: process.env.ASANA_SCOPE || 'default',
+    redirectUri: process.env.ASANA_REDIRECT_URI || oauthConfig.asana?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/asana`,
+    clientId: process.env.ASANA_CLIENT_ID || oauthConfig.asana?.clientId,
+    clientSecret: process.env.ASANA_CLIENT_SECRET || oauthConfig.asana?.clientSecret,
+    tokenAuthStyle: 'basic',
+  }),
+  linear: new GenericOAuthAdapter({
+    serviceName: 'linear',
+    authUrl: 'https://linear.app/oauth/authorize',
+    tokenUrl: 'https://api.linear.app/oauth/token',
+    verifyUrl: 'https://api.linear.app/oauth/userinfo',
+    scope: process.env.LINEAR_SCOPE || 'read write',
+    redirectUri: process.env.LINEAR_REDIRECT_URI || oauthConfig.linear?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/linear`,
+    clientId: process.env.LINEAR_CLIENT_ID || oauthConfig.linear?.clientId,
+    clientSecret: process.env.LINEAR_CLIENT_SECRET || oauthConfig.linear?.clientSecret,
+    extraAuthParams: { response_type: 'code', actor: 'user' },
+  }),
+  box: new GenericOAuthAdapter({
+    serviceName: 'box',
+    authUrl: 'https://account.box.com/api/oauth2/authorize',
+    tokenUrl: 'https://api.box.com/oauth2/token',
+    verifyUrl: 'https://api.box.com/2.0/users/me',
+    scope: process.env.BOX_SCOPE || 'root_readwrite',
+    redirectUri: process.env.BOX_REDIRECT_URI || oauthConfig.box?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/box`,
+    clientId: process.env.BOX_CLIENT_ID || oauthConfig.box?.clientId,
+    clientSecret: process.env.BOX_CLIENT_SECRET || oauthConfig.box?.clientSecret,
+  }),
+  airtable: new GenericOAuthAdapter({
+    serviceName: 'airtable',
+    authUrl: 'https://airtable.com/oauth2/v1/authorize',
+    tokenUrl: 'https://airtable.com/oauth2/v1/token',
+    verifyUrl: 'https://api.airtable.com/v0/meta/whoami',
+    scope: process.env.AIRTABLE_SCOPE || 'data.records:read data.records:write schema.bases:read',
+    redirectUri: process.env.AIRTABLE_REDIRECT_URI || oauthConfig.airtable?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/airtable`,
+    clientId: process.env.AIRTABLE_CLIENT_ID || oauthConfig.airtable?.clientId,
+    clientSecret: process.env.AIRTABLE_CLIENT_SECRET || oauthConfig.airtable?.clientSecret,
+    tokenAuthStyle: 'basic',
+  }),
+  figma: new GenericOAuthAdapter({
+    serviceName: 'figma',
+    authUrl: 'https://www.figma.com/oauth',
+    tokenUrl: 'https://www.figma.com/api/oauth/token',
+    verifyUrl: 'https://api.figma.com/v1/me',
+    scope: process.env.FIGMA_SCOPE || 'files:read',
+    redirectUri: process.env.FIGMA_REDIRECT_URI || oauthConfig.figma?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/figma`,
+    clientId: process.env.FIGMA_CLIENT_ID || oauthConfig.figma?.clientId,
+    clientSecret: process.env.FIGMA_CLIENT_SECRET || oauthConfig.figma?.clientSecret,
+  }),
+  canva: new GenericOAuthAdapter({
+    serviceName: 'canva',
+    authUrl: 'https://www.canva.com/api/oauth/authorize',
+    tokenUrl: 'https://www.canva.com/api/oauth/token',
+    verifyUrl: 'https://api.canva.com/rest/v1/users/me',
+    scope: process.env.CANVA_SCOPE || 'asset:read profile:read design:content:read',
+    redirectUri: process.env.CANVA_REDIRECT_URI || oauthConfig.canva?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/canva`,
+    clientId: process.env.CANVA_CLIENT_ID || oauthConfig.canva?.clientId,
+    clientSecret: process.env.CANVA_CLIENT_SECRET || oauthConfig.canva?.clientSecret,
+  }),
+  zendesk: new GenericOAuthAdapter({
+    serviceName: 'zendesk',
+    authUrl: `https://${process.env.ZENDESK_SUBDOMAIN || oauthConfig.zendesk?.subdomain || 'your-subdomain'}.zendesk.com/oauth/authorizations/new`,
+    tokenUrl: `https://${process.env.ZENDESK_SUBDOMAIN || oauthConfig.zendesk?.subdomain || 'your-subdomain'}.zendesk.com/oauth/tokens`,
+    verifyUrl: `https://${process.env.ZENDESK_SUBDOMAIN || oauthConfig.zendesk?.subdomain || 'your-subdomain'}.zendesk.com/api/v2/users/me.json`,
+    scope: process.env.ZENDESK_SCOPE || 'read write',
+    redirectUri: process.env.ZENDESK_REDIRECT_URI || oauthConfig.zendesk?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/zendesk`,
+    clientId: process.env.ZENDESK_CLIENT_ID || oauthConfig.zendesk?.clientId,
+    clientSecret: process.env.ZENDESK_CLIENT_SECRET || oauthConfig.zendesk?.clientSecret,
+    extraAuthParams: { response_type: 'code' },
+  }),
+  intercom: new GenericOAuthAdapter({
+    serviceName: 'intercom',
+    authUrl: 'https://app.intercom.com/oauth',
+    tokenUrl: 'https://api.intercom.io/auth/eagle/token',
+    verifyUrl: 'https://api.intercom.io/me',
+    scope: process.env.INTERCOM_SCOPE || '',
+    redirectUri: process.env.INTERCOM_REDIRECT_URI || oauthConfig.intercom?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/intercom`,
+    clientId: process.env.INTERCOM_CLIENT_ID || oauthConfig.intercom?.clientId,
+    clientSecret: process.env.INTERCOM_CLIENT_SECRET || oauthConfig.intercom?.clientSecret,
+  }),
+  clickup: new GenericOAuthAdapter({
+    serviceName: 'clickup',
+    authUrl: 'https://app.clickup.com/api',
+    tokenUrl: 'https://app.clickup.com/api/v2/oauth/token',
+    verifyUrl: 'https://api.clickup.com/api/v2/user',
+    scope: process.env.CLICKUP_SCOPE || '',
+    redirectUri: process.env.CLICKUP_REDIRECT_URI || oauthConfig.clickup?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/clickup`,
+    clientId: process.env.CLICKUP_CLIENT_ID || oauthConfig.clickup?.clientId,
+    clientSecret: process.env.CLICKUP_CLIENT_SECRET || oauthConfig.clickup?.clientSecret,
+  }),
+  monday: new GenericOAuthAdapter({
+    serviceName: 'monday',
+    authUrl: 'https://auth.monday.com/oauth2/authorize',
+    tokenUrl: 'https://auth.monday.com/oauth2/token',
+    verifyUrl: null,
+    scope: process.env.MONDAY_SCOPE || 'me:read boards:read',
+    redirectUri: process.env.MONDAY_REDIRECT_URI || oauthConfig.monday?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/monday`,
+    clientId: process.env.MONDAY_CLIENT_ID || oauthConfig.monday?.clientId,
+    clientSecret: process.env.MONDAY_CLIENT_SECRET || oauthConfig.monday?.clientSecret,
+  }),
 };
 
 const OAUTH_SERVICES = Object.keys(oauthAdapters);
@@ -6455,7 +6570,7 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
       }
     }
 
-    if (service === 'twitter') {
+    if (['twitter', 'airtable', 'canva'].includes(service)) {
       const { codeChallenge } = buildPkcePairFromState(state);
       runtimeAuthParams.code_challenge = codeChallenge;
       runtimeAuthParams.code_challenge_method = 'S256';
@@ -6593,7 +6708,7 @@ app.get([
   try {
     const adapter = oauthAdapters[service];
     const runtimeTokenParams = {};
-    if (service === 'twitter') {
+    if (['twitter', 'airtable', 'canva'].includes(service)) {
       const { codeVerifier } = buildPkcePairFromState(state);
       runtimeTokenParams.code_verifier = codeVerifier;
     }

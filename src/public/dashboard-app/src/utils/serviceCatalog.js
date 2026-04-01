@@ -45,6 +45,16 @@ const BRAND_LOGOS = {
   jira: `${SIMPLE_ICONS_BASE}/jira/0052CC`,
   trello: `${SIMPLE_ICONS_BASE}/trello/0052CC`,
   airtable: `${SIMPLE_ICONS_BASE}/airtable/18BFFF`,
+  confluence: `${SIMPLE_ICONS_BASE}/confluence/172B4D`,
+  asana: `${SIMPLE_ICONS_BASE}/asana/F06A6A`,
+  linear: `${SIMPLE_ICONS_BASE}/linear/5E6AD2`,
+  box: `${SIMPLE_ICONS_BASE}/box/0061D5`,
+  figma: `${SIMPLE_ICONS_BASE}/figma/F24E1E`,
+  canva: `${SIMPLE_ICONS_BASE}/canva/00C4CC`,
+  zendesk: `${SIMPLE_ICONS_BASE}/zendesk/03363D`,
+  intercom: `${SIMPLE_ICONS_BASE}/intercom/1F8FED`,
+  clickup: `${SIMPLE_ICONS_BASE}/clickup/7B68EE`,
+  monday: `${SIMPLE_ICONS_BASE}/mondaydotcom/FF3D57`,
   microsoft365: `${SIMPLE_ICONS_BASE}/microsoft365/D83B01`,
   dropbox: `${SIMPLE_ICONS_BASE}/dropbox/0061FF`,
   zoom: `${SIMPLE_ICONS_BASE}/zoom/0B5CFF`,
@@ -75,6 +85,17 @@ const BRAND_LOGO_FALLBACKS = {
   zoom: `${JSDELIVR_SIMPLE_ICONS_BASE}/zoom.svg`,
   hubspot: `${JSDELIVR_SIMPLE_ICONS_BASE}/hubspot.svg`,
   salesforce: `${JSDELIVR_SIMPLE_ICONS_BASE}/salesforce.svg`,
+  confluence: `${JSDELIVR_SIMPLE_ICONS_BASE}/confluence.svg`,
+  asana: `${JSDELIVR_SIMPLE_ICONS_BASE}/asana.svg`,
+  linear: `${JSDELIVR_SIMPLE_ICONS_BASE}/linear.svg`,
+  box: `${JSDELIVR_SIMPLE_ICONS_BASE}/box.svg`,
+  airtable: `${JSDELIVR_SIMPLE_ICONS_BASE}/airtable.svg`,
+  figma: `${JSDELIVR_SIMPLE_ICONS_BASE}/figma.svg`,
+  canva: `${JSDELIVR_SIMPLE_ICONS_BASE}/canva.svg`,
+  zendesk: `${JSDELIVR_SIMPLE_ICONS_BASE}/zendesk.svg`,
+  intercom: `${JSDELIVR_SIMPLE_ICONS_BASE}/intercom.svg`,
+  clickup: `${JSDELIVR_SIMPLE_ICONS_BASE}/clickup.svg`,
+  monday: `${JSDELIVR_SIMPLE_ICONS_BASE}/mondaydotcom.svg`,
   fal: FAL_SVG,
 };
 
@@ -97,6 +118,17 @@ const SERVICE_ENV_REQUIREMENTS = {
   hubspot: ['HUBSPOT_CLIENT_ID', 'HUBSPOT_CLIENT_SECRET', 'HUBSPOT_REDIRECT_URI'],
   salesforce: ['SALESFORCE_CLIENT_ID', 'SALESFORCE_CLIENT_SECRET', 'SALESFORCE_REDIRECT_URI'],
   jira: ['JIRA_CLIENT_ID', 'JIRA_CLIENT_SECRET', 'JIRA_REDIRECT_URI'],
+  confluence: ['CONFLUENCE_CLIENT_ID', 'CONFLUENCE_CLIENT_SECRET', 'CONFLUENCE_REDIRECT_URI'],
+  asana: ['ASANA_CLIENT_ID', 'ASANA_CLIENT_SECRET', 'ASANA_REDIRECT_URI'],
+  linear: ['LINEAR_CLIENT_ID', 'LINEAR_CLIENT_SECRET', 'LINEAR_REDIRECT_URI'],
+  box: ['BOX_CLIENT_ID', 'BOX_CLIENT_SECRET', 'BOX_REDIRECT_URI'],
+  airtable: ['AIRTABLE_CLIENT_ID', 'AIRTABLE_CLIENT_SECRET', 'AIRTABLE_REDIRECT_URI'],
+  figma: ['FIGMA_CLIENT_ID', 'FIGMA_CLIENT_SECRET', 'FIGMA_REDIRECT_URI'],
+  canva: ['CANVA_CLIENT_ID', 'CANVA_CLIENT_SECRET', 'CANVA_REDIRECT_URI'],
+  zendesk: ['ZENDESK_SUBDOMAIN', 'ZENDESK_CLIENT_ID', 'ZENDESK_CLIENT_SECRET', 'ZENDESK_REDIRECT_URI'],
+  intercom: ['INTERCOM_CLIENT_ID', 'INTERCOM_CLIENT_SECRET', 'INTERCOM_REDIRECT_URI'],
+  clickup: ['CLICKUP_CLIENT_ID', 'CLICKUP_CLIENT_SECRET', 'CLICKUP_REDIRECT_URI'],
+  monday: ['MONDAY_CLIENT_ID', 'MONDAY_CLIENT_SECRET', 'MONDAY_REDIRECT_URI'],
   email: ['EMAIL_PROVIDER', 'EMAIL_FROM', 'SMTP_HOST', 'SMTP_PORT'],
   fal: ['FAL_API_KEY (optional global fallback)'],
 };
@@ -152,7 +184,9 @@ const KNOWN_STATUS = new Set(['connected', 'pending', 'error', 'disconnected']);
 const OAUTH_SERVICES = new Set([
   'google', 'github', 'facebook', 'instagram', 'tiktok', 'twitter', 'reddit',
   'linkedin', 'slack', 'discord', 'whatsapp', 'notion', 'gitlab', 'bitbucket', 'telegram',
-  'microsoft365', 'dropbox', 'trello', 'zoom', 'hubspot', 'salesforce', 'jira'
+  'microsoft365', 'dropbox', 'trello', 'zoom', 'hubspot', 'salesforce', 'jira',
+  'confluence', 'asana', 'linear', 'box', 'airtable', 'figma', 'canva',
+  'zendesk', 'intercom', 'clickup', 'monday',
 ]);
 
 const API_ROOT_FALLBACKS = {
@@ -174,6 +208,17 @@ const API_ROOT_FALLBACKS = {
   hubspot: 'https://api.hubapi.com',
   salesforce: 'https://login.salesforce.com',
   jira: 'https://api.atlassian.com',
+  confluence: 'https://api.atlassian.com',
+  asana: 'https://app.asana.com/api/1.0',
+  linear: 'https://api.linear.app',
+  box: 'https://api.box.com/2.0',
+  airtable: 'https://api.airtable.com/v0',
+  figma: 'https://api.figma.com/v1',
+  canva: 'https://api.canva.com/rest/v1',
+  zendesk: 'https://developer.zendesk.com',
+  intercom: 'https://api.intercom.io',
+  clickup: 'https://api.clickup.com/api/v2',
+  monday: 'https://api.monday.com/v2',
 };
 
 function normalizeStatus(status) {
