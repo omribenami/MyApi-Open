@@ -49,9 +49,17 @@ function AccessTokens() {
   const [showServiceScopeModal, setShowServiceScopeModal] = useState(false);
   const [showRevokeModal, setShowRevokeModal] = useState(false);
 
+  // Marketplace-installed guest tokens
+  const [myPublishedTokens, setMyPublishedTokens] = useState([]);
+  const [installedTokens, setInstalledTokens] = useState([]);
+  const [vaultLoading, setVaultLoading] = useState(false);
+  const [vaultDeleteTarget, setVaultDeleteTarget] = useState(null);
+
   // Create guest token form
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [createForm, setCreateForm] = useState({ label: '', scopes: [], expiresInHours: '168' });
+  const [createForm, setCreateForm] = useState({ label: '', description: '', scopes: [], expiresInHours: '168', requiresApproval: false });
+  const [bundleMode, setBundleMode] = useState('custom'); // 'custom' | 'persona_bundle'
+  const [bundlePersonaId, setBundlePersonaId] = useState(null);
   const [newlyCreated, setNewlyCreated] = useState(null);
   const [revealedTokens, setRevealedTokens] = useState({});
   const [visibleTokenIds, setVisibleTokenIds] = useState({});
@@ -64,11 +72,15 @@ function AccessTokens() {
   const [allowedPersonas, setAllowedPersonas] = useState([]); // empty = all
   const [allPersonas, setAllPersonas] = useState(true); // "All Personas" checkbox
 
+  // Publish/unpublish state
+  const [publishingTokenId, setPublishingTokenId] = useState(null);
+
   // Re-fetch tokens when switching workspaces or when master token changes
   const currentWorkspace = useAuthStore((state) => state.currentWorkspace);
   useEffect(() => {
     if (masterToken) {
       fetchTokens(masterToken);
+      fetchVaultTokens(masterToken);
     }
   }, [masterToken, fetchTokens, currentWorkspace?.id]);
 
@@ -98,9 +110,10 @@ function AccessTokens() {
       .catch(() => {});
   }, [masterToken, setMasterToken, isAuthenticated]);
 
-  // Fetch personas when the 'personas' scope is toggled on
+  // Fetch personas when 'personas' scope is toggled on or bundle mode is selected
   useEffect(() => {
-    if (createForm.scopes.includes('personas:read') && personas.length === 0 && !personasLoading) {
+    const needsPersonas = createForm.scopes.includes('personas:read') || bundleMode === 'persona_bundle';
+    if (needsPersonas && personas.length === 0 && !personasLoading) {
       setPersonasLoading(true);
       fetch('/api/v1/personas', { headers: { Authorization: `Bearer ${masterToken}` } })
         .then((r) => r.json())
@@ -110,12 +123,12 @@ function AccessTokens() {
         .catch(() => {})
         .finally(() => setPersonasLoading(false));
     }
-    // Reset selection when scope removed
-    if (!createForm.scopes.includes('personas:read')) {
+    // Reset persona selection when personas scope removed (custom mode only)
+    if (bundleMode === 'custom' && !createForm.scopes.includes('personas:read')) {
       setAllowedPersonas([]);
       setAllPersonas(true);
     }
-  }, [createForm.scopes, masterToken]);
+  }, [createForm.scopes, bundleMode, masterToken]);
 
   // Auto-clear messages
   useEffect(() => {
@@ -215,6 +228,52 @@ function AccessTokens() {
     }
   };
 
+  const fetchVaultTokens = async (token) => {
+    if (!token) return;
+    setVaultLoading(true);
+    try {
+      const res = await fetch('/api/v1/vault/my-tokens', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMyPublishedTokens(data.data?.yourTokens || []);
+        setInstalledTokens(data.data?.guestTokens || []);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setVaultLoading(false);
+    }
+  };
+
+  const handleRevokeInstalledToken = async (tokenId) => {
+    try {
+      const res = await fetch(`/api/v1/vault/${tokenId}/revoke`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${masterToken}` },
+      });
+      if (!res.ok) throw new Error('Failed to revoke token');
+      await fetchVaultTokens(masterToken);
+    } catch (err) {
+      setError(err.message || 'Failed to revoke token');
+    }
+  };
+
+  const handleDeletePublishedToken = async (tokenId) => {
+    try {
+      const res = await fetch(`/api/v1/tokens/${tokenId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${masterToken}` },
+      });
+      if (!res.ok) throw new Error('Failed to remove token');
+      await fetchTokens(masterToken);
+      await fetchVaultTokens(masterToken);
+    } catch (err) {
+      setError(err.message || 'Failed to remove token');
+    }
+  };
+
   const handleScopeToggle = (scope) => {
     setCreateForm((prev) => ({
       ...prev,
@@ -236,21 +295,31 @@ function AccessTokens() {
     setAllowedPersonas([]);
   };
 
+  const BUNDLE_SCOPES = ['personas', 'knowledge', 'skills:read', 'chat'];
+
   const handleCreateSubmit = async (e) => {
     e.preventDefault();
-    if (createForm.scopes.length === 0) return;
+
+    const isBundle = bundleMode === 'persona_bundle';
+    const effectiveScopes = isBundle ? BUNDLE_SCOPES : createForm.scopes;
+    if (effectiveScopes.length === 0) return;
+    if (isBundle && !bundlePersonaId) return;
 
     const payload = {
       label: createForm.label,
-      scopes: createForm.scopes,
+      description: createForm.description || undefined,
+      scopes: effectiveScopes,
       expiresInHours: createForm.expiresInHours ? parseInt(createForm.expiresInHours) : null,
+      requiresApproval: createForm.requiresApproval,
     };
 
-    // Only include allowedPersonas when 'personas' scope is selected and specific ones chosen
-    if (createForm.scopes.includes('personas:read') && !allPersonas && allowedPersonas.length > 0) {
+    if (isBundle) {
+      payload.scopeBundle = { persona_id: bundlePersonaId };
+      payload.allowedPersonas = [bundlePersonaId];
+    } else if (createForm.scopes.includes('personas:read') && !allPersonas && allowedPersonas.length > 0) {
       payload.allowedPersonas = allowedPersonas;
     } else {
-      payload.allowedPersonas = []; // empty = all
+      payload.allowedPersonas = [];
     }
 
     const created = await createToken(masterToken, payload);
@@ -261,9 +330,11 @@ function AccessTokens() {
         setRevealedTokens((prev) => ({ ...prev, [created.id]: created.token }));
         setVisibleTokenIds((prev) => ({ ...prev, [created.id]: true }));
       }
-      setCreateForm({ label: '', scopes: [], expiresInHours: '168' });
+      setCreateForm({ label: '', description: '', scopes: [], expiresInHours: '168', requiresApproval: false });
       setAllowedPersonas([]);
       setAllPersonas(true);
+      setBundleMode('custom');
+      setBundlePersonaId(null);
       setShowCreateForm(false);
     }
   };
@@ -335,9 +406,53 @@ function AccessTokens() {
   const handleOpenCreate = () => {
     setShowCreateForm(true);
     setNewlyCreated(null);
-    // Reset persona state when toggling form
     setAllowedPersonas([]);
     setAllPersonas(true);
+    setBundleMode('custom');
+    setBundlePersonaId(null);
+  };
+
+  const handlePublishToken = async (token) => {
+    const tokenKey = getTokenKey(token);
+    if (!tokenKey) return;
+    setPublishingTokenId(tokenKey);
+    clearError();
+    try {
+      const res = await fetch(`/api/v1/tokens/${tokenKey}/make-shareable`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${masterToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: token.description }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to publish token');
+      await fetchTokens(masterToken);
+      await fetchVaultTokens(masterToken);
+    } catch (err) {
+      setError(err.message || 'Failed to publish token');
+    } finally {
+      setPublishingTokenId(null);
+    }
+  };
+
+  const handleUnpublishToken = async (token) => {
+    const tokenKey = getTokenKey(token);
+    if (!tokenKey) return;
+    setPublishingTokenId(tokenKey);
+    clearError();
+    try {
+      const res = await fetch(`/api/v1/tokens/${tokenKey}/unpublish`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${masterToken}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to unpublish token');
+      await fetchTokens(masterToken);
+      await fetchVaultTokens(masterToken);
+    } catch (err) {
+      setError(err.message || 'Failed to unpublish token');
+    } finally {
+      setPublishingTokenId(null);
+    }
   };
 
   // Guest tokens = non-master tokens that are not revoked
@@ -360,9 +475,9 @@ function AccessTokens() {
     <div className="space-y-10">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-white">Master Tokens</h1>
+        <h1 className="text-3xl font-bold text-white">Access Tokens</h1>
         <p className="mt-2 text-slate-400">
-          Manage your master platform token and generate limited guest tokens for external access
+          Manage your master token, guest tokens, and marketplace-installed tokens
         </p>
       </div>
 
@@ -494,13 +609,33 @@ New Token
         {showCreateForm && (
           <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
             <div className="bg-slate-800 border border-slate-700 rounded-lg p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center justify-between mb-5">
                 <h3 className="text-lg font-semibold text-white">New Guest Token</h3>
                 <button onClick={() => setShowCreateForm(false)} className="text-slate-400 hover:text-slate-200 text-xl">✕</button>
               </div>
 
-            <h3 className="text-lg font-semibold text-white mb-4">New Guest Token</h3>
             <form onSubmit={handleCreateSubmit} className="space-y-5">
+              {/* Mode selector */}
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">Token Type</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer border transition-colors ${bundleMode === 'custom' ? 'bg-blue-600/10 border-blue-600' : 'bg-slate-900 border-slate-700 hover:border-slate-500'}`}>
+                    <input type="radio" name="bundleMode" value="custom" checked={bundleMode === 'custom'} onChange={() => setBundleMode('custom')} className="mt-0.5 h-4 w-4 text-blue-600 bg-slate-800 border-slate-600" />
+                    <div>
+                      <p className="text-sm font-medium text-white">Custom Scopes</p>
+                      <p className="text-xs text-slate-400">Pick individual access permissions</p>
+                    </div>
+                  </label>
+                  <label className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer border transition-colors ${bundleMode === 'persona_bundle' ? 'bg-purple-600/10 border-purple-600' : 'bg-slate-900 border-slate-700 hover:border-slate-500'}`}>
+                    <input type="radio" name="bundleMode" value="persona_bundle" checked={bundleMode === 'persona_bundle'} onChange={() => setBundleMode('persona_bundle')} className="mt-0.5 h-4 w-4 text-purple-500 bg-slate-800 border-slate-600" />
+                    <div>
+                      <p className="text-sm font-medium text-white">Persona Bundle</p>
+                      <p className="text-xs text-slate-400">Expose a full persona (skills + knowledge + chat)</p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">Token Label *</label>
                 <input
@@ -514,33 +649,103 @@ New Token
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">Access Scopes *</label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {GUEST_SCOPES.map((scope) => (
-                    <label
-                      key={scope.value}
-                      className="flex items-start gap-3 p-3 bg-slate-900 rounded-lg cursor-pointer hover:bg-slate-800 border border-transparent hover:border-slate-600 transition-colors"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={createForm.scopes.includes(scope.value)}
-                        onChange={() => handleScopeToggle(scope.value)}
-                        className="mt-0.5 h-4 w-4 text-blue-600 bg-slate-800 border-slate-600 rounded"
-                      />
-                      <div>
-                        <p className="text-sm font-medium text-white">{scope.label}</p>
-                        <p className="text-xs text-slate-400">{scope.description}</p>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-                {createForm.scopes.length === 0 && (
-                  <p className="mt-1 text-xs text-red-400">Select at least one scope</p>
-                )}
+                <label className="block text-sm font-medium text-slate-300 mb-1">Description <span className="text-slate-500 font-normal">(optional)</span></label>
+                <input
+                  type="text"
+                  value={createForm.description}
+                  onChange={(e) => setCreateForm((p) => ({ ...p, description: e.target.value }))}
+                  placeholder="What is this token used for?"
+                  className="w-full px-4 py-2.5 rounded-lg border border-slate-700 bg-slate-900 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+                />
               </div>
 
-              {/* Per-persona scoping — shown when 'personas' scope is selected */}
-              {createForm.scopes.includes('personas:read') && (
+              {/* Scope selection — custom mode */}
+              {bundleMode === 'custom' && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-300 mb-2">Access Scopes *</label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {GUEST_SCOPES.map((scope) => (
+                      <label
+                        key={scope.value}
+                        className="flex items-start gap-3 p-3 bg-slate-900 rounded-lg cursor-pointer hover:bg-slate-800 border border-transparent hover:border-slate-600 transition-colors"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={createForm.scopes.includes(scope.value)}
+                          onChange={() => handleScopeToggle(scope.value)}
+                          className="mt-0.5 h-4 w-4 text-blue-600 bg-slate-800 border-slate-600 rounded"
+                        />
+                        <div>
+                          <p className="text-sm font-medium text-white">{scope.label}</p>
+                          <p className="text-xs text-slate-400">{scope.description}</p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                  {createForm.scopes.length === 0 && (
+                    <p className="mt-1 text-xs text-red-400">Select at least one scope</p>
+                  )}
+                </div>
+              )}
+
+              {/* Persona bundle mode — scope summary + persona picker */}
+              {bundleMode === 'persona_bundle' && (
+                <div className="space-y-4">
+                  <div className="bg-purple-900/20 border border-purple-700/40 rounded-lg p-3">
+                    <p className="text-xs font-medium text-purple-300 mb-1">Included scopes</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {['personas', 'knowledge', 'skills:read', 'chat'].map(s => (
+                        <span key={s} className="px-2 py-0.5 bg-purple-700/30 text-purple-200 text-xs rounded border border-purple-700/50">{s}</span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="border border-slate-600 rounded-lg p-4 space-y-3">
+                    <div>
+                      <p className="text-sm font-medium text-slate-200">Select Persona *</p>
+                      <p className="text-xs text-slate-400 mt-0.5">This token will be scoped to one persona and its skills and knowledge.</p>
+                    </div>
+                    {personasLoading ? (
+                      <div className="flex items-center gap-2 text-slate-400 text-sm">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-500"></div>
+                        Loading personas…
+                      </div>
+                    ) : personas.length === 0 ? (
+                      <p className="text-xs text-slate-500">No personas found. Create a persona first.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {personas.map((persona) => (
+                          <label
+                            key={persona.id}
+                            className={`flex items-center gap-3 p-2.5 rounded-lg cursor-pointer border transition-colors ${bundlePersonaId === persona.id ? 'bg-purple-600/10 border-purple-600' : 'bg-slate-900 border-transparent hover:border-slate-600'}`}
+                          >
+                            <input
+                              type="radio"
+                              name="bundlePersona"
+                              checked={bundlePersonaId === persona.id}
+                              onChange={() => setBundlePersonaId(persona.id)}
+                              className="h-4 w-4 text-purple-500 bg-slate-800 border-slate-600"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-white">{persona.name}</p>
+                              {persona.description && (
+                                <p className="text-xs text-slate-400 truncate">{persona.description}</p>
+                              )}
+                            </div>
+                            {persona.active ? <span className="text-xs text-green-400 flex-shrink-0">Active</span> : null}
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                    {bundleMode === 'persona_bundle' && !bundlePersonaId && (
+                      <p className="text-xs text-red-400">Select a persona</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Per-persona scoping in custom mode — shown when 'personas' scope is selected */}
+              {bundleMode === 'custom' && createForm.scopes.includes('personas') && (
                 <div className="border border-slate-600 rounded-lg p-4 space-y-3">
                   <div>
                     <p className="text-sm font-medium text-slate-200">Persona Access</p>
@@ -556,7 +761,6 @@ New Token
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      {/* All Personas option */}
                       <label className="flex items-center gap-3 p-2.5 bg-slate-900 rounded-lg cursor-pointer hover:bg-slate-800 border border-transparent hover:border-slate-600 transition-colors">
                         <input
                           type="checkbox"
@@ -588,9 +792,7 @@ New Token
                                   <p className="text-xs text-slate-400 truncate">{persona.description}</p>
                                 )}
                               </div>
-                              {persona.active ? (
-                                <span className="text-xs text-green-400 flex-shrink-0">Active</span>
-                              ) : null}
+                              {persona.active ? <span className="text-xs text-green-400 flex-shrink-0">Active</span> : null}
                             </label>
                           ))}
                         </>
@@ -619,6 +821,20 @@ New Token
                 </select>
               </div>
 
+              {/* Requires Approval */}
+              <label className="flex items-center gap-3 p-3 bg-slate-900 rounded-lg cursor-pointer hover:bg-slate-800 border border-transparent hover:border-slate-600 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={createForm.requiresApproval}
+                  onChange={(e) => setCreateForm((p) => ({ ...p, requiresApproval: e.target.checked }))}
+                  className="h-4 w-4 text-amber-500 bg-slate-800 border-slate-600 rounded"
+                />
+                <div>
+                  <p className="text-sm font-medium text-white">Requires Approval</p>
+                  <p className="text-xs text-slate-400">Anyone using this token must be approved before access is granted</p>
+                </div>
+              </label>
+
               <div className="flex justify-end gap-3 pt-2">
                 <button
                   type="button"
@@ -629,7 +845,7 @@ New Token
                 </button>
                 <button
                   type="submit"
-                  disabled={isSaving || createForm.scopes.length === 0}
+                  disabled={isSaving || (bundleMode === 'custom' && createForm.scopes.length === 0) || (bundleMode === 'persona_bundle' && !bundlePersonaId)}
                   className="px-5 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50"
                 >
                   {isSaving ? 'Creating...' : 'Create Token'}
@@ -667,6 +883,9 @@ New Token
                   <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                     <div className="flex-1 min-w-0">
                       <h3 className="font-semibold text-white">{token.label || token.name}</h3>
+                      {token.description && (
+                        <p className="text-sm text-slate-400 mt-1">{token.description}</p>
+                      )}
 
                       {/* Scopes */}
                       {token.scopes && token.scopes.length > 0 && (
@@ -693,6 +912,20 @@ New Token
                           </span>
                         </div>
                       )}
+
+                      {/* Approval / shareable badges */}
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        {(token.requiresApproval || token.requires_approval) ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-600/20 text-amber-300 text-xs rounded border border-amber-700/50">
+                            Requires Approval
+                          </span>
+                        ) : null}
+                        {(token.isShareable || token.is_shareable) ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-600/20 text-emerald-300 text-xs rounded border border-emerald-700/50">
+                            Published
+                          </span>
+                        ) : null}
+                      </div>
 
                       {/* Metadata */}
                       <div className="flex flex-wrap gap-4 mt-3 text-xs text-slate-400">
@@ -762,6 +995,32 @@ New Token
                       >
                         {regeneratingTokenId === tokenKey ? 'Regenerating…' : 'Regenerate'}
                       </button>
+                      {/* Publish / Unpublish */}
+                      {(() => {
+                        const hasServiceScope = (token.scopes || []).some(s => s === 'services:read' || s === 'services:write' || s.startsWith('services:'));
+                        const isPublished = token.isShareable || token.is_shareable;
+                        if (isPublished) {
+                          return (
+                            <button
+                              onClick={() => handleUnpublishToken(token)}
+                              disabled={publishingTokenId === tokenKey}
+                              className="px-3 py-1.5 text-sm text-emerald-300 hover:text-emerald-200 bg-slate-700 hover:bg-slate-600 rounded transition-colors disabled:opacity-50 col-span-2 sm:col-span-1"
+                            >
+                              {publishingTokenId === tokenKey ? 'Updating…' : 'Unpublish'}
+                            </button>
+                          );
+                        }
+                        return (
+                          <button
+                            onClick={() => !hasServiceScope && handlePublishToken(token)}
+                            disabled={publishingTokenId === tokenKey || hasServiceScope}
+                            title={hasServiceScope ? 'Tokens with service scopes cannot be published' : 'Publish to marketplace'}
+                            className={`px-3 py-1.5 text-sm rounded transition-colors col-span-2 sm:col-span-1 ${hasServiceScope ? 'text-slate-500 bg-slate-700 cursor-not-allowed opacity-50' : 'text-emerald-400 hover:text-emerald-300 bg-slate-700 hover:bg-slate-600 disabled:opacity-50'}`}
+                          >
+                            {publishingTokenId === tokenKey ? 'Publishing…' : 'Publish'}
+                          </button>
+                        );
+                      })()}
                       <button
                         onClick={() => { selectToken(token); setShowRevokeModal(true); }}
                         className="px-3 py-1.5 text-sm text-red-400 hover:text-red-300 bg-slate-700 hover:bg-slate-600 rounded transition-colors col-span-2 sm:col-span-1"
@@ -776,6 +1035,145 @@ New Token
           </div>
         )}
       </section>
+
+      {/* ── Section 3: My Shareable Tokens (publishable, user-created via vault) ── */}
+      <section className="space-y-4">
+        <div>
+          <h2 className="text-xl font-semibold text-white">My Shareable Tokens</h2>
+          <p className="mt-1 text-sm text-slate-400">
+            Tokens you created that can be published to the marketplace for others to use.
+          </p>
+        </div>
+
+        {vaultLoading ? (
+          <div className="flex justify-center py-8">
+            <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-blue-500"></div>
+          </div>
+        ) : myPublishedTokens.length === 0 ? (
+          <div className="rounded-lg bg-slate-800 border-2 border-dashed border-slate-700 p-8 text-center">
+            <p className="text-sm text-slate-400">No shareable tokens yet. Create a guest token and publish it to the marketplace.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {myPublishedTokens.map((token) => (
+              <div key={token.id} className="bg-slate-800 border border-emerald-700/40 rounded-lg p-5 hover:border-emerald-700/60 transition-colors">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-semibold text-white">{token.label || token.name || 'Untitled'}</h3>
+                      {token.isPublished && (
+                        <span className="px-2 py-0.5 bg-emerald-900/60 text-emerald-300 text-xs rounded border border-emerald-700">Published</span>
+                      )}
+                    </div>
+                    {token.description && (
+                      <p className="text-sm text-slate-400 mt-1">{token.description}</p>
+                    )}
+                    <div className="flex flex-wrap gap-4 mt-2 text-xs text-slate-500">
+                      <span>Scope: {token.scope || 'default'}</span>
+                      {(token.created_at || token.createdAt) && (
+                        <span>Created: {new Date(token.created_at || token.createdAt).toLocaleDateString()}</span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setVaultDeleteTarget({ ...token, type: 'shareable' })}
+                    className="px-3 py-1.5 text-sm text-red-400 hover:text-red-300 bg-slate-700 hover:bg-slate-600 rounded transition-colors flex-shrink-0"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* ── Section 4: Installed from Marketplace ── */}
+      <section className="space-y-4">
+        <div>
+          <h2 className="text-xl font-semibold text-white">Installed from Marketplace</h2>
+          <p className="mt-1 text-sm text-slate-400">
+            Tokens added from the marketplace. Created by other users — used to access their data with their permission.
+          </p>
+        </div>
+
+        {vaultLoading ? (
+          <div className="flex justify-center py-8">
+            <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-blue-500"></div>
+          </div>
+        ) : installedTokens.length === 0 ? (
+          <div className="rounded-lg bg-slate-800 border-2 border-dashed border-slate-700 p-8 text-center">
+            <p className="text-sm text-slate-400">No installed tokens. Browse the marketplace to find and add tokens from other users.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {installedTokens.map((token) => (
+              <div key={token.id} className="bg-slate-800 border border-cyan-700/40 rounded-lg p-5 hover:border-cyan-700/60 transition-colors">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-semibold text-white">{token.label || token.name || 'Untitled'}</h3>
+                      <span className="px-2 py-0.5 bg-cyan-900/60 text-cyan-300 text-xs rounded border border-cyan-700">Installed</span>
+                    </div>
+                    {token.description && (
+                      <p className="text-sm text-slate-400 mt-1">{token.description}</p>
+                    )}
+                    <div className="flex flex-wrap gap-4 mt-2 text-xs text-slate-500">
+                      <span>Scope: {token.scope || 'default'}</span>
+                      {(token.created_at || token.createdAt) && (
+                        <span>Installed: {new Date(token.created_at || token.createdAt).toLocaleDateString()}</span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setVaultDeleteTarget({ ...token, type: 'installed' })}
+                    className="px-3 py-1.5 text-sm text-red-400 hover:text-red-300 bg-slate-700 hover:bg-slate-600 rounded transition-colors flex-shrink-0"
+                  >
+                    Revoke
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Vault token delete/revoke confirmation */}
+      {vaultDeleteTarget && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-red-800 rounded-lg max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold text-red-300 mb-2">
+              {vaultDeleteTarget.type === 'installed' ? 'Revoke installed token?' : 'Remove shareable token?'}
+            </h3>
+            <p className="text-sm text-slate-300 mb-5">
+              Are you sure you want to {vaultDeleteTarget.type === 'installed' ? 'revoke' : 'remove'}{' '}
+              <span className="font-semibold text-white">{vaultDeleteTarget.label || vaultDeleteTarget.name}</span>?
+              This action cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setVaultDeleteTarget(null)}
+                className="flex-1 px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (vaultDeleteTarget.type === 'installed') {
+                    await handleRevokeInstalledToken(vaultDeleteTarget.id);
+                  } else {
+                    await handleDeletePublishedToken(vaultDeleteTarget.id);
+                  }
+                  setVaultDeleteTarget(null);
+                }}
+                className="flex-1 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm"
+              >
+                {vaultDeleteTarget.type === 'installed' ? 'Revoke' : 'Remove'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modals */}
       <EditTokenModal

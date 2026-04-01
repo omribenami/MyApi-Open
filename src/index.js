@@ -149,6 +149,12 @@ const {
   getKBDocuments,
   getKBDocumentById,
   deleteKBDocument,
+  createMemory,
+  getMemories,
+  getMemoryById,
+  updateMemory,
+  deleteMemory,
+  clearMemories,
   getPersonaDocuments,
   getPersonaDocumentContents,
   attachDocumentToPersona,
@@ -1082,7 +1088,7 @@ app.get('/api/v1/quick-start', (req, res) => {
         step: 2,
         action: 'Load your full context — START HERE',
         endpoint: 'GET /api/v1/gateway/context',
-        detail: 'Returns everything you need in one call: who you are (persona + soul_content), who you are serving (user identity), long-term memory, connected services, and the complete list of endpoints available to your token. Always call this first.',
+        detail: 'Returns everything you need in one call: who you are (persona + soul_content), who you are serving (user identity), long-term memory (DB entries with IDs + timestamps), connected services, and the complete list of endpoints available to your token. Always call this first.',
         critical: true,
       },
       {
@@ -1093,13 +1099,20 @@ app.get('/api/v1/quick-start', (req, res) => {
       },
       {
         step: 4,
+        action: 'Store memory for future sessions',
+        endpoint: 'POST /api/v1/memory',
+        detail: 'Write freeform markdown notes that persist across AI sessions. Any AI that calls gateway/context will see these entries (with id + timestamp), enabling seamless context handoff between different AI assistants.',
+        body: { content: '<markdown text to remember>' },
+      },
+      {
+        step: 5,
         action: 'Explore the knowledge base',
         endpoint: 'GET /api/v1/brain/knowledge-base',
         detail: 'Read documents stored by the owner (identity, preferences, skills, etc).',
         requiredScope: 'knowledge',
       },
       {
-        step: 5,
+        step: 6,
         action: 'Chat with the AI brain',
         endpoint: 'POST /api/v1/brain/chat',
         detail: 'Send messages to the owner\'s AI brain. Your persona instructions from step 2 are automatically applied.',
@@ -1107,7 +1120,7 @@ app.get('/api/v1/quick-start', (req, res) => {
         body: { message: '<your message>', conversationId: '<optional — omit to start new>' },
       },
       {
-        step: 6,
+        step: 7,
         action: 'Proxy connected OAuth services',
         endpoint: 'GET /api/v1/services/:service/*',
         detail: 'Call any connected service (github, google, slack, etc.) through the proxy using the owner\'s stored credentials.',
@@ -1131,7 +1144,7 @@ app.get('/.well-known/ai-plugin.json', (req, res) => {
     name_for_human: 'MyApi',
     name_for_model: 'myapi',
     description_for_human: 'Personal API platform for managing your digital identity, knowledge, and connected services.',
-    description_for_model: 'MyApi is a personal API. ALWAYS use https://www.myapiai.com as the base URL — do not follow redirects as they strip auth headers. If your token is missing or rejected: (1) POST /api/v1/handshakes with {agentId, requestedScopes:["read"], message} — no auth needed, (2) poll GET /api/v1/handshakes/:id/status until approved, (3) owner shares a new token with you. With a valid token: FIRST call GET /api/v1/gateway/context — this returns your persona (who you are), the user identity (who you serve), long-term memory, and all available endpoints in one response. Then ask the human for explicit approval before every action.',
+    description_for_model: 'MyApi is a personal API. ALWAYS use https://www.myapiai.com as the base URL — do not follow redirects as they strip auth headers. If your token is missing or rejected: (1) POST /api/v1/handshakes with {agentId, requestedScopes:["read"], message} — no auth needed, (2) poll GET /api/v1/handshakes/:id/status until approved, (3) owner shares a new token with you. With a valid token: FIRST call GET /api/v1/gateway/context — this returns your persona, user identity, long-term memory (array of {id, content, created_at}), and all available endpoints. To persist memory across sessions: POST /api/v1/memory with {content: "markdown text"} — these entries appear in every future gateway/context call so any AI can resume context. Then ask the human for explicit approval before every action.',
     human_verification_required: true,
     auth: { type: 'service_http', authorization_type: 'bearer' },
     api: { type: 'openapi', url: `https://${host}/openapi.json` },
@@ -1180,6 +1193,7 @@ app.get('/api/v1/users/me', authenticate, (req, res) => {
 });
 
 app.put('/api/v1/users/me', authenticate, (req, res) => {
+  if (!isMaster(req)) return res.status(403).json({ error: 'Only master token can update user profile' });
   const fields = req.body || {};
   const userId = req.user?.id;
 
@@ -1252,6 +1266,7 @@ const avatarUpload = multer({
 
 // POST /api/v1/users/me/avatar - Upload profile picture
 app.post('/api/v1/users/me/avatar', authenticate, avatarUpload.single('avatar'), (req, res) => {
+  if (!isMaster(req)) return res.status(403).json({ error: 'Only master token can update avatar' });
   if (!req.file) return res.status(400).json({ error: 'No image file provided' });
   const avatarUrl = `/uploads/avatars/${req.file.filename}`;
   const userId = req.user?.id;
@@ -1305,6 +1320,7 @@ app.get('/api/v1/privacy/cookies', (req, res) => {
 });
 
 app.put('/api/v1/privacy/cookies', authenticate, rateLimit(60000, 20, 'cookies-write'), (req, res) => {
+  if (!isMaster(req)) return res.status(403).json({ error: 'Only master token can update privacy settings' });
   const ownerId = getRequestOwnerId(req);
   const mode = String(req.body?.mode || '').toLowerCase();
   if (!['all', 'essential', 'none'].includes(mode)) {
@@ -1347,6 +1363,7 @@ app.get('/api/v1/privacy/settings', rateLimit(60000, 60, 'privacy-settings-read'
 });
 
 app.put('/api/v1/privacy/settings', authenticate, rateLimit(60000, 20, 'privacy-settings-write'), (req, res) => {
+  if (!isMaster(req)) return res.status(403).json({ error: 'Only master token can update privacy settings' });
   const ownerId = getRequestOwnerId(req);
   const { dataSharing, apiLogging } = req.body || {};
 
@@ -1655,6 +1672,15 @@ function authenticate(req, res, next) {
   }
   req.tokenMeta = matched;
   req.authType = 'bearer';
+
+  // Populate req.user from the token's owner so endpoints that read req.user?.id work
+  // correctly regardless of whether auth came from a session or a Bearer token.
+  if (matched.ownerId && matched.ownerId !== 'owner') {
+    try {
+      const tokenOwner = getUserById(matched.ownerId);
+      if (tokenOwner) req.user = tokenOwner;
+    } catch (_) {}
+  }
 
   // For Bearer tokens (agents/APIs), enforce device approval.
   // This adds a layer of security: even if a master token is leaked, the attacker
@@ -2536,6 +2562,14 @@ No username or extra info needed. Just two steps:
 - POST /api/v1/handshakes                         → Request access (no auth)
 - GET  /api/v1/handshakes/:id/status              → Poll handshake status (no auth)
 
+## Memory (Cross-AI Persistent Context)
+Store notes that persist across all AI sessions. Any AI reading gateway/context sees these.
+- GET    /api/v1/memory                           → List all memory entries (id, content, created_at)
+- POST   /api/v1/memory  { content: "..." }       → Store a new memory (markdown text)
+- PATCH  /api/v1/memory/:id  { content: "..." }   → Update a memory entry
+- DELETE /api/v1/memory/:id                       → Delete one memory entry
+- DELETE /api/v1/memory                           → Clear all memories
+
 ## Documentation
 - OpenAPI spec: https://${host}/openapi.json
 - Quick start: https://${host}/api/v1/quick-start
@@ -2781,6 +2815,85 @@ app.get('/openapi.json', (req, res) => {
       '/api/v1/skills/{id}/documents': { get: { summary: 'List skill docs', security: [{ bearerAuth: [] }] }, post: { summary: 'Attach doc to skill', security: [{ bearerAuth: [] }] } },
       '/api/v1/skills/{id}/documents/{docId}': { delete: { summary: 'Detach doc from skill', security: [{ bearerAuth: [] }] } },
       '/api/v1/skills/{id}/attachments': { get: { summary: 'List skill persona attachments', security: [{ bearerAuth: [] }] } },
+
+      '/api/v1/memory': {
+        get: {
+          summary: 'List memory entries',
+          description: 'Returns all stored memory entries for the owner, newest first. Included in gateway/context so every AI session starts with full memory.',
+          security: [{ bearerAuth: [] }],
+          responses: {
+            '200': {
+              description: 'List of memory entries',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      data: {
+                        type: 'array',
+                        items: {
+                          type: 'object',
+                          properties: {
+                            id: { type: 'string', example: 'mem_abc123' },
+                            content: { type: 'string', example: 'User prefers concise responses' },
+                            created_at: { type: 'string', format: 'date-time' },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        post: {
+          summary: 'Store a memory entry',
+          description: 'Persist a freeform markdown note. Appears in every future GET /api/v1/gateway/context call so any AI — regardless of platform — can resume context.',
+          security: [{ bearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['content'],
+                  properties: {
+                    content: { type: 'string', description: 'Freeform markdown text to remember', example: 'User is building a SaaS product. Prefers TypeScript. Timezone: US/Eastern.' },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            '201': {
+              description: 'Memory entry created',
+              content: { 'application/json': { schema: { type: 'object', properties: { data: { type: 'object', properties: { id: { type: 'string' }, content: { type: 'string' }, created_at: { type: 'string' } } } } } } },
+            },
+          },
+        },
+        delete: {
+          summary: 'Clear all memories',
+          description: 'Delete every memory entry for this owner. Irreversible.',
+          security: [{ bearerAuth: [] }],
+          responses: { '200': { description: 'OK', content: { 'application/json': { schema: { type: 'object', properties: { success: { type: 'boolean' }, deleted: { type: 'integer' } } } } } } },
+        },
+      },
+      '/api/v1/memory/{id}': {
+        patch: {
+          summary: 'Update a memory entry',
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['content'], properties: { content: { type: 'string' } } } } } },
+          responses: { '200': { description: 'Updated' } },
+        },
+        delete: {
+          summary: 'Delete a memory entry',
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+          responses: { '200': { description: 'Deleted' } },
+        },
+      },
 
       '/api/v1/brain/knowledge-base': { get: { summary: 'List KB docs', security: [{ bearerAuth: [] }] }, post: { summary: 'Create KB doc', security: [{ bearerAuth: [] }] } },
       '/api/v1/brain/knowledge-base/{id}': { get: { summary: 'Get KB doc', security: [{ bearerAuth: [] }] }, delete: { summary: 'Delete KB doc', security: [{ bearerAuth: [] }] } },
@@ -3074,7 +3187,7 @@ app.delete("/api/v1/vault/tokens/:id", authenticate, (req, res) => {
 app.post("/api/v1/tokens", authenticate, (req, res) => {
   if (!isMaster(req)) return res.status(403).json({ error: "Only master token can create tokens" });
 
-  const { label = "Guest Token", scopes, expiresInHours, description, allowedPersonas } = req.body;
+  const { label = "Guest Token", scopes, expiresInHours, description, allowedPersonas, requiresApproval, scopeBundle } = req.body;
 
   // Parse scopes - support both template names and individual scopes
   let finalScopes = [];
@@ -3130,6 +3243,14 @@ app.post("/api/v1/tokens", authenticate, (req, res) => {
 
   const tokenId = createAccessToken(hash, getRequestOwnerId(req), JSON.stringify(finalScopes), label, expiresAt, personaIds, req.workspaceId || req.session?.currentWorkspace || null);
 
+  // Set additional fields that aren't in the base createAccessToken signature
+  const bundleJson = scopeBundle && typeof scopeBundle === 'object' ? JSON.stringify(scopeBundle) : null;
+  const needsApproval = requiresApproval ? 1 : 0;
+  if (bundleJson || needsApproval) {
+    db.prepare('UPDATE access_tokens SET scope_bundle = ?, requires_approval = ? WHERE id = ?')
+      .run(bundleJson, needsApproval, tokenId);
+  }
+
   // Grant the scopes to the token
   grantScopes(tokenId, finalScopes);
 
@@ -3156,6 +3277,8 @@ app.post("/api/v1/tokens", authenticate, (req, res) => {
       label,
       description: description || null,
       allowedPersonas: personaIds,
+      requiresApproval: needsApproval === 1,
+      scopeBundle: bundleJson ? scopeBundle : null,
       createdAt: new Date().toISOString(),
       expiresAt
     }
@@ -4245,8 +4368,9 @@ app.get("/api/v1/gateway/context", authenticate, (req, res) => {
       plan: dbUser.plan || 'free',
     } : (Object.keys(vaultIdentity).length > 0 ? vaultIdentity : null);
 
-    // Long-term memory bullets the owner has recorded (from MEMORY.md)
-    const memory = contextEngine.loadMemory();
+    // Long-term memory: DB entries (newest first) + MEMORY.md bullets
+    const dbMemories = getMemories(ownerId, req.workspaceId || null);
+    const fileMemory = contextEngine.loadMemory();
 
     // Vault tokens (metadata only — never the actual token values)
     const vaultTokens = getVaultTokens().map(t => ({
@@ -4276,6 +4400,11 @@ app.get("/api/v1/gateway/context", authenticate, (req, res) => {
       { method: 'GET',    path: '/api/v1/identity/availability',         description: 'Calendar, timezone, availability', scope: 'availability' },
       { method: 'GET',    path: '/api/v1/personas',                      description: 'List all personas', scope: 'personas' },
       { method: 'GET',    path: '/api/v1/personas/:id',                  description: 'Get a specific persona', scope: 'personas' },
+      { method: 'GET',    path: '/api/v1/memory',                        description: 'List all memory entries (newest first)', scope: 'memory' },
+      { method: 'POST',   path: '/api/v1/memory',                        description: 'Store a new memory entry', scope: 'memory' },
+      { method: 'PATCH',  path: '/api/v1/memory/:id',                    description: 'Update a memory entry', scope: 'memory' },
+      { method: 'DELETE', path: '/api/v1/memory/:id',                    description: 'Delete a specific memory entry', scope: 'memory' },
+      { method: 'DELETE', path: '/api/v1/memory',                        description: 'Clear all memory entries', scope: 'memory' },
       { method: 'GET',    path: '/api/v1/brain/knowledge-base',          description: 'List knowledge base documents', scope: 'knowledge' },
       { method: 'GET',    path: '/api/v1/brain/knowledge-base/:id',      description: 'Get a knowledge base document', scope: 'knowledge' },
       { method: 'GET',    path: '/api/v1/skills',                        description: 'List available skills', scope: 'skills:read' },
@@ -4295,8 +4424,9 @@ app.get("/api/v1/gateway/context", authenticate, (req, res) => {
       persona,
       // Who the AI is serving — full identity from the database
       user: userProfile,
-      // Long-term memory bullets the owner has recorded
-      memory: memory.memories || [],
+      // Long-term memory: structured DB entries + legacy MEMORY.md bullets
+      memory: dbMemories.map(m => ({ id: m.id, content: m.content, created_at: m.created_at })),
+      memory_legacy: fileMemory.memories || [],
       // Connected services metadata (no credentials)
       vault: { tokens: vaultTokens },
       // All available personas
@@ -4360,6 +4490,14 @@ app.post('/api/v1/tokens/:id/make-shareable', authenticate, (req, res) => {
     if (!token) return res.status(404).json({ error: 'Token not found' });
     if (token.revoked_at) return res.status(400).json({ error: 'Cannot share a revoked token' });
     if (token.is_shareable) return res.status(400).json({ error: 'Token is already being shared' });
+
+    // Block publishing tokens that include service scopes (they proxy real OAuth credentials)
+    let tokenScopes = [];
+    try { tokenScopes = JSON.parse(token.scope) || []; } catch { tokenScopes = token.scope ? token.scope.split(',') : []; }
+    const hasServiceScope = tokenScopes.some(s => s === 'services:read' || s === 'services:write' || s.startsWith('services:'));
+    if (hasServiceScope) {
+      return res.status(400).json({ error: 'Tokens with service scopes cannot be published to the marketplace' });
+    }
 
     // Create marketplace listing for this token
     const now = new Date().toISOString();
@@ -5631,15 +5769,14 @@ app.get("/api/v1/personas", authenticate, (req, res) => {
   const ownerId = getRequestOwnerId(req);
   let personas = getPersonas(ownerId, workspaceId);
   
-  // If this is a guest token with persona scope, only return that persona
-  if (req.tokenMeta?.is_guest_token && req.tokenMeta?.scope_bundle) {
+  // If this is a guest token with a scope_bundle, restrict to the bundled persona
+  const rawScopeBundle = req.tokenMeta?.scopeBundle;
+  if (rawScopeBundle && req.tokenMeta?.tokenType !== 'master') {
     try {
-      const scopeBundle = typeof req.tokenMeta.scope_bundle === 'string' 
-        ? JSON.parse(req.tokenMeta.scope_bundle) 
-        : req.tokenMeta.scope_bundle;
-      
-      if (scopeBundle.persona_id) {
-        personas = personas.filter(p => p.id === scopeBundle.persona_id);
+      const scopeBundle = typeof rawScopeBundle === 'string' ? JSON.parse(rawScopeBundle) : rawScopeBundle;
+      if (scopeBundle?.persona_id) {
+        const pid = Number(scopeBundle.persona_id);
+        personas = personas.filter(p => p.id === pid);
         if (personas.length === 0) {
           return res.status(404).json({ error: "Scoped persona not found" });
         }
@@ -5647,6 +5784,12 @@ app.get("/api/v1/personas", authenticate, (req, res) => {
     } catch (err) {
       console.error('[Guest Token] Error parsing scope_bundle:', err);
     }
+  }
+
+  // Also filter by allowedPersonas list if set on the token
+  const allowedPersonaIds = req.tokenMeta?.allowedPersonas;
+  if (Array.isArray(allowedPersonaIds) && allowedPersonaIds.length > 0 && req.tokenMeta?.tokenType !== 'master') {
+    personas = personas.filter(p => allowedPersonaIds.includes(p.id) || allowedPersonaIds.map(Number).includes(Number(p.id)));
   }
   
   createAuditLog({
@@ -7889,6 +8032,7 @@ app.get('/api/v1/brain/conversations/:id', authenticate, (req, res) => {
 
 // POST /api/v1/brain/knowledge-base - Add document
 app.post('/api/v1/brain/knowledge-base', authenticate, async (req, res) => {
+  if (!isMaster(req)) return res.status(403).json({ error: 'Only master token can create knowledge base documents' });
   try {
     const { source, title, content } = req.body;
 
@@ -7925,6 +8069,7 @@ app.post('/api/v1/brain/knowledge-base', authenticate, async (req, res) => {
 
 // POST /api/v1/brain/knowledge-base/upload - Upload and ingest document
 app.post('/api/v1/brain/knowledge-base/upload', authenticate, kbUploadFields, async (req, res) => {
+  if (!isMaster(req)) return res.status(403).json({ error: 'Only master token can upload knowledge base documents' });
   try {
     const uploadedFile = req.files?.file?.[0] || req.files?.document?.[0] || req.files?.upload?.[0] || req.files?.kbFile?.[0];
     if (!uploadedFile) {
@@ -8080,6 +8225,7 @@ app.get('/api/v1/brain/knowledge-base/:id/attachments', authenticate, (req, res)
 
 // DELETE /api/v1/brain/knowledge-base/:id - Delete KB document
 app.delete('/api/v1/brain/knowledge-base/:id', authenticate, (req, res) => {
+  if (!isMaster(req)) return res.status(403).json({ error: 'Only master token can delete knowledge base documents' });
   try {
     const { id } = req.params;
     const ownerId = getRequestOwnerId(req);
@@ -8101,6 +8247,99 @@ app.delete('/api/v1/brain/knowledge-base/:id', authenticate, (req, res) => {
   } catch (error) {
     console.error('Delete KB document error:', error);
     res.status(500).json({ error: 'Failed to delete document' });
+  }
+});
+
+// ─── Memory API ───────────────────────────────────────────────────────────────
+// AI agents (and users) store freeform markdown notes here.
+// Each entry has an id + timestamp so any AI can resume context across sessions.
+
+// GET /api/v1/memory - list all memories
+app.get('/api/v1/memory', authenticate, (req, res) => {
+  try {
+    const ownerId = getRequestOwnerId(req);
+    const memories = getMemories(ownerId, req.workspaceId || null);
+    res.json({ data: memories });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch memories' });
+  }
+});
+
+// POST /api/v1/memory - store a new memory
+app.post('/api/v1/memory', authenticate, (req, res) => {
+  try {
+    const { content } = req.body;
+    if (!content || typeof content !== 'string' || !content.trim()) {
+      return res.status(400).json({ error: 'content is required' });
+    }
+    const ownerId = getRequestOwnerId(req);
+    const memory = createMemory(content.trim(), ownerId, req.workspaceId || null);
+    createAuditLog({
+      requesterId: req.tokenMeta.tokenId,
+      action: 'memory_created',
+      resource: `/api/v1/memory/${memory.id}`,
+      scope: req.tokenMeta.scope,
+      ip: req.ip,
+    });
+    res.status(201).json({ data: memory });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to store memory' });
+  }
+});
+
+// PATCH /api/v1/memory/:id - update a memory
+app.patch('/api/v1/memory/:id', authenticate, (req, res) => {
+  try {
+    const { content } = req.body;
+    if (!content || typeof content !== 'string' || !content.trim()) {
+      return res.status(400).json({ error: 'content is required' });
+    }
+    const ownerId = getRequestOwnerId(req);
+    const existing = getMemoryById(req.params.id, ownerId);
+    if (!existing) return res.status(404).json({ error: 'Memory not found' });
+    updateMemory(req.params.id, content.trim(), ownerId);
+    res.json({ data: { ...existing, content: content.trim() } });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update memory' });
+  }
+});
+
+// DELETE /api/v1/memory - clear all memories
+app.delete('/api/v1/memory', authenticate, (req, res) => {
+  if (!isMaster(req)) return res.status(403).json({ error: 'Only master token can clear all memories' });
+  try {
+    const ownerId = getRequestOwnerId(req);
+    const count = clearMemories(ownerId, req.workspaceId || null);
+    createAuditLog({
+      requesterId: req.tokenMeta.tokenId,
+      action: 'memory_cleared',
+      resource: '/api/v1/memory',
+      scope: req.tokenMeta.scope,
+      ip: req.ip,
+      details: { count },
+    });
+    res.json({ success: true, deleted: count });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to clear memories' });
+  }
+});
+
+// DELETE /api/v1/memory/:id - delete one memory
+app.delete('/api/v1/memory/:id', authenticate, (req, res) => {
+  try {
+    const ownerId = getRequestOwnerId(req);
+    const deleted = deleteMemory(req.params.id, ownerId);
+    if (!deleted) return res.status(404).json({ error: 'Memory not found' });
+    createAuditLog({
+      requesterId: req.tokenMeta.tokenId,
+      action: 'memory_deleted',
+      resource: `/api/v1/memory/${req.params.id}`,
+      scope: req.tokenMeta.scope,
+      ip: req.ip,
+    });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete memory' });
   }
 });
 
@@ -8548,6 +8787,7 @@ app.get('/api/v1/marketplace/:id', (req, res) => {
 
 // POST /api/v1/marketplace - create listing
 app.post('/api/v1/marketplace', authenticate, (req, res) => {
+  if (!isMaster(req)) return res.status(403).json({ error: 'Only master token can create marketplace listings' });
   try {
     const { type, title, description, content, tags, price } = req.body;
     if (!type || !title) return res.status(400).json({ error: 'type and title are required' });
@@ -8574,6 +8814,7 @@ app.post('/api/v1/marketplace', authenticate, (req, res) => {
 
 // PUT /api/v1/marketplace/:id - update own listing
 app.put('/api/v1/marketplace/:id', authenticate, (req, res) => {
+  if (!isMaster(req)) return res.status(403).json({ error: 'Only master token can update marketplace listings' });
   try {
     const ownerId = req.tokenMeta.ownerId;
     const listing = updateMarketplaceListing(parseInt(req.params.id), ownerId, req.body);
@@ -8587,6 +8828,7 @@ app.put('/api/v1/marketplace/:id', authenticate, (req, res) => {
 
 // DELETE /api/v1/marketplace/:id - remove own listing
 app.delete('/api/v1/marketplace/:id', authenticate, (req, res) => {
+  if (!isMaster(req)) return res.status(403).json({ error: 'Only master token can delete marketplace listings' });
   try {
     const ownerId = req.tokenMeta.ownerId;
     const ok = removeMarketplaceListing(parseInt(req.params.id), ownerId);
@@ -8644,6 +8886,7 @@ app.post('/api/v1/marketplace/:id/rate', authenticate, (req, res) => {
 
 // POST /api/v1/marketplace/:id/install - track install/use and provision local resources
 app.post('/api/v1/marketplace/:id/install', authenticate, (req, res) => {
+  if (!isMaster(req)) return res.status(403).json({ error: 'Only master token can install marketplace items' });
   try {
     const listingId = parseInt(req.params.id, 10);
     if (!Number.isFinite(listingId)) {
@@ -9183,6 +9426,7 @@ app.get('/api/v1/privacy/retention-policy', authenticate, (req, res) => {
 
 // POST /api/v1/privacy/retention-policy
 app.post('/api/v1/privacy/retention-policy', authenticate, (req, res) => {
+  if (!isMaster(req)) return res.status(403).json({ error: 'Only master token can set retention policy' });
   try {
     const workspaceId = req.workspaceId || (req.user ? getOrEnsureUserWorkspace(req.user.id) : null);
     if (!workspaceId) return res.status(401).json({ error: 'Workspace context required' });

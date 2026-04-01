@@ -317,6 +317,16 @@ function initDatabase() {
       created_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS memories (
+      id TEXT PRIMARY KEY,
+      owner_id TEXT NOT NULL DEFAULT 'owner',
+      workspace_id TEXT,
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_memories_owner ON memories(owner_id);
+    CREATE INDEX IF NOT EXISTS idx_memories_created ON memories(owner_id, created_at DESC);
+
     CREATE TABLE IF NOT EXISTS scope_definitions (
       scope_name TEXT PRIMARY KEY,
       description TEXT NOT NULL,
@@ -1143,7 +1153,8 @@ function initDatabase() {
     "ALTER TABLE access_tokens ADD COLUMN source_token_id TEXT",
     "ALTER TABLE access_tokens ADD COLUMN marketplace_listing_id INTEGER",
     "ALTER TABLE access_tokens ADD COLUMN scope_bundle TEXT",
-    "ALTER TABLE access_tokens ADD COLUMN read_only INTEGER DEFAULT 0"
+    "ALTER TABLE access_tokens ADD COLUMN read_only INTEGER DEFAULT 0",
+    "ALTER TABLE access_tokens ADD COLUMN requires_approval INTEGER DEFAULT 0"
   ];
   
   for (const migration of guestTokenMigrations) {
@@ -1520,7 +1531,11 @@ function getAccessTokens(ownerId = null, workspaceId = null) {
     active: !row.revoked_at,
     allowedPersonas: row.allowed_personas ? JSON.parse(row.allowed_personas) : null,
     workspaceId: row.workspace_id,
-    tokenType: row.token_type || 'guest'
+    tokenType: row.token_type || 'guest',
+    isShareable: row.is_shareable || 0,
+    requiresApproval: row.requires_approval || 0,
+    scopeBundle: row.scope_bundle ? (() => { try { return JSON.parse(row.scope_bundle); } catch { return null; } })() : null,
+    marketplaceListingId: row.marketplace_listing_id || null
   }));
 }
 
@@ -3015,6 +3030,54 @@ function deleteKBDocument(id, ownerId = 'owner') {
     return result.changes > 0;
   });
   return tx(id, owner);
+}
+
+// ─── Memory ──────────────────────────────────────────────────────────────────
+
+function createMemory(content, ownerId = 'owner', workspaceId = null) {
+  const owner = normalizeOwnerId(ownerId);
+  const id = 'mem_' + crypto.randomBytes(12).toString('hex');
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO memories (id, owner_id, workspace_id, content, created_at)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(id, owner, workspaceId || null, content, now);
+  return { id, owner_id: owner, workspace_id: workspaceId || null, content, created_at: now };
+}
+
+function getMemories(ownerId = 'owner', workspaceId = null) {
+  const owner = normalizeOwnerId(ownerId);
+  const query = workspaceId
+    ? `SELECT * FROM memories WHERE owner_id = ? AND workspace_id = ? ORDER BY created_at DESC`
+    : `SELECT * FROM memories WHERE owner_id = ? ORDER BY created_at DESC`;
+  return workspaceId
+    ? db.prepare(query).all(owner, workspaceId)
+    : db.prepare(query).all(owner);
+}
+
+function getMemoryById(id, ownerId = 'owner') {
+  const owner = normalizeOwnerId(ownerId);
+  return db.prepare(`SELECT * FROM memories WHERE id = ? AND owner_id = ?`).get(id, owner) || null;
+}
+
+function updateMemory(id, content, ownerId = 'owner') {
+  const owner = normalizeOwnerId(ownerId);
+  const result = db.prepare(`UPDATE memories SET content = ? WHERE id = ? AND owner_id = ?`).run(content, id, owner);
+  return result.changes > 0;
+}
+
+function deleteMemory(id, ownerId = 'owner') {
+  const owner = normalizeOwnerId(ownerId);
+  const result = db.prepare(`DELETE FROM memories WHERE id = ? AND owner_id = ?`).run(id, owner);
+  return result.changes > 0;
+}
+
+function clearMemories(ownerId = 'owner', workspaceId = null) {
+  const owner = normalizeOwnerId(ownerId);
+  const result = workspaceId
+    ? db.prepare(`DELETE FROM memories WHERE owner_id = ? AND workspace_id = ?`).run(owner, workspaceId)
+    : db.prepare(`DELETE FROM memories WHERE owner_id = ?`).run(owner);
+  return result.changes;
 }
 
 // Persona Documents
@@ -6336,6 +6399,13 @@ module.exports = {
   getKBDocuments,
   getKBDocumentById,
   deleteKBDocument,
+  // Memory
+  createMemory,
+  getMemories,
+  getMemoryById,
+  updateMemory,
+  deleteMemory,
+  clearMemories,
   // Skills
   createSkill,
   getSkills,

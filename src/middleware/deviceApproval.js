@@ -72,8 +72,16 @@ function deviceApprovalMiddleware(req, res, next) {
     return next();
   }
 
-  // BUG-8: Removed SKIP_DEVICE_APPROVAL bypass - device approval is now mandatory for all API access
-  // Note: Device approval should be properly configured in production environment
+  // Check if this token requires device approval
+  // Tokens without requires_approval=1 (e.g. bundle tokens without the approval checkbox) skip this gate
+  try {
+    const tokenRow = db.db.prepare('SELECT requires_approval FROM access_tokens WHERE id = ?').get(tokenId);
+    if (!tokenRow || !tokenRow.requires_approval) {
+      return next(); // token doesn't require approval — pass through
+    }
+  } catch (_) {
+    // If lookup fails, fall through to full device check
+  }
 
   try {
     // Generate fingerprint from request

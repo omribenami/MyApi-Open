@@ -122,42 +122,41 @@ function Layout({ children, onLogout }) {
 
   const navGroups = [
     {
-      label: 'Core',
+      label: 'Overview',
       items: [
-        { path: '/access-tokens', label: 'Master Tokens' },
         { path: '/', label: 'Dashboard' },
-        { path: '/services', label: 'Services' },
-        { path: '/marketplace', label: 'Marketplace' },
+        { path: '/activity', label: 'Activity Log' },
+        { path: '/notifications', label: 'Notifications' },
       ]
     },
     {
-      label: 'Security',
+      label: 'AI & Brain',
       items: [
+        { path: '/identity', label: 'Identity' },
+        { path: '/personas', label: 'Personas' },
+        { path: '/knowledge', label: 'Knowledge' },
+        { path: '/skills', label: 'Skills' },
+      ]
+    },
+    {
+      label: 'Access',
+      items: [
+        { path: '/access-tokens', label: 'Access Tokens' },
         { path: '/tokens', label: 'Token Vault' },
         { path: '/devices', label: 'Device Management' },
       ]
     },
     {
-      label: 'Teams',
+      label: 'Integrations',
       items: [
-        { path: '/settings/team', label: 'Team Settings' },
-      ]
-    },
-    {
-      label: 'AI & Data',
-      items: [
+        { path: '/services', label: 'Services' },
         { path: '/connectors', label: 'Connectors' },
-        { path: '/identity', label: 'Identity' },
-        { path: '/personas', label: 'Personas' },
-        { path: '/skills', label: 'Skills' },
-        { path: '/knowledge', label: 'Knowledge' },
+        { path: '/marketplace', label: 'Marketplace' },
       ]
     },
     {
       label: 'Resources',
       items: [
-        { path: '/notifications', label: 'Notifications' },
-        { path: '/activity', label: 'Activity Log' },
         { path: '/platform-docs', label: 'Platform Docs' },
         { path: '/api-docs', label: 'API Docs' },
         { path: 'https://discord.gg/WPp4sCN4xB', label: 'Get Support', external: true },

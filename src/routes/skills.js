@@ -30,6 +30,21 @@ function createSkillsRoutes(
   // Helper to extract owner from token
   const getOwnerId = (req) => req.tokenMeta?.ownerId || req.tokenData?.id || req.session?.user?.id || req.session?.userId || 'owner';
 
+  // Check if request has write permission (master token or skills:write scope)
+  const canWriteSkills = (req) => {
+    const meta = req.tokenMeta;
+    if (!meta) return !!req.session?.user; // session auth = ok
+    if (meta.scope === 'full' || meta.tokenType === 'master' || String(meta.tokenId || '').startsWith('sess_')) return true;
+    // Check granular scope via the scopes granted to this token
+    const scopeStr = meta.scope || '';
+    try {
+      const scopes = JSON.parse(scopeStr);
+      return Array.isArray(scopes) && (scopes.includes('admin:*') || scopes.includes('skills:write'));
+    } catch {
+      return scopeStr === 'full' || scopeStr.includes('skills:write') || scopeStr.includes('admin:*');
+    }
+  };
+
   // Validation error handler
   const handleValidationErrors = (req, res, next) => {
     const errors = validationResult(req);
@@ -127,6 +142,7 @@ function createSkillsRoutes(
     body('originOwner').optional().isString().trim(),
     body('license').optional().isString().trim()
   ], handleValidationErrors, async (req, res) => {
+    if (!canWriteSkills(req)) return res.status(403).json({ error: "Requires 'skills:write' scope" });
     try {
       const ownerId = getOwnerId(req);
       const {
@@ -243,6 +259,7 @@ function createSkillsRoutes(
   router.post('/:id/versions', [
     body('releaseNotes').optional().isString()
   ], handleValidationErrors, (req, res) => {
+    if (!canWriteSkills(req)) return res.status(403).json({ error: "Requires 'skills:write' scope" });
     try {
       const ownerId = getOwnerId(req);
       const skill = getSkillById(req.params.id, ownerId);
@@ -314,6 +331,7 @@ function createSkillsRoutes(
     body('name').isString().trim().notEmpty(),
     body('description').optional().isString().trim()
   ], handleValidationErrors, (req, res) => {
+    if (!canWriteSkills(req)) return res.status(403).json({ error: "Requires 'skills:write' scope" });
     try {
       const ownerId = getOwnerId(req);
       const { name, description } = req.body;

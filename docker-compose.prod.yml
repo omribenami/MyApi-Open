@@ -46,8 +46,8 @@ services:
       - "${PORT:-4500}:${PORT:-4500}"
 
     volumes:
-      # SQLite database and uploads — persisted on the host
-      - myapi-data:/app/data
+      # SQLite database — bind-mounted from host so data persists across rebuilds
+      - ./data:/app/data
       # Application logs
       - myapi-logs:/app/logs
 
@@ -78,8 +78,6 @@ services:
   #     - myapi
 
 volumes:
-  myapi-data:
-    driver: local
   myapi-logs:
     driver: local
 

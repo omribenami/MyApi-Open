@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { getConversationHistory, getCachedContext, cacheContext, getKBDocumentById } = require('../database');
+const { getConversationHistory, getCachedContext, cacheContext, getKBDocumentById, getMemories } = require('../database');
 
 /**
  * Context Assembly Engine
@@ -67,30 +67,35 @@ class ContextEngine {
   /**
    * Load MEMORY.md - Long-term memory
    */
-  loadMemory() {
+  loadMemory(ownerId = 'owner') {
     try {
+      // DB memories (structured, with id + timestamp)
+      let dbMemories = [];
+      try {
+        dbMemories = getMemories(ownerId);
+      } catch (_) {}
+
+      // Legacy MEMORY.md bullets
       const memoryMdPath = path.join(this.workspaceRoot, 'MEMORY.md');
-      if (!fs.existsSync(memoryMdPath)) {
-        return { memories: [] };
+      let fileMemories = [];
+      if (fs.existsSync(memoryMdPath)) {
+        const content = fs.readFileSync(memoryMdPath, 'utf8');
+        fileMemories = content.split('\n')
+          .filter(line => line.trim().startsWith('-') || line.trim().startsWith('*'))
+          .map(line => line.replace(/^[\s\-\*]+/, '').trim())
+          .filter(line => line.length > 0);
       }
 
-      const content = fs.readFileSync(memoryMdPath, 'utf8');
-      const lines = content.split('\n');
-      
-      // Extract memory entries (usually marked as - or bullets)
-      const memories = lines
-        .filter(line => line.trim().startsWith('-') || line.trim().startsWith('*'))
-        .map(line => line.replace(/^[\s\-\*]+/, '').trim())
-        .filter(line => line.length > 0);
+      // Unified list: DB entries as strings (newest first), then file bullets
+      const memories = [
+        ...dbMemories.map(m => m.content),
+        ...fileMemories,
+      ];
 
-      return {
-        memories,
-        source: 'MEMORY.md',
-        content
-      };
+      return { memories, dbMemories, fileMemories };
     } catch (error) {
       console.error('Error loading memory:', error);
-      return { memories: [] };
+      return { memories: [], dbMemories: [], fileMemories: [] };
     }
   }
 
