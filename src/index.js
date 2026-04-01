@@ -149,6 +149,8 @@ const {
   getKBDocuments,
   getKBDocumentById,
   deleteKBDocument,
+  updateKBDocument,
+  getKBDocumentByTitle,
   createMemory,
   getMemories,
   getMemoryById,
@@ -980,6 +982,9 @@ app.use('/dashboard', (req, res, next) => {
 
 // General static files
 app.use(express.static(path.join(__dirname, "public")));
+
+// Connectors — serve OpenAPI specs and related files publicly
+app.use('/connectors', express.static(path.join(__dirname, '..', 'connectors')));
 
 // Legal pages - Terms and Privacy
 app.get('/terms', (req, res) => {
@@ -2906,8 +2911,105 @@ app.get('/openapi.json', (req, res) => {
         },
       },
 
-      '/api/v1/brain/knowledge-base': { get: { summary: 'List KB docs', security: [{ bearerAuth: [] }] }, post: { summary: 'Create KB doc', security: [{ bearerAuth: [] }] } },
-      '/api/v1/brain/knowledge-base/{id}': { get: { summary: 'Get KB doc', security: [{ bearerAuth: [] }] }, delete: { summary: 'Delete KB doc', security: [{ bearerAuth: [] }] } },
+      '/api/v1/brain/knowledge-base': {
+        get: { summary: 'List KB docs', operationId: 'listKBDocuments', security: [{ bearerAuth: [] }] },
+        post: {
+          summary: 'Create KB doc',
+          operationId: 'createKBDocument',
+          security: [{ bearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['title', 'content'],
+                  properties: {
+                    title: { type: 'string', description: 'Document title' },
+                    content: { type: 'string', description: 'Document content (markdown or plain text)' },
+                    source: { type: 'string', description: 'Source identifier (defaults to "agent")', default: 'agent' },
+                  },
+                },
+              },
+            },
+          },
+          responses: { '200': { description: 'Document created' } },
+        },
+      },
+      '/api/v1/brain/knowledge-base/upsert': {
+        post: {
+          summary: 'Create or update KB doc by title',
+          operationId: 'upsertKBDocument',
+          description: 'Creates a new document or updates an existing one with the same title. Ideal for agents maintaining persistent named documents like "memory.md".',
+          security: [{ bearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['title', 'content'],
+                  properties: {
+                    title: { type: 'string', description: 'Document title (used as unique key for upsert)' },
+                    content: { type: 'string', description: 'Full document content (markdown or plain text)' },
+                    source: { type: 'string', description: 'Source identifier (defaults to "agent")', default: 'agent' },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            '200': {
+              description: 'Document created or updated',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      ok: { type: 'boolean' },
+                      action: { type: 'string', enum: ['created', 'updated'] },
+                      document: {
+                        type: 'object',
+                        properties: {
+                          id: { type: 'string' },
+                          title: { type: 'string' },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/api/v1/brain/knowledge-base/{id}': {
+        get: { summary: 'Get KB doc', operationId: 'getKBDocument', security: [{ bearerAuth: [] }] },
+        put: {
+          summary: 'Update KB doc',
+          operationId: 'updateKBDocument',
+          security: [{ bearerAuth: [] }],
+          parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['content'],
+                  properties: {
+                    title: { type: 'string' },
+                    content: { type: 'string' },
+                    source: { type: 'string' },
+                  },
+                },
+              },
+            },
+          },
+          responses: { '200': { description: 'Updated' } },
+        },
+        delete: { summary: 'Delete KB doc', operationId: 'deleteKBDocument', security: [{ bearerAuth: [] }] },
+      },
       '/api/v1/brain/knowledge-base/{id}/attachments': { get: { summary: 'KB attachment usage', security: [{ bearerAuth: [] }] } },
       '/api/v1/brain/knowledge-base/upload': {
         post: {
@@ -2945,6 +3047,92 @@ app.get('/openapi.json', (req, res) => {
       '/api/v1/services/{serviceId}/methods': { get: { summary: 'Service methods', security: [{ bearerAuth: [] }] } },
       '/api/v1/services/{serviceName}/execute': { post: { summary: 'Execute service method', security: [{ bearerAuth: [] }] } },
       '/api/v1/services/{serviceName}/proxy': { post: { summary: 'Proxy raw API request to service', security: [{ bearerAuth: [] }] } },
+
+      '/api/v1/services/google/gmail/messages': {
+        get: {
+          operationId: 'listGmailMessages',
+          summary: 'List Gmail messages',
+          description: 'Fetch recent emails from the connected Gmail account. Returns subject, sender, date, and snippet for each message.',
+          security: [{ bearerAuth: [] }],
+          parameters: [
+            { name: 'maxResults', in: 'query', schema: { type: 'integer', default: 5, maximum: 20 }, description: 'Number of messages to return' },
+            { name: 'q', in: 'query', schema: { type: 'string' }, description: 'Gmail search query (e.g. "is:unread", "from:boss@example.com")' },
+            { name: 'pageToken', in: 'query', schema: { type: 'string' }, description: 'Page token for pagination' },
+          ],
+          responses: {
+            '200': {
+              description: 'List of email messages',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean' },
+                      messages: {
+                        type: 'array',
+                        items: {
+                          type: 'object',
+                          properties: {
+                            id: { type: 'string' },
+                            threadId: { type: 'string' },
+                            subject: { type: 'string' },
+                            from: { type: 'string' },
+                            to: { type: 'string' },
+                            date: { type: 'string' },
+                            snippet: { type: 'string' },
+                            isUnread: { type: 'boolean' },
+                          },
+                        },
+                      },
+                      nextPageToken: { type: 'string', nullable: true },
+                    },
+                  },
+                },
+              },
+            },
+            '403': { description: 'Google not connected' },
+          },
+        },
+      },
+      '/api/v1/services/google/gmail/messages/{messageId}': {
+        get: {
+          operationId: 'getGmailMessage',
+          summary: 'Get a Gmail message',
+          description: 'Fetch the full content of a single Gmail message by ID.',
+          security: [{ bearerAuth: [] }],
+          parameters: [
+            { name: 'messageId', in: 'path', required: true, schema: { type: 'string' } },
+          ],
+          responses: {
+            '200': {
+              description: 'Full email message',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      success: { type: 'boolean' },
+                      message: {
+                        type: 'object',
+                        properties: {
+                          id: { type: 'string' },
+                          subject: { type: 'string' },
+                          from: { type: 'string' },
+                          to: { type: 'string' },
+                          date: { type: 'string' },
+                          snippet: { type: 'string' },
+                          body: { type: 'string' },
+                          isUnread: { type: 'boolean' },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
 
       '/api/v1/oauth/authorize/{service}': { get: { summary: 'OAuth authorize URL', security: [{ bearerAuth: [] }] } },
       '/api/v1/oauth/callback/{service}': { get: { summary: 'OAuth callback', responses: { '200': { description: 'OK' } } } },
@@ -4417,7 +4605,10 @@ app.get("/api/v1/gateway/context", authenticate, (req, res) => {
       { method: 'DELETE', path: '/api/v1/memory/:id',                    description: 'Delete a specific memory entry', scope: 'memory' },
       { method: 'DELETE', path: '/api/v1/memory',                        description: 'Clear all memory entries', scope: 'memory' },
       { method: 'GET',    path: '/api/v1/brain/knowledge-base',          description: 'List knowledge base documents', scope: 'knowledge' },
+      { method: 'POST',   path: '/api/v1/brain/knowledge-base',          description: 'Create a knowledge base document', scope: 'knowledge' },
+      { method: 'POST',   path: '/api/v1/brain/knowledge-base/upsert',   description: 'Create or update a KB document by title', scope: 'knowledge' },
       { method: 'GET',    path: '/api/v1/brain/knowledge-base/:id',      description: 'Get a knowledge base document', scope: 'knowledge' },
+      { method: 'PUT',    path: '/api/v1/brain/knowledge-base/:id',      description: 'Update a knowledge base document', scope: 'knowledge' },
       { method: 'GET',    path: '/api/v1/skills',                        description: 'List available skills', scope: 'skills:read' },
       { method: 'GET',    path: '/api/v1/skills/:id',                    description: 'Get skill details', scope: 'skills:read' },
       { method: 'POST',   path: '/api/v1/skills',                        description: 'Create a new skill', scope: 'skills:write' },
@@ -8043,12 +8234,14 @@ app.get('/api/v1/brain/conversations/:id', authenticate, (req, res) => {
 
 // POST /api/v1/brain/knowledge-base - Add document
 app.post('/api/v1/brain/knowledge-base', authenticate, async (req, res) => {
-  if (!isMaster(req)) return res.status(403).json({ error: 'Only master token can create knowledge base documents' });
+  if (!isMaster(req) && !hasScope(req, 'knowledge')) {
+    return res.status(403).json({ error: "Requires 'knowledge' scope or master token" });
+  }
   try {
     const { source, title, content } = req.body;
 
-    if (!source || !title || !content) {
-      return res.status(400).json({ error: 'source, title, and content are required' });
+    if (!title || !content) {
+      return res.status(400).json({ error: 'title and content are required' });
     }
 
     const currentBytes = getKnowledgeBaseBytesUsed(req);
@@ -8056,7 +8249,8 @@ app.post('/api/v1/brain/knowledge-base', authenticate, async (req, res) => {
     const kbLimitErr = enforcePlanLimit(req, 'knowledgeBytes', currentBytes, incomingBytes);
     if (kbLimitErr) return res.status(403).json(kbLimitErr);
 
-    const docs = await knowledgeBase.addDocument(source, title, content, getRequestOwnerId(req));
+    const ownerId = getRequestOwnerId(req);
+    const docs = await knowledgeBase.addDocument(source || 'agent', title, content, ownerId);
 
     createAuditLog({
       requesterId: req.tokenMeta.tokenId,
@@ -8069,12 +8263,90 @@ app.post('/api/v1/brain/knowledge-base', authenticate, async (req, res) => {
 
     res.json({
       id: docs[0]?.id,
+      title: docs[0]?.title,
       tokensProcessed: content.split(/\s+/).length,
       documentsCreated: docs.length
     });
   } catch (error) {
     console.error('Add KB document error:', error);
     res.status(500).json({ error: 'Failed to add document' });
+  }
+});
+
+// PUT /api/v1/brain/knowledge-base/:id - Update an existing KB document
+app.put('/api/v1/brain/knowledge-base/:id', authenticate, async (req, res) => {
+  if (!isMaster(req) && !hasScope(req, 'knowledge')) {
+    return res.status(403).json({ error: "Requires 'knowledge' scope or master token" });
+  }
+  try {
+    const ownerId = getRequestOwnerId(req);
+    const { title, content, source } = req.body;
+
+    if (!content) return res.status(400).json({ error: 'content is required' });
+
+    const existing = getKBDocumentById(req.params.id, ownerId);
+    if (!existing) return res.status(404).json({ error: 'Document not found' });
+
+    const updated = updateKBDocument(req.params.id, { title, content, source }, ownerId);
+
+    createAuditLog({
+      requesterId: req.tokenMeta.tokenId,
+      action: 'kb_document_updated',
+      resource: `/api/v1/brain/knowledge-base/${req.params.id}`,
+      scope: req.tokenMeta.scope,
+      ip: req.ip,
+      details: { title: updated?.title }
+    });
+
+    res.json({ ok: true, document: updated });
+  } catch (error) {
+    console.error('Update KB document error:', error);
+    res.status(500).json({ error: 'Failed to update document' });
+  }
+});
+
+// POST /api/v1/brain/knowledge-base/upsert - Create or update a document by title
+// Useful for agents that want to maintain a named document (e.g. "memory.md")
+app.post('/api/v1/brain/knowledge-base/upsert', authenticate, async (req, res) => {
+  if (!isMaster(req) && !hasScope(req, 'knowledge')) {
+    return res.status(403).json({ error: "Requires 'knowledge' scope or master token" });
+  }
+  try {
+    const { title, content, source } = req.body;
+    if (!title || !content) return res.status(400).json({ error: 'title and content are required' });
+
+    const ownerId = getRequestOwnerId(req);
+    const existing = getKBDocumentByTitle(title, ownerId);
+
+    let doc;
+    let action;
+    if (existing) {
+      doc = updateKBDocument(existing.id, { content, source: source || existing.source }, ownerId);
+      action = 'updated';
+    } else {
+      const currentBytes = getKnowledgeBaseBytesUsed(req);
+      const incomingBytes = Buffer.byteLength(String(content || ''), 'utf8');
+      const kbLimitErr = enforcePlanLimit(req, 'knowledgeBytes', currentBytes, incomingBytes);
+      if (kbLimitErr) return res.status(403).json(kbLimitErr);
+
+      const docs = await knowledgeBase.addDocument(source || 'agent', title, content, ownerId);
+      doc = docs[0];
+      action = 'created';
+    }
+
+    createAuditLog({
+      requesterId: req.tokenMeta.tokenId,
+      action: `kb_document_${action}`,
+      resource: '/api/v1/brain/knowledge-base/upsert',
+      scope: req.tokenMeta.scope,
+      ip: req.ip,
+      details: { title, action }
+    });
+
+    res.json({ ok: true, action, document: { id: doc?.id, title: doc?.title } });
+  } catch (error) {
+    console.error('Upsert KB document error:', error);
+    res.status(500).json({ error: 'Failed to upsert document' });
   }
 });
 

@@ -1,7 +1,12 @@
 const express = require('express');
 const { body, query, validationResult } = require('express-validator');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const GitHubRepoMetadata = require('../services/github-repo-metadata');
+
+// Where Claude Code skills live when mounted into the container
+const CLAUDE_SKILLS_DIR = process.env.CLAUDE_SKILLS_DIR || '/app/claude-skills';
 
 function createSkillsRoutes(
   db,
@@ -433,6 +438,86 @@ function createSkillsRoutes(
       res.status(500).json({ error: error.message });
     }
   });
+
+  // GET /skills/:id/skill.md - Get the SKILL.md content as raw text
+  router.get('/:id/skill.md', (req, res) => {
+    if (!canReadSkills(req)) return res.status(403).json({ error: "Requires 'skills:read' scope" });
+    try {
+      const ownerId = getOwnerId(req);
+      const skill = getSkillById(req.params.id, ownerId);
+
+      if (!skill) {
+        return res.status(404).json({ error: 'Skill not found' });
+      }
+
+      // Bundle token: block access to skills not attached to the bundled persona
+      const bundlePersonaId = getBundlePersonaId(req);
+      if (bundlePersonaId) {
+        const attached = db.prepare('SELECT skill_id FROM persona_skills WHERE persona_id = ? AND skill_id = ?').get(bundlePersonaId, skill.id);
+        if (!attached) return res.status(403).json({ error: 'Skill not accessible with this token' });
+      }
+
+      let content = skill.script_content || null;
+
+      // Fall back to SKILL.md on disk (mounted from the host Claude skills dir)
+      if (!content) {
+        const diskPath = path.join(CLAUDE_SKILLS_DIR, skill.name, 'SKILL.md');
+        try {
+          content = fs.readFileSync(diskPath, 'utf8');
+        } catch (_) {
+          content = '';
+        }
+      }
+
+      res.set('Content-Type', 'text/markdown; charset=utf-8');
+      res.send(content);
+    } catch (error) {
+      console.error('Error getting skill.md:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // PUT /skills/:id/skill.md - Set the SKILL.md content
+  // Accepts:
+  //   - JSON body: { "content": "# My Skill\n..." }  (Content-Type: application/json)
+  //   - Raw markdown body                             (Content-Type: text/markdown or text/plain)
+  router.put(
+    '/:id/skill.md',
+    (req, res, next) => {
+      const ct = req.headers['content-type'] || '';
+      if (ct.includes('text/')) {
+        express.text({ type: 'text/*', limit: '500kb' })(req, res, next);
+      } else {
+        next();
+      }
+    },
+    (req, res) => {
+      if (!canWriteSkills(req)) return res.status(403).json({ error: "Requires 'skills:write' scope" });
+      try {
+        const ownerId = getOwnerId(req);
+        const skill = getSkillById(req.params.id, ownerId);
+
+        if (!skill) {
+          return res.status(404).json({ error: 'Skill not found' });
+        }
+
+        // Resolve content from either raw text or JSON body
+        const ct = req.headers['content-type'] || '';
+        let content;
+        if (ct.includes('text/')) {
+          content = typeof req.body === 'string' ? req.body : '';
+        } else {
+          content = req.body?.content ?? req.body?.script_content ?? '';
+        }
+
+        const updated = updateSkill(skill.id, { script_content: String(content) }, ownerId);
+        res.json({ ok: true, skill: updated });
+      } catch (error) {
+        console.error('Error updating skill.md:', error);
+        res.status(500).json({ error: error.message });
+      }
+    }
+  );
 
   // GET /licenses - Get available licenses
   router.get('/licenses', (req, res) => {

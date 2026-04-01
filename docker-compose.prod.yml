@@ -50,6 +50,11 @@ services:
       - ./data:/app/data
       # Application logs
       - myapi-logs:/app/logs
+      # Claude Code skills — read-only; lets MyApi serve SKILL.md files from disk
+      # without requiring them to be stored in the database first.
+      - /root/.claude/skills:/app/claude-skills:ro
+      # Connectors — OpenAPI specs, ChatGPT action schemas, privacy policies
+      - ./connectors:/app/connectors:ro
 
     networks:
       - myapi-network

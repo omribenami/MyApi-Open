@@ -1,4 +1,6 @@
 const express = require('express');
+const https = require('https');
+const bcrypt = require('bcrypt');
 const {
   getServicePreference,
   getServicePreferences,
@@ -8,6 +10,7 @@ const {
   getOAuthToken,
   isTokenExpired,
   refreshOAuthToken,
+  getAccessTokens,
 } = require('../database');
 
 // Token URLs for auto-refresh (keyed by service id)
@@ -47,11 +50,31 @@ const SERVICE_CATALOG = [
 function createServicesRoutes() {
   const router = express.Router();
 
-  // Auth middleware for write operations
-  function requireAuth(req, res, next) {
-    if (req.session?.user || req.tokenMeta) {
-      return next();
+  // Auth middleware — honours tokenMeta already set by index.js authenticate(),
+  // and falls back to parsing the Bearer token itself when the services router
+  // runs before the global authenticate middleware.
+  async function requireAuth(req, res, next) {
+    if (req.session?.user || req.tokenMeta) return next();
+
+    const authHeader = req.headers.authorization || '';
+    const rawToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : (req.query.token || '');
+    if (!rawToken) return res.status(401).json({ error: 'Unauthorized' });
+
+    try {
+      const tokens = getAccessTokens();
+      for (const t of tokens) {
+        if (t.revokedAt) continue;
+        if (t.expiresAt && new Date(t.expiresAt) <= new Date()) continue;
+        if (t.hash && bcrypt.compareSync(rawToken, t.hash)) {
+          req.tokenMeta = t;
+          req.user = req.user || { id: t.ownerId };
+          return next();
+        }
+      }
+    } catch (e) {
+      console.error('[services] requireAuth error:', e.message);
     }
+
     res.status(401).json({ error: 'Unauthorized' });
   }
 
@@ -102,7 +125,7 @@ function createServicesRoutes() {
   }
 
   // GET /api/v1/services - List all services with their connection status
-  router.get('/', async (req, res) => {
+  router.get('/', requireAuth, async (req, res) => {
     try {
       const userId = resolveUserId(req);
 
@@ -302,6 +325,184 @@ function createServicesRoutes() {
     } catch (error) {
       console.error('[ServicePreferences] Error deleting preference:', error);
       res.status(500).json({ error: 'Failed to delete service preference' });
+    }
+  });
+
+  // ── Google Gmail endpoints ───────────────────────────────────────────────
+
+  // Helper: get a valid Google access token, auto-refreshing if needed
+  async function getGoogleAccessToken(userId) {
+    let token = getOAuthToken('google', userId);
+    if (!token) return null;
+
+    if (isTokenExpired(token) && token.refreshToken) {
+      const result = await refreshOAuthToken(
+        'google', userId,
+        'https://oauth2.googleapis.com/token',
+        process.env.GOOGLE_CLIENT_ID,
+        process.env.GOOGLE_CLIENT_SECRET
+      );
+      if (result?.ok) token = result.token;
+    }
+
+    return token?.accessToken || null;
+  }
+
+  // Helper: make a GET request to the Gmail API
+  function gmailGet(accessToken, path) {
+    return new Promise((resolve, reject) => {
+      const url = new URL('https://gmail.googleapis.com' + path);
+      const options = {
+        hostname: url.hostname,
+        path: url.pathname + url.search,
+        method: 'GET',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      };
+      const req = https.request(options, (res) => {
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+          try { resolve({ status: res.statusCode, body: JSON.parse(data) }); }
+          catch { resolve({ status: res.statusCode, body: data }); }
+        });
+      });
+      req.on('error', reject);
+      req.end();
+    });
+  }
+
+  // GET /api/v1/services/google/gmail/messages
+  // Query params: maxResults (default 5, max 20), q (Gmail search query), pageToken
+  router.get('/google/gmail/messages', requireAuth, async (req, res) => {
+    try {
+      const userId = resolveUserId(req);
+      const accessToken = await getGoogleAccessToken(userId);
+
+      if (!accessToken) {
+        return res.status(403).json({
+          error: 'Google not connected',
+          message: 'Connect your Google account first via /api/v1/oauth/connect/google',
+        });
+      }
+
+      const maxResults = Math.min(Number(req.query.maxResults) || 5, 20);
+      const q = req.query.q || '';
+      const pageToken = req.query.pageToken || '';
+
+      let listPath = `/gmail/v1/users/me/messages?maxResults=${maxResults}`;
+      if (q) listPath += `&q=${encodeURIComponent(q)}`;
+      if (pageToken) listPath += `&pageToken=${encodeURIComponent(pageToken)}`;
+
+      const listResp = await gmailGet(accessToken, listPath);
+      if (listResp.status !== 200) {
+        return res.status(listResp.status).json({ error: 'Gmail API error', details: listResp.body });
+      }
+
+      const { messages = [], nextPageToken, resultSizeEstimate } = listResp.body;
+
+      // Fetch metadata for each message in parallel (headers only, no body)
+      const details = await Promise.all(
+        messages.map(async (msg) => {
+          const r = await gmailGet(
+            accessToken,
+            `/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Date`
+          );
+          if (r.status !== 200) return { id: msg.id, threadId: msg.threadId };
+
+          const headers = {};
+          for (const h of (r.body.payload?.headers || [])) {
+            headers[h.name.toLowerCase()] = h.value;
+          }
+
+          return {
+            id: msg.id,
+            threadId: msg.threadId,
+            subject: headers.subject || '(no subject)',
+            from: headers.from || '',
+            to: headers.to || '',
+            date: headers.date || '',
+            snippet: r.body.snippet || '',
+            labelIds: r.body.labelIds || [],
+            isUnread: (r.body.labelIds || []).includes('UNREAD'),
+          };
+        })
+      );
+
+      res.json({
+        success: true,
+        messages: details,
+        nextPageToken: nextPageToken || null,
+        resultSizeEstimate: resultSizeEstimate || details.length,
+      });
+    } catch (error) {
+      console.error('[Gmail] Error fetching messages:', error);
+      res.status(500).json({ error: 'Failed to fetch Gmail messages', message: error.message });
+    }
+  });
+
+  // GET /api/v1/services/google/gmail/messages/:messageId
+  // Returns the full email (plain text body extracted)
+  router.get('/google/gmail/messages/:messageId', requireAuth, async (req, res) => {
+    try {
+      const userId = resolveUserId(req);
+      const accessToken = await getGoogleAccessToken(userId);
+
+      if (!accessToken) {
+        return res.status(403).json({ error: 'Google not connected' });
+      }
+
+      const r = await gmailGet(
+        accessToken,
+        `/gmail/v1/users/me/messages/${req.params.messageId}?format=full`
+      );
+
+      if (r.status !== 200) {
+        return res.status(r.status).json({ error: 'Gmail API error', details: r.body });
+      }
+
+      const msg = r.body;
+      const headers = {};
+      for (const h of (msg.payload?.headers || [])) {
+        headers[h.name.toLowerCase()] = h.value;
+      }
+
+      // Recursively extract text/plain or text/html body parts
+      function extractBody(part) {
+        if (!part) return '';
+        if (part.mimeType === 'text/plain' && part.body?.data) {
+          return Buffer.from(part.body.data, 'base64').toString('utf8');
+        }
+        if (part.parts) {
+          for (const p of part.parts) {
+            const text = extractBody(p);
+            if (text) return text;
+          }
+        }
+        // Fall back to html if no plain text found
+        if (part.mimeType === 'text/html' && part.body?.data) {
+          return Buffer.from(part.body.data, 'base64').toString('utf8').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+        }
+        return '';
+      }
+
+      res.json({
+        success: true,
+        message: {
+          id: msg.id,
+          threadId: msg.threadId,
+          subject: headers.subject || '(no subject)',
+          from: headers.from || '',
+          to: headers.to || '',
+          date: headers.date || '',
+          snippet: msg.snippet || '',
+          body: extractBody(msg.payload),
+          labelIds: msg.labelIds || [],
+          isUnread: (msg.labelIds || []).includes('UNREAD'),
+        },
+      });
+    } catch (error) {
+      console.error('[Gmail] Error fetching message:', error);
+      res.status(500).json({ error: 'Failed to fetch Gmail message', message: error.message });
     }
   });
 

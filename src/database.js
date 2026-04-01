@@ -3021,6 +3021,39 @@ function getKBDocumentById(id, ownerId = 'owner') {
   };
 }
 
+function updateKBDocument(id, updates, ownerId = 'owner') {
+  const owner = normalizeOwnerId(ownerId);
+  const now = new Date().toISOString();
+  const setClauses = [];
+  const params = [];
+
+  if (updates.title !== undefined) { setClauses.push('title = ?'); params.push(updates.title); }
+  if (updates.content !== undefined) { setClauses.push('content = ?'); params.push(updates.content); }
+  if (updates.source !== undefined) { setClauses.push('source = ?'); params.push(updates.source); }
+  if (updates.metadata !== undefined) { setClauses.push('metadata = ?'); params.push(JSON.stringify(updates.metadata)); }
+
+  if (setClauses.length === 0) return getKBDocumentById(id, owner);
+
+  params.push(id, owner);
+
+  db.prepare(`UPDATE kb_documents SET ${setClauses.join(', ')} WHERE id = ? AND owner_id = ?`).run(...params);
+  return getKBDocumentById(id, owner);
+}
+
+function getKBDocumentByTitle(title, ownerId = 'owner') {
+  const owner = normalizeOwnerId(ownerId);
+  const row = db.prepare('SELECT * FROM kb_documents WHERE title = ? AND owner_id = ? ORDER BY created_at DESC LIMIT 1').get(title, owner);
+  if (!row) return null;
+  return {
+    id: row.id,
+    source: row.source,
+    title: row.title,
+    content: row.content,
+    metadata: row.metadata ? JSON.parse(row.metadata) : null,
+    createdAt: row.created_at,
+  };
+}
+
 function deleteKBDocument(id, ownerId = 'owner') {
   const owner = normalizeOwnerId(ownerId);
   const tx = db.transaction((docId, docOwner) => {
@@ -4626,17 +4659,20 @@ function markNotificationAsRead(notificationId, workspaceId, userId) {
   const stmt = db.prepare(`
     UPDATE notifications
     SET is_read = 1
-    WHERE id = ? AND workspace_id = ? AND user_id = ?
+    WHERE id = ? AND user_id = ?
   `);
-  
-  return stmt.run(notificationId, workspaceId, userId).changes > 0;
+
+  return stmt.run(notificationId, userId).changes > 0;
 }
 
 function deleteNotification(notificationId, workspaceId, userId) {
   // Delete child rows in notification_queue first to avoid FK constraint failure
   db.prepare(`DELETE FROM notification_queue WHERE notification_id = ?`).run(notificationId);
-  return db.prepare(`DELETE FROM notifications WHERE id = ? AND workspace_id = ? AND user_id = ?`)
-    .run(notificationId, workspaceId, userId).changes > 0;
+  // Match only on id + user_id; workspace_id is omitted because notifications may be
+  // created under a different workspace than what the request resolves to, causing
+  // false 404s. user_id is the authoritative ownership check.
+  return db.prepare(`DELETE FROM notifications WHERE id = ? AND user_id = ?`)
+    .run(notificationId, userId).changes > 0;
 }
 
 function getUnreadNotificationCount(workspaceId, userId) {
@@ -6399,6 +6435,8 @@ module.exports = {
   getKBDocuments,
   getKBDocumentById,
   deleteKBDocument,
+  updateKBDocument,
+  getKBDocumentByTitle,
   // Memory
   createMemory,
   getMemories,

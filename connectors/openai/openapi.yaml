@@ -86,6 +86,65 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/KBDocumentSummary"
+    post:
+      operationId: createKnowledgeDoc
+      summary: Create a new knowledge base document
+      description: Adds a new document to the knowledge base.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KBDocumentInput"
+      responses:
+        "200":
+          description: Document created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  title:
+                    type: string
+                  documentsCreated:
+                    type: integer
+
+  /api/v1/brain/knowledge-base/upsert:
+    post:
+      operationId: upsertKnowledgeDoc
+      summary: Create or update a knowledge document by title
+      description: |
+        Creates a new document or updates an existing one that has the same title.
+        Use this to maintain persistent named documents — e.g. call with title "memory.md"
+        every time you want to save notes; subsequent calls will update instead of duplicate.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KBDocumentInput"
+      responses:
+        "200":
+          description: Document created or updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  action:
+                    type: string
+                    enum: [created, updated]
+                  document:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      title:
+                        type: string
 
   /api/v1/brain/knowledge-base/{id}:
     get:
@@ -107,6 +166,34 @@ paths:
                 type: object
                 properties:
                   data:
+                    $ref: "#/components/schemas/KBDocument"
+    put:
+      operationId: updateKnowledgeDoc
+      summary: Update an existing knowledge base document
+      description: Replaces the content (and optionally title/source) of an existing document by its ID.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KBDocumentInput"
+      responses:
+        "200":
+          description: Document updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  document:
                     $ref: "#/components/schemas/KBDocument"
 
   # ── Services ─────────────────────────────────────────────────
@@ -133,20 +220,76 @@ paths:
                     type: integer
                     description: Number of connected services
 
+  # ── Service Proxy ─────────────────────────────────────────────
+  # Use this to call ANY connected service's API directly.
+  # First check listServices to confirm the service is connected before calling.
+  /api/v1/services/{serviceName}/proxy:
+    post:
+      operationId: callServiceProxy
+      summary: Call a connected service's API
+      description: "Proxy a raw API call to any connected OAuth service (GitHub, Slack, Notion, etc.). Call listServices first to confirm the service is connected. Examples: GitHub repos → GET /user/repos, Slack channels → GET /conversations.list, Notion → POST /search."
+      parameters:
+        - name: serviceName
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [github, google, slack, discord, linkedin, notion, dropbox, facebook, instagram, twitter, microsoft365, trello, zoom, hubspot, salesforce, jira]
+          description: The connected service to call
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - method
+                - path
+              properties:
+                method:
+                  type: string
+                  enum: [GET, POST, PUT, DELETE, PATCH]
+                path:
+                  type: string
+                  description: API path on the service (e.g. /user/repos, /conversations.list)
+                params:
+                  type: object
+                  description: Query parameters
+                  additionalProperties: true
+                body:
+                  type: object
+                  description: Request body for POST/PUT/PATCH
+                  additionalProperties: true
+      responses:
+        "200":
+          description: Response from the service API
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    description: The raw response from the service API
+                  success:
+                    type: boolean
+        "404":
+          description: Service not connected
+
   # ── Gmail ────────────────────────────────────────────────────
-  /api/v1/google/gmail/messages:
+  /api/v1/services/google/gmail/messages:
     get:
       operationId: listGmailMessages
       summary: List Gmail messages
       description: Returns recent Gmail messages with subject, from, date, and snippet. Supports Gmail search queries.
       parameters:
-        - name: limit
+        - name: maxResults
           in: query
           schema:
             type: integer
             default: 10
-            maximum: 50
-          description: Number of messages to return (max 50)
+            maximum: 20
+          description: Number of messages to return (max 20)
         - name: q
           in: query
           schema:
@@ -167,22 +310,19 @@ paths:
                 properties:
                   success:
                     type: boolean
-                  data:
-                    type: object
-                    properties:
-                      messages:
-                        type: array
-                        items:
-                          $ref: "#/components/schemas/GmailMessage"
-                      nextPageToken:
-                        type: string
-                        nullable: true
-                      resultSizeEstimate:
-                        type: integer
+                  messages:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/GmailMessage"
+                  nextPageToken:
+                    type: string
+                    nullable: true
+                  resultSizeEstimate:
+                    type: integer
         "401":
           description: Google not connected or token expired
 
-  /api/v1/google/gmail/messages/{id}:
+  /api/v1/services/google/gmail/messages/{id}:
     get:
       operationId: getGmailMessage
       summary: Get full Gmail message
@@ -257,6 +397,96 @@ paths:
                     items:
                       $ref: "#/components/schemas/Notification"
 
+  # ── Memory ───────────────────────────────────────────────────
+  # Use these for short-term notes, facts, and observations the AI wants to remember.
+  # DO NOT use the knowledge base for this — memory entries are atomic strings, not documents.
+  /api/v1/memory:
+    get:
+      operationId: listMemories
+      summary: List all memory entries
+      description: Returns all stored memory notes, newest first. Use this to recall what you've previously remembered about the user.
+      responses:
+        "200":
+          description: Memory entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MemoryEntry"
+    post:
+      operationId: addMemory
+      summary: Store a new memory
+      description: |
+        Save a short fact, note, or observation to memory.
+        Use this whenever the user shares something worth remembering (preference, fact, instruction).
+        Keep entries concise — one fact per entry.
+        IMPORTANT: Use this endpoint for memories, NOT the knowledge base.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - content
+              properties:
+                content:
+                  type: string
+                  description: The memory to store (e.g. "User prefers dark mode", "User's dog is named Max")
+      responses:
+        "201":
+          description: Memory stored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/MemoryEntry"
+
+  /api/v1/memory/{id}:
+    patch:
+      operationId: updateMemory
+      summary: Update a memory entry
+      description: Update the content of an existing memory by its ID.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - content
+              properties:
+                content:
+                  type: string
+      responses:
+        "200":
+          description: Memory updated
+    delete:
+      operationId: deleteMemory
+      summary: Delete a memory entry
+      description: Remove a specific memory by its ID.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Memory deleted
+
 components:
   securitySchemes:
     oauth2:
@@ -286,6 +516,23 @@ components:
         created_at:
           type: string
           format: date-time
+
+    KBDocumentInput:
+      type: object
+      required:
+        - title
+        - content
+      properties:
+        title:
+          type: string
+          description: Document title (used as unique key for upsert)
+        content:
+          type: string
+          description: Full document content (markdown or plain text)
+        source:
+          type: string
+          description: Source label, e.g. "agent", "chatgpt", "manual"
+          default: agent
 
     KBDocumentSummary:
       type: object
@@ -400,5 +647,20 @@ components:
         read:
           type: boolean
         created_at:
+          type: string
+          format: date-time
+
+    MemoryEntry:
+      type: object
+      properties:
+        id:
+          type: string
+        content:
+          type: string
+          description: The stored memory (a short fact or note)
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
           type: string
           format: date-time
