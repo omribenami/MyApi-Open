@@ -133,6 +133,7 @@ function Layout({ children, onLogout }) {
       label: 'AI & Brain',
       items: [
         { path: '/identity', label: 'Identity' },
+        { path: '/memory', label: 'Memory' },
         { path: '/personas', label: 'Personas' },
         { path: '/knowledge', label: 'Knowledge' },
         { path: '/skills', label: 'Skills' },

@@ -24,6 +24,7 @@ import ActivityLog from './pages/ActivityLog';
 import NotificationCenter from './pages/NotificationCenter';
 import TeamSettings from './pages/TeamSettings';
 import Connectors from './pages/Connectors';
+import Memory from './pages/Memory';
 import OAuthAuthorize from './pages/OAuthAuthorize';
 import Layout from './components/Layout';
 
@@ -263,6 +264,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <Skills />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/memory"
+              element={
+                <ProtectedRoute>
+                  <Memory />
                 </ProtectedRoute>
               }
             />
