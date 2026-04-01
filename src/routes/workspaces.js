@@ -105,6 +105,8 @@ const {
   getUserByEmail,
 } = require('../database');
 
+const { enforcePlanLimit } = require('../lib/planEnforcement');
+
 // ========== WORKSPACE OPERATIONS ==========
 
 /**
@@ -345,6 +347,11 @@ router.post('/:id/members', (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
+    // Enforce team member plan limit
+    const currentMembers = getWorkspaceMembers(workspace.id);
+    const memberLimitErr = enforcePlanLimit(req, 'teamMembers', currentMembers.length, 1);
+    if (memberLimitErr) return res.status(403).json(memberLimitErr);
+
     const memberId = addWorkspaceMember(workspace.id, userId, role);
     const members = getWorkspaceMembers(workspace.id);
     const newMember = members.find(m => m.id === memberId);
@@ -565,6 +572,11 @@ router.post('/:id/invitations', (req, res) => {
         return res.status(500).json({ error: 'Failed to clean up old invitation' });
       }
     }
+
+    // Enforce team member plan limit (pending invitations count toward the cap)
+    const currentMembers = getWorkspaceMembers(workspace.id);
+    const inviteLimitErr = enforcePlanLimit(req, 'teamMembers', currentMembers.length, 1);
+    if (inviteLimitErr) return res.status(403).json(inviteLimitErr);
 
     const invitation = createWorkspaceInvitation(
       workspace.id,

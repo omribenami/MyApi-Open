@@ -6754,6 +6754,15 @@ app.get([
     }
 
     if (oauthOwnerId && !tokenStoredForUser) {
+      // Enforce service connection plan limit before storing
+      const currentConnections = countConnectedOAuthServices(oauthOwnerId);
+      const planCheckReq = { user: req.user || { id: oauthOwnerId }, session: req.session, tokenMeta: req.tokenMeta, headers: req.headers };
+      const connLimitErr = enforcePlanLimit(planCheckReq, 'serviceConnections', currentConnections, 1);
+      if (connLimitErr) {
+        console.warn(`[OAuth Callback] Plan limit reached for user ${oauthOwnerId}: serviceConnections=${currentConnections}`);
+        return res.redirect(`/dashboard/?oauth_service=${service}&oauth_status=error&error=${encodeURIComponent('plan_limit_reached')}`);
+      }
+
       console.log(`[OAuth Callback] Storing ${service} token for owner: ${oauthOwnerId} (mode=${stateMeta.mode || 'connect'})`);
       const storeResult = storeOAuthToken(service, oauthOwnerId, tokenData.accessToken, tokenData.refreshToken || null, expiresAt, tokenData.scope);
       tokenStoredForUser = true;
