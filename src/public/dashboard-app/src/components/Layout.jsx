@@ -7,6 +7,7 @@ import CookieNotice from './CookieNotice';
 import Toast from './Toast';
 import NotificationDropdown from './NotificationDropdown';
 import WorkspaceSwitcher from './WorkspaceSwitcher';
+import PlanLimitModal from './PlanLimitModal';
 
 function NavDropdown({ label, items, isActiveFn, onMobileClick }) {
   const [open, setOpen] = useState(false);
@@ -389,6 +390,7 @@ function Layout({ children, onLogout }) {
       </div>
       
       <CookieNotice />
+      <PlanLimitModal />
     </div>
   );
 }

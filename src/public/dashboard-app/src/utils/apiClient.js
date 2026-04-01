@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { clearAuthArtifacts, isLogoutInProgress, redirectToLoginOnce } from './authRuntime';
+import { usePlanLimitStore } from '../stores/planLimitStore';
 
 const rateLimitState = new Map();
 
@@ -86,6 +87,17 @@ apiClient.interceptors.response.use(
 
     if ((status === 401 || status === 403) && !isLogoutInProgress()) {
       const errorData = error.response?.data || {};
+
+      // Plan limit — show upgrade modal instead of redirecting to login
+      if (status === 403 && typeof errorData.error === 'string' && errorData.error.startsWith('Plan limit reached')) {
+        usePlanLimitStore.getState().show({
+          plan: errorData.plan || null,
+          limit: errorData.limit || null,
+          errorMessage: errorData.error,
+        });
+        return Promise.reject(error);
+      }
+
       if (status === 403 && (errorData.code === 'DEVICE_APPROVAL_REQUIRED' || errorData.error === 'device_not_approved')) {
         return Promise.reject(error);
       }
