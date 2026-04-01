@@ -24,6 +24,16 @@ const TOKEN_REFRESH_URLS = {
   dropbox:    { tokenUrl: 'https://api.dropboxapi.com/oauth2/token',      clientId: () => process.env.DROPBOX_CLIENT_ID,    clientSecret: () => process.env.DROPBOX_CLIENT_SECRET },
   zoom:       { tokenUrl: 'https://zoom.us/oauth/token',                  clientId: () => process.env.ZOOM_CLIENT_ID,       clientSecret: () => process.env.ZOOM_CLIENT_SECRET },
   hubspot:    { tokenUrl: 'https://api.hubapi.com/oauth/v1/token',        clientId: () => process.env.HUBSPOT_CLIENT_ID,    clientSecret: () => process.env.HUBSPOT_CLIENT_SECRET },
+  confluence: { tokenUrl: 'https://auth.atlassian.com/oauth/token',       clientId: () => process.env.CONFLUENCE_CLIENT_ID, clientSecret: () => process.env.CONFLUENCE_CLIENT_SECRET },
+  asana:      { tokenUrl: 'https://app.asana.com/-/oauth_token',          clientId: () => process.env.ASANA_CLIENT_ID,      clientSecret: () => process.env.ASANA_CLIENT_SECRET },
+  linear:     { tokenUrl: 'https://api.linear.app/oauth/token',           clientId: () => process.env.LINEAR_CLIENT_ID,     clientSecret: () => process.env.LINEAR_CLIENT_SECRET },
+  box:        { tokenUrl: 'https://api.box.com/oauth2/token',             clientId: () => process.env.BOX_CLIENT_ID,        clientSecret: () => process.env.BOX_CLIENT_SECRET },
+  airtable:   { tokenUrl: 'https://airtable.com/oauth2/v1/token',        clientId: () => process.env.AIRTABLE_CLIENT_ID,   clientSecret: () => process.env.AIRTABLE_CLIENT_SECRET },
+  figma:      { tokenUrl: 'https://www.figma.com/api/oauth/token',        clientId: () => process.env.FIGMA_CLIENT_ID,      clientSecret: () => process.env.FIGMA_CLIENT_SECRET },
+  canva:      { tokenUrl: 'https://www.canva.com/api/oauth/token',        clientId: () => process.env.CANVA_CLIENT_ID,      clientSecret: () => process.env.CANVA_CLIENT_SECRET },
+  intercom:   { tokenUrl: 'https://api.intercom.io/auth/eagle/token',     clientId: () => process.env.INTERCOM_CLIENT_ID,   clientSecret: () => process.env.INTERCOM_CLIENT_SECRET },
+  clickup:    { tokenUrl: 'https://app.clickup.com/api/v2/oauth/token',   clientId: () => process.env.CLICKUP_CLIENT_ID,    clientSecret: () => process.env.CLICKUP_CLIENT_SECRET },
+  monday:     { tokenUrl: 'https://auth.monday.com/oauth2/token',         clientId: () => process.env.MONDAY_CLIENT_ID,     clientSecret: () => process.env.MONDAY_CLIENT_SECRET },
 };
 
 const SERVICE_CATALOG = [
@@ -44,6 +54,17 @@ const SERVICE_CATALOG = [
   { id: 'hubspot', name: 'HubSpot', description: 'CRM contacts, companies, and deals', icon: 'hubspot', category: 'Business', auth_type: 'oauth2', api_endpoint: 'https://api.hubapi.com' },
   { id: 'salesforce', name: 'Salesforce', description: 'Enterprise CRM records and workflows', icon: 'salesforce', category: 'Business', auth_type: 'oauth2', api_endpoint: 'https://login.salesforce.com' },
   { id: 'jira', name: 'Jira', description: 'Issue tracking and project management', icon: 'jira', category: 'Developer Tools', auth_type: 'oauth2', api_endpoint: 'https://api.atlassian.com' },
+  { id: 'confluence', name: 'Confluence', description: 'Team wiki, docs, and knowledge base', icon: 'confluence', category: 'Developer Tools', auth_type: 'oauth2', api_endpoint: 'https://api.atlassian.com' },
+  { id: 'asana', name: 'Asana', description: 'Project and task management', icon: 'asana', category: 'Productivity', auth_type: 'oauth2', api_endpoint: 'https://app.asana.com/api/1.0' },
+  { id: 'linear', name: 'Linear', description: 'Issue tracking for software teams', icon: 'linear', category: 'Developer Tools', auth_type: 'oauth2', api_endpoint: 'https://api.linear.app' },
+  { id: 'box', name: 'Box', description: 'Cloud content management and file sharing', icon: 'box', category: 'Productivity', auth_type: 'oauth2', api_endpoint: 'https://api.box.com/2.0' },
+  { id: 'airtable', name: 'Airtable', description: 'Flexible database and spreadsheet hybrid', icon: 'airtable', category: 'Productivity', auth_type: 'oauth2', api_endpoint: 'https://api.airtable.com/v0' },
+  { id: 'figma', name: 'Figma', description: 'Collaborative design and prototyping', icon: 'figma', category: 'Developer Tools', auth_type: 'oauth2', api_endpoint: 'https://api.figma.com/v1' },
+  { id: 'canva', name: 'Canva', description: 'Visual design and content creation', icon: 'canva', category: 'Productivity', auth_type: 'oauth2', api_endpoint: 'https://api.canva.com/rest/v1' },
+  { id: 'zendesk', name: 'Zendesk', description: 'Customer support and ticketing', icon: 'zendesk', category: 'Business', auth_type: 'oauth2', api_endpoint: 'https://developer.zendesk.com' },
+  { id: 'intercom', name: 'Intercom', description: 'Customer messaging and engagement', icon: 'intercom', category: 'Business', auth_type: 'oauth2', api_endpoint: 'https://api.intercom.io' },
+  { id: 'clickup', name: 'ClickUp', description: 'All-in-one project management', icon: 'clickup', category: 'Productivity', auth_type: 'oauth2', api_endpoint: 'https://api.clickup.com/api/v2' },
+  { id: 'monday', name: 'Monday.com', description: 'Work management and team workflows', icon: 'monday', category: 'Productivity', auth_type: 'oauth2', api_endpoint: 'https://api.monday.com/v2' },
   { id: 'fal', name: 'fal', description: 'fal AI inference APIs (HTTP MVP, MCP phase-2)', icon: 'fal', category: 'Developer Tools', auth_type: 'api_key', api_endpoint: 'https://fal.run' },
 ];
 
