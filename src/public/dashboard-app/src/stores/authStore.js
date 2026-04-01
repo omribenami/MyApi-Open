@@ -13,6 +13,11 @@ const readCookie = (name) => {
 let authMeFailureCount = 0;
 let initializePromise = null;
 const resetAuthMeFailureCountOnSuccess = () => { authMeFailureCount = 0; };
+
+const LOGGED_OUT_FLAG = '__myapi_logged_out__';
+const markLoggedOut = () => { try { localStorage.setItem(LOGGED_OUT_FLAG, '1'); } catch { /* ignored */ } };
+const clearLoggedOut = () => { try { localStorage.removeItem(LOGGED_OUT_FLAG); } catch { /* ignored */ } };
+const wasLoggedOut = () => { try { return localStorage.getItem(LOGGED_OUT_FLAG) === '1'; } catch { return false; } };
 const incrementAuthMeFailureCount = () => { authMeFailureCount++; };
 
 const normalizeUserPayload = (payload) => {
@@ -118,9 +123,8 @@ export const useAuthStore = create((set, get) => ({
         }
 
         const cookieMasterToken = readCookie('myapi_master_token');
-        if (cookieMasterToken && !sessionReturned401) {
-          // Only use cookie if session wasn't explicitly 401
-          // If session returned 401, the user logged out and we should NOT restore
+        // Never restore from cookie if the user explicitly logged out on this device
+        if (cookieMasterToken && !sessionReturned401 && !wasLoggedOut()) {
           try { localStorage.setItem('masterToken', cookieMasterToken); } catch { /* ignored */ }
         }
 
@@ -133,7 +137,7 @@ export const useAuthStore = create((set, get) => ({
         // If the first session check already returned 401 and we have a cookie master token,
         // validate it via Bearer auth. If there is no token at all, skip the redundant
         // session-only check (it would also return 401, causing a second console error).
-        if (authMeFailureCount < 2 && (!sessionReturned401 || cookieMasterToken)) {
+        if (authMeFailureCount < 2 && (!sessionReturned401 || cookieMasterToken) && !wasLoggedOut()) {
           try {
             let fetchOptions;
             if (sessionReturned401 && cookieMasterToken) {
@@ -189,6 +193,7 @@ export const useAuthStore = create((set, get) => ({
 
   setMasterToken: (token) => {
     setLogoutInProgress(false);
+    clearLoggedOut();
     try { localStorage.setItem('masterToken', token); } catch { /* ignored */ }
     set({ masterToken: token, isAuthenticated: true, error: null });
   },
@@ -220,7 +225,10 @@ export const useAuthStore = create((set, get) => ({
       return;
     }
     setLogoutInProgress(true);
-    
+
+    // Mark logged-out in localStorage so initialize() won't restore from cookies on next page load
+    markLoggedOut();
+
     // Clear all client-side auth artifacts FIRST
     clearAuthArtifacts();
     
