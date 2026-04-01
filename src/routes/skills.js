@@ -30,19 +30,42 @@ function createSkillsRoutes(
   // Helper to extract owner from token
   const getOwnerId = (req) => req.tokenMeta?.ownerId || req.tokenData?.id || req.session?.user?.id || req.session?.userId || 'owner';
 
+  const isMasterToken = (req) => {
+    const meta = req.tokenMeta;
+    if (!meta) return !!req.session?.user;
+    return meta.scope === 'full' || meta.tokenType === 'master' || String(meta.tokenId || '').startsWith('sess_');
+  };
+
+  const getScopeList = (req) => {
+    const meta = req.tokenMeta;
+    if (!meta) return [];
+    const scopeStr = meta.scope || '';
+    try { return JSON.parse(scopeStr); } catch { return scopeStr.split(',').map(s => s.trim()); }
+  };
+
+  // Check if request has read permission (master, skills:read, or skills:write scope)
+  const canReadSkills = (req) => {
+    if (isMasterToken(req)) return true;
+    const scopes = getScopeList(req);
+    return scopes.includes('admin:*') || scopes.includes('skills:read') || scopes.includes('skills:write');
+  };
+
   // Check if request has write permission (master token or skills:write scope)
   const canWriteSkills = (req) => {
-    const meta = req.tokenMeta;
-    if (!meta) return !!req.session?.user; // session auth = ok
-    if (meta.scope === 'full' || meta.tokenType === 'master' || String(meta.tokenId || '').startsWith('sess_')) return true;
-    // Check granular scope via the scopes granted to this token
-    const scopeStr = meta.scope || '';
+    if (isMasterToken(req)) return true;
+    const scopes = getScopeList(req);
+    return scopes.includes('admin:*') || scopes.includes('skills:write');
+  };
+
+  // Return the persona_id from scope_bundle if this is a non-master bundle token
+  const getBundlePersonaId = (req) => {
+    if (isMasterToken(req)) return null;
+    const bundle = req.tokenMeta?.scopeBundle;
+    if (!bundle) return null;
     try {
-      const scopes = JSON.parse(scopeStr);
-      return Array.isArray(scopes) && (scopes.includes('admin:*') || scopes.includes('skills:write'));
-    } catch {
-      return scopeStr === 'full' || scopeStr.includes('skills:write') || scopeStr.includes('admin:*');
-    }
+      const parsed = typeof bundle === 'string' ? JSON.parse(bundle) : bundle;
+      return parsed?.persona_id ? Number(parsed.persona_id) : null;
+    } catch { return null; }
   };
 
   // Validation error handler
@@ -58,10 +81,19 @@ function createSkillsRoutes(
   router.get('/', [
     query('include_archived').optional().isBoolean()
   ], handleValidationErrors, (req, res) => {
+    if (!canReadSkills(req)) return res.status(403).json({ error: "Requires 'skills:read' scope" });
     try {
       const ownerId = getOwnerId(req);
-      const skills = getSkills(ownerId);
-      
+      let skills = getSkills(ownerId);
+
+      // Bundle token: restrict to skills attached to the bundled persona only
+      const bundlePersonaId = getBundlePersonaId(req);
+      if (bundlePersonaId) {
+        const attached = db.prepare('SELECT skill_id FROM persona_skills WHERE persona_id = ?').all(bundlePersonaId);
+        const allowedIds = new Set(attached.map(r => Number(r.skill_id)));
+        skills = skills.filter(s => allowedIds.has(Number(s.id)));
+      }
+
       // Enhance response with origin info and metadata
       const enhancedSkills = skills.map(skill => ({
         ...skill,
@@ -88,12 +120,20 @@ function createSkillsRoutes(
 
   // GET /skills/:id - Get skill details
   router.get('/:id', (req, res) => {
+    if (!canReadSkills(req)) return res.status(403).json({ error: "Requires 'skills:read' scope" });
     try {
       const ownerId = getOwnerId(req);
       const skill = getSkillById(req.params.id, ownerId);
-      
+
       if (!skill) {
         return res.status(404).json({ error: 'Skill not found' });
+      }
+
+      // Bundle token: block access to skills not attached to the bundled persona
+      const bundlePersonaId = getBundlePersonaId(req);
+      if (bundlePersonaId) {
+        const attached = db.prepare('SELECT skill_id FROM persona_skills WHERE persona_id = ? AND skill_id = ?').get(bundlePersonaId, skill.id);
+        if (!attached) return res.status(403).json({ error: 'Skill not accessible with this token' });
       }
 
       // Get fork info if it's a fork

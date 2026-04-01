@@ -2078,6 +2078,17 @@ function hasScope(req, scope) {
   return tokenScopes.includes('admin:*') || tokenScopes.includes(scope);
 }
 
+// Returns the persona_id from scope_bundle for non-master bundle tokens, or null.
+function getBundlePersonaId(req) {
+  if (isMaster(req)) return null;
+  const bundle = req.tokenMeta?.scopeBundle;
+  if (!bundle) return null;
+  try {
+    const parsed = typeof bundle === 'string' ? JSON.parse(bundle) : bundle;
+    return parsed?.persona_id ? Number(parsed.persona_id) : null;
+  } catch { return null; }
+}
+
 // --- Scope Filter (identity data) ---
 function filterByScope(data, scope) {
   if (scope === "full" || !scope) return data;
@@ -8155,7 +8166,15 @@ app.get('/api/v1/brain/knowledge-base', authenticate, (req, res) => {
   if (!hasScope(req, 'knowledge')) return res.status(403).json({ error: "Requires 'knowledge' scope" });
   try {
     const ownerId = getRequestOwnerId(req);
-    const documents = getKBDocuments(ownerId);
+    let documents = getKBDocuments(ownerId);
+
+    // Bundle token: restrict to documents attached to the bundled persona only
+    const bundlePersonaId = getBundlePersonaId(req);
+    if (bundlePersonaId) {
+      const attached = db.prepare('SELECT document_id FROM persona_documents WHERE persona_id = ?').all(bundlePersonaId);
+      const allowedIds = new Set(attached.map(r => r.document_id));
+      documents = Array.isArray(documents) ? documents.filter(d => allowedIds.has(d.id)) : documents;
+    }
 
     createAuditLog({
       requesterId: req.tokenMeta.tokenId,
@@ -8180,6 +8199,13 @@ app.get('/api/v1/brain/knowledge-base/:id', authenticate, (req, res) => {
     const ownerId = getRequestOwnerId(req);
     const doc = getKBDocumentById(id, ownerId);
     if (!doc) return res.status(404).json({ error: 'Document not found' });
+
+    // Bundle token: block access to docs not attached to the bundled persona
+    const bundlePersonaId = getBundlePersonaId(req);
+    if (bundlePersonaId) {
+      const attached = db.prepare('SELECT document_id FROM persona_documents WHERE persona_id = ? AND document_id = ?').get(bundlePersonaId, id);
+      if (!attached) return res.status(403).json({ error: 'Document not accessible with this token' });
+    }
 
     createAuditLog({
       requesterId: req.tokenMeta.tokenId,
