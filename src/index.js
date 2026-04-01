@@ -677,6 +677,89 @@ app.use(cors({
   credentials: true,
 }));
 
+// Stripe webhook must be registered before express.json() so it receives the raw body
+// required by stripe.webhooks.constructEvent() for signature verification.
+app.post('/api/v1/billing/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  const configuredSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
+  let event;
+
+  if (configuredSecret) {
+    const signature = req.headers['stripe-signature'];
+    if (!signature) return res.status(400).json({ error: 'Missing Stripe signature' });
+    const stripe = getStripeClient();
+    if (!stripe) return res.status(500).json({ error: 'Stripe not configured' });
+    try {
+      event = stripe.webhooks.constructEvent(req.body, signature, configuredSecret);
+    } catch (err) {
+      return res.status(400).json({ error: `Webhook signature verification failed: ${err.message}` });
+    }
+  } else {
+    try {
+      event = JSON.parse(req.body.toString());
+    } catch {
+      return res.status(400).json({ error: 'Invalid JSON body' });
+    }
+  }
+
+  const type = event?.type;
+  const obj = event?.data?.object || {};
+  const metadataWorkspaceId = obj?.metadata?.workspace_id || null;
+
+  if (type === 'customer.subscription.created' || type === 'customer.subscription.updated') {
+    if (metadataWorkspaceId) {
+      upsertBillingSubscription(metadataWorkspaceId, {
+        stripe_subscription_id: obj.id,
+        plan_id: (obj.items?.data?.[0]?.price?.nickname || obj.items?.data?.[0]?.price?.lookup_key || 'free').toLowerCase(),
+        status: obj.status || 'active',
+        period_start: obj.current_period_start ? new Date(obj.current_period_start * 1000).toISOString() : null,
+        period_end: obj.current_period_end ? new Date(obj.current_period_end * 1000).toISOString() : null,
+        cancel_at_period_end: !!obj.cancel_at_period_end,
+      });
+    }
+  }
+
+  if (type === 'customer.subscription.deleted') {
+    if (metadataWorkspaceId) {
+      upsertBillingSubscription(metadataWorkspaceId, {
+        stripe_subscription_id: obj.id,
+        plan_id: 'free',
+        status: 'canceled',
+        period_start: null,
+        period_end: null,
+        cancel_at_period_end: false,
+      });
+    }
+  }
+
+  if (type === 'customer.subscription.trial_will_end') {
+    if (metadataWorkspaceId) {
+      upsertBillingSubscription(metadataWorkspaceId, {
+        stripe_subscription_id: obj.id,
+        plan_id: (obj.items?.data?.[0]?.price?.nickname || obj.items?.data?.[0]?.price?.lookup_key || 'free').toLowerCase(),
+        status: obj.status || 'trialing',
+        period_start: obj.current_period_start ? new Date(obj.current_period_start * 1000).toISOString() : null,
+        period_end: obj.current_period_end ? new Date(obj.current_period_end * 1000).toISOString() : null,
+        cancel_at_period_end: !!obj.cancel_at_period_end,
+      });
+    }
+  }
+
+  if (type === 'invoice.paid' || type === 'invoice.payment_failed' || type === 'invoice.finalized') {
+    if (metadataWorkspaceId) {
+      upsertInvoice(metadataWorkspaceId, {
+        stripe_invoice_id: obj.id,
+        amount_cents: obj.amount_paid || obj.amount_due || 0,
+        currency: obj.currency || 'usd',
+        status: obj.status || 'open',
+        invoice_url: obj.hosted_invoice_url || null,
+        created_at: obj.created ? new Date(obj.created * 1000).toISOString() : new Date().toISOString(),
+      });
+    }
+  }
+
+  return res.json({ received: true });
+});
+
 app.use(express.json({ limit: "100kb" }));
 
 // Global rate limiter middleware (applies to all requests except exempt paths)
@@ -4471,51 +4554,7 @@ app.post('/api/v1/billing/portal', authenticate, async (req, res) => {
   }
 });
 
-app.post('/api/v1/billing/webhook', async (req, res) => {
-  const configuredSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
-  const event = req.body || {};
-
-  if (configuredSecret) {
-    const signature = req.headers['stripe-signature'];
-    if (!signature) return res.status(400).json({ error: 'Missing Stripe signature' });
-    // NOTE: verification requires raw request body middleware; keep strict failure instead of silent acceptance.
-    if (typeof req.body !== 'string' && !Buffer.isBuffer(req.body)) {
-      return res.status(400).json({ error: 'Webhook verification requires raw body middleware configuration' });
-    }
-  }
-
-  const type = event?.type;
-  const obj = event?.data?.object || {};
-  const metadataWorkspaceId = obj?.metadata?.workspace_id || null;
-
-  if (type === 'customer.subscription.created' || type === 'customer.subscription.updated') {
-    if (metadataWorkspaceId) {
-      upsertBillingSubscription(metadataWorkspaceId, {
-        stripe_subscription_id: obj.id,
-        plan_id: (obj.items?.data?.[0]?.price?.nickname || obj.items?.data?.[0]?.price?.lookup_key || 'free').toLowerCase(),
-        status: obj.status || 'active',
-        period_start: obj.current_period_start ? new Date(obj.current_period_start * 1000).toISOString() : null,
-        period_end: obj.current_period_end ? new Date(obj.current_period_end * 1000).toISOString() : null,
-        cancel_at_period_end: !!obj.cancel_at_period_end,
-      });
-    }
-  }
-
-  if (type === 'invoice.paid' || type === 'invoice.payment_failed' || type === 'invoice.finalized') {
-    if (metadataWorkspaceId) {
-      upsertInvoice(metadataWorkspaceId, {
-        stripe_invoice_id: obj.id,
-        amount_cents: obj.amount_paid || obj.amount_due || 0,
-        currency: obj.currency || 'usd',
-        status: obj.status || 'open',
-        invoice_url: obj.hosted_invoice_url || null,
-        created_at: obj.created ? new Date(obj.created * 1000).toISOString() : new Date().toISOString(),
-      });
-    }
-  }
-
-  return res.json({ received: true });
-});
+// Stripe webhook handler is registered early in the file (before express.json) for raw body access.
 
 // --- CONNECTORS ---
 app.get("/api/v1/connectors", authenticate, (req, res) => {

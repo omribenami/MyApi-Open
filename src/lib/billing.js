@@ -38,6 +38,8 @@ function normalizePlanId(planId) {
 
 function resolveWorkspaceCurrentPlan(subscriptionRow) {
   if (!subscriptionRow) return PLAN_LIMITS.free;
+  const activeStatuses = ['active', 'trialing'];
+  if (!activeStatuses.includes(subscriptionRow.status)) return PLAN_LIMITS.free;
   return PLAN_LIMITS[normalizePlanId(subscriptionRow.plan_id)] || PLAN_LIMITS.free;
 }
 
