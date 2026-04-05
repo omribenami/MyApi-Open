@@ -1166,6 +1166,9 @@ function initDatabase() {
   // Backfill: full-scope tokens with an encrypted raw token stored are master tokens
   try { db.exec("UPDATE access_tokens SET token_type = 'master' WHERE scope = 'full' AND encrypted_token IS NOT NULL AND (token_type IS NULL OR token_type = 'guest')"); } catch (e) {}
 
+  // Memory source tracking: who created this memory entry
+  try { db.exec("ALTER TABLE memories ADD COLUMN source TEXT DEFAULT 'user'"); } catch (e) {}
+
   // Per-type notification settings stored as JSON in notification_preferences
   safeMigration("ALTER TABLE notification_preferences ADD COLUMN type_settings TEXT DEFAULT NULL");
 
@@ -3067,15 +3070,15 @@ function deleteKBDocument(id, ownerId = 'owner') {
 
 // ─── Memory ──────────────────────────────────────────────────────────────────
 
-function createMemory(content, ownerId = 'owner', workspaceId = null) {
+function createMemory(content, ownerId = 'owner', workspaceId = null, source = 'user') {
   const owner = normalizeOwnerId(ownerId);
   const id = 'mem_' + crypto.randomBytes(12).toString('hex');
   const now = new Date().toISOString();
   db.prepare(`
-    INSERT INTO memories (id, owner_id, workspace_id, content, created_at)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(id, owner, workspaceId || null, content, now);
-  return { id, owner_id: owner, workspace_id: workspaceId || null, content, created_at: now };
+    INSERT INTO memories (id, owner_id, workspace_id, content, created_at, source)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(id, owner, workspaceId || null, content, now, source || 'user');
+  return { id, owner_id: owner, workspace_id: workspaceId || null, content, created_at: now, source: source || 'user' };
 }
 
 function getMemories(ownerId = 'owner', workspaceId = null) {
@@ -3093,8 +3096,12 @@ function getMemoryById(id, ownerId = 'owner') {
   return db.prepare(`SELECT * FROM memories WHERE id = ? AND owner_id = ?`).get(id, owner) || null;
 }
 
-function updateMemory(id, content, ownerId = 'owner') {
+function updateMemory(id, content, ownerId = 'owner', source = null) {
   const owner = normalizeOwnerId(ownerId);
+  if (source !== null) {
+    const result = db.prepare(`UPDATE memories SET content = ?, source = ? WHERE id = ? AND owner_id = ?`).run(content, source, id, owner);
+    return result.changes > 0;
+  }
   const result = db.prepare(`UPDATE memories SET content = ? WHERE id = ? AND owner_id = ?`).run(content, id, owner);
   return result.changes > 0;
 }

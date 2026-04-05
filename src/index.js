@@ -2164,6 +2164,18 @@ function getRequestOwnerId(req) {
   return String(req?.tokenMeta?.ownerId || req?.session?.user?.id || 'owner');
 }
 
+function inferMemorySource(req) {
+  const label = (req?.tokenMeta?.label || '').toLowerCase();
+  if (!label || isMaster(req) && !label) return 'user';
+  if (label.includes('chatgpt') || label.includes('openai') || label.includes('gpt')) return 'chatgpt';
+  if (label.includes('claude') || label.includes('anthropic')) return 'claude';
+  if (label.includes('jarvis')) return 'jarvis';
+  if (label.includes('gemini') || label.includes('google ai')) return 'gemini';
+  if (label.includes('copilot') || label.includes('github')) return 'github copilot';
+  if (isMaster(req)) return 'user';
+  return label || 'api';
+}
+
 function getRequestWorkspaceId(req) {
   if (req?.workspaceId) return req.workspaceId;
   if (req?.session?.currentWorkspace) return req.session.currentWorkspace;
@@ -8833,12 +8845,14 @@ app.get('/api/v1/memory', authenticate, (req, res) => {
 // POST /api/v1/memory - store a new memory
 app.post('/api/v1/memory', authenticate, (req, res) => {
   try {
-    const { content } = req.body;
+    const { content, source } = req.body;
     if (!content || typeof content !== 'string' || !content.trim()) {
       return res.status(400).json({ error: 'content is required' });
     }
     const ownerId = getRequestOwnerId(req);
-    const memory = createMemory(content.trim(), ownerId, req.workspaceId || null);
+    // Infer source from token label if not explicitly provided
+    const inferredSource = source || inferMemorySource(req);
+    const memory = createMemory(content.trim(), ownerId, req.workspaceId || null, inferredSource);
     createAuditLog({
       requesterId: req.tokenMeta.tokenId,
       action: 'memory_created',
@@ -8855,15 +8869,15 @@ app.post('/api/v1/memory', authenticate, (req, res) => {
 // PATCH /api/v1/memory/:id - update a memory
 app.patch('/api/v1/memory/:id', authenticate, (req, res) => {
   try {
-    const { content } = req.body;
+    const { content, source } = req.body;
     if (!content || typeof content !== 'string' || !content.trim()) {
       return res.status(400).json({ error: 'content is required' });
     }
     const ownerId = getRequestOwnerId(req);
     const existing = getMemoryById(req.params.id, ownerId);
     if (!existing) return res.status(404).json({ error: 'Memory not found' });
-    updateMemory(req.params.id, content.trim(), ownerId);
-    res.json({ data: { ...existing, content: content.trim() } });
+    updateMemory(req.params.id, content.trim(), ownerId, source || null);
+    res.json({ data: { ...existing, content: content.trim(), source: source || existing.source || 'user' } });
   } catch (error) {
     res.status(500).json({ error: 'Failed to update memory' });
   }
