@@ -2491,6 +2491,82 @@ function buildCapabilitiesForRequest(req) {
     },
   ];
 
+  const canMemory = isMaster(req) || hasPermission(scopes, ['memory']) || hasPermission(scopes, ['admin:*']);
+  const canKnowledge = hasPermission(scopes, ['knowledge']) || hasPermission(scopes, ['admin:*']);
+
+  if (canMemory) {
+    endpoints.push({
+      purpose: 'List all memory entries — call this first to recall what you already know',
+      method: 'GET',
+      url: '/api/v1/memory',
+      params: [],
+      sampleRequest: { method: 'GET', headers: [...auth.requiredHeaders] },
+      sampleResponse: { data: [{ id: 'mem_x', content: 'User prefers dark mode', created_at: '...' }] },
+      commonErrors: [],
+    });
+    endpoints.push({
+      purpose: 'Save a memory — use for short facts, notes, preferences. One fact per entry. NOT for documents.',
+      method: 'POST',
+      url: '/api/v1/memory',
+      params: [{ in: 'body', name: 'content', required: true, type: 'string', description: 'A short fact or note, e.g. "User prefers TypeScript"' }],
+      sampleRequest: { method: 'POST', headers: [...auth.requiredHeaders, 'Content-Type: application/json'], body: { content: 'User prefers dark mode' } },
+      sampleResponse: { data: { id: 'mem_x', content: 'User prefers dark mode' } },
+      commonErrors: [{ status: 400, error: 'content is required' }],
+    });
+    endpoints.push({
+      purpose: 'Update a memory entry by ID',
+      method: 'PATCH',
+      url: '/api/v1/memory/:id',
+      params: [{ in: 'body', name: 'content', required: true, type: 'string' }],
+      sampleRequest: { method: 'PATCH', headers: [...auth.requiredHeaders, 'Content-Type: application/json'], body: { content: 'Updated fact' } },
+      sampleResponse: { data: { id: 'mem_x', content: 'Updated fact' } },
+      commonErrors: [{ status: 404, error: 'Memory not found' }],
+    });
+    endpoints.push({
+      purpose: 'Delete a memory entry by ID',
+      method: 'DELETE',
+      url: '/api/v1/memory/:id',
+      params: [],
+      sampleRequest: { method: 'DELETE', headers: [...auth.requiredHeaders] },
+      sampleResponse: { success: true },
+      commonErrors: [{ status: 404, error: 'Memory not found' }],
+    });
+  }
+
+  if (canKnowledge) {
+    endpoints.push({
+      purpose: 'List knowledge base documents — for named documents and files, NOT short facts',
+      method: 'GET',
+      url: '/api/v1/brain/knowledge-base',
+      params: [],
+      sampleRequest: { method: 'GET', headers: [...auth.requiredHeaders] },
+      sampleResponse: { data: [{ id: 'kbdoc_x', title: 'Resume', source: 'agent' }] },
+      commonErrors: [],
+    });
+    endpoints.push({
+      purpose: 'Create or update a knowledge base document by title (upsert) — use for named documents, NOT short memories',
+      method: 'POST',
+      url: '/api/v1/brain/knowledge-base/upsert',
+      params: [
+        { in: 'body', name: 'title', required: true, type: 'string', description: 'Document title, used as unique key' },
+        { in: 'body', name: 'content', required: true, type: 'string', description: 'Full document text' },
+        { in: 'body', name: 'source', required: false, type: 'string', description: 'Source label, e.g. "agent"' },
+      ],
+      sampleRequest: { method: 'POST', headers: [...auth.requiredHeaders, 'Content-Type: application/json'], body: { title: 'My Document', content: '# Content here', source: 'agent' } },
+      sampleResponse: { ok: true, action: 'created', document: { id: 'kbdoc_x', title: 'My Document' } },
+      commonErrors: [{ status: 400, error: 'title and content are required' }],
+    });
+    endpoints.push({
+      purpose: 'Get full content of a knowledge base document by ID',
+      method: 'GET',
+      url: '/api/v1/brain/knowledge-base/:id',
+      params: [],
+      sampleRequest: { method: 'GET', headers: [...auth.requiredHeaders] },
+      sampleResponse: { data: { id: 'kbdoc_x', title: 'My Document', content: '...' } },
+      commonErrors: [{ status: 404, error: 'Document not found' }],
+    });
+  }
+
   if (canReadVault) {
     endpoints.push({
       purpose: 'Store API token with website URL and optional AI discovery',
@@ -2522,11 +2598,27 @@ function buildCapabilitiesForRequest(req) {
     endpoints: filtered,
     tryFlow: [
       '1) Call GET /api/v1/capabilities to inspect available endpoints for this token/session.',
-      '2) (Optional) POST /api/v1/vault/discover-api with websiteUrl to detect likely API base URL + auth scheme.',
-      '3) POST /api/v1/vault/tokens with name/service/token/websiteUrl/discoverApi=true.',
-      '4) POST /api/v1/brain/knowledge-base/upload using field file (or document/upload/kbFile).',
+      '2) Call GET /api/v1/memory to recall previously stored facts before responding.',
+      '3) Use POST /api/v1/memory to save short facts, notes, or preferences (one fact per entry).',
+      '4) Use POST /api/v1/brain/knowledge-base/upsert to save named documents or long-form content.',
       '5) GET /api/v1/tokens/me/capabilities to confirm scope-filtered access.',
     ],
+    aiGuide: {
+      critical: 'MEMORY and KNOWLEDGE BASE are two different systems. Always use the correct one.',
+      memory: {
+        endpoint: 'POST /api/v1/memory',
+        useFor: 'Short facts, notes, preferences, observations. One fact per entry.',
+        examples: ['User prefers dark mode', 'User is building a SaaS product', "User's dog is named Max"],
+        doNot: 'Do NOT store documents, files, or long content here.',
+      },
+      knowledgeBase: {
+        endpoint: 'POST /api/v1/brain/knowledge-base/upsert',
+        useFor: 'Named documents, files, long-form content with a title.',
+        examples: ['Resume', 'Project brief', 'Meeting notes for April 2026'],
+        doNot: 'Do NOT store short facts or memory notes here.',
+      },
+      decisionRule: 'User says "remember this / note that / save this fact" → POST /api/v1/memory. User says "save this document / upload this file / store this content" → POST /api/v1/brain/knowledge-base/upsert.',
+    },
   };
 }
 
@@ -6654,12 +6746,24 @@ app.get([
     console.error(`[OAuth] Service not in list: ${service}`);
     return res.status(400).json({ error: "Invalid OAuth service" });
   }
-  if (!state) {
+  // Discord bot installation callbacks arrive without a state parameter because
+  // the user navigated to the Discord auth URL directly (not via /oauth/authorize/:service).
+  // In this case, fall back to the authenticated session user to identify the owner.
+  const isDiscordBotInstall = service === 'discord' && !state && req.query.guild_id;
+
+  if (!state && !isDiscordBotInstall) {
     return res.status(400).json({ error: "Invalid or expired state token" });
   }
 
   // Check state in session (where it was stored during authorize step)
-  const stateMeta = req.session?.oauthStateMeta?.[state];
+  const stateMeta = isDiscordBotInstall
+    ? { mode: 'connect', ownerId: req.session?.user?.id || null, returnTo: '/dashboard/services' }
+    : req.session?.oauthStateMeta?.[state];
+
+  if (!stateMeta && !isDiscordBotInstall) {
+    return res.status(400).json({ error: "Invalid or expired state token - not found in session" });
+  }
+
   if (!stateMeta) {
     return res.status(400).json({ error: "Invalid or expired state token - not found in session" });
   }
