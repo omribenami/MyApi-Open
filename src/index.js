@@ -6203,7 +6203,7 @@ app.delete('/api/v1/users/:id', authenticate, (req, res) => {
     const tx = db.transaction((userId) => {
       // Delete from all tables that reference this user (in dependency order)
       db.prepare('DELETE FROM oauth_tokens WHERE user_id = ?').run(userId);
-      db.prepare('DELETE FROM vault_tokens WHERE user_id = ?').run(userId);
+      db.prepare('DELETE FROM vault_tokens WHERE owner_id = ?').run(userId);
       db.prepare('DELETE FROM access_tokens WHERE owner_id = ?').run(userId);
       db.prepare('DELETE FROM approved_devices WHERE user_id = ?').run(userId);
       db.prepare('DELETE FROM device_approvals_pending WHERE user_id = ?').run(userId);
