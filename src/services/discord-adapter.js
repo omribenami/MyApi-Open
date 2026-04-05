@@ -15,9 +15,11 @@ class DiscordAdapter {
   getAuthorizationUrl(state) {
     const params = {
       client_id: this.clientId,
+      permissions: '2048',
       response_type: 'code',
-      scope: 'identify email guilds',
       redirect_uri: this.redirectUri,
+      integration_type: '0',
+      scope: 'identify email guilds guilds.join bot applications.commands.permissions.update',
       state: state
     };
     return `${DISCORD_AUTH_URL}?${querystring.stringify(params)}`;
@@ -57,7 +59,7 @@ class DiscordAdapter {
                 refreshToken: result.refresh_token || null,
                 expiresIn: result.expires_in,
                 tokenType: result.token_type,
-                scope: result.scope || 'identify email guilds'
+                scope: result.scope || 'identify email guilds guilds.join bot applications.commands.permissions.update'
               });
             }
           } catch (e) {
