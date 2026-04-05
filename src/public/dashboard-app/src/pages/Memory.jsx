@@ -60,9 +60,9 @@ function EditModal({ mem, onClose, onSave }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="w-full max-w-2xl bg-slate-900 border border-slate-700 rounded-xl shadow-2xl flex flex-col">
+      <div className="w-full max-w-4xl max-h-[90vh] bg-slate-900 border border-slate-700 rounded-xl shadow-2xl flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
+        <div className="flex-shrink-0 flex items-center justify-between px-5 py-4 border-b border-slate-800">
           <div className="flex items-center gap-3">
             <span className="text-sm font-medium text-slate-200">Edit Memory</span>
             <SourceBadge source={mem.source} />
@@ -70,15 +70,15 @@ function EditModal({ mem, onClose, onSave }) {
           <span className="text-xs text-slate-500">{formatDate(mem.created_at)}</span>
         </div>
 
-        {/* Editor */}
-        <div className="p-5">
+        {/* Editor — scrollable */}
+        <div className="flex-1 overflow-y-auto p-5 min-h-0">
           <textarea
             ref={textareaRef}
             value={draft}
             onChange={e => setDraft(e.target.value)}
             onKeyDown={handleKeyDown}
-            rows={Math.max(6, draft.split('\n').length + 1)}
-            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-sm text-slate-200 font-mono resize-y focus:outline-none focus:border-blue-500 leading-relaxed"
+            className="w-full h-full min-h-[400px] bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-sm text-slate-200 font-mono resize-none focus:outline-none focus:border-blue-500 leading-relaxed"
+            style={{ minHeight: '400px' }}
           />
           <p className="mt-1.5 text-xs text-slate-600">⌘↵ to save · Esc to cancel</p>
         </div>
