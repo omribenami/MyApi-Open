@@ -1,7 +1,9 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from './stores/authStore';
+import OnboardingModal from './components/OnboardingModal';
+import { wasOnboardingDismissed } from './utils/onboardingUtils';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import DashboardHome from './pages/DashboardHome';
@@ -57,6 +59,8 @@ function App() {
   const handleLogout = useAuthStore((state) => state.logout);
   const forceUnauthenticated = useAuthStore((state) => state.forceUnauthenticated);
   const fetchWorkspaces = useAuthStore((state) => state.fetchWorkspaces);
+  const user = useAuthStore((state) => state.user);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   // Initialize auth store on mount
   useEffect(() => {
@@ -69,6 +73,13 @@ function App() {
       fetchWorkspaces();
     }
   }, [isAuthenticated, fetchWorkspaces]);
+
+  // Show onboarding modal for new users
+  useEffect(() => {
+    if (isAuthenticated && user?.needsOnboarding && !wasOnboardingDismissed()) {
+      setShowOnboarding(true);
+    }
+  }, [isAuthenticated, user?.needsOnboarding]);
 
   // Handle OAuth callbacks at app level (runs before router decides which component to show)
   useEffect(() => {
@@ -150,6 +161,9 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <Router basename="/dashboard">
+        {isAuthenticated && showOnboarding && (
+          <OnboardingModal onClose={() => setShowOnboarding(false)} />
+        )}
         <Routes>
           {/* Unauthenticated Routes */}
           {!isAuthenticated && (

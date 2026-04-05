@@ -19,6 +19,7 @@ function Dashboard() {
   const masterToken = useAuthStore((state) => state.masterToken);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const currentWorkspace = useAuthStore((state) => state.currentWorkspace);
+  const user = useAuthStore((state) => state.user);
   const wsRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
 
@@ -314,6 +315,49 @@ function Dashboard() {
 
       {/* Pending Invitations */}
       <PendingInvitations />
+
+      {/* Getting Started Checklist — shown for new users until all 4 items are done */}
+      {user?.needsOnboarding && (
+        <div className="rounded-lg border border-blue-700/40 bg-blue-950/20 p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-blue-400 text-lg">🚀</span>
+            <h3 className="text-white font-semibold text-sm">Getting started</h3>
+            <span className="ml-auto text-xs text-slate-500">Complete these to unlock the full platform</span>
+          </div>
+          <div className="space-y-2">
+            {[
+              { done: !!(user?.displayName), label: 'Complete your profile', href: '/identity' },
+              { done: (metrics.connectedServices || 0) > 0, label: 'Connect a service', href: '/services' },
+              { done: (metrics.knowledge || 0) > 0, label: 'Add a memory or knowledge doc', href: '/memory' },
+              { done: (metrics.personas || 0) > 0, label: 'Create a persona', href: '/personas' },
+            ].map((item) => (
+              <Link
+                key={item.label}
+                to={item.href}
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
+                  item.done
+                    ? 'opacity-50 pointer-events-none'
+                    : 'hover:bg-blue-900/30 cursor-pointer'
+                }`}
+              >
+                <span className={`flex-shrink-0 w-4 h-4 rounded-full border flex items-center justify-center text-xs ${
+                  item.done ? 'bg-green-600 border-green-600 text-white' : 'border-slate-600 text-transparent'
+                }`}>
+                  {item.done ? '✓' : ''}
+                </span>
+                <span className={`text-sm ${item.done ? 'line-through text-slate-500' : 'text-slate-300'}`}>
+                  {item.label}
+                </span>
+                {!item.done && (
+                  <svg className="ml-auto w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                )}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Error Display */}
       {error && (

@@ -1261,11 +1261,63 @@ app.get('/api/v1/', (req, res) => {
   });
 });
 
-// GET /api/v1/quick-start - step-by-step guide for AI agents
+// GET /api/v1/quick-start - personalized step-by-step guide for AI agents
 app.get('/api/v1/quick-start', (req, res) => {
   const hasAuth = !!(req.headers.authorization || '').match(/^Bearer\s+.+/i);
   const host = req.headers.host || 'www.myapiai.com';
   const canonicalBase = `https://${host}`;
+
+  // Build personalized section when authenticated
+  let personalized = null;
+  if (hasAuth) {
+    try {
+      const userId = getOAuthUserId(req);
+      const connectedSvcs = [];
+      for (const svcId of OAUTH_SERVICES) {
+        const token = getCachedOAuthToken(svcId, userId) || getOAuthToken(svcId, userId);
+        if (token) connectedSvcs.push(svcId);
+      }
+      const tokenLabel = req.tokenMeta?.label || 'your-token';
+      const authHeader = `Authorization: Bearer ${tokenLabel === 'your-token' ? '<your-token>' : tokenLabel}`;
+
+      // Generate up to 3 example curls from connected services
+      const SERVICE_EXAMPLE_PATHS = {
+        github: '/user/repos?per_page=5',
+        google: '/gmail/v1/users/me/messages?maxResults=5',
+        slack: '/conversations.list?limit=5',
+        notion: '/search',
+        discord: '/users/@me/guilds',
+        linear: '/issues?first=5',
+        jira: '/rest/api/3/myself',
+        zoom: '/users/me/meetings',
+        microsoft365: '/me/messages?$top=5',
+        dropbox: '/files/list_folder',
+        hubspot: '/crm/v3/objects/contacts?limit=5',
+        trello: '/members/me/boards',
+      };
+
+      const exampleCurls = connectedSvcs.slice(0, 3).map(svcId => {
+        const path = SERVICE_EXAMPLE_PATHS[svcId] || '/';
+        return {
+          service: svcId,
+          description: `List/fetch from ${svcId}`,
+          curl: `curl -s -X POST ${canonicalBase}/api/v1/services/${svcId}/proxy \\\n  -H "${authHeader}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"path":"${path}","method":"GET"}'`,
+        };
+      });
+
+      const intentExample = connectedSvcs.length > 0
+        ? `curl -s -X POST ${canonicalBase}/api/v1/ask \\\n  -H "${authHeader}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"intent":"list my recent ${connectedSvcs[0]} activity"}'`
+        : null;
+
+      personalized = {
+        connectedServices: connectedSvcs,
+        exampleCurls,
+        intentExample: intentExample ? { description: 'Natural language → auto-routed action', curl: intentExample } : null,
+      };
+    } catch (_e) {
+      // non-critical
+    }
+  }
   res.json({
     title: 'MyApi Quick Start for AI Agents',
     important: AI_APPROVAL_MESSAGE,
@@ -1354,7 +1406,136 @@ app.get('/api/v1/quick-start', (req, res) => {
       },
     ],
     fullDocs: '/openapi.json',
+    personalized: personalized || undefined,
   });
+});
+
+// POST /api/v1/ask - Natural language intent → service resolution → proxy execution
+app.post('/api/v1/ask', authenticate, async (req, res) => {
+  try {
+    const { intent } = req.body || {};
+    if (!intent || typeof intent !== 'string' || !intent.trim()) {
+      return res.status(400).json({ error: 'intent is required' });
+    }
+
+    if (!hasScope(req, 'services:read')) {
+      return res.status(403).json({ error: "Requires 'services:read' scope" });
+    }
+
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      return res.status(503).json({ error: 'AI routing unavailable — OPENAI_API_KEY not configured' });
+    }
+
+    const userId = getOAuthUserId(req);
+
+    // Build list of connected services for the prompt
+    const connectedServices = [];
+    for (const svcId of OAUTH_SERVICES) {
+      const token = getCachedOAuthToken(svcId, userId) || getOAuthToken(svcId, userId);
+      if (token) connectedServices.push(svcId);
+    }
+
+    if (connectedServices.length === 0) {
+      return res.status(400).json({ error: 'No services connected. Connect at least one service first.' });
+    }
+
+    // Service hint map (compact for prompt)
+    const SERVICE_HINTS = {
+      github: 'repos(/user/repos), issues(/repos/{owner}/{repo}/issues), PRs, user(/user)',
+      google: 'gmail(/gmail/v1/users/me/messages), calendar(/calendar/v3/calendars/primary/events)',
+      slack: 'channels(/conversations.list), messages(/conversations.history), users(/users.list)',
+      notion: 'pages(/pages), databases(/databases), search(/search)',
+      discord: 'guilds(/users/@me/guilds), channels(/channels/{id}/messages)',
+      linear: 'issues(/issues), projects(/projects), teams(/teams)',
+      microsoft365: 'mail(/me/messages), calendar(/me/events), files(/me/drive/root/children)',
+      jira: 'issues(/rest/api/3/search), projects(/rest/api/3/project)',
+      zoom: 'meetings(/users/me/meetings), recordings(/users/me/recordings)',
+      trello: 'boards(/members/me/boards), cards(/boards/{id}/cards)',
+      hubspot: 'contacts(/crm/v3/objects/contacts), deals(/crm/v3/objects/deals)',
+      dropbox: 'files(/files/list_folder), search(/files/search_v2)',
+    };
+
+    const svcLines = connectedServices
+      .map(id => `${id}: ${SERVICE_HINTS[id] || 'general API access'}`)
+      .join('\n');
+
+    const systemPrompt = `You are a service router for a personal API platform. Given a user intent, select the best connected service and output ONLY valid JSON with no explanation.
+
+Connected services:
+${svcLines}
+
+Output format (strict JSON only, no markdown):
+{"service":"<service_id>","path":"<api_path_with_leading_slash>","method":"GET","body":{},"reasoning":"<one line>"}
+
+Rules:
+- service must be one of the connected services listed above
+- method must be GET, POST, PUT, PATCH, or DELETE
+- path must start with /
+- body should be {} for GET requests
+- reasoning is a single short sentence`;
+
+    const llmResp = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(10000),
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        temperature: 0,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `Intent: ${intent.trim()}` },
+        ],
+      }),
+    });
+
+    if (!llmResp.ok) {
+      return res.status(502).json({ error: 'AI routing failed', details: `LLM status ${llmResp.status}` });
+    }
+
+    const llmData = await llmResp.json();
+    let resolved;
+    try {
+      resolved = JSON.parse(llmData?.choices?.[0]?.message?.content || '{}');
+    } catch {
+      return res.status(502).json({ error: 'AI returned invalid JSON' });
+    }
+
+    const { service, path: apiPath, method: httpMethod = 'GET', body: reqBody = {} } = resolved;
+
+    if (!service || !apiPath) {
+      return res.status(502).json({ error: 'AI could not resolve intent to a service action', intent, resolved });
+    }
+
+    if (!connectedServices.includes(service)) {
+      return res.status(400).json({ error: `Resolved service '${service}' is not connected`, connected: connectedServices });
+    }
+
+    // Execute via internal proxy call (reuse proxy endpoint logic)
+    const proxyResp = await fetch(`http://127.0.0.1:${process.env.PORT || 4500}/api/v1/services/${service}/proxy`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: req.headers.authorization,
+        ...(req.headers['x-workspace-id'] ? { 'x-workspace-id': req.headers['x-workspace-id'] } : {}),
+      },
+      signal: AbortSignal.timeout(15000),
+      body: JSON.stringify({ path: apiPath, method: httpMethod.toUpperCase(), body: reqBody }),
+    });
+
+    const proxyData = await proxyResp.json().catch(() => ({}));
+
+    return res.json({
+      ok: true,
+      intent: intent.trim(),
+      resolved: { service, path: apiPath, method: httpMethod.toUpperCase(), reasoning: resolved.reasoning },
+      result: proxyData,
+    });
+  } catch (err) {
+    console.error('[/api/v1/ask] error:', err.message);
+    return res.status(500).json({ error: 'Internal error', details: err.message });
+  }
 });
 
 // /.well-known/openapi - standard discovery path
