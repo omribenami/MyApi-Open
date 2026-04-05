@@ -34,6 +34,8 @@ const TOKEN_REFRESH_URLS = {
   intercom:   { tokenUrl: 'https://api.intercom.io/auth/eagle/token',     clientId: () => process.env.INTERCOM_CLIENT_ID,   clientSecret: () => process.env.INTERCOM_CLIENT_SECRET },
   clickup:    { tokenUrl: 'https://app.clickup.com/api/v2/oauth/token',   clientId: () => process.env.CLICKUP_CLIENT_ID,    clientSecret: () => process.env.CLICKUP_CLIENT_SECRET },
   monday:     { tokenUrl: 'https://auth.monday.com/oauth2/token',         clientId: () => process.env.MONDAY_CLIENT_ID,     clientSecret: () => process.env.MONDAY_CLIENT_SECRET },
+  // TikTok uses client_key instead of client_id in token requests
+  tiktok:     { tokenUrl: 'https://open.tiktokapis.com/v2/oauth/token/',  clientId: () => process.env.TIKTOK_CLIENT_KEY,    clientSecret: () => process.env.TIKTOK_CLIENT_SECRET, clientIdParam: 'client_key' },
 };
 
 const SERVICE_CATALOG = [
@@ -122,9 +124,9 @@ function createServicesRoutes() {
       if (token && !token.revokedAt) {
         // Auto-refresh if expired and we know the token URL
         if (isTokenExpired(token) && token.refreshToken && TOKEN_REFRESH_URLS[serviceId]) {
-          const { tokenUrl, clientId, clientSecret } = TOKEN_REFRESH_URLS[serviceId];
+          const { tokenUrl, clientId, clientSecret, clientIdParam } = TOKEN_REFRESH_URLS[serviceId];
           try {
-            const refreshResult = await refreshOAuthToken(serviceId, userId, tokenUrl, clientId(), clientSecret());
+            const refreshResult = await refreshOAuthToken(serviceId, userId, tokenUrl, clientId(), clientSecret(), clientIdParam ? { clientIdParam } : {});
             if (refreshResult?.ok) {
               return { connected: true, created_at: token.createdAt || null, expires_at: refreshResult.token?.expiresAt || null };
             }

@@ -174,7 +174,7 @@ function ProfileSection() {
       setAvatarLoadError(false);
       // Persist immediately so it survives a page reload
       localStorage.setItem('profileAvatarUrl', data.avatarUrl || '');
-    } catch (err) {
+    } catch (_err) {
       setProfileError('Failed to upload image. Max 5 MB, images only.');
     } finally {
       setAvatarUploading(false);

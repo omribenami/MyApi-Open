@@ -1,6 +1,24 @@
 const path = require("path");
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 require('dotenv').config(); // fallback to current working dir .env if present
+
+// Sentry error monitoring (only initialised when SENTRY_DSN is set)
+let Sentry = null;
+if (process.env.SENTRY_DSN) {
+  try {
+    Sentry = require('@sentry/node');
+    Sentry.init({
+      dsn: process.env.SENTRY_DSN,
+      environment: process.env.NODE_ENV || 'production',
+      tracesSampleRate: 0.1,
+    });
+    console.log('[Sentry] Error monitoring initialised');
+  } catch (e) {
+    console.warn('[Sentry] Failed to initialise:', e.message);
+    Sentry = null;
+  }
+}
+
 const express = require("express");
 const helmet = require("helmet");
 const cors = require("cors");
@@ -1134,6 +1152,11 @@ app.get('/', (req, res) => {
     });
   }
 
+  // Serve the marketing landing page for browser visitors
+  const landingPath = path.join(__dirname, 'public', 'landing', 'index.html');
+  if (fs.existsSync(landingPath)) {
+    return res.sendFile(landingPath);
+  }
   res.redirect('/dashboard/');
 });
 app.get('/login', (req, res) => res.redirect('/dashboard/'));
@@ -10308,6 +10331,11 @@ function cleanupExpiredSessions() {
   if (cleanedCount > 0) {
     console.log(`[Session Cleanup] Expired ${cleanedCount} old sessions (7-day TTL)`);
   }
+}
+
+// Sentry error handler must be registered after all routes
+if (Sentry) {
+  Sentry.setupExpressErrorHandler(app);
 }
 
 // --- Start ---

@@ -2448,7 +2448,7 @@ function isTokenExpired(tokenRow, bufferMs = 300000) {
  * Refresh an OAuth token using its refresh_token.
  * Requires the service's token URL and client credentials.
  */
-async function refreshOAuthToken(serviceName, userId, tokenUrl, clientId, clientSecret) {
+async function refreshOAuthToken(serviceName, userId, tokenUrl, clientId, clientSecret, options = {}) {
   const existing = getOAuthToken(serviceName, userId);
   if (!existing || !existing.refreshToken) {
     return { ok: false, error: 'No refresh token available' };
@@ -2464,10 +2464,11 @@ async function refreshOAuthToken(serviceName, userId, tokenUrl, clientId, client
     const url = new URL(tokenUrl);
     const transport = url.protocol === 'https:' ? https : http;
 
+    const clientIdKey = options.clientIdParam || 'client_id';
     const body = new URLSearchParams({
       grant_type: 'refresh_token',
       refresh_token: existing.refreshToken,
-      client_id: clientId,
+      [clientIdKey]: clientId,
       client_secret: clientSecret,
     }).toString();
 
