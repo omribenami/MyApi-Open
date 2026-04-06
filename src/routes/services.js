@@ -529,6 +529,126 @@ function createServicesRoutes() {
     }
   });
 
+  // ── Google Drive ─────────────────────────────────────────────────────────────
+
+  function driveRequest(accessToken, method, path, body, extraHeaders = {}) {
+    return new Promise((resolve, reject) => {
+      const url = new URL('https://www.googleapis.com' + path);
+      const payload = body ? JSON.stringify(body) : null;
+      const options = {
+        hostname: url.hostname,
+        path: url.pathname + url.search,
+        method,
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          ...(payload ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) } : {}),
+          ...extraHeaders,
+        },
+      };
+      const req = https.request(options, (res) => {
+        const chunks = [];
+        res.on('data', c => chunks.push(c));
+        res.on('end', () => {
+          const raw = Buffer.concat(chunks);
+          try { resolve({ status: res.statusCode, body: JSON.parse(raw.toString()) }); }
+          catch { resolve({ status: res.statusCode, body: raw }); }
+        });
+      });
+      req.on('error', reject);
+      if (payload) req.write(payload);
+      req.end();
+    });
+  }
+
+  // GET /api/v1/services/google/drive/files?q=&pageSize=
+  router.get('/google/drive/files', requireAuth, async (req, res) => {
+    try {
+      const userId = resolveUserId(req);
+      const accessToken = await getGoogleAccessToken(userId);
+      if (!accessToken) return res.status(401).json({ error: 'Google account not connected', hint: 'Connect via /api/v1/oauth/connect/google' });
+
+      const pageSize = Math.min(Number(req.query.pageSize) || 20, 100);
+      const q = req.query.q || '';
+      const pageToken = req.query.pageToken || '';
+      let path = `/drive/v3/files?pageSize=${pageSize}&fields=nextPageToken,files(id,name,mimeType,size,modifiedTime,parents,webViewLink,webContentLink)`;
+      if (q) path += `&q=${encodeURIComponent(q)}`;
+      if (pageToken) path += `&pageToken=${encodeURIComponent(pageToken)}`;
+
+      const r = await driveRequest(accessToken, 'GET', path);
+      if (r.status !== 200) return res.status(r.status).json({ error: 'Drive API error', details: r.body });
+      res.json({ success: true, files: r.body.files, nextPageToken: r.body.nextPageToken || null });
+    } catch (e) {
+      res.status(500).json({ error: 'Failed to list Drive files', message: e.message });
+    }
+  });
+
+  // POST /api/v1/services/google/drive/upload  body: { name, content, mimeType?, folderId? }
+  router.post('/google/drive/upload', requireAuth, async (req, res) => {
+    try {
+      const userId = resolveUserId(req);
+      const accessToken = await getGoogleAccessToken(userId);
+      if (!accessToken) return res.status(401).json({ error: 'Google account not connected', hint: 'Connect via /api/v1/oauth/connect/google' });
+
+      const { name, content, mimeType = 'text/plain', encoding = 'utf8', folderId } = req.body;
+      if (!name || content === undefined) return res.status(400).json({ error: 'name and content are required' });
+
+      const fileBuffer = encoding === 'base64' ? Buffer.from(content, 'base64') : Buffer.from(content, 'utf8');
+      const metadata = { name, mimeType, ...(folderId ? { parents: [folderId] } : {}) };
+      const metaJson = JSON.stringify(metadata);
+
+      // Multipart upload
+      const boundary = '-------MyApiUpload';
+      const body = Buffer.concat([
+        Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metaJson}\r\n--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n`),
+        fileBuffer,
+        Buffer.from(`\r\n--${boundary}--`),
+      ]);
+
+      const r = await new Promise((resolve, reject) => {
+        const options = {
+          hostname: 'www.googleapis.com',
+          path: '/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,size,webViewLink',
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': `multipart/related; boundary=${boundary}`,
+            'Content-Length': body.length,
+          },
+        };
+        const req2 = https.request(options, (res2) => {
+          const chunks = [];
+          res2.on('data', c => chunks.push(c));
+          res2.on('end', () => {
+            try { resolve({ status: res2.statusCode, body: JSON.parse(Buffer.concat(chunks).toString()) }); }
+            catch (e) { resolve({ status: res2.statusCode, body: {} }); }
+          });
+        });
+        req2.on('error', reject);
+        req2.write(body);
+        req2.end();
+      });
+
+      if (r.status !== 200) return res.status(r.status).json({ error: 'Upload failed', details: r.body });
+      res.json({ success: true, file: r.body });
+    } catch (e) {
+      res.status(500).json({ error: 'Failed to upload to Drive', message: e.message });
+    }
+  });
+
+  // DELETE /api/v1/services/google/drive/files/:fileId
+  router.delete('/google/drive/files/:fileId', requireAuth, async (req, res) => {
+    try {
+      const userId = resolveUserId(req);
+      const accessToken = await getGoogleAccessToken(userId);
+      if (!accessToken) return res.status(401).json({ error: 'Google account not connected' });
+      const r = await driveRequest(accessToken, 'DELETE', `/drive/v3/files/${req.params.fileId}`);
+      if (r.status !== 204 && r.status !== 200) return res.status(r.status).json({ error: 'Delete failed', details: r.body });
+      res.json({ success: true });
+    } catch (e) {
+      res.status(500).json({ error: 'Failed to delete Drive file', message: e.message });
+    }
+  });
+
   return router;
 }
 
