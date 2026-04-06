@@ -2027,6 +2027,7 @@ function authenticate(req, res, next) {
     /^\/api\/v1\/billing\/plans/,
     /^\/oauth\//,
     /^\/api\/v1\/handshakes\/[^/]+\/status$/,  // public: AI agents poll handshake status
+    /^\/api\/v1\/afp\/download/,              // public: AFP daemon binary downloads
   ];
 
   // Allow DELETE on invitations if email query param is provided (for email-based revocation without login)
