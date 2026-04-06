@@ -11,7 +11,11 @@ services:
     ports:
       - "${PORT:-4500}:${PORT:-4500}"
     
-    # Environment variables
+    # Load all env vars from root .env file
+    env_file:
+      - ../.env
+
+    # Environment variables (overrides for container-specific settings)
     environment:
       - NODE_ENV=${NODE_ENV:-production}
       - PORT=${PORT:-4500}

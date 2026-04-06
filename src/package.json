@@ -40,6 +40,7 @@
     "axios": "^1.6.0",
     "bcrypt": "^5.1.1",
     "better-sqlite3": "^9.6.0",
+    "better-sqlite3-session-store": "^0.1.0",
     "cors": "^2.8.5",
     "crypto-js": "^4.2.0",
     "dotenv": "^16.3.1",
@@ -49,14 +50,18 @@
     "express-validator": "^7.0.1",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
+    "jszip": "^3.10.1",
     "langchain": "^0.1.0",
     "marked": "^11.1.0",
     "multer": "^1.4.5-lts.2",
+    "node-cache": "^5.1.2",
     "nodemailer": "^8.0.3",
     "pdf-parse": "^1.1.1",
     "qrcode": "^1.5.4",
     "speakeasy": "^2.0.0",
-    "uuid": "^9.0.1"
+    "stripe": "^22.0.0",
+    "uuid": "^9.0.1",
+    "ws": "^8.20.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.2",

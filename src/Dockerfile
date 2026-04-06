@@ -10,7 +10,7 @@ COPY . .
 RUN npm install --no-audit
 
 # Build frontend (React/Vite dashboard)
-RUN cd src/public/dashboard-app && npm run build
+RUN cd public/dashboard-app && npm install --no-audit && npm run build
 
 # Ensure directories exist
 RUN mkdir -p data logs && chmod -R 755 data logs
@@ -23,4 +23,4 @@ HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=20s \
   CMD node -e "require('http').get('http://localhost:4500/api/v1/', (r) => { if (r.statusCode !== 200) throw new Error(r.statusCode) })" || exit 1
 
 # Start application in production mode
-CMD ["node", "src/index.js"]
+CMD ["node", "index.js"]
