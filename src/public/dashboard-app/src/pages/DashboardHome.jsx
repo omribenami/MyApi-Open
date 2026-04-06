@@ -27,6 +27,9 @@ function DashboardHome() {
     tokens: 0,
     vaultTokens: 0,
     connectors: 0,
+    connectorsList: [],
+    afpDevices: 0,
+    afpOnline: 0,
     myListings: 0,
     personas: 0,
     activePersona: null,
@@ -51,7 +54,7 @@ function DashboardHome() {
           headers['X-Workspace-ID'] = workspaceId;
         }
 
-        const [healthRes, tokensRes, vaultRes, connectorsRes, myListingsRes, personasRes, skillsRes, kbRes, billingRes] = await Promise.all([
+        const [healthRes, tokensRes, vaultRes, connectorsRes, myListingsRes, personasRes, skillsRes, kbRes, billingRes, afpRes] = await Promise.all([
           fetch('/health'),
           fetch('/api/v1/tokens', { headers }).catch(() => ({ ok: false })),
           fetch('/api/v1/vault/tokens', { headers }).catch(() => ({ ok: false })),
@@ -61,6 +64,7 @@ function DashboardHome() {
           fetch('/api/v1/skills', { headers }).catch(() => ({ ok: false })),
           fetch('/api/v1/brain/knowledge-base', { headers }).catch(() => ({ ok: false })),
           fetch('/api/v1/billing/current', { headers, credentials: 'include' }).catch(() => ({ ok: false })),
+          fetch('/api/v1/afp/devices', { headers }).catch(() => ({ ok: false })),
         ]);
 
         if (healthRes.ok) {
@@ -87,7 +91,14 @@ function DashboardHome() {
           const connectorsData = await connectorsRes.json();
           const serviceList = connectorsData.services || connectorsData.data || [];
           const connected = serviceList.filter((c) => c.status === 'connected');
-          setStats((s) => ({ ...s, connectors: connected.length }));
+          setStats((s) => ({ ...s, connectors: connected.length, connectorsList: connected.slice(0, 5) }));
+        }
+
+        if (afpRes.ok) {
+          const afpData = await afpRes.json();
+          const devices = afpData.devices || afpData.data || [];
+          const online = devices.filter((d) => d.status === 'online');
+          setStats((s) => ({ ...s, afpDevices: devices.length, afpOnline: online.length }));
         }
 
         if (myListingsRes.ok) {
@@ -138,56 +149,79 @@ function DashboardHome() {
     };
   }, [masterToken, currentWorkspace?.id]);
 
-  const statCards = [
+  const row1Cards = [
     {
       label: 'Master Tokens',
       value: stats.tokens,
       link: '/access-tokens',
       description: 'Master & guest tokens',
+      accent: 'blue',
     },
     {
       label: 'Token Vault',
       value: stats.vaultTokens,
       link: '/tokens',
       description: 'External service credentials',
+      accent: 'violet',
     },
     {
       label: 'Connected Services',
       value: stats.connectors,
       link: '/services',
       description: 'OAuth and integrations',
+      accent: 'emerald',
     },
+  ];
+
+  const row2Cards = [
     {
       label: 'Personas',
       value: stats.personas,
       link: '/personas',
       description: stats.activePersona ? `Active: ${stats.activePersona}` : 'AI personality profiles',
+      accent: 'pink',
     },
     {
       label: 'Skills',
       value: stats.skills,
       link: '/skills',
       description: `${stats.activeSkills} active skill${stats.activeSkills !== 1 ? 's' : ''}`,
+      accent: 'amber',
     },
     {
       label: 'Knowledge Base',
       value: stats.kbDocs,
       link: '/knowledge',
       description: 'Documents & memory',
+      accent: 'cyan',
     },
     {
       label: 'My Listings',
       value: stats.myListings,
       link: '/my-listings',
       description: 'Published to marketplace',
+      accent: 'orange',
     },
     {
       label: 'Billing Plan',
       value: stats.billingPlan.charAt(0).toUpperCase() + stats.billingPlan.slice(1),
       link: '/settings?section=billing',
       description: `Usage: ${stats.billingUsagePercent}%`,
+      accent: 'slate',
     },
   ];
+
+  const accentClasses = {
+    blue:   { dot: 'bg-blue-500',   text: 'text-blue-400',   border: 'border-blue-500/20',   glow: 'hover:border-blue-500/40' },
+    violet: { dot: 'bg-violet-500', text: 'text-violet-400', border: 'border-violet-500/20', glow: 'hover:border-violet-500/40' },
+    emerald:{ dot: 'bg-emerald-500',text: 'text-emerald-400',border: 'border-emerald-500/20',glow: 'hover:border-emerald-500/40' },
+    pink:   { dot: 'bg-pink-500',   text: 'text-pink-400',   border: 'border-pink-500/20',   glow: 'hover:border-pink-500/40' },
+    amber:  { dot: 'bg-amber-500',  text: 'text-amber-400',  border: 'border-amber-500/20',  glow: 'hover:border-amber-500/40' },
+    cyan:   { dot: 'bg-cyan-500',   text: 'text-cyan-400',   border: 'border-cyan-500/20',   glow: 'hover:border-cyan-500/40' },
+    orange: { dot: 'bg-orange-500', text: 'text-orange-400', border: 'border-orange-500/20', glow: 'hover:border-orange-500/40' },
+    slate:  { dot: 'bg-slate-400',  text: 'text-slate-400',  border: 'border-slate-700',     glow: 'hover:border-slate-600' },
+    indigo: { dot: 'bg-indigo-500', text: 'text-indigo-400', border: 'border-indigo-500/20', glow: 'hover:border-indigo-500/40' },
+  };
 
   if (loading) {
     return (
@@ -240,23 +274,88 @@ function DashboardHome() {
         </div>
       )}
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {statCards.map((card) => (
-          <Link
-            key={card.label}
-            to={card.link}
-            className="rounded-md p-5 border border-slate-800 bg-slate-900 hover:border-slate-700 transition-colors"
-          >
-            <div className="flex items-start justify-between mb-3">
-              <div>
-                <p className="text-sm font-medium text-slate-300">{card.label}</p>
-                <p className="text-3xl font-semibold mt-1 text-slate-100">{card.value}</p>
+      {/* Stats Cards — Row 1 (3 standard + 1 connectors summary) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {row1Cards.map((card) => {
+          const ac = accentClasses[card.accent] || accentClasses.slate;
+          return (
+            <Link
+              key={card.label}
+              to={card.link}
+              className={`rounded-xl p-5 border bg-slate-900 transition-all duration-200 ${ac.border} ${ac.glow} hover:bg-slate-800/60 group`}
+            >
+              <div className="flex items-center gap-2 mb-3">
+                <span className={`w-2 h-2 rounded-full ${ac.dot}`} />
+                <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">{card.label}</p>
               </div>
+              <p className={`text-4xl font-bold mb-1 ${ac.text}`}>{card.value}</p>
+              <p className="text-xs text-slate-500">{card.description}</p>
+            </Link>
+          );
+        })}
+
+        {/* Connectors Summary Card */}
+        <Link
+          to="/services"
+          className="rounded-xl p-5 border bg-slate-900 border-indigo-500/20 hover:border-indigo-500/40 hover:bg-slate-800/60 transition-all duration-200 group"
+        >
+          <div className="flex items-center gap-2 mb-3">
+            <span className="w-2 h-2 rounded-full bg-indigo-500" />
+            <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Connectors</p>
+          </div>
+          <div className="flex items-baseline gap-2 mb-2">
+            <p className="text-4xl font-bold text-indigo-400">{stats.connectors}</p>
+            <span className="text-xs text-slate-500">connected</span>
+          </div>
+          {stats.afpDevices > 0 && (
+            <div className="flex items-center gap-1.5 mb-2">
+              <span className={`w-1.5 h-1.5 rounded-full ${stats.afpOnline > 0 ? 'bg-emerald-400' : 'bg-slate-600'}`} />
+              <span className="text-xs text-slate-400">
+                {stats.afpOnline}/{stats.afpDevices} PC{stats.afpDevices !== 1 ? 's' : ''} online
+              </span>
             </div>
-            <p className="text-xs text-slate-400">{card.description}</p>
-          </Link>
-        ))}
+          )}
+          {stats.connectorsList.length > 0 ? (
+            <div className="flex flex-wrap gap-1 mt-2">
+              {stats.connectorsList.map((c) => (
+                <span
+                  key={c.name || c.id}
+                  className="px-1.5 py-0.5 rounded text-[10px] bg-indigo-900/30 text-indigo-300 border border-indigo-500/20 capitalize"
+                >
+                  {c.name || c.id}
+                </span>
+              ))}
+              {stats.connectors > 5 && (
+                <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-500 border border-slate-700">
+                  +{stats.connectors - 5} more
+                </span>
+              )}
+            </div>
+          ) : (
+            <p className="text-xs text-slate-500">OAuth &amp; PC integrations</p>
+          )}
+        </Link>
+      </div>
+
+      {/* Stats Cards — Row 2 */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {row2Cards.map((card) => {
+          const ac = accentClasses[card.accent] || accentClasses.slate;
+          return (
+            <Link
+              key={card.label}
+              to={card.link}
+              className={`rounded-xl p-5 border bg-slate-900 transition-all duration-200 ${ac.border} ${ac.glow} hover:bg-slate-800/60 group`}
+            >
+              <div className="flex items-center gap-2 mb-3">
+                <span className={`w-2 h-2 rounded-full ${ac.dot}`} />
+                <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">{card.label}</p>
+              </div>
+              <p className={`text-4xl font-bold mb-1 ${ac.text}`}>{card.value}</p>
+              <p className="text-xs text-slate-500">{card.description}</p>
+            </Link>
+          );
+        })}
       </div>
 
       {/* Quick Actions */}
