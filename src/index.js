@@ -1923,7 +1923,11 @@ app.use('/api/v1/auth', newAuthRoutes);
 
 // AFP binary downloads — public, no auth (must be BEFORE the authRoutes catch-all below)
 {
-  const AFP_DIST = path.join(__dirname, '..', 'connectors', 'afp-daemon', 'dist');
+  // In Docker the src/ contents live at /app/ directly; connectors are at /app/afp-dist (copied in).
+  // In dev the project root is one level up from __dirname (src/).
+  const AFP_DIST = fs.existsSync(path.join(__dirname, 'afp-dist'))
+    ? path.join(__dirname, 'afp-dist')
+    : path.join(__dirname, '..', 'connectors', 'afp-daemon', 'dist');
   const AFP_PLATFORMS = {
     linux:     { file: 'afp-daemon-linux',       mime: 'application/octet-stream' },
     mac:       { file: 'afp-daemon-macos-x64',   mime: 'application/octet-stream' },
