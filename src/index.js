@@ -10386,7 +10386,8 @@ const server = http.createServer(app);
 
 // Setup WebSocket server if available
 if (WebSocketServer) {
-  const wss = new WebSocketServer({ server });
+  // path: '/ws' lets nginx route WebSocket upgrades separately from HTTP traffic
+  const wss = new WebSocketServer({ server, path: '/ws' });
 
   wss.on('connection', (ws, req) => {
     console.log('New WebSocket connection');

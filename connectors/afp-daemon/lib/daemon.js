@@ -180,7 +180,7 @@ function start(cfg, log) {
   // Allow passing a logger or fall back to console
   const logger = log || { info: console.log, warn: console.warn, error: console.error, debug: () => {} };
 
-  const wsUrl     = cfg.serverUrl.replace(/^http/, 'ws');
+  const wsUrl     = cfg.serverUrl.replace(/^http/, 'ws').replace(/\/+$/, '') + '/ws';
   const ops       = makeOps(cfg.afpRoot || null);
   const handleMsg = makeMessageHandler(ops, logger);
   let   backoffMs = 1000;
