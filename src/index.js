@@ -101,6 +101,8 @@ setInterval(() => {
   }
 }, 10 * 60 * 1000);
 
+const { pendingRequests: afpPendingRequests, afpConnections } = require('./lib/afp-state');
+
 const {
   db,
   initDatabase,
@@ -125,6 +127,9 @@ const {
   createConnector,
   getConnectors,
   createAuditLog,
+  // AFP
+  getAfpDeviceById,
+  updateAfpDeviceStatus,
   getAuditLogs,
   createUser,
   getUsers,
@@ -2101,6 +2106,7 @@ function authenticate(req, res, next) {
                              routePath.startsWith('/api/v1/oauth/') ||
                              routePath.startsWith('/api/v1/users') ||
                              routePath.startsWith('/api/v1/billing') ||
+                             routePath.startsWith('/api/v1/afp') ||
                              (routePath.startsWith('/api/v1/activity') && req.method === 'GET');
 
   if (skipDeviceApproval) {
@@ -2244,6 +2250,10 @@ const createVaultInstructionsRoutes = require('./routes/vault-instructions');
 app.use('/api/v1/export', authenticate, exportRoutes);
 app.use('/api/v1/import', authenticate, importRoutes);
 app.use('/api/v1/vault', authenticate, createVaultInstructionsRoutes(db, null, createAuditLog));
+
+// AFP (API File Protocol) — PC filesystem/exec connector
+const afpRoutes = require('./routes/afp');
+app.use('/api/v1/afp', authenticate, afpRoutes);
 
 // FAL Image Generation API
 const falImagesRoutes = require('./routes/fal-images');
@@ -10407,6 +10417,41 @@ if (WebSocketServer) {
             message: 'WebSocket connection authenticated',
           }));
           console.log(`User ${userId} authenticated via WebSocket`);
+
+        // AFP daemon registration
+        } else if (data.type === 'afp:register') {
+          let device;
+          try { device = getAfpDeviceById(data.deviceId); } catch (_) {}
+          if (!device || device.revoked_at) {
+            ws.send(JSON.stringify({ type: 'afp:error', message: 'Unknown or revoked AFP device' }));
+            return;
+          }
+          const bcrypt = require('bcrypt');
+          const valid = bcrypt.compareSync(String(data.deviceToken || ''), device.device_token_hash);
+          if (!valid) {
+            ws.send(JSON.stringify({ type: 'afp:error', message: 'Invalid AFP device token' }));
+            return;
+          }
+          afpConnections.set(data.deviceId, ws);
+          updateAfpDeviceStatus(data.deviceId, 'online');
+          ws.afpDeviceId = data.deviceId;
+          ws.send(JSON.stringify({ type: 'afp:registered', deviceId: data.deviceId }));
+          console.log(`[AFP] Daemon connected: ${data.deviceId} (${data.hostname || 'unknown'})`);
+
+        // AFP result relay (daemon → waiting REST promise)
+        } else if (data.type === 'afp:result') {
+          const pending = afpPendingRequests.get(data.requestId);
+          if (pending) {
+            clearTimeout(pending.timer);
+            afpPendingRequests.delete(data.requestId);
+            if (data.ok) {
+              pending.resolve(data.data);
+            } else {
+              const e = new Error(data.error || 'Daemon error');
+              e.code = 'DAEMON_ERROR';
+              pending.reject(e);
+            }
+          }
         }
       } catch (err) {
         console.error('Error processing WebSocket message:', err);
@@ -10424,6 +10469,12 @@ if (WebSocketServer) {
         if (connections.length === 0) {
           wsConnections.delete(userId);
         }
+      }
+      // AFP daemon disconnect
+      if (ws.afpDeviceId) {
+        afpConnections.delete(ws.afpDeviceId);
+        try { updateAfpDeviceStatus(ws.afpDeviceId, 'offline'); } catch (_) {}
+        console.log(`[AFP] Daemon disconnected: ${ws.afpDeviceId}`);
       }
       console.log('WebSocket connection closed');
     });

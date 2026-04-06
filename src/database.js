@@ -1201,6 +1201,48 @@ function initDatabase() {
     `);
   } catch (e) { /* tables already exist */ }
 
+  // AFP (API File Protocol) — PC filesystem/exec connector
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS afp_devices (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        device_name TEXT NOT NULL,
+        hostname TEXT,
+        platform TEXT,
+        arch TEXT,
+        capabilities_json TEXT,
+        device_token_hash TEXT NOT NULL,
+        status TEXT DEFAULT 'offline',
+        last_seen_at TEXT,
+        created_at TEXT NOT NULL,
+        revoked_at TEXT,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_afp_devices_user ON afp_devices(user_id);
+      CREATE INDEX IF NOT EXISTS idx_afp_devices_status ON afp_devices(status);
+
+      CREATE TABLE IF NOT EXISTS afp_command_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        device_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        requester_token_id TEXT,
+        op TEXT NOT NULL,
+        path TEXT,
+        cmd TEXT,
+        status TEXT NOT NULL,
+        duration_ms INTEGER,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (device_id) REFERENCES afp_devices(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_afp_command_log_device ON afp_command_log(device_id);
+      CREATE INDEX IF NOT EXISTS idx_afp_command_log_user ON afp_command_log(user_id);
+      CREATE INDEX IF NOT EXISTS idx_afp_command_log_created ON afp_command_log(created_at);
+    `);
+  } catch (e) { /* tables already exist */ }
+  // Add afp_root column if it doesn't exist yet (safe migration)
+  try { db.exec(`ALTER TABLE afp_devices ADD COLUMN afp_root TEXT`); } catch (_) {}
+
   // Seed initial pricing plans if table is empty
   seedDefaultPricingPlans();
 
@@ -6358,6 +6400,52 @@ function consumeOAuthServerAuthCode(code) {
   return row;
 }
 
+// ── AFP (API File Protocol) helpers ───────────────────────────────────────────
+
+function createAfpDevice(userId, deviceName, hostname, platform, arch, capabilities, tokenHash, afpRoot) {
+  const id = 'afp_' + crypto.randomBytes(16).toString('hex');
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO afp_devices
+      (id, user_id, device_name, hostname, platform, arch, capabilities_json, device_token_hash, afp_root, status, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'offline', ?)
+  `).run(id, userId, deviceName, hostname || null, platform || null, arch || null,
+         JSON.stringify(capabilities || []), tokenHash, afpRoot || null, now);
+  return id;
+}
+
+function getAfpDevices(userId) {
+  return db.prepare(
+    `SELECT * FROM afp_devices WHERE user_id = ? AND revoked_at IS NULL ORDER BY created_at DESC`
+  ).all(userId);
+}
+
+function getAfpDeviceById(deviceId) {
+  return db.prepare(`SELECT * FROM afp_devices WHERE id = ?`).get(deviceId);
+}
+
+function revokeAfpDevice(deviceId) {
+  db.prepare(`UPDATE afp_devices SET revoked_at = ?, status = 'offline' WHERE id = ?`)
+    .run(new Date().toISOString(), deviceId);
+}
+
+function updateAfpDeviceStatus(deviceId, status) {
+  db.prepare(`UPDATE afp_devices SET status = ?, last_seen_at = ? WHERE id = ?`)
+    .run(status, new Date().toISOString(), deviceId);
+}
+
+function logAfpCommand(deviceId, userId, requesterTokenId, op, path, cmd, status, durationMs) {
+  db.prepare(`
+    INSERT INTO afp_command_log
+      (device_id, user_id, requester_token_id, op, path, cmd, status, duration_ms, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(deviceId, userId, requesterTokenId || null, op,
+         path || null, cmd || null, status, durationMs || null,
+         new Date().toISOString());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 module.exports = {
   db,
   initDatabase,
@@ -6622,4 +6710,11 @@ module.exports = {
   getOAuthServerClient,
   createOAuthServerAuthCode,
   consumeOAuthServerAuthCode,
+  // AFP (API File Protocol)
+  createAfpDevice,
+  getAfpDevices,
+  getAfpDeviceById,
+  revokeAfpDevice,
+  updateAfpDeviceStatus,
+  logAfpCommand,
 };

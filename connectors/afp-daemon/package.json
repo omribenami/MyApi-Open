@@ -1,0 +1,35 @@
+{
+  "name": "myapi-afp-daemon",
+  "version": "1.0.0",
+  "description": "MyApi AFP Daemon — bridges WebSocket commands to local filesystem and shell exec",
+  "main": "index.js",
+  "bin": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "build": "npm run build:all",
+    "build:all": "npm run build:linux && npm run build:mac && npm run build:mac-arm && npm run build:win",
+    "build:linux": "pkg . --target node18-linux-x64   --output dist/afp-daemon-linux   --compress GZip",
+    "build:mac": "pkg . --target node18-macos-x64   --output dist/afp-daemon-mac     --compress GZip",
+    "build:mac-arm": "pkg . --target node18-macos-arm64 --output dist/afp-daemon-mac-arm --compress GZip",
+    "build:win": "pkg . --target node18-win-x64     --output dist/afp-daemon-win.exe --compress GZip"
+  },
+  "pkg": {
+    "assets": [],
+    "scripts": [],
+    "targets": [
+      "node18-linux-x64",
+      "node18-macos-x64",
+      "node18-macos-arm64",
+      "node18-win-x64"
+    ]
+  },
+  "dependencies": {
+    "ws": "^8.20.0"
+  },
+  "devDependencies": {
+    "@yao-pkg/pkg": "^5.16.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
