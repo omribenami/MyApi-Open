@@ -5597,16 +5597,17 @@ app.delete('/api/v1/account', authenticate, (req, res) => {
       return res.status(400).json({ error: 'Cannot delete power user account from self-service endpoint' });
     }
 
+    const rawDb = db.getRawDB ? db.getRawDB() : db;
     const existingTables = new Set(
-      db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(r => r.name)
+      rawDb.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(r => r.name)
     );
     const safeDelete = (sql, ...params) => {
       const match = sql.match(/DELETE FROM (\w+)/i);
       if (match && !existingTables.has(match[1])) return;
-      db.prepare(sql).run(...params);
+      rawDb.prepare(sql).run(...params);
     };
 
-    const tx = db.transaction((uid) => {
+    rawDb.transaction((uid) => {
       // Delete from all tables that reference this user (in dependency order)
       safeDelete('DELETE FROM oauth_tokens WHERE user_id = ?', uid);
       safeDelete('DELETE FROM vault_tokens WHERE owner_id = ?', uid);
@@ -5632,9 +5633,7 @@ app.delete('/api/v1/account', authenticate, (req, res) => {
       safeDelete('DELETE FROM personas WHERE owner_id = ?', uid);
       safeDelete('DELETE FROM kb_documents WHERE owner_id = ?', uid);
       safeDelete('DELETE FROM users WHERE id = ?', uid);
-    });
-
-    tx(userId);
+    })(userId);
 
     if (req.session) {
       req.session.destroy(() => {});
@@ -6209,16 +6208,17 @@ app.delete('/api/v1/users/:id', authenticate, (req, res) => {
       return res.status(400).json({ error: 'Cannot delete power user account' });
     }
 
+    const adminRawDb = db.getRawDB ? db.getRawDB() : db;
     const adminExistingTables = new Set(
-      db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(r => r.name)
+      adminRawDb.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(r => r.name)
     );
     const adminSafeDelete = (sql, ...params) => {
       const match = sql.match(/DELETE FROM (\w+)/i);
       if (match && !adminExistingTables.has(match[1])) return;
-      db.prepare(sql).run(...params);
+      adminRawDb.prepare(sql).run(...params);
     };
 
-    const tx = db.transaction((userId) => {
+    adminRawDb.transaction((userId) => {
       // Delete from all tables that reference this user (in dependency order)
       adminSafeDelete('DELETE FROM oauth_tokens WHERE user_id = ?', userId);
       adminSafeDelete('DELETE FROM vault_tokens WHERE owner_id = ?', userId);
@@ -6244,8 +6244,7 @@ app.delete('/api/v1/users/:id', authenticate, (req, res) => {
       adminSafeDelete('DELETE FROM personas WHERE owner_id = ?', userId);
       adminSafeDelete('DELETE FROM kb_documents WHERE owner_id = ?', userId);
       adminSafeDelete('DELETE FROM users WHERE id = ?', userId);
-    });
-    tx(id);
+    })(id);
 
     createAuditLog({ requesterId: req.tokenMeta.tokenId, action: 'delete_user', resource: `/users/${id}`, scope: req.tokenMeta.scope, ip: req.ip, details: { email: user.email || null } });
     res.json({ ok: true, deletedUserId: id });
