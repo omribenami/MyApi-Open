@@ -460,8 +460,7 @@ const oauthAdapters = {
     authUrl: 'https://www.tiktok.com/v2/auth/authorize/',
     tokenUrl: 'https://open.tiktokapis.com/v2/oauth/token/',
     verifyUrl: 'https://open.tiktokapis.com/v1/user/info/',
-    // Keep TikTok OAuth scope minimal to avoid unauthorized_client for unapproved products.
-    scope: process.env.TIKTOK_SCOPE || 'user.info.basic video.list',
+    scope: process.env.TIKTOK_SCOPE || 'user.info.basic,user.info.profile,user.info.stats,video.list,video.upload,video.publish,comment.list,comment.list.pull',
     redirectUri: process.env.TIKTOK_REDIRECT_URI || oauthConfig.tiktok?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/tiktok`,
     // TikTok docs/UI often call this value "Client Key". Accept both env names.
     // TikTok expects this key in `client_key` (not `client_id`).
