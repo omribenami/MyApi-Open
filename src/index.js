@@ -5597,32 +5597,41 @@ app.delete('/api/v1/account', authenticate, (req, res) => {
       return res.status(400).json({ error: 'Cannot delete power user account from self-service endpoint' });
     }
 
+    const existingTables = new Set(
+      db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(r => r.name)
+    );
+    const safeDelete = (sql, ...params) => {
+      const match = sql.match(/DELETE FROM (\w+)/i);
+      if (match && !existingTables.has(match[1])) return;
+      db.prepare(sql).run(...params);
+    };
+
     const tx = db.transaction((uid) => {
       // Delete from all tables that reference this user (in dependency order)
-      db.prepare('DELETE FROM oauth_tokens WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM vault_tokens WHERE owner_id = ?').run(uid);
-      db.prepare('DELETE FROM access_tokens WHERE owner_id = ?').run(uid);
-      db.prepare('DELETE FROM approved_devices WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM device_approvals_pending WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM handshakes WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)').run(uid);
-      db.prepare('DELETE FROM conversations WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM notifications WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM notification_preferences WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM service_preferences WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM activity_log WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM email_queue WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM rate_limits WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM subscriptions WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM two_factor_backup_codes WHERE user_id = ?').run(uid);
-      db.prepare('DELETE FROM team_invitations WHERE sender_id = ? OR recipient_id = ?').run(uid, uid);
-      db.prepare('DELETE FROM marketplace_listings WHERE owner_id = ?').run(uid);
-      db.prepare('DELETE FROM persona_documents WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)').run(uid);
-      db.prepare('DELETE FROM persona_skills WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)').run(uid);
-      db.prepare('DELETE FROM skills WHERE owner_id = ?').run(uid);
-      db.prepare('DELETE FROM personas WHERE owner_id = ?').run(uid);
-      db.prepare('DELETE FROM kb_documents WHERE owner_id = ?').run(uid);
-      db.prepare('DELETE FROM users WHERE id = ?').run(uid);
+      safeDelete('DELETE FROM oauth_tokens WHERE user_id = ?', uid);
+      safeDelete('DELETE FROM vault_tokens WHERE owner_id = ?', uid);
+      safeDelete('DELETE FROM access_tokens WHERE owner_id = ?', uid);
+      safeDelete('DELETE FROM approved_devices WHERE user_id = ?', uid);
+      safeDelete('DELETE FROM device_approvals_pending WHERE user_id = ?', uid);
+      safeDelete('DELETE FROM handshakes WHERE user_id = ?', uid);
+      safeDelete('DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)', uid);
+      safeDelete('DELETE FROM conversations WHERE user_id = ?', uid);
+      safeDelete('DELETE FROM notifications WHERE user_id = ?', uid);
+      safeDelete('DELETE FROM notification_preferences WHERE user_id = ?', uid);
+      safeDelete('DELETE FROM service_preferences WHERE user_id = ?', uid);
+      safeDelete('DELETE FROM activity_log WHERE user_id = ?', uid);
+      safeDelete('DELETE FROM email_queue WHERE user_id = ?', uid);
+      safeDelete('DELETE FROM rate_limits WHERE user_id = ?', uid);
+      safeDelete('DELETE FROM subscriptions WHERE user_id = ?', uid);
+      safeDelete('DELETE FROM two_factor_backup_codes WHERE user_id = ?', uid);
+      safeDelete('DELETE FROM team_invitations WHERE sender_id = ? OR recipient_id = ?', uid, uid);
+      safeDelete('DELETE FROM marketplace_listings WHERE owner_id = ?', uid);
+      safeDelete('DELETE FROM persona_documents WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)', uid);
+      safeDelete('DELETE FROM persona_skills WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)', uid);
+      safeDelete('DELETE FROM skills WHERE owner_id = ?', uid);
+      safeDelete('DELETE FROM personas WHERE owner_id = ?', uid);
+      safeDelete('DELETE FROM kb_documents WHERE owner_id = ?', uid);
+      safeDelete('DELETE FROM users WHERE id = ?', uid);
     });
 
     tx(userId);
@@ -6200,32 +6209,41 @@ app.delete('/api/v1/users/:id', authenticate, (req, res) => {
       return res.status(400).json({ error: 'Cannot delete power user account' });
     }
 
+    const adminExistingTables = new Set(
+      db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(r => r.name)
+    );
+    const adminSafeDelete = (sql, ...params) => {
+      const match = sql.match(/DELETE FROM (\w+)/i);
+      if (match && !adminExistingTables.has(match[1])) return;
+      db.prepare(sql).run(...params);
+    };
+
     const tx = db.transaction((userId) => {
       // Delete from all tables that reference this user (in dependency order)
-      db.prepare('DELETE FROM oauth_tokens WHERE user_id = ?').run(userId);
-      db.prepare('DELETE FROM vault_tokens WHERE owner_id = ?').run(userId);
-      db.prepare('DELETE FROM access_tokens WHERE owner_id = ?').run(userId);
-      db.prepare('DELETE FROM approved_devices WHERE user_id = ?').run(userId);
-      db.prepare('DELETE FROM device_approvals_pending WHERE user_id = ?').run(userId);
-      db.prepare('DELETE FROM handshakes WHERE user_id = ?').run(userId);
-      db.prepare('DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)').run(userId);
-      db.prepare('DELETE FROM conversations WHERE user_id = ?').run(userId);
-      db.prepare('DELETE FROM notifications WHERE user_id = ?').run(userId);
-      db.prepare('DELETE FROM notification_preferences WHERE user_id = ?').run(userId);
-      db.prepare('DELETE FROM service_preferences WHERE user_id = ?').run(userId);
-      db.prepare('DELETE FROM activity_log WHERE user_id = ?').run(userId);
-      db.prepare('DELETE FROM email_queue WHERE user_id = ?').run(userId);
-      db.prepare('DELETE FROM rate_limits WHERE user_id = ?').run(userId);
-      db.prepare('DELETE FROM subscriptions WHERE user_id = ?').run(userId);
-      db.prepare('DELETE FROM two_factor_backup_codes WHERE user_id = ?').run(userId);
-      db.prepare('DELETE FROM team_invitations WHERE sender_id = ? OR recipient_id = ?').run(userId, userId);
-      db.prepare('DELETE FROM marketplace_listings WHERE owner_id = ?').run(userId);
-      db.prepare('DELETE FROM persona_documents WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)').run(userId);
-      db.prepare('DELETE FROM persona_skills WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)').run(userId);
-      db.prepare('DELETE FROM skills WHERE owner_id = ?').run(userId);
-      db.prepare('DELETE FROM personas WHERE owner_id = ?').run(userId);
-      db.prepare('DELETE FROM kb_documents WHERE owner_id = ?').run(userId);
-      db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+      adminSafeDelete('DELETE FROM oauth_tokens WHERE user_id = ?', userId);
+      adminSafeDelete('DELETE FROM vault_tokens WHERE owner_id = ?', userId);
+      adminSafeDelete('DELETE FROM access_tokens WHERE owner_id = ?', userId);
+      adminSafeDelete('DELETE FROM approved_devices WHERE user_id = ?', userId);
+      adminSafeDelete('DELETE FROM device_approvals_pending WHERE user_id = ?', userId);
+      adminSafeDelete('DELETE FROM handshakes WHERE user_id = ?', userId);
+      adminSafeDelete('DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)', userId);
+      adminSafeDelete('DELETE FROM conversations WHERE user_id = ?', userId);
+      adminSafeDelete('DELETE FROM notifications WHERE user_id = ?', userId);
+      adminSafeDelete('DELETE FROM notification_preferences WHERE user_id = ?', userId);
+      adminSafeDelete('DELETE FROM service_preferences WHERE user_id = ?', userId);
+      adminSafeDelete('DELETE FROM activity_log WHERE user_id = ?', userId);
+      adminSafeDelete('DELETE FROM email_queue WHERE user_id = ?', userId);
+      adminSafeDelete('DELETE FROM rate_limits WHERE user_id = ?', userId);
+      adminSafeDelete('DELETE FROM subscriptions WHERE user_id = ?', userId);
+      adminSafeDelete('DELETE FROM two_factor_backup_codes WHERE user_id = ?', userId);
+      adminSafeDelete('DELETE FROM team_invitations WHERE sender_id = ? OR recipient_id = ?', userId, userId);
+      adminSafeDelete('DELETE FROM marketplace_listings WHERE owner_id = ?', userId);
+      adminSafeDelete('DELETE FROM persona_documents WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)', userId);
+      adminSafeDelete('DELETE FROM persona_skills WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)', userId);
+      adminSafeDelete('DELETE FROM skills WHERE owner_id = ?', userId);
+      adminSafeDelete('DELETE FROM personas WHERE owner_id = ?', userId);
+      adminSafeDelete('DELETE FROM kb_documents WHERE owner_id = ?', userId);
+      adminSafeDelete('DELETE FROM users WHERE id = ?', userId);
     });
     tx(id);
 
