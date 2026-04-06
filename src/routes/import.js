@@ -473,14 +473,15 @@ router.post('/', upload.single('file'), async (req, res) => {
 
     try {
       // Start transaction
-      const insertProfile = db.transaction(() => {
+      const importRawDb = db.getRawDB ? db.getRawDB() : db;
+      const insertProfile = importRawDb.transaction(() => {
         console.log(`[IMPORT-TX] Transaction callback started`);
 
         // 4.1 Update user profile
         if (profileData) {
           try {
             console.log(`[IMPORT-TX] Updating user profile for ${ownerId}`);
-            db.prepare(`
+            importRawDb.prepare(`
               UPDATE users SET
                 displayName = COALESCE(?, displayName),
                 avatarUrl = COALESCE(?, avatarUrl)
@@ -526,7 +527,7 @@ router.post('/', upload.single('file'), async (req, res) => {
             const notifications = settingsData.notifications || {};
 
             console.log(`[IMPORT-TX] Updating settings for ${ownerId}`);
-            db.prepare(`
+            importRawDb.prepare(`
               UPDATE users SET
                 profile_public = COALESCE(?, profile_public),
                 show_activity = COALESCE(?, show_activity),
@@ -636,7 +637,7 @@ router.post('/', upload.single('file'), async (req, res) => {
 
       // Execute transaction
       console.log(`[IMPORT] Executing transaction...`);
-      insertProfile();
+      insertProfile(); // better-sqlite3 transaction fn — called with no args (closure captures all vars)
       console.log(`[IMPORT] Transaction executed successfully`);
     } catch (error) {
       summary.errors.push(`Transaction failed: ${error.message}`);

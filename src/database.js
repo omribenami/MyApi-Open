@@ -3060,13 +3060,13 @@ function getKBDocumentByTitle(title, ownerId = 'owner') {
 
 function deleteKBDocument(id, ownerId = 'owner') {
   const owner = normalizeOwnerId(ownerId);
-  const tx = db.transaction((docId, docOwner) => {
-    db.prepare('DELETE FROM persona_documents WHERE document_id = ? AND persona_id IN (SELECT id FROM personas WHERE owner_id = ?)').run(docId, docOwner);
-    db.prepare('DELETE FROM skill_documents WHERE document_id = ? AND skill_id IN (SELECT id FROM skills WHERE owner_id = ?)').run(docId, docOwner);
-    const result = db.prepare('DELETE FROM kb_documents WHERE id = ? AND owner_id = ?').run(docId, docOwner);
+  const rawDb = db.getRawDB ? db.getRawDB() : db;
+  return rawDb.transaction((docId, docOwner) => {
+    rawDb.prepare('DELETE FROM persona_documents WHERE document_id = ? AND persona_id IN (SELECT id FROM personas WHERE owner_id = ?)').run(docId, docOwner);
+    rawDb.prepare('DELETE FROM skill_documents WHERE document_id = ? AND skill_id IN (SELECT id FROM skills WHERE owner_id = ?)').run(docId, docOwner);
+    const result = rawDb.prepare('DELETE FROM kb_documents WHERE id = ? AND owner_id = ?').run(docId, docOwner);
     return result.changes > 0;
-  });
-  return tx(id, owner);
+  })(id, owner);
 }
 
 // ─── Memory ──────────────────────────────────────────────────────────────────

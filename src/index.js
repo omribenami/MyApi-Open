@@ -4639,34 +4639,35 @@ app.post('/api/v1/billing/downgrade-confirm', authenticate, async (req, res) => 
       return res.status(400).json({ error: 'This is not a downgrade' });
     }
 
-    const tx = db.transaction(() => {
+    const downgradeRawDb = db.getRawDB ? db.getRawDB() : db;
+    downgradeRawDb.transaction(() => {
       // Delete excess personas (keep oldest)
       const maxPersonas = newPlanId === 'free' ? 1 : (newPlanId === 'pro' ? 5 : -1);
       if (maxPersonas > 0) {
-        const personas = db.prepare('SELECT id FROM personas WHERE owner_id = ? ORDER BY created_at DESC').all(ownerId);
+        const personas = downgradeRawDb.prepare('SELECT id FROM personas WHERE owner_id = ? ORDER BY created_at DESC').all(ownerId);
         if (personas.length > maxPersonas) {
           const toDelete = personas.slice(0, personas.length - maxPersonas).map(p => p.id);
           for (const id of toDelete) {
-            db.prepare('DELETE FROM persona_documents WHERE persona_id = ?').run(id);
-            db.prepare('DELETE FROM persona_skills WHERE persona_id = ?').run(id);
-            db.prepare('DELETE FROM personas WHERE id = ?').run(id);
+            downgradeRawDb.prepare('DELETE FROM persona_documents WHERE persona_id = ?').run(id);
+            downgradeRawDb.prepare('DELETE FROM persona_skills WHERE persona_id = ?').run(id);
+            downgradeRawDb.prepare('DELETE FROM personas WHERE id = ?').run(id);
           }
         }
       }
 
       // Delete excess service connections (keep oldest)
       if (newPlanDef.maxServices > 0) {
-        const services = db.prepare(`SELECT id FROM oauth_tokens WHERE user_id = ? ORDER BY created_at DESC`).all(ownerId);
+        const services = downgradeRawDb.prepare('SELECT id FROM oauth_tokens WHERE user_id = ? ORDER BY created_at DESC').all(ownerId);
         if (services.length > newPlanDef.maxServices) {
           const toDelete = services.slice(0, services.length - newPlanDef.maxServices).map(s => s.id);
           for (const id of toDelete) {
-            db.prepare('DELETE FROM oauth_tokens WHERE id = ?').run(id);
+            downgradeRawDb.prepare('DELETE FROM oauth_tokens WHERE id = ?').run(id);
           }
         }
       }
 
       // Update user's plan
-      db.prepare('UPDATE users SET plan = ? WHERE id = ?').run(newPlanId, req.user?.id || ownerId);
+      downgradeRawDb.prepare('UPDATE users SET plan = ? WHERE id = ?').run(newPlanId, req.user?.id || ownerId);
 
       // Update workspace subscription
       const workspaceId = getRequestWorkspaceId(req);
@@ -4677,9 +4678,7 @@ app.post('/api/v1/billing/downgrade-confirm', authenticate, async (req, res) => 
           status: 'active',
         });
       }
-    });
-
-    tx();
+    })();
 
     // Cancel Stripe subscription if downgrading from paid plan to lower/free plan
     const paidPlans = ['pro', 'enterprise'];
@@ -6268,23 +6267,23 @@ app.post('/api/v1/users/cleanup-test-users', authenticate, (req, res) => {
   try {
     const users = db.prepare('SELECT id, email, username FROM users WHERE username LIKE ?').all(`${prefix}%`);
     let deleted = 0;
-    const tx = db.transaction((list) => {
+    const cleanupRawDb = db.getRawDB ? db.getRawDB() : db;
+    cleanupRawDb.transaction((list) => {
       for (const u of list) {
-        db.prepare('DELETE FROM oauth_tokens WHERE user_id = ?').run(u.id);
-        db.prepare('DELETE FROM access_tokens WHERE owner_id = ?').run(u.id);
-        db.prepare('DELETE FROM handshakes WHERE user_id = ?').run(u.id);
-        db.prepare('DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)').run(u.id);
-        db.prepare('DELETE FROM conversations WHERE user_id = ?').run(u.id);
-        db.prepare('DELETE FROM persona_documents WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)').run(u.id);
-        db.prepare('DELETE FROM persona_skills WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)').run(u.id);
-        db.prepare('DELETE FROM skills WHERE owner_id = ?').run(u.id);
-        db.prepare('DELETE FROM personas WHERE owner_id = ?').run(u.id);
-        db.prepare('DELETE FROM kb_documents WHERE owner_id = ?').run(u.id);
-        const r = db.prepare('DELETE FROM users WHERE id = ?').run(u.id);
+        cleanupRawDb.prepare('DELETE FROM oauth_tokens WHERE user_id = ?').run(u.id);
+        cleanupRawDb.prepare('DELETE FROM access_tokens WHERE owner_id = ?').run(u.id);
+        cleanupRawDb.prepare('DELETE FROM handshakes WHERE user_id = ?').run(u.id);
+        cleanupRawDb.prepare('DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)').run(u.id);
+        cleanupRawDb.prepare('DELETE FROM conversations WHERE user_id = ?').run(u.id);
+        cleanupRawDb.prepare('DELETE FROM persona_documents WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)').run(u.id);
+        cleanupRawDb.prepare('DELETE FROM persona_skills WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)').run(u.id);
+        cleanupRawDb.prepare('DELETE FROM skills WHERE owner_id = ?').run(u.id);
+        cleanupRawDb.prepare('DELETE FROM personas WHERE owner_id = ?').run(u.id);
+        cleanupRawDb.prepare('DELETE FROM kb_documents WHERE owner_id = ?').run(u.id);
+        const r = cleanupRawDb.prepare('DELETE FROM users WHERE id = ?').run(u.id);
         if (r.changes > 0) deleted += 1;
       }
-    });
-    tx(users);
+    })(users);
 
     createAuditLog({ requesterId: req.tokenMeta.tokenId, action: 'cleanup_test_users', resource: '/users/cleanup-test-users', scope: req.tokenMeta.scope, ip: req.ip, details: { prefix, deleted } });
     res.json({ ok: true, prefix, deleted });
