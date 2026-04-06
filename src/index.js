@@ -1920,6 +1920,36 @@ const createSkillsRoutes = require('./routes/skills');
 const newAuthRoutes = require('./routes/auth');
 
 app.use('/api/v1/auth', newAuthRoutes);
+
+// AFP binary downloads — public, no auth (must be BEFORE the authRoutes catch-all below)
+{
+  const AFP_DIST = path.join(__dirname, '..', 'connectors', 'afp-daemon', 'dist');
+  const AFP_PLATFORMS = {
+    linux:     { file: 'afp-daemon-linux',       mime: 'application/octet-stream' },
+    mac:       { file: 'afp-daemon-macos-x64',   mime: 'application/octet-stream' },
+    'mac-arm': { file: 'afp-daemon-macos-arm64', mime: 'application/octet-stream' },
+    win:       { file: 'afp-daemon-win-x64.exe', mime: 'application/vnd.microsoft.portable-executable' },
+  };
+  app.get('/api/v1/afp/download/:platform', (req, res) => {
+    const meta = AFP_PLATFORMS[req.params.platform];
+    if (!meta) return res.status(400).json({ error: 'Unknown platform. Use: linux, mac, mac-arm, win' });
+    const filePath = path.join(AFP_DIST, meta.file);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Binary not yet built', hint: 'cd connectors/afp-daemon && npm run build' });
+    res.setHeader('Content-Disposition', `attachment; filename="${meta.file}"`);
+    res.setHeader('Content-Type', meta.mime);
+    res.sendFile(filePath);
+  });
+  app.get('/api/v1/afp/download-info', (req, res) => {
+    const platforms = Object.entries(AFP_PLATFORMS).map(([platform, meta]) => {
+      const filePath = path.join(AFP_DIST, meta.file);
+      let size = null;
+      try { size = fs.statSync(filePath).size; } catch (_) {}
+      return { platform, filename: meta.file, available: size !== null, size };
+    });
+    res.json({ ok: true, platforms });
+  });
+}
+
 app.use('/api/v1', authRoutes);
 app.use('/api/v1/devices', authenticate, deviceRoutes);
 // Device approval is now applied globally in the authenticate middleware
@@ -2253,7 +2283,7 @@ app.use('/api/v1/vault', authenticate, createVaultInstructionsRoutes(db, null, c
 
 // AFP (API File Protocol) — PC filesystem/exec connector
 const afpRoutes = require('./routes/afp');
-app.use('/api/v1/afp/download', afpRoutes);   // download + download-info are public (no auth)
+
 app.use('/api/v1/afp', authenticate, afpRoutes);
 
 // FAL Image Generation API
