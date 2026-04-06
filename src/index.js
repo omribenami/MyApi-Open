@@ -1209,7 +1209,11 @@ app.use('/dashboard', (req, res, next) => {
 app.use(express.static(path.join(__dirname, "public")));
 
 // Connectors — serve OpenAPI specs and related files publicly
-app.use('/connectors', express.static(path.join(__dirname, '..', 'connectors')));
+// In Docker __dirname=/app (src/ contents are at /app/); in dev __dirname=.../src/
+const connectorsDir = fs.existsSync(path.join(__dirname, 'connectors'))
+  ? path.join(__dirname, 'connectors')
+  : path.join(__dirname, '..', 'connectors');
+app.use('/connectors', express.static(connectorsDir));
 
 // Legal pages - Terms and Privacy
 app.get('/terms', (req, res) => {
