@@ -5607,6 +5607,7 @@ app.delete('/api/v1/account', authenticate, (req, res) => {
       rawDb.prepare(sql).run(...params);
     };
 
+    rawDb.pragma('foreign_keys = OFF');
     rawDb.transaction((uid) => {
       // Delete from all tables that reference this user (in dependency order)
       safeDelete('DELETE FROM oauth_tokens WHERE user_id = ?', uid);
@@ -5634,6 +5635,7 @@ app.delete('/api/v1/account', authenticate, (req, res) => {
       safeDelete('DELETE FROM kb_documents WHERE owner_id = ?', uid);
       safeDelete('DELETE FROM users WHERE id = ?', uid);
     })(userId);
+    rawDb.pragma('foreign_keys = ON');
 
     if (req.session) {
       req.session.destroy(() => {});
@@ -5651,6 +5653,7 @@ app.delete('/api/v1/account', authenticate, (req, res) => {
 
     return res.json({ ok: true, deletedUserId: userId });
   } catch (error) {
+    try { (db.getRawDB ? db.getRawDB() : db).pragma('foreign_keys = ON'); } catch (_e) { /* ignore */ }
     console.error('Delete own account error:', error);
     return res.status(500).json({ error: 'Failed to delete account' });
   }
@@ -6218,6 +6221,7 @@ app.delete('/api/v1/users/:id', authenticate, (req, res) => {
       adminRawDb.prepare(sql).run(...params);
     };
 
+    adminRawDb.pragma('foreign_keys = OFF');
     adminRawDb.transaction((userId) => {
       // Delete from all tables that reference this user (in dependency order)
       adminSafeDelete('DELETE FROM oauth_tokens WHERE user_id = ?', userId);
@@ -6245,10 +6249,12 @@ app.delete('/api/v1/users/:id', authenticate, (req, res) => {
       adminSafeDelete('DELETE FROM kb_documents WHERE owner_id = ?', userId);
       adminSafeDelete('DELETE FROM users WHERE id = ?', userId);
     })(id);
+    adminRawDb.pragma('foreign_keys = ON');
 
     createAuditLog({ requesterId: req.tokenMeta.tokenId, action: 'delete_user', resource: `/users/${id}`, scope: req.tokenMeta.scope, ip: req.ip, details: { email: user.email || null } });
     res.json({ ok: true, deletedUserId: id });
   } catch (error) {
+    try { (db.getRawDB ? db.getRawDB() : db).pragma('foreign_keys = ON'); } catch (_e) { /* ignore */ }
     console.error('Delete user error:', error);
     res.status(500).json({ error: 'Failed to delete user' });
   }
