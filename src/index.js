@@ -2253,6 +2253,7 @@ app.use('/api/v1/vault', authenticate, createVaultInstructionsRoutes(db, null, c
 
 // AFP (API File Protocol) — PC filesystem/exec connector
 const afpRoutes = require('./routes/afp');
+app.use('/api/v1/afp/download', afpRoutes);   // download + download-info are public (no auth)
 app.use('/api/v1/afp', authenticate, afpRoutes);
 
 // FAL Image Generation API
