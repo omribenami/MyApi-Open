@@ -58,12 +58,10 @@ services:
     
     # Persistent volumes for SQLite and logs
     volumes:
-      # SQLite database - persistent storage
-      - myapi-data:/app/data
+      # SQLite database - bind mount to host so data survives rebuilds
+      - /opt/MyApi/data:/app/data
       # Application logs
       - myapi-logs:/app/logs
-      # Optional: Mount local data directory for development/debugging
-      # - ./data:/app/data
     
     # Restart policy
     restart: unless-stopped
@@ -90,20 +88,10 @@ services:
     #       cpus: '0.5'
     #       memory: 512M
 
-# Named volumes for persistent data
+# Named volumes
 volumes:
-  myapi-data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ./data
   myapi-logs:
     driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: ./logs
 
 networks:
   myapi-network:
