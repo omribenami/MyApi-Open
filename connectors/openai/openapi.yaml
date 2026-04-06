@@ -349,6 +349,353 @@ paths:
         "401":
           description: Google not connected or token expired
 
+  # ── Google Drive ─────────────────────────────────────────────
+  /api/v1/services/google/drive/files:
+    get:
+      operationId: listDriveFiles
+      summary: List Google Drive files
+      description: Returns files in the user's Google Drive. Supports Google Drive search queries.
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+          description: "Drive search query (e.g. \"name contains 'report'\", \"mimeType='application/pdf'\")"
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: pageToken
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Drive files
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  files:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/DriveFile"
+                  nextPageToken:
+                    type: string
+                    nullable: true
+
+  /api/v1/services/google/drive/upload:
+    post:
+      operationId: uploadDriveFile
+      summary: Upload a file to Google Drive
+      description: Upload text or binary content as a new file in Google Drive.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - content
+              properties:
+                name:
+                  type: string
+                  description: Filename in Drive
+                content:
+                  type: string
+                  description: File content (text or base64)
+                mimeType:
+                  type: string
+                  default: text/plain
+                  description: MIME type of the file
+                encoding:
+                  type: string
+                  enum: [utf8, base64]
+                  default: utf8
+                folderId:
+                  type: string
+                  description: Optional Drive folder ID to upload into
+      responses:
+        "200":
+          description: File uploaded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  file:
+                    $ref: "#/components/schemas/DriveFile"
+
+  /api/v1/services/google/drive/files/{fileId}:
+    delete:
+      operationId: deleteDriveFile
+      summary: Delete a file from Google Drive
+      parameters:
+        - name: fileId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: File deleted
+
+  # ── AFP — PC File System Access ───────────────────────────────
+  # Requires a registered AFP daemon running on the target PC (master token only).
+  /api/v1/afp/devices:
+    get:
+      operationId: listAfpDevices
+      summary: List registered PCs
+      description: Returns all PCs with AFP daemon installed, including their online/offline status and platform.
+      responses:
+        "200":
+          description: AFP devices
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  devices:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AfpDevice"
+
+  /api/v1/afp/{deviceId}/ls:
+    get:
+      operationId: afpListDir
+      summary: List directory on a remote PC
+      description: Returns the contents of a directory on the target PC.
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Absolute path on the remote PC (e.g. C:\Users or /home/user)
+      responses:
+        "200":
+          description: Directory listing
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AfpEntry"
+
+  /api/v1/afp/{deviceId}/read:
+    get:
+      operationId: afpReadFile
+      summary: Read a file from a remote PC
+      description: Returns file content. Binary files are returned as base64.
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: File content
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      content:
+                        type: string
+                      encoding:
+                        type: string
+                        enum: [utf8, base64]
+
+  /api/v1/afp/{deviceId}/write:
+    post:
+      operationId: afpWriteFile
+      summary: Write a file to a remote PC
+      description: Creates or overwrites a file on the target PC.
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - path
+                - content
+              properties:
+                path:
+                  type: string
+                content:
+                  type: string
+                encoding:
+                  type: string
+                  enum: [utf8, base64]
+                  default: utf8
+      responses:
+        "200":
+          description: File written
+
+  /api/v1/afp/{deviceId}/exec:
+    post:
+      operationId: afpExec
+      summary: Execute a shell command on a remote PC
+      description: Runs a shell command on the target PC and returns stdout/stderr/exitCode. Hard timeout of 60s.
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - cmd
+              properties:
+                cmd:
+                  type: string
+                  description: Shell command to execute
+                cwd:
+                  type: string
+                  description: Working directory for the command
+                timeout:
+                  type: integer
+                  default: 30000
+                  maximum: 60000
+                  description: Timeout in milliseconds (max 60000)
+      responses:
+        "200":
+          description: Command result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      stdout:
+                        type: string
+                      stderr:
+                        type: string
+                      exitCode:
+                        type: integer
+
+  /api/v1/afp/{deviceId}/stat:
+    get:
+      operationId: afpStat
+      summary: Get file/directory metadata on a remote PC
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: File metadata
+
+  /api/v1/afp/{deviceId}/rm:
+    delete:
+      operationId: afpDelete
+      summary: Delete a file or directory on a remote PC
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - path
+              properties:
+                path:
+                  type: string
+                recursive:
+                  type: boolean
+                  default: false
+      responses:
+        "200":
+          description: Deleted
+
+  /api/v1/afp/{deviceId}/mkdir:
+    post:
+      operationId: afpMkdir
+      summary: Create a directory on a remote PC
+      parameters:
+        - name: deviceId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - path
+              properties:
+                path:
+                  type: string
+                recursive:
+                  type: boolean
+                  default: true
+      responses:
+        "200":
+          description: Directory created
+
   # ── Brain / Context ───────────────────────────────────────────
   /api/v1/brain/context:
     get:
@@ -664,3 +1011,63 @@ components:
         updated_at:
           type: string
           format: date-time
+
+    DriveFile:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        mimeType:
+          type: string
+        size:
+          type: string
+        modifiedTime:
+          type: string
+          format: date-time
+        webViewLink:
+          type: string
+        webContentLink:
+          type: string
+
+    AfpDevice:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        hostname:
+          type: string
+        platform:
+          type: string
+          enum: [win32, linux, darwin]
+        arch:
+          type: string
+        status:
+          type: string
+          enum: [online, offline]
+        privileges:
+          type: string
+          enum: [full, restricted]
+        lastSeenAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    AfpEntry:
+      type: object
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [file, directory, symlink]
+        size:
+          type: integer
+          nullable: true
+        modified:
+          type: string
+          format: date-time
+          nullable: true

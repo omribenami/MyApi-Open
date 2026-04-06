@@ -3123,11 +3123,26 @@ No username or extra info needed. Just two steps:
 - GET  /api/v1/brain/knowledge-base               → Knowledge base documents
 - GET  /api/v1/vault/tokens                       → Connected service tokens
 - POST /api/v1/services/:name/proxy               → Proxy raw API request to a service
+- GET  /api/v1/services/google/gmail/messages     → List Gmail messages
+- GET  /api/v1/services/google/drive/files        → List Google Drive files
+- POST /api/v1/services/google/drive/upload       → Upload file to Google Drive
 - GET  /api/v1/personas                           → AI personas
 - GET  /api/v1/identity                           → Owner identity
 - GET  /openapi.json                              → Full OpenAPI specification
 - POST /api/v1/handshakes                         → Request access (no auth)
 - GET  /api/v1/handshakes/:id/status              → Poll handshake status (no auth)
+
+## AFP — PC File System Access (master token only)
+Requires a registered AFP daemon running on the target PC.
+- GET  /api/v1/afp/devices                        → List registered PCs and their online status
+- GET  /api/v1/afp/:deviceId/ls?path=<dir>        → List directory contents on the PC
+- GET  /api/v1/afp/:deviceId/read?path=<file>     → Read a file from the PC
+- POST /api/v1/afp/:deviceId/write                → Write a file to the PC  { path, content, encoding? }
+- GET  /api/v1/afp/:deviceId/stat?path=<path>     → File/directory metadata
+- POST /api/v1/afp/:deviceId/exec                 → Run a shell command on the PC  { cmd, cwd?, timeout? }
+- DELETE /api/v1/afp/:deviceId/rm                 → Delete a file or directory  { path, recursive? }
+- POST /api/v1/afp/:deviceId/mkdir                → Create a directory  { path }
+- GET  /api/v1/afp/download/:platform             → Download AFP daemon binary (linux|mac|mac-arm|win) — no auth required
 
 ## Memory (Cross-AI Persistent Context)
 Store notes that persist across all AI sessions. Any AI reading gateway/context sees these.
@@ -3682,6 +3697,214 @@ app.get('/openapi.json', (req, res) => {
               },
             },
           },
+        },
+      },
+
+      // ── Google Drive ──────────────────────────────────────────
+      '/api/v1/services/google/drive/files': {
+        get: {
+          operationId: 'listDriveFiles',
+          summary: 'List Google Drive files',
+          description: 'List files in the connected Google Drive. Supports Drive search query syntax.',
+          security: [{ bearerAuth: [] }],
+          parameters: [
+            { name: 'q', in: 'query', schema: { type: 'string' }, description: "Drive search query (e.g. \"name contains 'report'\")" },
+            { name: 'pageSize', in: 'query', schema: { type: 'integer', default: 20, maximum: 100 } },
+            { name: 'pageToken', in: 'query', schema: { type: 'string' } },
+          ],
+          responses: { '200': { description: 'Drive files list' }, '401': { description: 'Google not connected or missing drive.file scope' } },
+        },
+      },
+      '/api/v1/services/google/drive/upload': {
+        post: {
+          operationId: 'uploadDriveFile',
+          summary: 'Upload a file to Google Drive',
+          description: 'Upload text or binary content as a new file in Google Drive. Requires Google reconnect with drive.file scope.',
+          security: [{ bearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['name', 'content'],
+                  properties: {
+                    name: { type: 'string', description: 'Filename in Drive' },
+                    content: { type: 'string', description: 'File content (text or base64)' },
+                    mimeType: { type: 'string', default: 'text/plain' },
+                    encoding: { type: 'string', enum: ['utf8', 'base64'], default: 'utf8' },
+                    folderId: { type: 'string', description: 'Optional Drive folder ID' },
+                  },
+                },
+              },
+            },
+          },
+          responses: { '200': { description: 'File uploaded successfully' }, '403': { description: 'Insufficient Drive scope — reconnect Google' } },
+        },
+      },
+      '/api/v1/services/google/drive/files/{fileId}': {
+        delete: {
+          operationId: 'deleteDriveFile',
+          summary: 'Delete a Google Drive file',
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'fileId', in: 'path', required: true, schema: { type: 'string' } }],
+          responses: { '200': { description: 'File deleted' } },
+        },
+      },
+
+      // ── AFP — PC File System Access (master token only) ───────
+      '/api/v1/afp/devices': {
+        get: {
+          operationId: 'listAfpDevices',
+          summary: 'List registered AFP devices (PCs)',
+          description: 'Returns all PCs with AFP daemon installed, their online/offline status, platform, and privilege level.',
+          security: [{ bearerAuth: [] }],
+          responses: { '200': { description: 'List of AFP devices' } },
+        },
+      },
+      '/api/v1/afp/{deviceId}/ls': {
+        get: {
+          operationId: 'afpListDir',
+          summary: 'List a directory on a remote PC',
+          security: [{ bearerAuth: [] }],
+          parameters: [
+            { name: 'deviceId', in: 'path', required: true, schema: { type: 'string' } },
+            { name: 'path', in: 'query', required: true, schema: { type: 'string' }, description: 'Absolute path (e.g. C:\\Users or /home/user)' },
+          ],
+          responses: { '200': { description: 'Directory entries' }, '503': { description: 'Device offline' } },
+        },
+      },
+      '/api/v1/afp/{deviceId}/read': {
+        get: {
+          operationId: 'afpReadFile',
+          summary: 'Read a file from a remote PC',
+          description: 'Returns file content as UTF-8 or base64 (for binary files).',
+          security: [{ bearerAuth: [] }],
+          parameters: [
+            { name: 'deviceId', in: 'path', required: true, schema: { type: 'string' } },
+            { name: 'path', in: 'query', required: true, schema: { type: 'string' } },
+          ],
+          responses: { '200': { description: 'File content' }, '503': { description: 'Device offline' } },
+        },
+      },
+      '/api/v1/afp/{deviceId}/write': {
+        post: {
+          operationId: 'afpWriteFile',
+          summary: 'Write a file to a remote PC',
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'deviceId', in: 'path', required: true, schema: { type: 'string' } }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['path', 'content'],
+                  properties: {
+                    path: { type: 'string' },
+                    content: { type: 'string' },
+                    encoding: { type: 'string', enum: ['utf8', 'base64'], default: 'utf8' },
+                  },
+                },
+              },
+            },
+          },
+          responses: { '200': { description: 'File written' }, '503': { description: 'Device offline' } },
+        },
+      },
+      '/api/v1/afp/{deviceId}/exec': {
+        post: {
+          operationId: 'afpExec',
+          summary: 'Execute a shell command on a remote PC',
+          description: 'Runs a shell command on the target PC. Returns stdout, stderr, and exit code. Hard timeout: 60s.',
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'deviceId', in: 'path', required: true, schema: { type: 'string' } }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['cmd'],
+                  properties: {
+                    cmd: { type: 'string', description: 'Shell command to run', example: 'whoami' },
+                    cwd: { type: 'string', description: 'Working directory' },
+                    timeout: { type: 'integer', default: 30000, maximum: 60000, description: 'Timeout in ms' },
+                  },
+                },
+              },
+            },
+          },
+          responses: { '200': { description: 'Command result with stdout/stderr/exitCode' }, '503': { description: 'Device offline' }, '504': { description: 'Command timed out' } },
+        },
+      },
+      '/api/v1/afp/{deviceId}/stat': {
+        get: {
+          operationId: 'afpStat',
+          summary: 'Get file/directory metadata on a remote PC',
+          security: [{ bearerAuth: [] }],
+          parameters: [
+            { name: 'deviceId', in: 'path', required: true, schema: { type: 'string' } },
+            { name: 'path', in: 'query', required: true, schema: { type: 'string' } },
+          ],
+          responses: { '200': { description: 'File metadata' } },
+        },
+      },
+      '/api/v1/afp/{deviceId}/rm': {
+        delete: {
+          operationId: 'afpDelete',
+          summary: 'Delete a file or directory on a remote PC',
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'deviceId', in: 'path', required: true, schema: { type: 'string' } }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['path'],
+                  properties: {
+                    path: { type: 'string' },
+                    recursive: { type: 'boolean', default: false },
+                  },
+                },
+              },
+            },
+          },
+          responses: { '200': { description: 'Deleted' } },
+        },
+      },
+      '/api/v1/afp/{deviceId}/mkdir': {
+        post: {
+          operationId: 'afpMkdir',
+          summary: 'Create a directory on a remote PC',
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'deviceId', in: 'path', required: true, schema: { type: 'string' } }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['path'],
+                  properties: {
+                    path: { type: 'string' },
+                    recursive: { type: 'boolean', default: true },
+                  },
+                },
+              },
+            },
+          },
+          responses: { '200': { description: 'Directory created' } },
+        },
+      },
+      '/api/v1/afp/download/{platform}': {
+        get: {
+          operationId: 'downloadAfpDaemon',
+          summary: 'Download AFP daemon binary',
+          description: 'Download the AFP daemon executable for the target platform. No authentication required.',
+          parameters: [{ name: 'platform', in: 'path', required: true, schema: { type: 'string', enum: ['linux', 'mac', 'mac-arm', 'win'] } }],
+          responses: { '200': { description: 'Binary file download' } },
         },
       },
 
