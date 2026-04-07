@@ -310,18 +310,28 @@ async function handleTokenExchange(params, res) {
 // POST /api/v1/oauth-server/token — standard OAuth token exchange
 router.post('/token', express.urlencoded({ extended: false }), express.json(), async (req, res) => {
   console.log('[OAuthServer] POST /token body:', JSON.stringify(req.body));
-  const params = { ...req.body };
-  if (!params.grant_type && params.code) params.grant_type = 'authorization_code';
-  await handleTokenExchange(params, res);
+  try {
+    const params = { ...req.body };
+    if (!params.grant_type && params.code) params.grant_type = 'authorization_code';
+    await handleTokenExchange(params, res);
+  } catch (err) {
+    console.error('[OAuthServer] POST /token unhandled error:', err);
+    if (!res.headersSent) res.status(500).json({ error: 'server_error', error_description: err.message });
+  }
 });
 
 // GET /api/v1/oauth-server/token — some clients (ChatGPT) use GET with query params
 router.get('/token', async (req, res) => {
   console.log('[OAuthServer] GET /token params:', JSON.stringify(req.query));
   // ChatGPT may omit grant_type — infer it when code is present
-  const params = { ...req.query };
-  if (!params.grant_type && params.code) params.grant_type = 'authorization_code';
-  await handleTokenExchange(params, res);
+  try {
+    const params = { ...req.query };
+    if (!params.grant_type && params.code) params.grant_type = 'authorization_code';
+    await handleTokenExchange(params, res);
+  } catch (err) {
+    console.error('[OAuthServer] GET /token unhandled error:', err);
+    if (!res.headersSent) res.status(500).json({ error: 'server_error', error_description: err.message });
+  }
 });
 
 // GET /api/v1/oauth-server/credentials — returns OAuth setup info for the dashboard
