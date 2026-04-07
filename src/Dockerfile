@@ -1,6 +1,6 @@
 # Production Dockerfile for MyApi
 # Build context: repo root (one level above src/)
-FROM node:22-noble
+FROM node:22
 
 WORKDIR /app
 
@@ -13,6 +13,9 @@ COPY connectors/afp-oauth/dist/ afp-oauth-dist/
 
 # Install dependencies
 RUN npm install --no-audit
+# Force-rebuild better-sqlite3 from source so it targets this container's GLIBC
+# (the prebuilt binary is compiled for GLIBC 2.38 but Debian Bookworm has 2.36)
+RUN npm rebuild better-sqlite3 --build-from-source
 
 # Build frontend (React/Vite dashboard)
 RUN cd public/dashboard-app && npm install --no-audit && npm run build
