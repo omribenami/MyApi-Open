@@ -40,6 +40,9 @@ logs/
 
 # Backups (may contain sensitive data)
 backups/
+.env.backup*
+.env.*.patch
+*.patch
 
 # Throwaway test/debug scripts
 test-db-query.js
