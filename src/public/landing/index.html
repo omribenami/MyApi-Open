@@ -126,6 +126,8 @@
     footer { border-top: 1px solid var(--border); padding: 2rem; text-align: center; color: var(--muted); font-size: .8rem; }
     footer a { color: var(--muted); }
     footer a:hover { color: var(--text); }
+    .footer-link { background: none; border: none; color: var(--muted); font-size: inherit; font-family: inherit; cursor: pointer; padding: 0; }
+    .footer-link:hover { color: var(--text); }
 
     /* ── AUTH MODAL ─────────────────────────────────────────────────────── */
     .modal-overlay {
@@ -440,7 +442,7 @@
 
   <!-- FOOTER -->
   <footer>
-    <p>© 2026 MyApi · <a href="/dashboard/">Dashboard</a> · <a href="/api/v1/">API</a> · <a href="/connectors/openai/openapi.yaml">OpenAPI spec</a> · Open source under AGPL-3.0</p>
+    <p>© 2026 MyApi · <button class="footer-link" data-action="open-modal" data-mode="login">Dashboard</button> · <a href="/api/v1/">API</a> · <a href="/connectors/openai/openapi.yaml">OpenAPI spec</a> · <a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Use</a> · Open source under AGPL-3.0</p>
   </footer>
 
   <script>
