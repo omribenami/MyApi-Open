@@ -399,7 +399,8 @@ function Dashboard() {
 
       {/* Main Grid - 4 Key Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: Security Status */}
+
+        {/* Card 1: Security */}
         <div className="rounded-lg border border-slate-700/50 bg-slate-900/50 backdrop-blur p-6 hover:border-slate-600/50 transition-all duration-200">
           <div className="mb-4">
             <div className="flex items-center gap-2 mb-2">
@@ -408,43 +409,32 @@ function Dashboard() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                 </svg>
               </div>
-              <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest">
-                Security
-              </h3>
+              <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest">Security</h3>
             </div>
-            <p className="text-2xl font-bold text-slate-100 tracking-tight">
-              {metrics.approvedDevices}
-            </p>
+            <p className="text-2xl font-bold text-slate-100 tracking-tight">{metrics.approvedDevices}</p>
             <p className="text-xs text-slate-400 mt-1">Approved Devices</p>
           </div>
           <div className="pt-4 border-t border-slate-700/30 space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-400">Pending Approvals</span>
-              <span className={`text-sm font-semibold ${metrics.pendingApprovals > 0 ? 'text-amber-400' : 'text-green-400'}`}>
+              <span className="text-xs text-slate-400">Pending</span>
+              <span className={`text-sm font-semibold ${metrics.pendingApprovals > 0 ? 'text-amber-400' : 'text-slate-400'}`}>
                 {metrics.pendingApprovals}
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-400">Last Activity</span>
-              <span className="text-xs text-slate-300">
-                {metrics.lastActivityTime
-                  ? new Date(metrics.lastActivityTime).toLocaleDateString()
-                  : 'None'}
+              <span className="text-xs text-slate-400">Last activity</span>
+              <span className="text-sm font-semibold text-slate-400">
+                {metrics.lastActivityTime ? new Date(metrics.lastActivityTime).toLocaleDateString() : 'None'}
               </span>
             </div>
           </div>
-          <Link
-            to="/device-management"
-            className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors"
-          >
+          <Link to="/device-management" className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors">
             View Details
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
           </Link>
         </div>
 
-        {/* Card 2: Connected Services */}
+        {/* Card 2: Services */}
         <div className="rounded-lg border border-slate-700/50 bg-slate-900/50 backdrop-blur p-6 hover:border-slate-600/50 transition-all duration-200">
           <div className="mb-4">
             <div className="flex items-center gap-2 mb-2">
@@ -453,40 +443,30 @@ function Dashboard() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.658 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                 </svg>
               </div>
-              <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest">
-                Services
-              </h3>
+              <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest">Services</h3>
             </div>
-            <p className="text-2xl font-bold text-slate-100 tracking-tight">
-              {metrics.connectedServices}
-            </p>
+            <p className="text-2xl font-bold text-slate-100 tracking-tight">{metrics.connectedServices}</p>
             <p className="text-xs text-slate-400 mt-1">Connected</p>
           </div>
           <div className="pt-4 border-t border-slate-700/30 space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-400">Total Services</span>
-              <span className="text-sm font-semibold text-slate-200">{metrics.totalServices || 0}</span>
+              <span className="text-xs text-slate-400">Available</span>
+              <span className="text-sm font-semibold text-slate-400">{metrics.totalServices || 0}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-xs text-slate-400">Status</span>
-              <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-semibold bg-green-500/10 text-green-400 border border-green-500/20">
-                <span className="w-2 h-2 rounded-full bg-green-400"></span>
-                Connected
+              <span className={`text-sm font-semibold ${metrics.connectedServices > 0 ? 'text-emerald-400' : 'text-slate-500'}`}>
+                {metrics.connectedServices > 0 ? 'Active' : 'None connected'}
               </span>
             </div>
           </div>
-          <Link
-            to="/services"
-            className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors"
-          >
+          <Link to="/services" className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors">
             Manage Services
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
           </Link>
         </div>
 
-        {/* Card 4: Recent Activity */}
+        {/* Card 3: Activity */}
         <div className="rounded-lg border border-slate-700/50 bg-slate-900/50 backdrop-blur p-6 hover:border-slate-600/50 transition-all duration-200">
           <div className="mb-4">
             <div className="flex items-center gap-2 mb-2">
@@ -495,36 +475,28 @@ function Dashboard() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
               </div>
-              <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest">
-                Activity
-              </h3>
+              <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest">Activity</h3>
             </div>
-            <p className="text-2xl font-bold text-slate-100 tracking-tight">
-              {metrics.recentActivity?.length || 0}
-            </p>
+            <p className="text-2xl font-bold text-slate-100 tracking-tight">{metrics.recentActivity?.length || 0}</p>
             <p className="text-xs text-slate-400 mt-1">Recent Events</p>
           </div>
-          <div className="pt-4 border-t border-slate-700/30">
-            <div className="space-y-2">
-              {metrics.recentActivity && metrics.recentActivity.length > 0 ? (
-                metrics.recentActivity.slice(0, 2).map((activity, idx) => (
-                  <p key={idx} className="text-xs text-slate-400 truncate">
-                    {activity.description}
-                  </p>
-                ))
-              ) : (
-                <p className="text-xs text-slate-500 italic">No recent activity</p>
-              )}
+          <div className="pt-4 border-t border-slate-700/30 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-400">Latest</span>
+              <span className="text-sm font-semibold text-slate-400 truncate max-w-[130px] text-right">
+                {metrics.recentActivity?.[0]?.description || 'None'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-400">Previous</span>
+              <span className="text-sm font-semibold text-slate-400 truncate max-w-[130px] text-right">
+                {metrics.recentActivity?.[1]?.description || '—'}
+              </span>
             </div>
           </div>
-          <Link
-            to="/activity"
-            className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors"
-          >
+          <Link to="/activity" className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors">
             View All
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
           </Link>
         </div>
 
@@ -539,36 +511,29 @@ function Dashboard() {
               </div>
               <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest">Connectors</h3>
             </div>
-            <p className="text-2xl font-bold text-slate-100 tracking-tight">
-              {connectorsSummary.afpDevices}
-            </p>
+            <p className="text-2xl font-bold text-slate-100 tracking-tight">{connectorsSummary.afpDevices}</p>
             <p className="text-xs text-slate-400 mt-1">PC Devices</p>
           </div>
           <div className="pt-4 border-t border-slate-700/30 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs text-slate-400">Online</span>
-              <span className={`text-sm font-semibold ${connectorsSummary.afpOnline > 0 ? 'text-emerald-400' : 'text-slate-500'}`}>
+              <span className={`text-sm font-semibold ${connectorsSummary.afpOnline > 0 ? 'text-emerald-400' : 'text-slate-400'}`}>
                 {connectorsSummary.afpOnline}/{connectorsSummary.afpDevices}
               </span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-xs text-slate-400">ChatGPT</span>
-              <span className={`inline-flex items-center gap-1 text-xs font-semibold ${connectorsSummary.chatgptActive ? 'text-emerald-400' : 'text-slate-500'}`}>
-                <span className={`w-2 h-2 rounded-full ${connectorsSummary.chatgptActive ? 'bg-emerald-400' : 'bg-slate-600'}`} />
+              <span className={`text-sm font-semibold ${connectorsSummary.chatgptActive ? 'text-emerald-400' : 'text-slate-500'}`}>
                 {connectorsSummary.chatgptActive ? 'Connected' : 'Not connected'}
               </span>
             </div>
           </div>
-          <Link
-            to="/connectors"
-            className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors"
-          >
+          <Link to="/connectors" className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors">
             Manage Connectors
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
           </Link>
         </div>
+
       </div>
 
       {/* AI & Data Section - Personas, Skills, Marketplace, Knowledge */}
