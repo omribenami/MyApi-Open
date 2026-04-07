@@ -488,9 +488,11 @@ function Dashboard() {
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-400">Previous</span>
+              <span className="text-xs text-slate-400">When</span>
               <span className="text-sm font-semibold text-slate-400 truncate max-w-[130px] text-right">
-                {metrics.recentActivity?.[1]?.description || 'None'}
+                {metrics.recentActivity?.[0]?.createdAt
+                  ? new Date(metrics.recentActivity[0].createdAt).toLocaleDateString()
+                  : 'None'}
               </span>
             </div>
           </div>
