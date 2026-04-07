@@ -490,7 +490,7 @@ function Dashboard() {
             <div className="flex items-center justify-between">
               <span className="text-xs text-slate-400">Previous</span>
               <span className="text-sm font-semibold text-slate-400 truncate max-w-[130px] text-right">
-                {metrics.recentActivity?.[1]?.description || '—'}
+                {metrics.recentActivity?.[1]?.description || 'None'}
               </span>
             </div>
           </div>
