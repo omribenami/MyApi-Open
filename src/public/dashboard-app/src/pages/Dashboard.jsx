@@ -35,7 +35,7 @@ function Dashboard() {
     marketplace: 0,
     knowledge: 0,
   });
-  const [connectorsSummary, setConnectorsSummary] = useState({ afpDevices: 0, afpOnline: 0, names: [] });
+  const [connectorsSummary, setConnectorsSummary] = useState({ afpDevices: 0, afpOnline: 0, names: [], chatgptActive: false });
 
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -53,17 +53,29 @@ function Dashboard() {
     }
   };
 
-  // Fetch AFP devices for connectors summary card
+  // Fetch AFP devices + check for active ChatGPT token
   const fetchConnectorsSummary = async () => {
     if (!isAuthenticated) return;
     try {
-      const afpRes = await apiClient.get('/afp/devices').catch(() => null);
+      const [afpRes, tokensRes] = await Promise.all([
+        apiClient.get('/afp/devices').catch(() => null),
+        apiClient.get('/tokens').catch(() => null),
+      ]);
       const afpDevices = afpRes?.data?.devices || afpRes?.data?.data || [];
       const afpOnline = afpDevices.filter((d) => d.status === 'online');
+
+      const allTokens = tokensRes?.data?.data || [];
+      const chatgptActive = allTokens.some((t) => {
+        const label = (t.label || '').toLowerCase();
+        const notRevoked = !t.revokedAt && !t.revoked_at;
+        return notRevoked && (label.includes('chatgpt') || label.includes('openai') || label.includes('gpt'));
+      });
+
       setConnectorsSummary({
         afpDevices: afpDevices.length,
         afpOnline: afpOnline.length,
         names: afpDevices.slice(0, 4).map((d) => d.device_name || d.name || d.id),
+        chatgptActive,
       });
     } catch (err) {
       console.error('Failed to fetch connectors summary:', err);
@@ -533,8 +545,13 @@ function Dashboard() {
           <div className="space-y-3">
             {/* AI connectors row */}
             <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-400">AI connectors</span>
-              <span className="text-xs text-slate-400">ChatGPT, Claude</span>
+              <span className="text-xs text-slate-400">ChatGPT</span>
+              <div className="flex items-center gap-1.5">
+                <span className={`w-2 h-2 rounded-full ${connectorsSummary.chatgptActive ? 'bg-emerald-400' : 'bg-slate-600'}`} />
+                <span className={`text-xs font-medium ${connectorsSummary.chatgptActive ? 'text-emerald-400' : 'text-slate-500'}`}>
+                  {connectorsSummary.chatgptActive ? 'signed in' : 'not connected'}
+                </span>
+              </div>
             </div>
 
             {/* AFP devices row */}
