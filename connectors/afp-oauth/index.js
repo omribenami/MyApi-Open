@@ -95,7 +95,7 @@ function getFreePort() {
 
 // ─── HTTP helpers ─────────────────────────────────────────────────────────────
 
-function httpRequest(method, url, body, headers = {}) {
+function httpRequest(method, url, body, headers = {}, redirects = 5) {
   return new Promise((resolve, reject) => {
     const parsed = new URL(url);
     const lib = parsed.protocol === 'https:' ? https : http;
@@ -112,6 +112,11 @@ function httpRequest(method, url, body, headers = {}) {
       },
     };
     const req = lib.request(opts, (res) => {
+      if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location && redirects > 0) {
+        const next = new URL(res.headers.location, url).toString();
+        res.resume();
+        return resolve(httpRequest(method, next, body, headers, redirects - 1));
+      }
       let raw = '';
       res.on('data', (c) => raw += c);
       res.on('end', () => {
