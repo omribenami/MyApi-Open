@@ -42,6 +42,8 @@ logs/
 backups/
 .env.backup*
 .env.*.patch
+.env.*.bak
+.env.dev.bak
 *.patch
 
 # Throwaway test/debug scripts
