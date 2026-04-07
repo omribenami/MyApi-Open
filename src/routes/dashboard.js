@@ -9,8 +9,8 @@ const {
   getMyMarketplaceListings,
   getMarketplaceListings,
   getKBDocuments,
-  getActivityLog,
   getMemories,
+  db,
 } = require('../database');
 
 const router = express.Router();
@@ -68,24 +68,17 @@ function handleDashboardMetrics(req, res) {
     const knowledge = (getKBDocuments(userId) || []).length;
     const memories = (getMemories(userId, workspaceId) || []).length;
 
-    const activity = getActivityLog(userId, { limit: 5 }) || [];
-    const recentActivity = activity.map((item) => {
-      const actionType = item.action_type || item.action || '';
-      const resourceName = item.resource_name || item.resource_id || '';
-      const resourceType = item.resource_type || '';
-      // Build a human-readable one-liner: e.g. "Connected google", "Created persona Alex"
-      const verb = actionType.split(':').pop() || actionType;
-      const subject = resourceName || resourceType;
-      const description = subject
-        ? `${verb.charAt(0).toUpperCase() + verb.slice(1)} ${subject}`
-        : verb.charAt(0).toUpperCase() + verb.slice(1) || 'Activity';
-      return {
-        type: actionType,
-        description,
-        createdAt: item.created_at || item.createdAt || null,
-      };
+    const auditRows = db.prepare(
+      `SELECT action, resource, timestamp FROM audit_log WHERE requester_id = ? ORDER BY timestamp DESC LIMIT 5`
+    ).all(userId);
+    const recentActivity = auditRows.map((item) => {
+      const action = item.action || '';
+      const resource = item.resource || '';
+      const parts = [action, resource].filter(Boolean);
+      const raw = parts.join(' ');
+      const description = raw.charAt(0).toUpperCase() + raw.slice(1);
+      return { type: action, description, createdAt: item.timestamp || null };
     });
-
     const lastActivityTime = recentActivity[0]?.createdAt || null;
 
     res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
