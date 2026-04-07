@@ -245,7 +245,7 @@ async function runOAuthFlow() {
     code_verifier: codeVerifier,
   });
 
-  if (tokenRes.status !== 200 || !tokenRes.body.access_token) {
+  if (!tokenRes.body.access_token) {
     throw new Error(`Token exchange failed (HTTP ${tokenRes.status}): ${JSON.stringify(tokenRes.body)}`);
   }
 
@@ -266,8 +266,8 @@ async function runOAuthFlow() {
     { Authorization: `Bearer ${accessToken}` }
   );
 
-  if (regRes.status !== 200 || !regRes.body.deviceId) {
-    throw new Error(`Device registration failed: ${JSON.stringify(regRes.body)}`);
+  if (!regRes.body.deviceId) {
+    throw new Error(`Device registration failed (HTTP ${regRes.status}): ${JSON.stringify(regRes.body)}`);
   }
 
   const { deviceId, deviceToken } = regRes.body;
