@@ -8,6 +8,8 @@
 const fs        = require('fs');
 const path      = require('path');
 const os        = require('os');
+const http      = require('http');
+const https     = require('https');
 const { spawn } = require('child_process');
 const WebSocket = require('ws');
 
@@ -174,13 +176,37 @@ function makeMessageHandler(ops, logger) {
   };
 }
 
+// ── Resolve final URL (follow HTTP redirects) ────────────────────────────────
+
+function resolveUrl(url) {
+  return new Promise((resolve) => {
+    try {
+      const parsed = new URL(url);
+      const lib = parsed.protocol === 'https:' ? https : http;
+      const req = lib.request({
+        hostname: parsed.hostname,
+        port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+        path: '/',
+        method: 'HEAD',
+      }, (res) => {
+        res.resume();
+        if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
+          resolve(new URL(res.headers.location, url).origin);
+        } else {
+          resolve(url);
+        }
+      });
+      req.on('error', () => resolve(url));
+      req.end();
+    } catch (_) { resolve(url); }
+  });
+}
+
 // ── Connect loop ──────────────────────────────────────────────────────────────
 
 function start(cfg, log) {
-  // Allow passing a logger or fall back to console
   const logger = log || { info: console.log, warn: console.warn, error: console.error, debug: () => {} };
 
-  const wsUrl     = cfg.serverUrl.replace(/^http/, 'ws').replace(/\/+$/, '') + '/ws';
   const ops       = makeOps(cfg.afpRoot || null);
   const handleMsg = makeMessageHandler(ops, logger);
   let   backoffMs = 1000;
@@ -189,7 +215,6 @@ function start(cfg, log) {
   logger.info(cfg.afpRoot
     ? `Path jail active: ${cfg.afpRoot}`
     : 'Full filesystem access (no path jail configured)');
-  logger.info(`Privileges: ${cfg.afpRoot ? 'restricted' : 'full'}`);
 
   // Cloudflare Access service token headers for WS upgrade
   const wsHeaders = {};
@@ -198,8 +223,13 @@ function start(cfg, log) {
     wsHeaders['CF-Access-Client-Secret'] = cfg.cfServiceToken.clientSecret;
   }
 
-  function connect() {
-    logger.info(`Connecting to ${cfg.serverUrl} ...`);
+  async function connect(baseUrl) {
+    if (!baseUrl) {
+      baseUrl = await resolveUrl(cfg.serverUrl);
+      if (baseUrl !== cfg.serverUrl) logger.info(`Resolved server: ${baseUrl}`);
+    }
+    const wsUrl = baseUrl.replace(/^http/, 'ws').replace(/\/+$/, '') + '/ws';
+    logger.info(`Connecting to ${baseUrl} ...`);
     const ws = new WebSocket(wsUrl, { headers: wsHeaders });
     currentWs = ws;
 
@@ -223,8 +253,17 @@ function start(cfg, log) {
       logger.warn(`Disconnected (code=${code}). Reconnecting in ${backoffMs}ms ...`);
       setTimeout(() => {
         backoffMs = Math.min(backoffMs * 2, 30000);
-        connect();
+        connect(baseUrl);
       }, backoffMs);
+    });
+
+    ws.on('unexpected-response', (req, res) => {
+      logger.error(`WebSocket upgrade failed (HTTP ${res.statusCode})`);
+      if ([301, 302, 307, 308].includes(res.statusCode) && res.headers.location) {
+        const next = new URL(res.headers.location, baseUrl).origin;
+        logger.info(`Redirected to ${next}, reconnecting...`);
+        setTimeout(() => { backoffMs = Math.min(backoffMs * 2, 30000); connect(next); }, backoffMs);
+      }
     });
 
     ws.on('error', err => logger.error(`WebSocket error: ${err.message}`));

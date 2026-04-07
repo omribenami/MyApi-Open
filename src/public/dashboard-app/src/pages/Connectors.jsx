@@ -236,68 +236,109 @@ const OS_PLATFORMS = [
 function AfpConnectorCard() {
   const [devices, setDevices] = useState([]);
   const [downloadInfo, setDownloadInfo] = useState([]);
+  const [downloadOAuthInfo, setDownloadOAuthInfo] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [downloading, setDownloading] = useState(null);
+  const [downloading, setDownloading] = useState(null); // e.g. "oauth-win" or "daemon-linux"
 
   useEffect(() => {
     Promise.all([
       apiClient.get('/afp/devices').catch(() => ({ data: { devices: [] } })),
       apiClient.get('/afp/download-info').catch(() => ({ data: { platforms: [] } })),
-    ]).then(([devRes, dlRes]) => {
+      apiClient.get('/afp/download-oauth-info').catch(() => ({ data: { platforms: [] } })),
+    ]).then(([devRes, dlRes, oauthRes]) => {
       setDevices(devRes.data?.devices || []);
       setDownloadInfo(dlRes.data?.platforms || []);
+      setDownloadOAuthInfo(oauthRes.data?.platforms || []);
     }).finally(() => setLoading(false));
   }, []);
 
   const onlineCount = devices.filter(d => d.status === 'online').length;
   const totalCount  = devices.length;
 
-  function getSizeForPlatform(platform) {
-    const info = downloadInfo.find(p => p.platform === platform);
-    return info?.available ? fmtBytes(info.size) : null;
+  function getSize(info, platform) {
+    const found = info.find(p => p.platform === platform);
+    return found?.available ? fmtBytes(found.size) : null;
   }
 
-  async function handleDownload(platform) {
-    setDownloading(platform);
+  async function handleDownload(type, platform) {
+    const key = `${type}-${platform}`;
+    setDownloading(key);
+    const url = type === 'oauth'
+      ? `/api/v1/afp/download-oauth/${platform}`
+      : `/api/v1/afp/download/${platform}`;
+    const fallbackName = type === 'oauth' ? `afp-oauth-${platform}` : `afp-daemon-${platform}`;
     try {
-      const response = await fetch(`/api/v1/afp/download/${platform}`, {
-        credentials: 'include',
-      });
+      const response = await fetch(url, { credentials: 'include' });
       if (!response.ok) {
         const err = await response.json().catch(() => ({}));
-        alert(err.error || 'Download failed. The binary may not be built yet.');
+        alert(err.error || 'Download failed.');
         return;
       }
       const blob = await response.blob();
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      const cd   = response.headers.get('Content-Disposition') || '';
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const cd = response.headers.get('Content-Disposition') || '';
       const nameMatch = cd.match(/filename="?([^"]+)"?/);
-      a.href     = url;
-      a.download = nameMatch ? nameMatch[1] : `afp-daemon-${platform}`;
+      a.href = blobUrl;
+      a.download = nameMatch ? nameMatch[1] : fallbackName;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      URL.revokeObjectURL(blobUrl);
     } finally {
       setDownloading(null);
     }
   }
 
+  function DownloadGrid({ type, accentRing }) {
+    return (
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {OS_PLATFORMS.map(os => {
+          const size = getSize(type === 'oauth' ? downloadOAuthInfo : downloadInfo, os.platform);
+          const key = `${type}-${os.platform}`;
+          const isDownloading = downloading === key;
+          return (
+            <button
+              key={os.platform}
+              onClick={() => handleDownload(type, os.platform)}
+              disabled={!!downloading}
+              className={`group flex flex-col items-center gap-3 p-4 rounded-xl bg-slate-800/50 border border-slate-700/60 ${os.hoverBorder} ${os.hoverBg} transition-all duration-200 disabled:opacity-60 disabled:cursor-wait focus:outline-none focus:ring-2 ${accentRing}`}
+            >
+              <div className={`w-11 h-11 rounded-xl ${os.iconBg} border ${os.iconBorder} flex items-center justify-center group-hover:scale-105 transition-transform duration-200`}>
+                {isDownloading
+                  ? <svg className="w-5 h-5 text-slate-400 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                  : <os.Logo className={`w-5 h-5 ${os.iconColor}`} />
+                }
+              </div>
+              <div className="text-center">
+                <p className="text-sm font-semibold text-slate-200 leading-tight">{os.label}</p>
+                <p className="text-xs text-slate-500 mt-0.5">{os.sublabel}</p>
+                {size && <p className="text-xs text-slate-600 mt-1">{size}</p>}
+              </div>
+              {!isDownloading && (
+                <svg className="w-4 h-4 text-slate-600 group-hover:text-slate-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <div className="bg-gradient-to-br from-slate-900 to-slate-900/60 border border-slate-700/60 rounded-2xl overflow-hidden">
 
-      {/* Card header */}
+      {/* Header */}
       <div className="p-6 border-b border-slate-800/60">
         <div className="flex items-start gap-4">
-          {/* AFP icon */}
           <div className="relative shrink-0">
             <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-blue-600/20 border border-cyan-500/30 flex items-center justify-center shadow-lg shadow-cyan-500/10">
               <svg viewBox="0 0 24 24" className="w-7 h-7 text-cyan-400" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25m18 0A2.25 2.25 0 0 0 18.75 3H5.25A2.25 2.25 0 0 0 3 5.25m18 0H3" />
               </svg>
             </div>
-            {/* Pulse if any device online */}
             {onlineCount > 0 && (
               <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-2 border-slate-900 flex items-center justify-center">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping absolute" />
@@ -305,14 +346,9 @@ function AfpConnectorCard() {
               </span>
             )}
           </div>
-
-          {/* Title + description */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 flex-wrap">
-              <h3 className="text-lg font-semibold text-white">AFP Daemon</h3>
-              <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-cyan-400/10 text-cyan-400 border border-cyan-400/20">
-                PC Connector
-              </span>
+              <h3 className="text-lg font-semibold text-white">AFP — PC File Access</h3>
               {!loading && totalCount > 0 && (
                 <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full flex items-center gap-1.5 ${
                   onlineCount > 0
@@ -325,123 +361,74 @@ function AfpConnectorCard() {
               )}
             </div>
             <p className="mt-1.5 text-sm text-slate-400 leading-relaxed">
-              Install the AFP Daemon on any PC to give AI agents secure read, write, and execute access to its file system.
-              Works over WebSocket — no port forwarding needed.
+              Install a small background app on any computer to give AI agents secure access to its files and commands — no port forwarding or technical setup required.
             </p>
           </div>
         </div>
       </div>
 
-      {/* Download section */}
-      <div className="p-6">
-        <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-4">
-          Download for your platform
-        </p>
+      <div className="p-6 space-y-8">
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {OS_PLATFORMS.map(os => {
-            const size = getSizeForPlatform(os.platform);
-            const isDownloading = downloading === os.platform;
-            return (
-              <button
-                key={os.platform}
-                onClick={() => handleDownload(os.platform)}
-                disabled={isDownloading}
-                className={`
-                  group relative flex flex-col items-center gap-3 p-4 rounded-xl
-                  bg-slate-800/50 border border-slate-700/60
-                  ${os.hoverBorder} ${os.hoverBg}
-                  transition-all duration-200
-                  disabled:opacity-60 disabled:cursor-wait
-                  focus:outline-none focus:ring-2 focus:ring-cyan-500/40
-                `}
-              >
-                {/* OS icon */}
-                <div className={`w-11 h-11 rounded-xl ${os.iconBg} border ${os.iconBorder} flex items-center justify-center group-hover:scale-105 transition-transform duration-200`}>
-                  {isDownloading
-                    ? <svg className="w-5 h-5 text-slate-400 animate-spin" viewBox="0 0 24 24" fill="none">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                      </svg>
-                    : <os.Logo className={`w-5 h-5 ${os.iconColor}`} />
-                  }
-                </div>
-
-                {/* Labels */}
-                <div className="text-center">
-                  <p className="text-sm font-semibold text-slate-200 leading-tight">{os.label}</p>
-                  <p className="text-xs text-slate-500 mt-0.5">{os.sublabel}</p>
-                  {size && <p className="text-xs text-slate-600 mt-1">{size}</p>}
-                </div>
-
-                {/* Download arrow */}
-                {!isDownloading && (
-                  <svg className="w-4 h-4 text-slate-600 group-hover:text-slate-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Install instructions */}
-        <div className="mt-6 rounded-xl bg-slate-800/40 border border-slate-700/40 overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-700/40">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Quick start</p>
+        {/* ── OAuth Edition ─────────────────────────────────────────────────── */}
+        <div>
+          <div className="flex items-center gap-3 mb-4">
+            <div>
+              <p className="text-sm font-semibold text-slate-200">Sign-in Edition <span className="ml-1.5 text-xs font-medium px-2 py-0.5 rounded-full bg-violet-400/10 text-violet-400 border border-violet-400/20">Recommended</span></p>
+              <p className="text-xs text-slate-500 mt-0.5">Opens your browser for a one-click login. Works with myapiai.com accounts.</p>
+            </div>
           </div>
-          <div className="p-5 space-y-4">
-            {[
-              {
-                n: '1',
-                title: 'Download the daemon',
-                body: 'Pick your platform above and download the installer. No Node.js or runtime required — it\'s a single self-contained executable.',
-              },
-              {
-                n: '2',
-                title: 'Run it once',
-                body: 'Double-click (Windows) or run from terminal. A setup wizard will ask for your MyApi URL and master token — it registers itself automatically.',
-                code: {
-                  linux: 'chmod +x afp-daemon-linux && ./afp-daemon-linux',
-                  mac: 'chmod +x afp-daemon-macos-x64 && ./afp-daemon-macos-x64',
-                  win: 'afp-daemon-win-x64.exe',
-                },
-              },
-              {
-                n: '3',
-                title: 'It installs itself as a background service',
-                body: 'The wizard offers to install as a system service (launchd / systemd / Task Scheduler) so it starts automatically at login.',
-              },
-              {
-                n: '4',
-                title: 'AI agents can now access this PC',
-                body: 'Any agent with your master token can list, read, write, and execute commands on this machine via /api/v1/afp/{deviceId}/*.',
-              },
-            ].map(step => (
-              <div key={step.n} className="flex gap-3">
-                <span className="w-6 h-6 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
-                  {step.n}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-slate-300 text-sm">{step.title}</p>
-                  <p className="text-slate-500 mt-0.5 text-sm leading-relaxed">{step.body}</p>
-                  {step.code && (
-                    <div className="mt-2 rounded-lg bg-slate-900/80 border border-slate-700/50 px-3 py-2">
-                      <code className="text-xs text-cyan-300 font-mono">{step.code.linux}</code>
-                    </div>
-                  )}
+          <DownloadGrid type="oauth" accentRing="focus:ring-violet-500/40" />
+          <div className="mt-4 rounded-xl bg-slate-800/40 border border-slate-700/40 overflow-hidden">
+            <div className="px-5 py-3 border-b border-slate-700/40">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">How to install</p>
+            </div>
+            <div className="p-5 space-y-3">
+              {[
+                { n: '1', title: 'Download', body: 'Pick your OS above and save the file. No installation wizard, no dependencies.' },
+                { n: '2', title: 'Run it', body: 'Double-click it (Windows) or open a terminal and run it (Mac/Linux). Your browser will open automatically.' },
+                { n: '3', title: 'Sign in', body: 'Log in to your MyApi account and click Authorize. The app connects in the background and stays running.' },
+                { n: '4', title: 'Done', body: 'Your PC will appear in the Connected Devices list below. AI agents can now access it.' },
+              ].map(s => (
+                <div key={s.n} className="flex gap-3">
+                  <span className="w-5 h-5 rounded-full bg-violet-500/10 border border-violet-500/20 text-violet-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{s.n}</span>
+                  <div><p className="text-sm font-medium text-slate-300">{s.title}</p><p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{s.body}</p></div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* Connected devices list */}
+        {/* ── Token Edition ─────────────────────────────────────────────────── */}
+        <div>
+          <div className="mb-4">
+            <p className="text-sm font-semibold text-slate-200">Token Edition <span className="ml-1.5 text-xs font-medium px-2 py-0.5 rounded-full bg-slate-700/50 text-slate-400 border border-slate-700">Self-hosted</span></p>
+            <p className="text-xs text-slate-500 mt-0.5">For self-hosted deployments. Connects using your master API token.</p>
+          </div>
+          <DownloadGrid type="daemon" accentRing="focus:ring-cyan-500/40" />
+          <div className="mt-4 rounded-xl bg-slate-800/40 border border-slate-700/40 overflow-hidden">
+            <div className="px-5 py-3 border-b border-slate-700/40">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">How to install</p>
+            </div>
+            <div className="p-5 space-y-3">
+              {[
+                { n: '1', title: 'Download', body: 'Pick your OS above and save the file.' },
+                { n: '2', title: 'Run it', body: 'Double-click (Windows) or run from terminal (Mac/Linux). A setup wizard will ask for your server URL and API token.' },
+                { n: '3', title: 'Auto-start', body: 'The wizard can install it as a background service so it starts automatically when you log in.' },
+                { n: '4', title: 'Done', body: 'Your PC will appear in the Connected Devices list below.' },
+              ].map(s => (
+                <div key={s.n} className="flex gap-3">
+                  <span className="w-5 h-5 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{s.n}</span>
+                  <div><p className="text-sm font-medium text-slate-300">{s.title}</p><p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{s.body}</p></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Connected devices ──────────────────────────────────────────────── */}
         {!loading && totalCount > 0 && (
-          <div className="mt-6">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">
-              Registered Devices
-            </p>
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">Connected Devices</p>
             <div className="space-y-2">
               {devices.map(device => (
                 <DeviceRow
@@ -459,199 +446,9 @@ function AfpConnectorCard() {
         )}
 
         {!loading && totalCount === 0 && (
-          <div className="mt-4 rounded-xl bg-slate-800/30 border border-slate-700/40 px-5 py-4 flex gap-3">
-            <svg className="w-5 h-5 text-slate-500 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />
-            </svg>
-            <div>
-              <p className="text-sm text-slate-400 font-medium">No devices registered yet</p>
-              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Download the daemon above and run it — the setup wizard registers this PC automatically.
-                If you already ran setup on an older version, run it again with{' '}
-                <code className="text-cyan-400 bg-slate-900/60 px-1 rounded">.\afp-daemon-win-x64.exe --reset</code>{' '}
-                (Windows) or{' '}
-                <code className="text-cyan-400 bg-slate-900/60 px-1 rounded">./afp-daemon-linux --reset</code>{' '}
-                (Linux/Mac) to re-register.
-              </p>
-            </div>
-          </div>
+          <p className="text-sm text-slate-500 text-center py-2">No devices connected yet — download and run the app above to get started.</p>
         )}
-      </div>
-    </div>
-  );
-}
 
-function AfpOAuthConnectorCard() {
-  const [downloadInfo, setDownloadInfo] = useState([]);
-  const [downloading, setDownloading] = useState(null);
-
-  useEffect(() => {
-    apiClient.get('/afp/download-oauth-info').catch(() => ({ data: { platforms: [] } }))
-      .then(res => setDownloadInfo(res.data?.platforms || []));
-  }, []);
-
-  function getSizeForPlatform(platform) {
-    const info = downloadInfo.find(p => p.platform === platform);
-    return info?.available ? fmtBytes(info.size) : null;
-  }
-
-  async function handleDownload(platform) {
-    setDownloading(platform);
-    try {
-      const response = await fetch(`/api/v1/afp/download-oauth/${platform}`, { credentials: 'include' });
-      if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        alert(err.error || 'Download failed. The binary may not be built yet.');
-        return;
-      }
-      const blob = await response.blob();
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      const cd   = response.headers.get('Content-Disposition') || '';
-      const nameMatch = cd.match(/filename="?([^"]+)"?/);
-      a.href     = url;
-      a.download = nameMatch ? nameMatch[1] : `afp-oauth-${platform}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } finally {
-      setDownloading(null);
-    }
-  }
-
-  return (
-    <div className="bg-gradient-to-br from-slate-900 to-slate-900/60 border border-violet-700/30 rounded-2xl overflow-hidden">
-
-      {/* Card header */}
-      <div className="p-6 border-b border-slate-800/60">
-        <div className="flex items-start gap-4">
-          <div className="shrink-0">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500/20 to-purple-600/20 border border-violet-500/30 flex items-center justify-center shadow-lg shadow-violet-500/10">
-              <svg viewBox="0 0 24 24" className="w-7 h-7 text-violet-400" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25m18 0A2.25 2.25 0 0 0 18.75 3H5.25A2.25 2.25 0 0 0 3 5.25m18 0H3" />
-              </svg>
-            </div>
-          </div>
-
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-3 flex-wrap">
-              <h3 className="text-lg font-semibold text-white">AFP Daemon <span className="text-violet-400">OAuth</span></h3>
-              <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-violet-400/10 text-violet-400 border border-violet-400/20">
-                myapiai.com
-              </span>
-            </div>
-            <p className="mt-1.5 text-sm text-slate-400 leading-relaxed">
-              The OAuth version of the AFP Daemon — opens your browser for a one-click login to myapiai.com.
-              No token pasting required. Credentials are stored securely at <code className="text-violet-300 bg-slate-900/60 px-1 rounded text-xs">~/.myapi/afp-credentials.json</code>.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Download section */}
-      <div className="p-6">
-        <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-4">
-          Download for your platform
-        </p>
-
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {OS_PLATFORMS.map(os => {
-            const size = getSizeForPlatform(os.platform);
-            const isDownloading = downloading === os.platform;
-            return (
-              <button
-                key={os.platform}
-                onClick={() => handleDownload(os.platform)}
-                disabled={isDownloading}
-                className={`
-                  group relative flex flex-col items-center gap-3 p-4 rounded-xl
-                  bg-slate-800/50 border border-slate-700/60
-                  ${os.hoverBorder} ${os.hoverBg}
-                  transition-all duration-200
-                  disabled:opacity-60 disabled:cursor-wait
-                  focus:outline-none focus:ring-2 focus:ring-violet-500/40
-                `}
-              >
-                <div className={`w-11 h-11 rounded-xl ${os.iconBg} border ${os.iconBorder} flex items-center justify-center group-hover:scale-105 transition-transform duration-200`}>
-                  {isDownloading
-                    ? <svg className="w-5 h-5 text-slate-400 animate-spin" viewBox="0 0 24 24" fill="none">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                      </svg>
-                    : <os.Logo className={`w-5 h-5 ${os.iconColor}`} />
-                  }
-                </div>
-                <div className="text-center">
-                  <p className="text-sm font-semibold text-slate-200 leading-tight">{os.label}</p>
-                  <p className="text-xs text-slate-500 mt-0.5">{os.sublabel}</p>
-                  {size && <p className="text-xs text-slate-600 mt-1">{size}</p>}
-                </div>
-                {!isDownloading && (
-                  <svg className="w-4 h-4 text-slate-600 group-hover:text-slate-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Install instructions */}
-        <div className="mt-6 rounded-xl bg-slate-800/40 border border-slate-700/40 overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-700/40">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Quick start</p>
-          </div>
-          <div className="p-5 space-y-4">
-            {[
-              {
-                n: '1',
-                title: 'Download the daemon',
-                body: "Pick your platform above. It's a single self-contained executable — no Node.js required.",
-              },
-              {
-                n: '2',
-                title: 'Run it',
-                body: 'On first run it opens your browser (or prints a URL) so you can sign in to myapiai.com and authorize the daemon.',
-                code: {
-                  linux: 'chmod +x afp-oauth-linux && ./afp-oauth-linux',
-                  mac:   'chmod +x afp-oauth-mac-arm && ./afp-oauth-mac-arm',
-                  win:   'afp-oauth-win.exe',
-                },
-              },
-              {
-                n: '3',
-                title: 'Authorize in your browser',
-                body: 'Sign in with your myapiai.com account and click Authorize. The daemon registers itself and stays connected automatically.',
-              },
-              {
-                n: '4',
-                title: 'Re-authenticate anytime',
-                body: 'To sign in with a different account or revoke access, delete the credentials file and restart.',
-                code: {
-                  linux: 'rm ~/.myapi/afp-credentials.json',
-                  mac:   'rm ~/.myapi/afp-credentials.json',
-                  win:   'del %USERPROFILE%\\.myapi\\afp-credentials.json',
-                },
-              },
-            ].map(step => (
-              <div key={step.n} className="flex gap-3">
-                <span className="w-6 h-6 rounded-full bg-violet-500/10 border border-violet-500/20 text-violet-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
-                  {step.n}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-slate-300 text-sm">{step.title}</p>
-                  <p className="text-slate-500 mt-0.5 text-sm leading-relaxed">{step.body}</p>
-                  {step.code && (
-                    <div className="mt-2 rounded-lg bg-slate-900/80 border border-slate-700/50 px-3 py-2">
-                      <code className="text-xs text-violet-300 font-mono">{step.code.linux}</code>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
     </div>
   );
@@ -748,7 +545,6 @@ export default function Connectors() {
         </div>
 
         <AfpConnectorCard />
-        <AfpOAuthConnectorCard />
       </section>
 
     </div>
