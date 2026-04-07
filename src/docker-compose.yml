@@ -6,66 +6,34 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: myapi-platform
-    
+
     # Port mapping
     ports:
       - "${PORT:-4500}:${PORT:-4500}"
-    
+
     # Load all env vars from root .env file
     env_file:
       - ../.env
 
-    # Environment variables (overrides for container-specific settings)
+    # Only override vars that must be different inside the container
+    # (filesystem paths, runtime mode).  Do NOT duplicate secrets or
+    # production URLs here — they come correctly from env_file above.
     environment:
       - NODE_ENV=${NODE_ENV:-production}
       - PORT=${PORT:-4500}
-      - JWT_SECRET=${JWT_SECRET:-change-this-in-production}
-      - ENCRYPTION_KEY=${ENCRYPTION_KEY:-32characterencryptionkeyhere!!}
       - DB_PATH=/app/data/myapi.db
-      - USER_MD_PATH=${USER_MD_PATH:-/app/data/USER.md}
-      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:4500,http://localhost:3001}
-      - BASE_URL=${BASE_URL:-http://localhost:4500}
-      - PUBLIC_URL=${PUBLIC_URL:-http://localhost:4500}
-      - RATE_LIMIT_WINDOW_MS=${RATE_LIMIT_WINDOW_MS:-900000}
-      - RATE_LIMIT_MAX_REQUESTS=${RATE_LIMIT_MAX_REQUESTS:-100}
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
-      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
-      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI}
-      - GITHUB_APP_ID=${GITHUB_APP_ID}
-      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
-      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
-      - GITHUB_REDIRECT_URI=${GITHUB_REDIRECT_URI}
-      - TIKTOK_CLIENT_KEY=${TIKTOK_CLIENT_KEY}
-      - TIKTOK_CLIENT_SECRET=${TIKTOK_CLIENT_SECRET}
-      - TIKTOK_APP_ID=${TIKTOK_APP_ID}
-      - TIKTOK_REDIRECT_URI=${TIKTOK_REDIRECT_URI}
-      - SLACK_CLIENT_ID=${SLACK_CLIENT_ID}
-      - SLACK_CLIENT_SECRET=${SLACK_CLIENT_SECRET}
-      - SLACK_REDIRECT_URI=${SLACK_REDIRECT_URI}
-      - LINKEDIN_CLIENT_ID=${LINKEDIN_CLIENT_ID}
-      - LINKEDIN_CLIENT_SECRET=${LINKEDIN_CLIENT_SECRET}
-      - LINKEDIN_REDIRECT_URI=${LINKEDIN_REDIRECT_URI}
-      - FACEBOOK_CLIENT_ID=${FACEBOOK_CLIENT_ID}
-      - FACEBOOK_CLIENT_SECRET=${FACEBOOK_CLIENT_SECRET}
-      - FACEBOOK_REDIRECT_URI=${FACEBOOK_REDIRECT_URI}
-      - TWITTER_CLIENT_ID=${TWITTER_CLIENT_ID}
-      - TWITTER_CLIENT_SECRET=${TWITTER_CLIENT_SECRET}
-      - TWITTER_REDIRECT_URI=${TWITTER_REDIRECT_URI}
-      - DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID}
-      - DISCORD_CLIENT_SECRET=${DISCORD_CLIENT_SECRET}
-      - DISCORD_REDIRECT_URI=${DISCORD_REDIRECT_URI}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-    
+      - USER_MD_PATH=/app/data/USER.md
+
     # Persistent volumes for SQLite and logs
     volumes:
       # SQLite database - bind mount to host so data survives rebuilds
       - /opt/MyApi/data:/app/data
       # Application logs
       - myapi-logs:/app/logs
-    
+
     # Restart policy
     restart: unless-stopped
-    
+
     # Health check
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:${PORT:-4500}/health"]
@@ -73,20 +41,10 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
-    
+
     # Network
     networks:
       - myapi-network
-    
-    # Resource limits (optional, adjust as needed)
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: '1'
-    #       memory: 1G
-    #     reservations:
-    #       cpus: '0.5'
-    #       memory: 512M
 
 # Named volumes
 volumes:

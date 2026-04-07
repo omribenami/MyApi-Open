@@ -72,3 +72,6 @@ src/QA_REPORT.md
 src/README.md
 src/patch_instructions.txt
 docs/SUBAGENT_COMPLETION_SUMMARY.md
+
+# Deploy script (local use only)
+deploy.sh

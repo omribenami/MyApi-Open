@@ -1,9 +1,30 @@
-import { StrictMode } from 'react'
+import { StrictMode, Component } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
 
+class RootErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ minHeight: '100vh', background: '#0b0f1a', color: '#e2e8f0', fontFamily: 'monospace', padding: '2rem' }}>
+          <h1 style={{ color: '#f87171', marginBottom: '1rem' }}>Dashboard Error</h1>
+          <pre style={{ whiteSpace: 'pre-wrap', background: '#1e2d40', padding: '1rem', borderRadius: '0.5rem', fontSize: '0.875rem' }}>
+            {this.state.error?.message || String(this.state.error)}
+            {'\n\n'}
+            {this.state.error?.stack}
+          </pre>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // Emergency client-side guard for rare storage/db corruption errors surfaced by browser/runtime.
+// v2: inline onerror recovery added to index.html handles pre-load failures.
 // If detected, clear local auth/session artifacts once and reload cleanly.
 if (typeof window !== 'undefined') {
   const CORRUPTION_MARKERS = [
@@ -81,6 +102,8 @@ if (typeof window !== 'undefined') {
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <App />
+    <RootErrorBoundary>
+      <App />
+    </RootErrorBoundary>
   </StrictMode>,
 )

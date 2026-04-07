@@ -749,6 +749,7 @@ app.use(helmet({
       baseUri: ["'self'"],
       formAction: ["'self'", "https://chat.openai.com", "https://chatgpt.com"],
       frameAncestors: ["'self'"],
+      upgradeInsecureRequests: null,
     },
   },
   crossOriginEmbedderPolicy: false,
