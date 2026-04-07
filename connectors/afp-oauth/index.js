@@ -216,12 +216,36 @@ async function runOAuthFlow() {
         return;
       }
 
-      res.writeHead(200, { 'Content-Type': 'text/html' });
-      res.end(`<html><body style="font-family:sans-serif;text-align:center;padding-top:80px">
-        <h2 style="color:#22c55e">✓ Authorized!</h2>
-        <p>MyApi AFP Daemon is now connected.</p>
-        <p style="color:#94a3b8;font-size:14px">You can close this window.</p>
-      </body></html>`);
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(`<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MyApi — Authorized</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#020817;color:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px}
+  .card{background:#0f172a;border:1px solid #1e293b;border-radius:16px;padding:40px;max-width:400px;width:100%;text-align:center;box-shadow:0 25px 50px rgba(0,0,0,.5)}
+  .logo{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:28px}
+  .dot{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#3b82f6,#a855f7)}
+  .brand{font-size:18px;font-weight:700;color:#f1f5f9}
+  .icon{width:56px;height:56px;border-radius:50%;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.2);display:flex;align-items:center;justify-content:center;margin:0 auto 20px}
+  .checkmark{color:#22c55e;font-size:26px;line-height:1}
+  h1{font-size:22px;font-weight:700;color:#f1f5f9;margin-bottom:8px}
+  p{font-size:14px;color:#94a3b8;line-height:1.6}
+  .device{margin-top:16px;background:rgba(255,255,255,.03);border:1px solid #1e293b;border-radius:8px;padding:10px 14px;font-size:13px;color:#64748b}
+  .device span{color:#cbd5e1;font-weight:600}
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo"><div class="dot"></div><span class="brand">MyApi</span></div>
+    <div class="icon"><div class="checkmark">&#10003;</div></div>
+    <h1>Authorized!</h1>
+    <p>AFP Daemon is now connected to your MyApi account.</p>
+    <div class="device">Device: <span>${DEVICE_NAME}</span></div>
+    <p style="margin-top:20px;font-size:13px;color:#475569">You can close this window.</p>
+  </div>
+</body></html>`);
       server.close();
       resolve(receivedCode);
     });
@@ -356,12 +380,39 @@ function execOp({ cmd, cwd, timeout = 30000 }) {
   });
 }
 
+// ─── Resolve final URL (follow HTTP redirects) ───────────────────────────────
+
+function resolveUrl(url) {
+  return new Promise((resolve) => {
+    try {
+      const parsed = new URL(url);
+      const lib = parsed.protocol === 'https:' ? https : http;
+      const req = lib.request({
+        hostname: parsed.hostname,
+        port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+        path: '/',
+        method: 'HEAD',
+      }, (res) => {
+        res.resume();
+        if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
+          const next = new URL(res.headers.location, url);
+          resolve(next.origin);
+        } else {
+          resolve(url);
+        }
+      });
+      req.on('error', () => resolve(url));
+      req.end();
+    } catch (_) { resolve(url); }
+  });
+}
+
 // ─── WebSocket connection ─────────────────────────────────────────────────────
 
 let backoff = 1000;
 
-function connect(creds) {
-  const wsUrl = MYAPI_URL.replace(/^http/, 'ws') + '/ws';
+function connect(creds, baseUrl) {
+  const wsUrl = baseUrl.replace(/^http/, 'ws') + '/ws';
   const ws = new WebSocket(wsUrl);
 
   ws.on('open', () => {
@@ -380,8 +431,18 @@ function connect(creds) {
 
   ws.on('close', () => {
     info(`Disconnected. Reconnecting in ${backoff / 1000}s...`);
-    setTimeout(() => connect(creds), backoff);
+    setTimeout(() => connect(creds, baseUrl), backoff);
     backoff = Math.min(backoff * 2, 30000);
+  });
+
+  ws.on('unexpected-response', (req, res) => {
+    error(`WebSocket upgrade failed (HTTP ${res.statusCode})`);
+    if ([301, 302, 307, 308].includes(res.statusCode) && res.headers.location) {
+      const next = new URL(res.headers.location, baseUrl).origin;
+      info(`Redirected to ${next}, reconnecting...`);
+      setTimeout(() => connect(creds, next), backoff);
+      backoff = Math.min(backoff * 2, 30000);
+    }
   });
 
   ws.on('error', (err) => error(err.message));
@@ -432,7 +493,9 @@ async function main() {
   }
 
   info('Connecting to MyApi server...');
-  connect(creds);
+  const baseUrl = await resolveUrl(MYAPI_URL);
+  if (baseUrl !== MYAPI_URL) info(`Resolved server URL: ${baseUrl}`);
+  connect(creds, baseUrl);
 }
 
 main().catch((err) => { error(err.message); process.exit(1); });
