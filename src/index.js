@@ -1958,6 +1958,37 @@ app.use('/api/v1/auth', newAuthRoutes);
   });
 }
 
+// AFP OAuth binary downloads — public, no auth
+{
+  const AFP_OAUTH_DIST = fs.existsSync(path.join(__dirname, 'afp-oauth-dist'))
+    ? path.join(__dirname, 'afp-oauth-dist')
+    : path.join(__dirname, '..', 'connectors', 'afp-oauth', 'dist');
+  const AFP_OAUTH_PLATFORMS = {
+    linux:     { file: 'afp-oauth-linux',   mime: 'application/octet-stream' },
+    mac:       { file: 'afp-oauth-mac-x64', mime: 'application/octet-stream' },
+    'mac-arm': { file: 'afp-oauth-mac-arm', mime: 'application/octet-stream' },
+    win:       { file: 'afp-oauth-win.exe', mime: 'application/vnd.microsoft.portable-executable' },
+  };
+  app.get('/api/v1/afp/download-oauth/:platform', (req, res) => {
+    const meta = AFP_OAUTH_PLATFORMS[req.params.platform];
+    if (!meta) return res.status(400).json({ error: 'Unknown platform. Use: linux, mac, mac-arm, win' });
+    const filePath = path.join(AFP_OAUTH_DIST, meta.file);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Binary not yet built', hint: 'cd connectors/afp-oauth && npm run build' });
+    res.setHeader('Content-Disposition', `attachment; filename="${meta.file}"`);
+    res.setHeader('Content-Type', meta.mime);
+    res.sendFile(filePath);
+  });
+  app.get('/api/v1/afp/download-oauth-info', (req, res) => {
+    const platforms = Object.entries(AFP_OAUTH_PLATFORMS).map(([platform, meta]) => {
+      const filePath = path.join(AFP_OAUTH_DIST, meta.file);
+      let size = null;
+      try { size = fs.statSync(filePath).size; } catch (_) {}
+      return { platform, filename: meta.file, available: size !== null, size };
+    });
+    res.json({ ok: true, platforms });
+  });
+}
+
 app.use('/api/v1', authRoutes);
 app.use('/api/v1/devices', authenticate, deviceRoutes);
 // Device approval is now applied globally in the authenticate middleware

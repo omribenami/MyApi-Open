@@ -481,6 +481,182 @@ function AfpConnectorCard() {
   );
 }
 
+function AfpOAuthConnectorCard() {
+  const [downloadInfo, setDownloadInfo] = useState([]);
+  const [downloading, setDownloading] = useState(null);
+
+  useEffect(() => {
+    apiClient.get('/afp/download-oauth-info').catch(() => ({ data: { platforms: [] } }))
+      .then(res => setDownloadInfo(res.data?.platforms || []));
+  }, []);
+
+  function getSizeForPlatform(platform) {
+    const info = downloadInfo.find(p => p.platform === platform);
+    return info?.available ? fmtBytes(info.size) : null;
+  }
+
+  async function handleDownload(platform) {
+    setDownloading(platform);
+    try {
+      const response = await fetch(`/api/v1/afp/download-oauth/${platform}`, { credentials: 'include' });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        alert(err.error || 'Download failed. The binary may not be built yet.');
+        return;
+      }
+      const blob = await response.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      const cd   = response.headers.get('Content-Disposition') || '';
+      const nameMatch = cd.match(/filename="?([^"]+)"?/);
+      a.href     = url;
+      a.download = nameMatch ? nameMatch[1] : `afp-oauth-${platform}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } finally {
+      setDownloading(null);
+    }
+  }
+
+  return (
+    <div className="bg-gradient-to-br from-slate-900 to-slate-900/60 border border-violet-700/30 rounded-2xl overflow-hidden">
+
+      {/* Card header */}
+      <div className="p-6 border-b border-slate-800/60">
+        <div className="flex items-start gap-4">
+          <div className="shrink-0">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500/20 to-purple-600/20 border border-violet-500/30 flex items-center justify-center shadow-lg shadow-violet-500/10">
+              <svg viewBox="0 0 24 24" className="w-7 h-7 text-violet-400" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25m18 0A2.25 2.25 0 0 0 18.75 3H5.25A2.25 2.25 0 0 0 3 5.25m18 0H3" />
+              </svg>
+            </div>
+          </div>
+
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-3 flex-wrap">
+              <h3 className="text-lg font-semibold text-white">AFP Daemon <span className="text-violet-400">OAuth</span></h3>
+              <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-violet-400/10 text-violet-400 border border-violet-400/20">
+                myapiai.com
+              </span>
+            </div>
+            <p className="mt-1.5 text-sm text-slate-400 leading-relaxed">
+              The OAuth version of the AFP Daemon — opens your browser for a one-click login to myapiai.com.
+              No token pasting required. Credentials are stored securely at <code className="text-violet-300 bg-slate-900/60 px-1 rounded text-xs">~/.myapi/afp-credentials.json</code>.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Download section */}
+      <div className="p-6">
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-4">
+          Download for your platform
+        </p>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {OS_PLATFORMS.map(os => {
+            const size = getSizeForPlatform(os.platform);
+            const isDownloading = downloading === os.platform;
+            return (
+              <button
+                key={os.platform}
+                onClick={() => handleDownload(os.platform)}
+                disabled={isDownloading}
+                className={`
+                  group relative flex flex-col items-center gap-3 p-4 rounded-xl
+                  bg-slate-800/50 border border-slate-700/60
+                  ${os.hoverBorder} ${os.hoverBg}
+                  transition-all duration-200
+                  disabled:opacity-60 disabled:cursor-wait
+                  focus:outline-none focus:ring-2 focus:ring-violet-500/40
+                `}
+              >
+                <div className={`w-11 h-11 rounded-xl ${os.iconBg} border ${os.iconBorder} flex items-center justify-center group-hover:scale-105 transition-transform duration-200`}>
+                  {isDownloading
+                    ? <svg className="w-5 h-5 text-slate-400 animate-spin" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                      </svg>
+                    : <os.Logo className={`w-5 h-5 ${os.iconColor}`} />
+                  }
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-semibold text-slate-200 leading-tight">{os.label}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">{os.sublabel}</p>
+                  {size && <p className="text-xs text-slate-600 mt-1">{size}</p>}
+                </div>
+                {!isDownloading && (
+                  <svg className="w-4 h-4 text-slate-600 group-hover:text-slate-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Install instructions */}
+        <div className="mt-6 rounded-xl bg-slate-800/40 border border-slate-700/40 overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-700/40">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Quick start</p>
+          </div>
+          <div className="p-5 space-y-4">
+            {[
+              {
+                n: '1',
+                title: 'Download the daemon',
+                body: "Pick your platform above. It's a single self-contained executable — no Node.js required.",
+              },
+              {
+                n: '2',
+                title: 'Run it',
+                body: 'On first run it opens your browser (or prints a URL) so you can sign in to myapiai.com and authorize the daemon.',
+                code: {
+                  linux: 'chmod +x afp-oauth-linux && ./afp-oauth-linux',
+                  mac:   'chmod +x afp-oauth-mac-arm && ./afp-oauth-mac-arm',
+                  win:   'afp-oauth-win.exe',
+                },
+              },
+              {
+                n: '3',
+                title: 'Authorize in your browser',
+                body: 'Sign in with your myapiai.com account and click Authorize. The daemon registers itself and stays connected automatically.',
+              },
+              {
+                n: '4',
+                title: 'Re-authenticate anytime',
+                body: 'To sign in with a different account or revoke access, delete the credentials file and restart.',
+                code: {
+                  linux: 'rm ~/.myapi/afp-credentials.json',
+                  mac:   'rm ~/.myapi/afp-credentials.json',
+                  win:   'del %USERPROFILE%\\.myapi\\afp-credentials.json',
+                },
+              },
+            ].map(step => (
+              <div key={step.n} className="flex gap-3">
+                <span className="w-6 h-6 rounded-full bg-violet-500/10 border border-violet-500/20 text-violet-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
+                  {step.n}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-slate-300 text-sm">{step.title}</p>
+                  <p className="text-slate-500 mt-0.5 text-sm leading-relaxed">{step.body}</p>
+                  {step.code && (
+                    <div className="mt-2 rounded-lg bg-slate-900/80 border border-slate-700/50 px-3 py-2">
+                      <code className="text-xs text-violet-300 font-mono">{step.code.linux}</code>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Connectors() {
   return (
     <div className="space-y-10">
@@ -572,6 +748,7 @@ export default function Connectors() {
         </div>
 
         <AfpConnectorCard />
+        <AfpOAuthConnectorCard />
       </section>
 
     </div>
