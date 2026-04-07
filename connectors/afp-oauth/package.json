@@ -1,0 +1,26 @@
+{
+  "name": "myapi-afp-oauth",
+  "version": "1.0.0",
+  "description": "MyApi AFP Daemon — myapiai.com edition (OAuth login, no token paste)",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "build:linux":   "pkg index.js --target node18-linux-x64   --output dist/afp-oauth-linux   --compress GZip",
+    "build:mac-x64": "pkg index.js --target node18-macos-x64   --output dist/afp-oauth-mac-x64 --compress GZip",
+    "build:mac-arm": "pkg index.js --target node18-macos-arm64 --output dist/afp-oauth-mac-arm --compress GZip",
+    "build:win":     "pkg index.js --target node18-win-x64     --output dist/afp-oauth-win.exe  --compress GZip",
+    "build:all": "npm run build:linux && npm run build:mac-x64 && npm run build:mac-arm && npm run build:win"
+  },
+  "bin": "index.js",
+  "pkg": {
+    "assets": [],
+    "outputPath": "dist"
+  },
+  "dependencies": {
+    "ws": "^8.0.0"
+  },
+  "devDependencies": {
+    "@yao-pkg/pkg": "^5.12.0"
+  },
+  "engines": { "node": ">=18.0.0" }
+}

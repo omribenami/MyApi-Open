@@ -15,6 +15,7 @@ const {
   upsertOAuthServerClient,
   createOAuthServerAuthCode,
   consumeOAuthServerAuthCode,
+  peekOAuthServerAuthCode,
   createAccessToken,
 } = require('../database');
 
@@ -170,7 +171,7 @@ function renderConsentPage({ clientName, username, clientId, redirectUri, state,
 // GET /api/v1/oauth-server/authorize
 router.get('/authorize', (req, res) => {
   console.log('[OAuthServer] GET /authorize hit — query:', JSON.stringify(req.query), '| session user:', req.session?.user?.id || 'none');
-  const { response_type, client_id, redirect_uri, state, scope } = req.query;
+  const { response_type, client_id, redirect_uri, state, scope, code_challenge, code_challenge_method } = req.query;
 
   if (response_type !== 'code') {
     return res.status(400).send('unsupported_response_type');
@@ -190,14 +191,19 @@ router.get('/authorize', (req, res) => {
   // chat.openai.com). The React page also avoids the CSP form-action issue that the
   // server-rendered HTML form has when the redirect chain crosses origins.
   const base = (process.env.PUBLIC_URL || `http://localhost:${process.env.PORT || 4500}`).replace(/\/$/, '');
-  return res.redirect(
-    `${base}/dashboard/authorize?response_type=${encodeURIComponent(response_type)}&client_id=${encodeURIComponent(client_id)}&redirect_uri=${encodeURIComponent(redirect_uri)}&state=${encodeURIComponent(state || '')}&scope=${encodeURIComponent(scope || 'full')}&client_name=${encodeURIComponent(client.client_name)}`
-  );
+  const consentParams = new URLSearchParams({
+    response_type, client_id, redirect_uri,
+    state: state || '', scope: scope || 'full',
+    client_name: client.client_name,
+  });
+  if (code_challenge) consentParams.set('code_challenge', code_challenge);
+  if (code_challenge_method) consentParams.set('code_challenge_method', code_challenge_method);
+  return res.redirect(`${base}/dashboard/authorize?${consentParams.toString()}`);
 });
 
 // POST /api/v1/oauth-server/authorize — user approves consent
 router.post('/authorize', express.urlencoded({ extended: false }), (req, res) => {
-  const { client_id, redirect_uri, state, scope } = req.body;
+  const { client_id, redirect_uri, state, scope, code_challenge } = req.body;
 
   if (!req.session?.user?.id) {
     const client = getOAuthServerClient(client_id);
@@ -224,6 +230,7 @@ router.post('/authorize', express.urlencoded({ extended: false }), (req, res) =>
     userId: String(req.session.user.id),
     redirectUri: redirect_uri,
     scope: scope || 'full',
+    codeChallenge: code_challenge || null,
   });
 
   const redirectUrl = new URL(redirect_uri);
@@ -249,7 +256,7 @@ router.get('/deny', (req, res) => {
 
 // Token exchange handler — shared by POST and GET
 async function handleTokenExchange(params, res) {
-  const { grant_type, code, redirect_uri, client_id, client_secret } = params;
+  const { grant_type, code, redirect_uri, client_id, client_secret, code_verifier } = params;
 
   if (grant_type !== 'authorization_code') {
     return res.status(400).json({ error: 'unsupported_grant_type' });
@@ -260,9 +267,21 @@ async function handleTokenExchange(params, res) {
     return res.status(401).json({ error: 'invalid_client' });
   }
 
-  const secretMatch = await bcrypt.compare(String(client_secret || ''), client.client_secret_hash);
-  if (!secretMatch) {
-    return res.status(401).json({ error: 'invalid_client' });
+  // PKCE: verify code_verifier instead of client_secret
+  if (code_verifier) {
+    const authCodeForPkce = peekOAuthServerAuthCode(code);
+    if (!authCodeForPkce?.code_challenge) {
+      return res.status(401).json({ error: 'invalid_client', error_description: 'PKCE not initiated for this code' });
+    }
+    const expected = crypto.createHash('sha256').update(code_verifier).digest('base64url');
+    if (expected !== authCodeForPkce.code_challenge) {
+      return res.status(401).json({ error: 'invalid_client', error_description: 'code_verifier mismatch' });
+    }
+  } else {
+    const secretMatch = await bcrypt.compare(String(client_secret || ''), client.client_secret_hash);
+    if (!secretMatch) {
+      return res.status(401).json({ error: 'invalid_client' });
+    }
   }
 
   const authCode = consumeOAuthServerAuthCode(code);
@@ -339,7 +358,7 @@ router.post('/authorize-token', express.json(), (req, res) => {
     return res.status(401).json({ error: 'unauthorized' });
   }
 
-  const { client_id, redirect_uri, state, scope } = req.body;
+  const { client_id, redirect_uri, state, scope, code_challenge } = req.body;
 
   const client = getOAuthServerClient(client_id);
   if (!client) {
@@ -357,6 +376,7 @@ router.post('/authorize-token', express.json(), (req, res) => {
     userId: String(userId),
     redirectUri: redirect_uri,
     scope: scope || 'full',
+    codeChallenge: code_challenge || null,
   });
 
   const redirectUrl = new URL(redirect_uri);

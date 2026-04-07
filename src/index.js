@@ -10897,6 +10897,26 @@ if (process.env.NODE_ENV !== 'test') {
       }
     })();
 
+    // Bootstrap MyApi AFP OAuth client (PKCE, localhost redirect)
+    (async () => {
+      try {
+        const afpClientId = 'myapi-afp';
+        // AFP uses PKCE — client secret is never sent by the daemon, but the DB requires a hash
+        const afpSecret = require('crypto').createHash('sha256').update('afp-pkce-placeholder:' + (process.env.ENCRYPTION_KEY || 'default')).digest('hex');
+        const afpSecretHash = await require('bcrypt').hash(afpSecret, 8);
+        upsertOAuthServerClient({
+          clientId: afpClientId,
+          clientSecretHash: afpSecretHash,
+          clientName: 'MyApi AFP',
+          redirectUris: ['http://localhost:*/callback'],
+          ownerId: null,
+        });
+        console.log('[OAuthServer] AFP client bootstrapped (client_id: myapi-afp, PKCE)');
+      } catch (e) {
+        console.error('[OAuthServer] Failed to bootstrap AFP client:', e.message);
+      }
+    })();
+
     // BUG-11: Cleanup expired OAuth state tokens every hour
     // BUG-10: Also cleanup old rate limit records
     setInterval(() => {

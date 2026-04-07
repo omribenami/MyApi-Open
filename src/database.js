@@ -6384,12 +6384,14 @@ function getOAuthServerClient(clientId) {
   return { ...row, redirectUris: JSON.parse(row.redirect_uris || '[]') };
 }
 
-function createOAuthServerAuthCode({ code, clientId, userId, redirectUri, scope }) {
+function createOAuthServerAuthCode({ code, clientId, userId, redirectUri, scope, codeChallenge }) {
   const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+  // Add code_challenge column for PKCE if not present
+  try { db.exec('ALTER TABLE oauth_server_auth_codes ADD COLUMN code_challenge TEXT'); } catch (_) {}
   db.prepare(`
-    INSERT INTO oauth_server_auth_codes (code, client_id, user_id, redirect_uri, scope, expires_at, used)
-    VALUES (?, ?, ?, ?, ?, ?, 0)
-  `).run(code, clientId, userId, redirectUri, scope || 'full', expiresAt);
+    INSERT INTO oauth_server_auth_codes (code, client_id, user_id, redirect_uri, scope, expires_at, used, code_challenge)
+    VALUES (?, ?, ?, ?, ?, ?, 0, ?)
+  `).run(code, clientId, userId, redirectUri, scope || 'full', expiresAt, codeChallenge || null);
 }
 
 function consumeOAuthServerAuthCode(code) {
@@ -6397,6 +6399,12 @@ function consumeOAuthServerAuthCode(code) {
   if (!row) return null;
   if (row.expires_at < Date.now()) return null;
   db.prepare('UPDATE oauth_server_auth_codes SET used = 1 WHERE code = ?').run(code);
+  return row;
+}
+
+function peekOAuthServerAuthCode(code) {
+  const row = db.prepare('SELECT * FROM oauth_server_auth_codes WHERE code = ? AND used = 0').get(code);
+  if (!row || row.expires_at < Date.now()) return null;
   return row;
 }
 
@@ -6710,6 +6718,7 @@ module.exports = {
   getOAuthServerClient,
   createOAuthServerAuthCode,
   consumeOAuthServerAuthCode,
+  peekOAuthServerAuthCode,
   // AFP (API File Protocol)
   createAfpDevice,
   getAfpDevices,

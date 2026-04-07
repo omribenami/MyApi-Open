@@ -24,17 +24,15 @@ export default function OAuthAuthorize() {
   const state = params.get('state') || '';
   const scope = params.get('scope') || 'full';
   const clientName = params.get('client_name') || clientId || 'External App';
+  const codeChallenge = params.get('code_challenge') || null;
 
   const handleAuthorize = async () => {
     setStatus('loading');
     setErrorMsg(null);
     try {
-      const res = await apiClient.post('/oauth-server/authorize-token', {
-        client_id: clientId,
-        redirect_uri: redirectUri,
-        state,
-        scope,
-      });
+      const body = { client_id: clientId, redirect_uri: redirectUri, state, scope };
+      if (codeChallenge) body.code_challenge = codeChallenge;
+      const res = await apiClient.post('/oauth-server/authorize-token', body);
       // Redirect the popup/window to ChatGPT callback
       window.location.href = res.data.redirectUrl;
     } catch (err) {
