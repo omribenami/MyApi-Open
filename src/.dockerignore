@@ -15,5 +15,5 @@ src/*.db-shm
 src/*.db-wal
 .git/
 *.md
-connectors/afp-daemon/
+connectors/afp-daemon/node_modules/
 connectors/afp-oauth/node_modules/

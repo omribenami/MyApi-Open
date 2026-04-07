@@ -7,8 +7,9 @@ WORKDIR /app
 # Copy src/ contents (the actual app)
 COPY src/ .
 
-# Stage AFP OAuth binaries if they exist in connectors/
-RUN mkdir -p afp-oauth-dist
+# Stage AFP binaries from connectors/
+RUN mkdir -p afp-dist afp-oauth-dist
+COPY connectors/afp-daemon/dist/ afp-dist/
 COPY connectors/afp-oauth/dist/ afp-oauth-dist/
 
 # Install dependencies
