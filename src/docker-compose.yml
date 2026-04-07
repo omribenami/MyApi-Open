@@ -3,8 +3,8 @@ version: '3.8'
 services:
   myapi:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: src/Dockerfile
     container_name: myapi-platform
 
     # Port mapping

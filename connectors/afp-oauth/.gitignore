@@ -1,5 +1,2 @@
 node_modules/
-# Linux binary is rebuilt on the server by deploy.sh -cb
-dist/afp-oauth-linux
-# Mac/Windows are built locally and committed
 

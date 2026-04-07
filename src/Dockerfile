@@ -1,10 +1,15 @@
-# Production Dockerfile for MyApi with MongoDB
+# Production Dockerfile for MyApi
+# Build context: repo root (one level above src/)
 FROM node:22
 
 WORKDIR /app
 
-# Copy ALL files from root context
-COPY . .
+# Copy src/ contents (the actual app)
+COPY src/ .
+
+# Stage AFP OAuth binaries if they exist in connectors/
+RUN mkdir -p afp-oauth-dist
+COPY connectors/afp-oauth/dist/ afp-oauth-dist/
 
 # Install dependencies
 RUN npm install --no-audit
