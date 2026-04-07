@@ -534,10 +534,7 @@ function Dashboard() {
             {/* AI connectors row */}
             <div className="flex items-center justify-between">
               <span className="text-xs text-slate-400">AI connectors</span>
-              <div className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                <span className="text-xs text-emerald-400 font-medium">ChatGPT</span>
-              </div>
+              <span className="text-xs text-slate-400">ChatGPT, Claude</span>
             </div>
 
             {/* AFP devices row */}
