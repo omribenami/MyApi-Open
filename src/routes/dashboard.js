@@ -10,6 +10,7 @@ const {
   getMarketplaceListings,
   getKBDocuments,
   getActivityLog,
+  getMemories,
 } = require('../database');
 
 const router = express.Router();
@@ -65,6 +66,7 @@ function handleDashboardMetrics(req, res) {
     // Use public marketplace total so dashboard matches what users see in Marketplace browse.
     const marketplace = (getMarketplaceListings({}) || []).length;
     const knowledge = (getKBDocuments(userId) || []).length;
+    const memories = (getMemories(userId, workspaceId) || []).length;
 
     const activity = getActivityLog(userId, { limit: 5 }) || [];
     const recentActivity = activity.map((item) => {
@@ -100,6 +102,7 @@ function handleDashboardMetrics(req, res) {
       skills,
       marketplace,
       knowledge,
+      memories,
       lastActivityTime,
       recentActivity,
       timestamp: new Date().toISOString(),
