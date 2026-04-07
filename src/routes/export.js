@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
@@ -596,7 +597,7 @@ router.get('/', async (req, res) => {
 
     return res.json(exportData);
   } catch (error) {
-    console.error('Error generating export:', error);
+    logger.error('Error generating export:', error);
     return res.status(500).json({
       error: 'Failed to generate export',
       message: error.message,

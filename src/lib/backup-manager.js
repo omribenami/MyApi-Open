@@ -1,14 +1,155 @@
 /**
  * Backup Manager for MyApi
  * Automated database backup with scheduling, retention, and restore
- * Supports local storage and configurable backup strategies
+ * Supports local storage, encryption (SOC2 C1), and S3 replication (SOC2 A1).
  */
 
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const https = require('https');
+const { URL } = require('url');
+
+// ---------------------------------------------------------------------------
+// Backup encryption helpers (SOC2 Phase 2 — C1)
+// AES-256-GCM, key derived from VAULT_KEY env var.
+// ---------------------------------------------------------------------------
+const ENC_ALGORITHM = 'aes-256-gcm';
+const ENC_KEY_LENGTH = 32; // bytes
+
+function _getEncryptionKey() {
+  const raw = String(process.env.VAULT_KEY || process.env.ENCRYPTION_KEY || '').trim();
+  if (!raw) return null;
+  // Accept both hex-encoded 64-char keys and plain strings
+  if (/^[0-9a-fA-F]{64}$/.test(raw)) return Buffer.from(raw, 'hex');
+  // Derive 32-byte key from arbitrary string via SHA-256
+  return crypto.createHash('sha256').update(raw).digest();
+}
+
+function _encryptBuffer(plainBuf) {
+  const key = _getEncryptionKey();
+  if (!key) throw new Error('[Backup] VAULT_KEY or ENCRYPTION_KEY must be set to encrypt backups');
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv(ENC_ALGORITHM, key, iv);
+  const ct = Buffer.concat([cipher.update(plainBuf), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  // Format: iv(12) | tag(16) | ciphertext
+  return Buffer.concat([iv, tag, ct]);
+}
+
+function _decryptBuffer(encBuf) {
+  const key = _getEncryptionKey();
+  if (!key) throw new Error('[Backup] VAULT_KEY or ENCRYPTION_KEY must be set to decrypt backups');
+  const iv = encBuf.slice(0, 12);
+  const tag = encBuf.slice(12, 28);
+  const ct = encBuf.slice(28);
+  const decipher = crypto.createDecipheriv(ENC_ALGORITHM, key, iv);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(ct), decipher.final()]);
+}
 
 const DEFAULT_BACKUP_DIR = path.join(__dirname, '../../backups');
+
+// ---------------------------------------------------------------------------
+// S3 upload via AWS Signature V4 — no external dependencies (SOC2 A1)
+// Required env vars: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, BACKUP_S3_BUCKET
+// Optional: BACKUP_S3_REGION (default: us-east-1), BACKUP_S3_PREFIX (default: backups/)
+// ---------------------------------------------------------------------------
+
+function _hmac(key, data) {
+  return crypto.createHmac('sha256', key).update(data).digest();
+}
+
+function _sigV4SigningKey(secretKey, dateStamp, region, service) {
+  const kDate = _hmac('AWS4' + secretKey, dateStamp);
+  const kRegion = _hmac(kDate, region);
+  const kService = _hmac(kRegion, service);
+  return _hmac(kService, 'aws4_request');
+}
+
+/**
+ * Upload a Buffer to S3 using AWS Signature V4.
+ * Returns a Promise that resolves with the ETag on success.
+ */
+async function _uploadToS3(buf, s3Key) {
+  const accessKeyId = String(process.env.AWS_ACCESS_KEY_ID || '').trim();
+  const secretAccessKey = String(process.env.AWS_SECRET_ACCESS_KEY || '').trim();
+  const bucket = String(process.env.BACKUP_S3_BUCKET || '').trim();
+  const region = String(process.env.BACKUP_S3_REGION || 'us-east-1').trim();
+
+  if (!accessKeyId || !secretAccessKey || !bucket) {
+    throw new Error('AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and BACKUP_S3_BUCKET must be set for S3 replication');
+  }
+
+  const now = new Date();
+  const amzDate = now.toISOString().replace(/[:\-]|\.\d{3}/g, '').slice(0, 15) + 'Z';
+  const dateStamp = amzDate.slice(0, 8);
+
+  const host = `${bucket}.s3.${region}.amazonaws.com`;
+  const endpoint = `https://${host}/${s3Key}`;
+  const url = new URL(endpoint);
+
+  const payloadHash = crypto.createHash('sha256').update(buf).digest('hex');
+  const contentType = 'application/octet-stream';
+
+  const canonicalHeaders =
+    `content-type:${contentType}\n` +
+    `host:${host}\n` +
+    `x-amz-content-sha256:${payloadHash}\n` +
+    `x-amz-date:${amzDate}\n`;
+
+  const signedHeaders = 'content-type;host;x-amz-content-sha256;x-amz-date';
+
+  const canonicalRequest = [
+    'PUT',
+    url.pathname,
+    '', // query string
+    canonicalHeaders,
+    signedHeaders,
+    payloadHash,
+  ].join('\n');
+
+  const credentialScope = `${dateStamp}/${region}/s3/aws4_request`;
+  const stringToSign = [
+    'AWS4-HMAC-SHA256',
+    amzDate,
+    credentialScope,
+    crypto.createHash('sha256').update(canonicalRequest).digest('hex'),
+  ].join('\n');
+
+  const signingKey = _sigV4SigningKey(secretAccessKey, dateStamp, region, 's3');
+  const signature = crypto.createHmac('sha256', signingKey).update(stringToSign).digest('hex');
+
+  const authHeader = `AWS4-HMAC-SHA256 Credential=${accessKeyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+  return new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: host,
+      path: url.pathname,
+      method: 'PUT',
+      headers: {
+        'Content-Type': contentType,
+        'Content-Length': buf.length,
+        'X-Amz-Date': amzDate,
+        'X-Amz-Content-SHA256': payloadHash,
+        'Authorization': authHeader,
+      },
+    }, (res) => {
+      let body = '';
+      res.on('data', d => { body += d; });
+      res.on('end', () => {
+        if (res.statusCode === 200) {
+          resolve({ etag: res.headers.etag, location: endpoint });
+        } else {
+          reject(new Error(`S3 upload failed: HTTP ${res.statusCode} — ${body.slice(0, 200)}`));
+        }
+      });
+    });
+    req.on('error', reject);
+    req.write(buf);
+    req.end();
+  });
+}
 
 class BackupManager {
   constructor(options = {}) {
@@ -90,31 +231,57 @@ class BackupManager {
         fs.copyFileSync(this.dbPath, backupPath);
       }
 
-      // Calculate checksum
-      const hash = crypto.createHash('sha256');
-      const fileBuffer = fs.readFileSync(backupPath);
-      hash.update(fileBuffer);
-      const checksum = hash.digest('hex');
+      // Checksum of plaintext before optional encryption
+      const plainBuf = fs.readFileSync(backupPath);
+      const plaintextChecksum = crypto.createHash('sha256').update(plainBuf).digest('hex');
 
-      const stats = fs.statSync(backupPath);
+      // Encrypt if VAULT_KEY / ENCRYPTION_KEY is available (SOC2 C1)
+      const encKey = _getEncryptionKey();
+      let finalPath = backupPath;
+      let encrypted = false;
+      if (encKey) {
+        const encBuf = _encryptBuffer(plainBuf);
+        finalPath = backupPath + '.enc';
+        fs.writeFileSync(finalPath, encBuf);
+        fs.unlinkSync(backupPath); // remove plaintext copy
+        encrypted = true;
+      }
+
+      const stats = fs.statSync(finalPath);
+      const finalFilename = encrypted ? filename + '.enc' : filename;
 
       // Write metadata
       const metadata = {
-        filename,
-        path: backupPath,
+        filename: finalFilename,
+        path: finalPath,
         type,
         label: label || null,
         createdAt: new Date().toISOString(),
         sizeBytes: stats.size,
-        checksum,
+        plaintextChecksum,
+        encrypted,
         sourceDb: this.dbPath,
         compressed: compress
       };
 
-      const metaPath = backupPath + '.meta.json';
+      const metaPath = finalPath + '.meta.json';
       fs.writeFileSync(metaPath, JSON.stringify(metadata, null, 2));
 
-      console.log(`[Backup] Created: ${filename} (${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
+      console.log(`[Backup] Created: ${finalFilename} (${(stats.size / 1024 / 1024).toFixed(2)} MB, encrypted=${encrypted})`);
+
+      // Off-site replication to S3 (non-blocking, SOC2 A1)
+      const s3Bucket = String(process.env.BACKUP_S3_BUCKET || '').trim();
+      if (s3Bucket) {
+        const s3Prefix = String(process.env.BACKUP_S3_PREFIX || 'backups/').replace(/\/?$/, '/');
+        const s3Key = `${s3Prefix}${subDir}/${finalFilename}`;
+        _uploadToS3(fs.readFileSync(finalPath), s3Key)
+          .then(({ location }) => {
+            console.log(`[Backup] S3 replication succeeded: ${location}`);
+          })
+          .catch((err) => {
+            console.error(`[Backup] S3 replication failed (non-fatal): ${err.message}`);
+          });
+      }
 
       return { success: true, ...metadata };
     } catch (error) {
@@ -134,22 +301,31 @@ class BackupManager {
         return { success: false, error: `Backup file not found: ${backupPath}` };
       }
 
+      const isEncrypted = backupPath.endsWith('.enc');
+
       // Verify checksum if metadata exists
       if (verify) {
         const metaPath = backupPath + '.meta.json';
         if (fs.existsSync(metaPath)) {
           const metadata = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
-          const hash = crypto.createHash('sha256');
-          hash.update(fs.readFileSync(backupPath));
-          const actualChecksum = hash.digest('hex');
-
-          if (metadata.checksum && metadata.checksum !== actualChecksum) {
-            return {
-              success: false,
-              error: 'Checksum mismatch — backup file may be corrupted',
-              expected: metadata.checksum,
-              actual: actualChecksum
-            };
+          if (metadata.plaintextChecksum || metadata.checksum) {
+            // For encrypted backups, decrypt first then verify plaintext checksum
+            let bufToCheck = fs.readFileSync(backupPath);
+            if (isEncrypted) {
+              try { bufToCheck = _decryptBuffer(bufToCheck); } catch (decErr) {
+                return { success: false, error: `Decryption failed: ${decErr.message}` };
+              }
+            }
+            const actualChecksum = crypto.createHash('sha256').update(bufToCheck).digest('hex');
+            const expectedChecksum = metadata.plaintextChecksum || metadata.checksum;
+            if (expectedChecksum && expectedChecksum !== actualChecksum) {
+              return {
+                success: false,
+                error: 'Checksum mismatch — backup file may be corrupted',
+                expected: expectedChecksum,
+                actual: actualChecksum
+              };
+            }
           }
         }
       }
@@ -175,8 +351,14 @@ class BackupManager {
         }
       }
 
-      // Perform restore
-      fs.copyFileSync(backupPath, this.dbPath);
+      // Decrypt if needed, then restore
+      if (isEncrypted) {
+        const encBuf = fs.readFileSync(backupPath);
+        const plainBuf = _decryptBuffer(encBuf);
+        fs.writeFileSync(this.dbPath, plainBuf);
+      } else {
+        fs.copyFileSync(backupPath, this.dbPath);
+      }
 
       const stats = fs.statSync(this.dbPath);
       console.log(`[Backup] Restored from: ${path.basename(backupPath)} (${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
@@ -210,7 +392,7 @@ class BackupManager {
       if (!fs.existsSync(dir)) continue;
 
       const files = fs.readdirSync(dir)
-        .filter(f => f.endsWith('.db'))
+        .filter(f => f.endsWith('.db') || f.endsWith('.db.enc'))
         .sort()
         .reverse();
 
@@ -327,28 +509,34 @@ class BackupManager {
         return { valid: false, error: 'Empty backup file' };
       }
 
-      // Check SQLite magic bytes
-      const fd = fs.openSync(backupPath, 'r');
-      const header = Buffer.alloc(16);
-      fs.readSync(fd, header, 0, 16, 0);
-      fs.closeSync(fd);
+      const isEncrypted = backupPath.endsWith('.enc');
+      let plainBuf;
 
-      const sqliteHeader = 'SQLite format 3';
-      const isSQLite = header.toString('utf8', 0, 15) === sqliteHeader;
-
-      if (!isSQLite) {
-        return { valid: false, error: 'Not a valid SQLite database file' };
+      if (isEncrypted) {
+        try {
+          plainBuf = _decryptBuffer(fs.readFileSync(backupPath));
+        } catch (decErr) {
+          return { valid: false, error: `Decryption failed: ${decErr.message}`, encrypted: true };
+        }
+      } else {
+        plainBuf = fs.readFileSync(backupPath);
       }
 
-      // Verify checksum if metadata exists
+      // Check SQLite magic bytes on plaintext
+      const sqliteHeader = 'SQLite format 3';
+      const isSQLite = plainBuf.slice(0, 15).toString('utf8') === sqliteHeader;
+      if (!isSQLite) {
+        return { valid: false, error: 'Not a valid SQLite database file', encrypted: isEncrypted };
+      }
+
+      // Verify checksum against metadata
       const metaPath = backupPath + '.meta.json';
       let checksumValid = null;
       if (fs.existsSync(metaPath)) {
         const metadata = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
-        if (metadata.checksum) {
-          const hash = crypto.createHash('sha256');
-          hash.update(fs.readFileSync(backupPath));
-          checksumValid = hash.digest('hex') === metadata.checksum;
+        const expectedChecksum = metadata.plaintextChecksum || metadata.checksum;
+        if (expectedChecksum) {
+          checksumValid = crypto.createHash('sha256').update(plainBuf).digest('hex') === expectedChecksum;
         }
       }
 
@@ -357,6 +545,7 @@ class BackupManager {
         sizeBytes: stats.size,
         sizeMB: (stats.size / 1024 / 1024).toFixed(2),
         isSQLite: true,
+        encrypted: isEncrypted,
         checksumValid
       };
     } catch (error) {

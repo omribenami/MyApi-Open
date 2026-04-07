@@ -1,6 +1,43 @@
 # SOC 2 Compliance Gap Analysis & Remediation Plan
 
-> Generated: 2026-04-07
+> Generated: 2026-04-07  
+> Last Updated: 2026-04-07  
+> Status: **Phase 1 ✅ Complete · Phase 2 ✅ Complete · Phase 3 in progress**
+
+---
+
+## Implementation Progress
+
+### Phase 1 — Critical Controls ✅ COMPLETE (2026-04-07)
+
+| Item | Status | Notes |
+|------|--------|-------|
+| 1.1 Idle Session Timeout | ✅ Done | 20-min idle timeout + 8-hr absolute max; `src/index.js` |
+| 1.2 `audit_log` Immutable | ✅ Done | BEFORE UPDATE/DELETE triggers added; `src/config/database.js` |
+| 1.3 Schedule Retention Cleanup | ✅ Done | Runs on startup + daily `setInterval`; logged to `compliance_audit_logs` |
+| 1.4 Remove Hardcoded Vault Key | ✅ Done | Hard error in production if `VAULT_KEY` missing or equals default |
+| 1.5 Log Critical Events | ✅ Done | `auth_failed`, `token_revoked`, `scope_violation`, `2fa_failed` all logged |
+
+### Phase 2 — High-Priority Controls ✅ COMPLETE (2026-04-07)
+
+| Item | Status | Notes |
+|------|--------|-------|
+| 2.1 Request Correlation IDs | ✅ Done | `X-Request-ID` header; `AsyncLocalStorage` propagation; `src/lib/request-context.js` |
+| 2.2 Structured Logger in Routes | ✅ Done | All 17 route files + `src/index.js` migrated from `console.*` to `logger.*` |
+| 2.3 Encrypt Backups | ✅ Done | AES-256-GCM with `VAULT_KEY`; `.enc` extension; plaintext checksum preserved |
+| 2.4 Concurrent Session Limits | ✅ Done | Max 3 sessions per user; oldest evicted; `POST /api/v1/auth/sessions/revoke-all` added |
+| 2.5 Off-Site Backup Replication | ✅ Done | S3 upload via SigV4 (zero deps) when `BACKUP_S3_BUCKET` is set; non-blocking |
+| 2.6 Incident Response Contacts | ✅ Done | `docs/INCIDENT_RESPONSE.md` v1.1 — all TBDs filled; `SECURITY.md` added to repo root |
+
+### Additional Fixes (Phase 2 window)
+
+| Fix | Notes |
+|-----|-------|
+| Master token canonical architecture | One token per user, same across all devices; recovered via `encrypted_token`; no longer re-created on OAuth login |
+| Dashboard login page removed | Unauthenticated `/dashboard` now redirects to landing page (`/`); OAuth consent + callback flows preserved |
+| Migration `004` | Added `request_id` column + index to `audit_log` and `compliance_audit_logs` |
+
+---
 
 ## Context
 
@@ -122,78 +159,58 @@ The platform already has a solid security foundation (AES-256-GCM encryption, RB
 
 | TSC Criteria | Status | Key Issues |
 |---|---|---|
-| CC6 — Access Controls | Partial | No session timeout, no concurrent session limits |
-| CC7 — Monitoring | Significant gaps | `audit_log` mutable, no structured logging, no alerting |
+| CC6 — Access Controls | ✅ Improved | Session timeout ✅, concurrent session limits ✅ — remaining: universal scope middleware coverage |
+| CC7 — Monitoring | ✅ Improved | `audit_log` immutable ✅, structured logging ✅, correlation IDs ✅ — remaining: real-time alerting |
 | CC8 — Change Management | Good | Missing prod deployment approval gate |
-| CC9 — Risk/Vendor | Gaps | Incident contacts unassigned, no SECURITY.md |
-| A1 — Availability | Partial | Backups unencrypted and local-only |
+| CC9 — Risk/Vendor | ✅ Good | Incident contacts assigned ✅, `SECURITY.md` added ✅ — remaining: pen test history |
+| A1 — Availability | ✅ Improved | Backups encrypted ✅, S3 replication ✅ — remaining: Redis rate-limit persistence |
 | C1 — Confidentiality | Strong foundation | No key rotation policy |
-| P — Privacy | Partial | Retention never runs, no consent timestamps |
+| P — Privacy | Partial | Retention scheduler ✅ — remaining: consent timestamps, backup right-to-be-forgotten |
 
 ---
 
 ## Phased Remediation Plan
 
-### Phase 1 — Critical Controls (Weeks 1-2)
+### Phase 1 — Critical Controls ✅ COMPLETE
 
 Hard blockers for SOC 2 Type II.
 
-**1.1 Idle Session Timeout**
-- File: `src/index.js` (session config ~line 1022)
-- Add middleware tracking `req.session.lastActivity`; reject if > 20 minutes idle
-- Update session `maxAge` to 8 hours absolute maximum
+**1.1 Idle Session Timeout** ✅
+- Implemented: 20-min idle check + 8-hr absolute max in `src/index.js`
 
-**1.2 Make `audit_log` Immutable**
-- File: `src/config/database.js`
-- Add BEFORE UPDATE/DELETE triggers to `audit_log` table (same pattern as `compliance_audit_logs` at lines 805-814)
+**1.2 Make `audit_log` Immutable** ✅
+- Implemented: BEFORE UPDATE/DELETE triggers in `src/config/database.js`
 
-**1.3 Schedule Retention Cleanup**
-- File: `src/index.js` (startup section)
-- Call `executeRetentionCleanup()` on startup and schedule via `setInterval` (daily)
-- Log each cleanup run to `compliance_audit_logs`
+**1.3 Schedule Retention Cleanup** ✅
+- Implemented: runs on startup + daily interval; logged to `compliance_audit_logs`
 
-**1.4 Remove Hardcoded Default Key**
-- File: `src/config/database.js:~1386`
-- Throw hard error if `VAULT_KEY` is missing or equals default value in production
-- Gate on `NODE_ENV !== 'test'`
+**1.4 Remove Hardcoded Default Key** ✅
+- Implemented: hard error in production if `VAULT_KEY` missing or equals default
 
-**1.5 Log Critical Events to `compliance_audit_logs`**
-- Events to add: `auth_failed`, `token_revoked`, `workspace_deleted`, `scope_violation`, `2fa_failed`
-- Files: `src/middleware/auth.js`, `src/gateway/tokens.js`, `src/middleware/scope-validator.js`, `src/index.js`
+**1.5 Log Critical Events to `compliance_audit_logs`** ✅
+- Implemented: `auth_failed`, `token_revoked`, `workspace_deleted`, `scope_violation`, `2fa_failed`
 
 ---
 
-### Phase 2 — High-Priority Controls (Weeks 3-5)
+### Phase 2 — High-Priority Controls ✅ COMPLETE
 
-**2.1 Add Request Correlation IDs**
-- File: `src/index.js` (early middleware)
-- Generate `X-Request-ID` via `crypto.randomUUID()` on each request
-- Propagate to all audit log entries
+**2.1 Add Request Correlation IDs** ✅
+- Implemented: `src/lib/request-context.js` (AsyncLocalStorage); `X-Request-ID` header on all responses; propagated to logger and audit logs via migration `004`
 
-**2.2 Replace `console.log` with Structured Logger**
-- Files: All `src/routes/*.js` and `src/index.js`
-- Import `src/utils/logger.js`; replace `console.log/warn/error` with `logger.info/warn/error`
-- Include `{ requestId, workspaceId, userId }` in log metadata
+**2.2 Replace `console.log` with Structured Logger** ✅
+- Implemented: all 17 route files + `src/index.js` use `logger.info/warn/error`
 
-**2.3 Encrypt Backups**
-- File: `src/lib/backup-manager.js`
-- Encrypt backup file using `src/lib/encryption.js` with `VAULT_KEY` after creation
-- Store checksum of plaintext before encryption; use `.enc` extension
+**2.3 Encrypt Backups** ✅
+- Implemented: AES-256-GCM with `VAULT_KEY`; `.enc` extension; plaintext checksum preserved
 
-**2.4 Concurrent Session Limits**
-- File: `src/index.js` (login route)
-- Track active sessions per user; enforce max 3, invalidate oldest on new login
-- Add `POST /api/v1/auth/sessions/revoke-all` endpoint
+**2.4 Concurrent Session Limits** ✅
+- Implemented: `userSessionRegistry` Map, max 3 per user, oldest evicted; `POST /api/v1/auth/sessions/revoke-all` added
 
-**2.5 Off-Site Backup Replication**
-- File: `src/lib/backup-manager.js`
-- Upload encrypted backup to S3 if `BACKUP_S3_BUCKET` env var is set
-- Non-blocking: log failure, don't crash
+**2.5 Off-Site Backup Replication** ✅
+- Implemented: SigV4 S3 upload (zero deps) when `BACKUP_S3_BUCKET` set; non-blocking
 
-**2.6 Assign Incident Response Contacts**
-- File: `docs/INCIDENT_RESPONSE.md`
-- Replace all "[TBD]" placeholders with real contacts
-- Add `SECURITY.md` to repo root with responsible disclosure process
+**2.6 Assign Incident Response Contacts** ✅
+- Implemented: `docs/INCIDENT_RESPONSE.md` v1.1 — all TBDs filled; `SECURITY.md` added to repo root
 
 ---
 

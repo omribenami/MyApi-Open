@@ -33,6 +33,8 @@ const { marked } = require('marked');
 const http = require('http');
 const EventEmitter = require('events');
 const expressRateLimit = require('express-rate-limit');
+const logger = require('./utils/logger');
+const { requestContextMiddleware } = require('./lib/request-context');
 
 // Database initialization
 let mongodbReady = Promise.resolve();
@@ -735,6 +737,10 @@ if (!process.env.DATABASE_URL) {
   BetterSqlite3StoreFactory = require('better-sqlite3-session-store')(session);
 }
 
+// SOC2 Phase 2 — CC7: Assign a unique correlation ID to every request for log tracing
+// Propagated automatically via AsyncLocalStorage — no manual threading needed
+app.use(requestContextMiddleware);
+
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -1019,6 +1025,43 @@ if (process.env.NODE_ENV !== 'test' && !process.env.DATABASE_URL) {
   });
 }
 
+// SOC2 CC6 — Concurrent session limits (max 3 per user, oldest invalidated on new login)
+const MAX_SESSIONS_PER_USER = 3;
+// userId -> [{ sessionId, createdAt }]
+const userSessionRegistry = new Map();
+
+function registerUserSession(userId, sessionId) {
+  if (!userSessionRegistry.has(userId)) userSessionRegistry.set(userId, []);
+  const sessions = userSessionRegistry.get(userId);
+  sessions.push({ sessionId, createdAt: Date.now() });
+
+  // Evict oldest sessions that exceed the limit
+  while (sessions.length > MAX_SESSIONS_PER_USER) {
+    const { sessionId: oldSid } = sessions.shift(); // oldest first
+    if (sessionStore && typeof sessionStore.destroy === 'function') {
+      try { sessionStore.destroy(oldSid, () => {}); } catch (_) {}
+    }
+    logger.warn('Session evicted due to concurrent session limit', { userId, evictedSessionId: oldSid });
+  }
+}
+
+function unregisterUserSession(userId, sessionId) {
+  const sessions = userSessionRegistry.get(userId);
+  if (!sessions) return;
+  const idx = sessions.findIndex(s => s.sessionId === sessionId);
+  if (idx !== -1) sessions.splice(idx, 1);
+}
+
+function revokeAllUserSessions(userId) {
+  const sessions = userSessionRegistry.get(userId) || [];
+  for (const { sessionId } of sessions) {
+    if (sessionStore && typeof sessionStore.destroy === 'function') {
+      try { sessionStore.destroy(sessionId, () => {}); } catch (_) {}
+    }
+  }
+  userSessionRegistry.delete(userId);
+}
+
 app.use(session({
   ...(sessionStore ? { store: sessionStore } : {}),
   secret: process.env.SESSION_SECRET, // P0 Security Fix: No fallback - validated at startup
@@ -1026,8 +1069,25 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   proxy: true,
-  cookie: { secure: secureCookie, httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000, sameSite: 'lax', path: '/' }
+  cookie: { secure: secureCookie, httpOnly: true, maxAge: 8 * 60 * 60 * 1000, sameSite: 'lax', path: '/' }
 }));
+
+// SOC2 CC6: Idle session timeout (20-minute inactivity, 8-hour absolute max)
+const IDLE_TIMEOUT_MS = 20 * 60 * 1000;
+app.use((req, res, next) => {
+  // Only applies to session-authenticated requests (human dashboard)
+  if (!req.session || !req.session.user) return next();
+
+  const now = Date.now();
+  if (req.session.lastActivity && now - req.session.lastActivity > IDLE_TIMEOUT_MS) {
+    req.session.destroy((err) => {
+      if (err) logger.error('Session destroy error during idle timeout', { error: err.message });
+    });
+    return res.status(401).json({ error: 'Session expired due to inactivity' });
+  }
+  req.session.lastActivity = now;
+  next();
+});
 
 function buildCookieDomainCandidates(req) {
   const candidates = new Set();
@@ -2147,6 +2207,13 @@ function authenticate(req, res, next) {
 
   if (!rawToken) {
     console.warn('[AUTH 401] missing token/session', { method: req.method, fullPath, baseUrl: req.baseUrl, path: req.path, isPublicPath });
+    try {
+      createComplianceAuditLog(
+        req.headers['x-workspace-id'] || 'system', null,
+        'auth_failed', 'token', null, JSON.stringify({ reason: 'missing_token', path: req.path }),
+        req.ip, req.get('user-agent')
+      );
+    } catch (_) {}
     return res.status(401).json({ error: "Missing session, Authorization: Bearer token, or ?token= query parameter" });
   }
   // Fast path: check in-memory cache before doing bcrypt scan
@@ -2181,6 +2248,13 @@ function authenticate(req, res, next) {
 
   if (!matched) {
     createAuditLog({ requesterId: "unknown", action: "auth_fail", resource: req.path, ip: req.ip });
+    try {
+      createComplianceAuditLog(
+        req.headers['x-workspace-id'] || 'system', null,
+        'auth_failed', 'token', null, null,
+        req.ip, req.get('user-agent')
+      );
+    } catch (_) {}
     return res.status(401).json({ error: "Invalid or revoked token" });
   }
   req.tokenMeta = matched;
@@ -4545,41 +4619,46 @@ app.post('/api/v1/tokens/master/bootstrap', authenticate, (req, res) => {
     const ownerId = req?.tokenMeta?.ownerId || req?.session?.user?.id || req?.user?.id;
     if (!ownerId) return res.status(401).json({ error: 'Not authenticated' });
 
-    // Reuse existing session token if available (avoid duplicate DB rows).
-    // But first validate that the session-cached token is still active — it may have been
-    // revoked by a prior master/regenerate call while this session was still alive.
+    // Step 1: Session cache hit — validate it's still active
     if (req.session?.masterTokenRaw && req.session?.masterTokenId) {
       const sessionTokenRow = db.prepare('SELECT revoked_at FROM access_tokens WHERE id = ?').get(req.session.masterTokenId);
       if (sessionTokenRow && !sessionTokenRow.revoked_at) {
         return res.json({ data: { id: req.session.masterTokenId, token: req.session.masterTokenRaw, scope: 'full' } });
       }
-      // Stale — clear and fall through to create a fresh token
+      // Stale — clear and fall through
       delete req.session.masterTokenRaw;
       delete req.session.masterTokenId;
     }
 
-    // Try to retrieve an existing master token from the database before creating a new one
+    // Step 2: Look up the ONE canonical master token from DB (requires encrypted_token to recover raw value)
     const existing = getExistingMasterToken(ownerId);
     if (existing) {
+      // Cache in session so future requests skip the DB lookup
       if (req.session) {
         req.session.masterTokenRaw = existing.rawToken;
         req.session.masterTokenId = existing.tokenId;
         req.session.save?.();
       }
-      const authHeader = req.headers.authorization;
-      if (authHeader && global.sessions) {
-        const bearerToken = authHeader.replace('Bearer ', '');
-        if (global.sessions[bearerToken]) {
-          global.sessions[bearerToken].masterTokenRaw = existing.rawToken;
-          global.sessions[bearerToken].masterTokenId = existing.tokenId;
-        }
-      }
+      createAuditLog({
+        requesterId: req?.tokenMeta?.tokenId || ownerId,
+        action: 'bootstrap_master_token',
+        resource: '/tokens/master/bootstrap',
+        scope: req?.tokenMeta?.scope || 'session',
+        ip: req.ip,
+        details: { tokenId: existing.tokenId, ownerId, reused: true }
+      });
       return res.json({ data: { id: existing.tokenId, token: existing.rawToken, scope: 'full' } });
     }
 
-    const rawToken = 'myapi_' + crypto.randomBytes(32).toString("hex");
+    // Step 3: No recoverable token found.
+    // Revoke ALL active full-scope tokens for this user (including old non-recoverable ones
+    // that lack encrypted_token and can never be retrieved again), then create exactly ONE
+    // new canonical token. All devices will converge to this token on their next bootstrap.
+    revokeExistingMasterTokens(ownerId);
+
+    const rawToken = 'myapi_' + crypto.randomBytes(32).toString('hex');
     const hash = bcrypt.hashSync(rawToken, 10);
-    const tokenId = createAccessToken(hash, ownerId, 'full', 'Master Token (Dashboard Session)', null, null, null, rawToken, 'master');
+    const tokenId = createAccessToken(hash, ownerId, 'full', 'Master Token', null, null, null, rawToken, 'master');
 
     if (req.session) {
       req.session.masterTokenRaw = rawToken;
@@ -4587,18 +4666,14 @@ app.post('/api/v1/tokens/master/bootstrap', authenticate, (req, res) => {
       req.session.save?.();
     }
 
-    // Also save to global.sessions for Bearer token users
-    const authHeader = req.headers.authorization;
-    if (authHeader && global.sessions) {
-      const bearerToken = authHeader.replace('Bearer ', '');
-      if (global.sessions[bearerToken]) {
-        global.sessions[bearerToken].masterTokenRaw = rawToken;
-        global.sessions[bearerToken].masterTokenId = tokenId;
-      }
-    }
-
-    // Keep only minimal safe active full-scope tokens
-    const prune = pruneRedundantMasterTokens(ownerId, 3);
+    // Also set the persistent cookie so the dashboard picks it up immediately
+    res.cookie('myapi_master_token', rawToken, {
+      httpOnly: false, // JS must read this to set Authorization header
+      secure: secureCookie,
+      path: '/',
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+      sameSite: 'lax'
+    });
 
     createAuditLog({
       requesterId: req?.tokenMeta?.tokenId || ownerId,
@@ -4606,12 +4681,12 @@ app.post('/api/v1/tokens/master/bootstrap', authenticate, (req, res) => {
       resource: '/tokens/master/bootstrap',
       scope: req?.tokenMeta?.scope || 'session',
       ip: req.ip,
-      details: { tokenId, ownerId, pruned: prune.pruned }
+      details: { tokenId, ownerId, reused: false }
     });
 
     res.json({ data: { id: tokenId, token: rawToken, scope: 'full' } });
   } catch (error) {
-    console.error('Master token bootstrap error:', error);
+    logger.error('Master token bootstrap error', { error: error.message });
     res.status(500).json({ error: 'Failed to bootstrap master token' });
   }
 });
@@ -4643,6 +4718,14 @@ app.delete("/api/v1/tokens/:id", authenticate, (req, res) => {
     scope: req.tokenMeta.scope,
     ip: req.ip
   });
+  try {
+    createComplianceAuditLog(
+      req.headers['x-workspace-id'] || req.workspaceId || 'system',
+      req.user?.id ? String(req.user.id) : null,
+      'token_revoked', 'token', req.params.id, null,
+      req.ip, req.get('user-agent')
+    );
+  } catch (_) {}
 
   res.json({ data: { tokenId: req.params.id, revoked: true } });
 });
@@ -5775,16 +5858,19 @@ app.post("/api/v1/auth/login", authRateLimit, (req, res) => {
           console.error('[login] Session save error:', saveErr);
           return res.status(500).json({ error: 'Session error' });
         }
-        
-        createAuditLog({ 
-          requesterId: user.id, 
-          action: "user_login", 
-          resource: `/users/${user.id}`, 
-          scope: "session", 
-          ip: req.ip 
+
+        // SOC2 CC6: Track session, evict oldest if user exceeds max concurrent sessions
+        registerUserSession(user.id, req.sessionID);
+
+        createAuditLog({
+          requesterId: user.id,
+          action: "user_login",
+          resource: `/users/${user.id}`,
+          scope: "session",
+          ip: req.ip
         });
-        
-        res.json({ 
+
+        res.json({
           success: true,
           userId: user.id,
           user: {
@@ -5971,6 +6057,9 @@ app.delete('/api/v1/account', authenticate, (req, res) => {
       safeDelete('DELETE FROM skills WHERE owner_id = ?', uid);
       safeDelete('DELETE FROM personas WHERE owner_id = ?', uid);
       safeDelete('DELETE FROM kb_documents WHERE owner_id = ?', uid);
+      safeDelete('DELETE FROM workspace_members WHERE user_id = ?', uid);
+      safeDelete('DELETE FROM afp_devices WHERE user_id = ?', uid);
+      safeDelete('DELETE FROM user_pii_secure WHERE user_id = ?', uid);
       safeDelete('DELETE FROM users WHERE id = ?', uid);
     })(userId);
     rawDb.pragma('foreign_keys = ON');
@@ -6068,9 +6157,17 @@ app.post('/api/v1/auth/oauth-signup/complete', async (req, res) => {
     return res.status(500).json({ error: 'Failed to complete OAuth signup' });
   }
 
-  const rawMasterToken = 'myapi_' + crypto.randomBytes(32).toString('hex');
-  const hash = bcrypt.hashSync(rawMasterToken, 10);
-  const tokenId = createAccessToken(hash, createdUser.id, 'full', 'Master Token (OAuth Signup Session)', null, null, null, rawMasterToken, 'master');
+  // Use existing master token if already created (e.g. retry scenario), otherwise create exactly one
+  let rawMasterToken, tokenId;
+  const existingMaster = getExistingMasterToken(createdUser.id);
+  if (existingMaster) {
+    rawMasterToken = existingMaster.rawToken;
+    tokenId = existingMaster.tokenId;
+  } else {
+    rawMasterToken = 'myapi_' + crypto.randomBytes(32).toString('hex');
+    const hash = bcrypt.hashSync(rawMasterToken, 10);
+    tokenId = createAccessToken(hash, createdUser.id, 'full', 'Master Token', null, null, null, rawMasterToken, 'master');
+  }
 
   await regenerateSession(req);
 
@@ -6392,6 +6489,9 @@ app.post("/api/v1/auth/logout", (req, res) => {
 
   const sid = req.sessionID;
 
+  // SOC2 CC6: Remove from concurrent session registry
+  if (req.session.user?.id) unregisterUserSession(req.session.user.id, sid);
+
   // BUG-12: Ensure ALL session data is cleared before responding
   // Clear all session properties that might contain sensitive data
   delete req.session.pending_2fa_user;
@@ -6428,6 +6528,33 @@ app.post("/api/v1/auth/logout", (req, res) => {
     // Send response only after session is fully destroyed
     res.json({ ok: true, message: 'Logged out successfully' });
   });
+});
+
+// SOC2 CC6 — Revoke all active sessions for the current user
+app.post('/api/v1/auth/sessions/revoke-all', (req, res) => {
+  const userId = req.session?.user?.id || null;
+  if (!userId) return res.status(401).json({ error: 'Not authenticated' });
+
+  const currentSid = req.sessionID;
+  revokeAllUserSessions(userId);
+
+  // Also destroy the current session
+  clearAuthCookies(req, res);
+  req.session.destroy(() => {
+    if (sessionStore && typeof sessionStore.destroy === 'function') {
+      try { sessionStore.destroy(currentSid, () => {}); } catch (_) {}
+    }
+  });
+
+  createAuditLog({
+    requesterId: userId,
+    action: 'revoke_all_sessions',
+    resource: '/auth/sessions/revoke-all',
+    scope: 'session',
+    ip: req.ip
+  });
+
+  res.json({ ok: true, message: 'All sessions revoked' });
 });
 
 // ============================
@@ -6585,6 +6712,9 @@ app.delete('/api/v1/users/:id', authenticate, (req, res) => {
       adminSafeDelete('DELETE FROM skills WHERE owner_id = ?', userId);
       adminSafeDelete('DELETE FROM personas WHERE owner_id = ?', userId);
       adminSafeDelete('DELETE FROM kb_documents WHERE owner_id = ?', userId);
+      adminSafeDelete('DELETE FROM workspace_members WHERE user_id = ?', userId);
+      adminSafeDelete('DELETE FROM afp_devices WHERE user_id = ?', userId);
+      adminSafeDelete('DELETE FROM user_pii_secure WHERE user_id = ?', userId);
       adminSafeDelete('DELETE FROM users WHERE id = ?', userId);
     })(id);
     adminRawDb.pragma('foreign_keys = ON');
@@ -7943,18 +8073,29 @@ app.post("/api/v1/oauth/confirm", (req, res) => {
     delete req.session.oauth_login_pending;
     delete req.session.oauth_confirm_token;
 
+    // Proactively load the canonical master token into session so the frontend
+    // gets it immediately without a separate bootstrap round-trip
+    const existingMasterForConfirm = getExistingMasterToken(pending.userId);
+    if (existingMasterForConfirm) {
+      req.session.masterTokenRaw = existingMasterForConfirm.rawToken;
+      req.session.masterTokenId = existingMasterForConfirm.tokenId;
+    }
+
     // Save session and respond
     req.session.save((err) => {
       if (err) {
-        console.error('[OAuth Confirm] ❌ Session save failed:', err);
-        // FALLBACK: Even if session save fails, return the user data so frontend can proceed
-        // The session will eventually sync when the user navigates
-        console.log('[OAuth Confirm] Fallback: Returning user data despite session save error');
+        logger.error('[OAuth Confirm] Session save failed', { error: err.message });
         return res.status(200).json({ ok: true, user: req.session.user, warning: 'Session sync delayed' });
       }
 
-      console.log(`[OAuth Confirm] ✅ Login confirmed for user: ${pending.userId}, session saved`);
-      res.json({ ok: true, user: req.session.user });
+      logger.info('[OAuth Confirm] Login confirmed', { userId: pending.userId });
+      res.json({
+        ok: true,
+        user: req.session.user,
+        bootstrap: existingMasterForConfirm
+          ? { tokenId: existingMasterForConfirm.tokenId, hasToken: true }
+          : null,
+      });
     });
   } catch (err) {
     console.error('[OAuth Confirm] Error:', err);
@@ -10889,8 +11030,21 @@ function validateRequiredSecrets() {
     } else {
       console.warn('⚠️  Running in development mode with missing secrets. This is insecure!');
     }
-  } else if (isProd) {
-    console.log('✅ All required secrets validated');
+  }
+
+  // SOC2 Phase 1: Reject known insecure default key values in production
+  if (isProd) {
+    const BANNED_DEFAULT_KEYS = ['default-vault-key-change-me', 'change-me', 'changeme', 'secret', 'password'];
+    for (const envVar of ['VAULT_KEY', 'ENCRYPTION_KEY', 'JWT_SECRET', 'SESSION_SECRET']) {
+      const val = String(process.env[envVar] || '').trim().toLowerCase();
+      if (val && BANNED_DEFAULT_KEYS.includes(val)) {
+        console.error(`❌ FATAL: ${envVar} is set to a known insecure default value. Change it before starting in production.`);
+        process.exit(1);
+      }
+    }
+    if (missing.length === 0) {
+      console.log('✅ All required secrets validated');
+    }
   }
 }
 
@@ -10899,7 +11053,7 @@ function cleanupExpiredSessions() {
   if (!global.sessions) return;
 
   const now = Date.now();
-  const sessionTTL = 7 * 24 * 60 * 60 * 1000; // 7 days
+  const sessionTTL = 8 * 60 * 60 * 1000; // 8 hours (SOC2 CC6)
   let cleanedCount = 0;
 
   for (const [sessionToken, sessionData] of Object.entries(global.sessions)) {
@@ -10913,7 +11067,7 @@ function cleanupExpiredSessions() {
   }
 
   if (cleanedCount > 0) {
-    console.log(`[Session Cleanup] Expired ${cleanedCount} old sessions (7-day TTL)`);
+    console.log(`[Session Cleanup] Expired ${cleanedCount} old sessions (8-hour TTL)`);
   }
 }
 
@@ -10990,11 +11144,33 @@ if (process.env.NODE_ENV !== 'test') {
       cleanupOldRateLimits(24); // Keep 24 hours of history
     }, 60 * 60 * 1000); // 1 hour
 
-    // P0 Security Fix: Cleanup expired sessions every 15 minutes (7-day TTL)
+    // P0 Security Fix: Cleanup expired sessions every 15 minutes (8-hour TTL)
     setInterval(() => {
       cleanupExpiredSessions();
     }, 15 * 60 * 1000); // Every 15 minutes
-    console.log('✅ Session cleanup scheduled (7-day TTL, 15-min check interval)');
+    console.log('✅ Session cleanup scheduled (8-hour TTL, 15-min check interval)');
+
+    // SOC2 CC6/P: Execute retention cleanup on startup and daily (per workspace policies)
+    const runRetentionCleanup = () => {
+      try {
+        const workspaces = getWorkspaces() || [];
+        let totalDeleted = 0;
+        for (const ws of workspaces) {
+          const result = executeRetentionCleanup(ws.id);
+          totalDeleted += result.totalDeleted || 0;
+        }
+        createComplianceAuditLog(
+          'system', 'system', 'retention_cleanup_executed', 'system', null,
+          JSON.stringify({ workspacesProcessed: workspaces.length, totalDeleted }), null, null
+        );
+        console.log(`[Retention] Cleanup complete: ${workspaces.length} workspaces, ${totalDeleted} records removed`);
+      } catch (err) {
+        console.error('[Retention] Cleanup error:', err.message);
+      }
+    };
+    runRetentionCleanup();
+    setInterval(runRetentionCleanup, 24 * 60 * 60 * 1000); // daily
+    console.log('✅ Retention cleanup scheduled (daily)');
     });
 
     // Global error handlers to prevent crashes

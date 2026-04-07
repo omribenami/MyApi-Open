@@ -4,7 +4,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from './stores/authStore';
 import OnboardingModal from './components/OnboardingModal';
 import { wasOnboardingDismissed } from './utils/onboardingUtils';
-import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import DashboardHome from './pages/DashboardHome';
 import ServiceConnectors from './pages/ServiceConnectors';
@@ -156,8 +155,17 @@ function App() {
     );
   }
 
-  // Authenticated - show dashboard with router
-  // Unauthenticated users get routed through landing/signup/login pages
+  // Unauthenticated users: redirect to landing page unless they're in an OAuth flow
+  // or on the /authorize consent page
+  if (!isAuthenticated) {
+    const urlParams = new URLSearchParams(window.location.search);
+    const isAuthorizePath = window.location.pathname.includes('/authorize');
+    if (!urlParams.has('oauth_status') && !isAuthorizePath) {
+      window.location.replace('/');
+      return null;
+    }
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
       <Router basename="/dashboard">
@@ -165,12 +173,19 @@ function App() {
           <OnboardingModal onClose={() => setShowOnboarding(false)} />
         )}
         <Routes>
-          {/* Unauthenticated Routes */}
+          {/* Unauthenticated Routes — only OAuth flows reach here; all others are
+              redirected to the landing page before this Router mounts */}
           {!isAuthenticated && (
             <>
-              <Route path="/" element={<Login />} />
               <Route path="/authorize" element={<OAuthAuthorize />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
+              <Route path="*" element={
+                <div className="min-h-screen grid place-items-center bg-slate-950 text-slate-300">
+                  <div className="text-center">
+                    <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-b-2 border-blue-500" />
+                    <p>Signing you in…</p>
+                  </div>
+                </div>
+              } />
             </>
           )}
 

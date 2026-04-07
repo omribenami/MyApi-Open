@@ -1,4 +1,4 @@
-const { getTokenScopes, hasPermission, createAuditLog } = require('../database');
+const { getTokenScopes, hasPermission, createAuditLog, createComplianceAuditLog } = require('../database');
 
 /**
  * Scope validation middleware
@@ -50,6 +50,14 @@ function requireScopes(requiredScopes = []) {
               }
             });
           }
+          try {
+            createComplianceAuditLog(
+              req.headers?.['x-workspace-id'] || 'system', null,
+              'scope_violation', 'token', tokenId,
+              JSON.stringify({ path: req.path, method: req.method, required: requiredScopes }),
+              req.ip, req.get('user-agent')
+            );
+          } catch (_) {}
           return res.status(403).json({
             error: 'Forbidden',
             message: 'Insufficient scope for this endpoint'
@@ -72,6 +80,14 @@ function requireScopes(requiredScopes = []) {
               }
             });
           }
+          try {
+            createComplianceAuditLog(
+              req.headers?.['x-workspace-id'] || 'system', null,
+              'scope_violation', 'token', tokenId,
+              JSON.stringify({ path: req.path, method: req.method, required: requiredScopes }),
+              req.ip, req.get('user-agent')
+            );
+          } catch (_) {}
           return res.status(403).json({
             error: 'Forbidden',
             message: 'Insufficient scope for this endpoint'

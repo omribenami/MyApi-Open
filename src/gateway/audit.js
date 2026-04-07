@@ -1,5 +1,6 @@
 const { getDatabase } = require('../config/database');
 const logger = require('../utils/logger');
+const crypto = require('crypto');
 
 class AuditLog {
   constructor() {
@@ -176,3 +177,30 @@ class AuditLog {
 }
 
 module.exports = AuditLog;
+
+/**
+ * Log a critical security event to the immutable compliance_audit_logs table.
+ * Safe to call without workspace context (defaults to 'system').
+ * Silently swallows errors so it never disrupts the request path.
+ */
+function logComplianceEvent({ workspaceId = 'system', userId = null, action, entityType = 'system',
+    entityId = null, ipAddress = null, userAgent = null, status = 'info', details = null } = {}) {
+  try {
+    const database = getDatabase();
+    const id = 'gw_' + crypto.randomBytes(12).toString('hex');
+    database.prepare(`
+      INSERT INTO compliance_audit_logs
+        (id, workspace_id, user_id, action, entity_type, entity_id, ip_address, user_agent, status, details, timestamp)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id, workspaceId, userId, action, entityType, entityId,
+      ipAddress, userAgent, status,
+      details ? JSON.stringify(details).substring(0, 5000) : null,
+      Math.floor(Date.now() / 1000)
+    );
+  } catch (err) {
+    logger.error('Failed to write compliance audit log', { action, error: err.message });
+  }
+}
+
+module.exports.logComplianceEvent = logComplianceEvent;

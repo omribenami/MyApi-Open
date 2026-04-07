@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 /**
  * Workspace Management Routes
  * Phase 1: Teams & Multi-Tenancy
@@ -103,6 +104,7 @@ const {
   queueEmail,
   getUserById,
   getUserByEmail,
+  createComplianceAuditLog,
 } = require('../database');
 
 const { enforcePlanLimit } = require('../lib/planEnforcement');
@@ -133,7 +135,7 @@ router.post('/', (req, res) => {
       message: 'Workspace created successfully'
     });
   } catch (error) {
-    console.error('Create workspace error:', error);
+    logger.error('Create workspace error:', error);
     res.status(500).json({ error: 'Failed to create workspace' });
   }
 });
@@ -156,7 +158,7 @@ router.get('/', (req, res) => {
       count: workspaces.length
     });
   } catch (error) {
-    console.error('Get workspaces error:', error);
+    logger.error('Get workspaces error:', error);
     res.status(500).json({ error: 'Failed to fetch workspaces' });
   }
 });
@@ -188,7 +190,7 @@ router.get('/:id', (req, res) => {
       workspace: workspace
     });
   } catch (error) {
-    console.error('Get workspace error:', error);
+    logger.error('Get workspace error:', error);
     res.status(500).json({ error: 'Failed to fetch workspace' });
   }
 });
@@ -234,7 +236,7 @@ router.put('/:id', (req, res) => {
       message: 'Workspace updated successfully'
     });
   } catch (error) {
-    console.error('Update workspace error:', error);
+    logger.error('Update workspace error:', error);
     res.status(500).json({ error: 'Failed to update workspace' });
   }
 });
@@ -265,12 +267,20 @@ router.delete('/:id', (req, res) => {
       return res.status(400).json({ error: 'Failed to delete workspace' });
     }
 
+    try {
+      createComplianceAuditLog(
+        req.params.id, req.user?.id ? String(req.user.id) : null,
+        'workspace_deleted', 'workspace', req.params.id, null,
+        req.ip, req.get('user-agent')
+      );
+    } catch (_) {}
+
     res.json({
       success: true,
       message: 'Workspace deleted successfully'
     });
   } catch (error) {
-    console.error('Delete workspace error:', error);
+    logger.error('Delete workspace error:', error);
     res.status(500).json({ error: 'Failed to delete workspace' });
   }
 });
@@ -306,7 +316,7 @@ router.get('/:id/members', (req, res) => {
       count: members.length
     });
   } catch (error) {
-    console.error('Get workspace members error:', error);
+    logger.error('Get workspace members error:', error);
     res.status(500).json({ error: 'Failed to fetch members' });
   }
 });
@@ -362,7 +372,7 @@ router.post('/:id/members', (req, res) => {
       message: 'Member added successfully'
     });
   } catch (error) {
-    console.error('Add member error:', error);
+    logger.error('Add member error:', error);
     res.status(500).json({ error: 'Failed to add member' });
   }
 });
@@ -421,7 +431,7 @@ router.put('/:id/members/:userId', (req, res) => {
       message: 'Member role updated successfully'
     });
   } catch (error) {
-    console.error('Update member role error:', error);
+    logger.error('Update member role error:', error);
     res.status(500).json({ error: 'Failed to update member role' });
   }
 });
@@ -471,7 +481,7 @@ router.delete('/:id/members/:userId', (req, res) => {
       message: 'Member removed successfully'
     });
   } catch (error) {
-    console.error('Remove member error:', error);
+    logger.error('Remove member error:', error);
     res.status(500).json({ error: 'Failed to remove member' });
   }
 });
@@ -510,7 +520,7 @@ router.get('/:id/invitations', (req, res) => {
       count: invitations.length
     });
   } catch (error) {
-    console.error('Get invitations error:', error);
+    logger.error('Get invitations error:', error);
     res.status(500).json({ error: 'Failed to fetch invitations' });
   }
 });
@@ -568,7 +578,7 @@ router.post('/:id/invitations', (req, res) => {
       try {
         deleteInvitationByEmailAndWorkspace(workspace.id, email);
       } catch (err) {
-        console.error('Failed to delete old invitation:', err.message);
+        logger.error('Failed to delete old invitation:', err.message);
         return res.status(500).json({ error: 'Failed to clean up old invitation' });
       }
     }
@@ -608,7 +618,7 @@ router.post('/:id/invitations', (req, res) => {
         { htmlBody }
       );
     } catch (err) {
-      console.error('Failed to queue invitation email:', err.message);
+      logger.error('Failed to queue invitation email:', err.message);
       // Don't fail the API call if email queueing fails
     }
 
@@ -629,7 +639,7 @@ router.post('/:id/invitations', (req, res) => {
         );
       }
     } catch (err) {
-      console.error('Failed to send invitation notification:', err.message);
+      logger.error('Failed to send invitation notification:', err.message);
       // Don't fail the API call if notification fails
     }
 
@@ -639,8 +649,8 @@ router.post('/:id/invitations', (req, res) => {
       message: 'Invitation sent successfully'
     });
   } catch (error) {
-    console.error('Send invitation error:', error.message || error);
-    console.error('Error stack:', error.stack);
+    logger.error('Send invitation error:', error.message || error);
+    logger.error('Error stack:', error.stack);
     res.status(500).json({ error: error.message || 'Failed to send invitation' });
   }
 });

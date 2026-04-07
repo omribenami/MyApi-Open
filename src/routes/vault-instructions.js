@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 /**
  * Vault Token Instructions API Routes
  * Phase 4.5: API Instruction Layer for Token Vault
@@ -92,7 +93,7 @@ function createVaultInstructionsRoutes(db, tokenManager, auditLog) {
       res.json({ success: true, data: response });
     } catch (error) {
       logInstructionAction(req, 'vault:get_token', req.params.id, 500, { error: error.message });
-      console.error('[VaultInstructions] Error getting token:', error);
+      logger.error('[VaultInstructions] Error getting token:', error);
       res.status(500).json({ error: 'Failed to get token' });
     }
   });
@@ -143,7 +144,7 @@ function createVaultInstructionsRoutes(db, tokenManager, auditLog) {
       res.json({ success: true, data: response });
     } catch (error) {
       logInstructionAction(req, 'vault:get_instructions', req.params.id, 500, { error: error.message });
-      console.error('[VaultInstructions] Error getting instructions:', error);
+      logger.error('[VaultInstructions] Error getting instructions:', error);
       res.status(500).json({ error: 'Failed to get instructions' });
     }
   });
@@ -243,7 +244,7 @@ function createVaultInstructionsRoutes(db, tokenManager, auditLog) {
       });
     } catch (error) {
       logInstructionAction(req, 'vault:create_instructions', req.params.id, 500, { error: error.message });
-      console.error('[VaultInstructions] Error creating instructions:', error);
+      logger.error('[VaultInstructions] Error creating instructions:', error);
       res.status(500).json({ error: 'Failed to create instructions' });
     }
   });
@@ -348,7 +349,7 @@ function createVaultInstructionsRoutes(db, tokenManager, auditLog) {
       });
     } catch (error) {
       logInstructionAction(req, 'vault:update_instructions', req.params.id, 500, { error: error.message });
-      console.error('[VaultInstructions] Error updating instructions:', error);
+      logger.error('[VaultInstructions] Error updating instructions:', error);
       res.status(500).json({ error: 'Failed to update instructions' });
     }
   });
@@ -421,7 +422,7 @@ function createVaultInstructionsRoutes(db, tokenManager, auditLog) {
       });
     } catch (error) {
       logInstructionAction(req, 'vault:delete_instructions', req.params.id, 500, { error: error.message });
-      console.error('[VaultInstructions] Error deleting instructions:', error);
+      logger.error('[VaultInstructions] Error deleting instructions:', error);
       res.status(500).json({ error: 'Failed to delete instructions' });
     }
   });
@@ -482,7 +483,7 @@ function createVaultInstructionsRoutes(db, tokenManager, auditLog) {
       res.json({ success: true, data: response });
     } catch (error) {
       logInstructionAction(req, 'vault:get_service_instructions', req.params.serviceName, 500, { error: error.message });
-      console.error('[VaultInstructions] Error getting service instructions:', error);
+      logger.error('[VaultInstructions] Error getting service instructions:', error);
       res.status(500).json({ error: 'Failed to get service instructions' });
     }
   });
@@ -582,7 +583,7 @@ function createVaultInstructionsRoutes(db, tokenManager, auditLog) {
       });
     } catch (error) {
       logInstructionAction(req, 'vault:learn_from_api', req.params.id, 500, { error: error.message });
-      console.error('[VaultInstructions] Error learning from API:', error);
+      logger.error('[VaultInstructions] Error learning from API:', error);
       res.status(500).json({ error: 'Failed to save learning' });
     }
   });

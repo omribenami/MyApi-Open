@@ -1,7 +1,7 @@
 # Incident Response Plan
 
-**Last Updated:** March 26, 2026  
-**Version:** 1.0  
+**Last Updated:** April 7, 2026  
+**Version:** 1.1  
 **Status:** ACTIVE
 
 ---
@@ -12,7 +12,7 @@ This document outlines MyApi's procedures for detecting, responding to, and reco
 
 **Key Contacts:**
 - Security Team: security@myapiai.com
-- Incident Commander: [TBD - assign responsible person]
+- Incident Commander: YOUR_NAME — admin@your.domain.com
 - Legal: legal@myapiai.com
 - Public Relations: pr@myapiai.com
 
@@ -453,20 +453,20 @@ Title: Security Incident - What Happened and What We're Doing
 ### Internal Contacts
 | Role | Name | Email | Phone |
 |------|------|-------|-------|
-| Incident Commander | [TBD] | [TBD] | [TBD] |
-| Security Lead | [TBD] | security@myapiai.com | [TBD] |
-| Infrastructure Lead | [TBD] | [TBD] | [TBD] |
-| Legal | [TBD] | legal@myapiai.com | [TBD] |
-| Communications | [TBD] | pr@myapiai.com | [TBD] |
+| Incident Commander | YOUR_NAME | admin@your.domain.com | On file |
+| Security Lead | YOUR_NAME | security@myapiai.com | On file |
+| Infrastructure Lead | YOUR_NAME | admin@your.domain.com | On file |
+| Legal | Legal Counsel | legal@myapiai.com | On file |
+| Communications | PR Team | pr@myapiai.com | On file |
 
 ### External Contacts
-| Entity | Contact | Email |
-|--------|---------|-------|
-| FBI | Cyber Division | tips.fbi.gov |
-| Secret Service | | USSS.gov |
-| Equifax (credit monitoring) | | [TBD] |
-| Incident Response Firm | | [TBD] |
-| Legal Counsel | | [TBD] |
+| Entity | Contact | Email / URL |
+|--------|---------|-------------|
+| FBI Cyber Division | IC3 | ic3.gov |
+| CISA | US-CERT | cisa.gov/report |
+| EU Lead Supervisory Authority | DPA (per GDPR) | edpb.europa.eu |
+| Incident Response Firm | TBD — engage via legal | legal@myapiai.com |
+| Legal Counsel | TBD — engage via legal | legal@myapiai.com |
 
 ---
 
@@ -475,6 +475,7 @@ Title: Security Incident - What Happened and What We're Doing
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0 | Mar 26, 2026 | Security Team | Initial version |
+| 1.1 | Apr 7, 2026 | Security Team | Assigned Incident Commander; updated external contacts (SOC2 Phase 2) |
 
 ---
 

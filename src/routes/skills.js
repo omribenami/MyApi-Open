@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const express = require('express');
 const { body, query, validationResult } = require('express-validator');
 const crypto = require('crypto');
@@ -118,7 +119,7 @@ function createSkillsRoutes(
 
       res.json({ skills: enhancedSkills });
     } catch (error) {
-      console.error('Error listing skills:', error);
+      logger.error('Error listing skills:', error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -170,7 +171,7 @@ function createSkillsRoutes(
         }
       });
     } catch (error) {
-      console.error('Error getting skill:', error);
+      logger.error('Error getting skill:', error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -243,7 +244,7 @@ function createSkillsRoutes(
             }
           }
         } catch (error) {
-          console.warn('Failed to fetch GitHub metadata:', error.message);
+          logger.warn('Failed to fetch GitHub metadata:', error.message);
         }
       }
 
@@ -295,7 +296,7 @@ function createSkillsRoutes(
         }
       });
     } catch (error) {
-      console.error('Error creating skill:', error);
+      logger.error('Error creating skill:', error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -336,7 +337,7 @@ function createSkillsRoutes(
 
       res.status(201).json({ version });
     } catch (error) {
-      console.error('Error creating skill version:', error);
+      logger.error('Error creating skill version:', error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -355,7 +356,7 @@ function createSkillsRoutes(
 
       res.json({ versions });
     } catch (error) {
-      console.error('Error getting skill versions:', error);
+      logger.error('Error getting skill versions:', error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -366,7 +367,7 @@ function createSkillsRoutes(
       const forks = getSkillForks(req.params.id);
       res.json({ forks });
     } catch (error) {
-      console.error('Error getting skill forks:', error);
+      logger.error('Error getting skill forks:', error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -434,7 +435,7 @@ function createSkillsRoutes(
         }
       });
     } catch (error) {
-      console.error('Error forking skill:', error);
+      logger.error('Error forking skill:', error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -472,7 +473,7 @@ function createSkillsRoutes(
       res.set('Content-Type', 'text/markdown; charset=utf-8');
       res.send(content);
     } catch (error) {
-      console.error('Error getting skill.md:', error);
+      logger.error('Error getting skill.md:', error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -513,7 +514,7 @@ function createSkillsRoutes(
         const updated = updateSkill(skill.id, { script_content: String(content) }, ownerId);
         res.json({ ok: true, skill: updated });
       } catch (error) {
-        console.error('Error updating skill.md:', error);
+        logger.error('Error updating skill.md:', error);
         res.status(500).json({ error: error.message });
       }
     }
@@ -525,7 +526,7 @@ function createSkillsRoutes(
       const licenses = getLicenses();
       res.json({ licenses });
     } catch (error) {
-      console.error('Error getting licenses:', error);
+      logger.error('Error getting licenses:', error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -554,7 +555,7 @@ function createSkillsRoutes(
 
       res.status(201).json({ claim });
     } catch (error) {
-      console.error('Error creating ownership claim:', error);
+      logger.error('Error creating ownership claim:', error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -598,7 +599,7 @@ function createSkillsRoutes(
 
       res.json({ claim: verified, verified: true });
     } catch (error) {
-      console.error('Error verifying ownership:', error);
+      logger.error('Error verifying ownership:', error);
       res.status(500).json({ error: error.message });
     }
   });

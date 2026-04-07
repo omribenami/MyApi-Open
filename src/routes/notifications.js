@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const express = require('express');
 const crypto = require('crypto');
 const {
@@ -90,7 +91,7 @@ const router = express.Router();
         }
       });
     } catch (err) {
-      console.error('Error fetching notifications:', err);
+      logger.error('Error fetching notifications:', err);
       res.status(500).json({ error: 'Failed to fetch notifications' });
     }
   });
@@ -114,7 +115,7 @@ const router = express.Router();
         unreadCount: count,
       });
     } catch (err) {
-      console.error('Error fetching unread count:', err);
+      logger.error('Error fetching unread count:', err);
       res.status(500).json({ error: 'Failed to fetch unread count' });
     }
   };
@@ -146,7 +147,7 @@ const router = express.Router();
         data: { marked: true }
       });
     } catch (err) {
-      console.error('Error marking notification as read:', err);
+      logger.error('Error marking notification as read:', err);
       res.status(500).json({ error: 'Failed to mark notification as read' });
     }
   });
@@ -177,7 +178,7 @@ const router = express.Router();
         data: { markedCount: marked }
       });
     } catch (err) {
-      console.error('Error marking all notifications as read:', err);
+      logger.error('Error marking all notifications as read:', err);
       res.status(500).json({ error: 'Failed to mark all notifications as read' });
     }
   });
@@ -205,7 +206,7 @@ const router = express.Router();
         data: { deleted: true }
       });
     } catch (err) {
-      console.error('Error deleting notification:', err);
+      logger.error('Error deleting notification:', err);
       res.status(500).json({ error: 'Failed to delete notification' });
     }
   });
@@ -219,7 +220,7 @@ const router = express.Router();
       const deleted = deleteAllNotifications(workspaceId, userId);
       res.json({ ok: true, data: { deleted } });
     } catch (err) {
-      console.error('Error clearing all notifications:', err);
+      logger.error('Error clearing all notifications:', err);
       res.status(500).json({ error: 'Failed to clear notifications' });
     }
   });
@@ -281,7 +282,7 @@ const router = express.Router();
         }
       });
     } catch (err) {
-      console.error('Error fetching notification settings:', err);
+      logger.error('Error fetching notification settings:', err);
       res.status(500).json({ error: 'Failed to fetch settings' });
     }
   });
@@ -349,7 +350,7 @@ const router = express.Router();
         }
       });
     } catch (err) {
-      console.error('Error updating notification settings:', err);
+      logger.error('Error updating notification settings:', err);
       res.status(500).json({ error: 'Failed to update settings' });
     }
   });
@@ -381,7 +382,7 @@ const router = express.Router();
         }
       });
     } catch (err) {
-      console.error('Error fetching notification preferences:', err);
+      logger.error('Error fetching notification preferences:', err);
       res.status(500).json({ error: 'Failed to fetch preferences' });
     }
   });
@@ -422,7 +423,7 @@ const router = express.Router();
         }
       });
     } catch (err) {
-      console.error('Error updating notification preferences:', err);
+      logger.error('Error updating notification preferences:', err);
       res.status(500).json({ error: 'Failed to update preferences' });
     }
   });
@@ -457,7 +458,7 @@ router.dispatchNotification = function(workspaceId, userId, type, title, message
       success: true
     };
   } catch (err) {
-    console.error('Error dispatching notification:', err);
+    logger.error('Error dispatching notification:', err);
     return {
       success: false,
       error: err.message

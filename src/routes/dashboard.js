@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const express = require('express');
 const {
   getApprovedDevices,
@@ -105,7 +106,7 @@ function handleDashboardMetrics(req, res) {
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    console.error('Error fetching dashboard metrics:', error);
+    logger.error('Error fetching dashboard metrics:', error);
     return res.status(500).json({ error: 'Failed to load dashboard metrics' });
   }
 }

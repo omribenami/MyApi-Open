@@ -52,6 +52,7 @@ try {
 }
 
 const MigrationRunner = require('./lib/migrationRunner');
+const { getCurrentRequestId } = require('./lib/request-context');
 const {
   encrypt,
   decrypt,
@@ -195,6 +196,18 @@ function initDatabase() {
       ip TEXT,
       details TEXT
     );
+
+    CREATE TRIGGER IF NOT EXISTS trg_audit_log_no_update
+    BEFORE UPDATE ON audit_log
+    BEGIN
+      SELECT RAISE(ABORT, 'audit_log is append-only');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS trg_audit_log_no_delete
+    BEFORE DELETE ON audit_log
+    BEGIN
+      SELECT RAISE(ABORT, 'audit_log is append-only');
+    END;
 
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
@@ -1382,7 +1395,9 @@ function decryptVaultToken(id, ownerId = 'owner', workspaceId = null) {
 
     // Legacy format fallback (AES-256-CBC, iv:ciphertext)
     if (decrypted == null) {
-      const allowLegacyDefault = String(process.env.ALLOW_LEGACY_DEFAULT_VAULT_KEY || '').toLowerCase() === 'true';
+      // ALLOW_LEGACY_DEFAULT_VAULT_KEY is restricted to test environments only (SOC2 Phase 1)
+      const allowLegacyDefault = process.env.NODE_ENV !== 'production' &&
+        String(process.env.ALLOW_LEGACY_DEFAULT_VAULT_KEY || '').toLowerCase() === 'true';
       const encryptionKey = vaultKey || (allowLegacyDefault ? 'default-vault-key-change-me' : null);
       if (!encryptionKey) return null;
       const algorithm = 'aes-256-cbc';
@@ -1438,6 +1453,9 @@ function deleteVaultToken(id, ownerId = 'owner', workspaceId = null) {
 function getMasterTokenEncryptionKey() {
   const key = String(process.env.VAULT_KEY || process.env.ENCRYPTION_KEY || '').trim();
   if (key) return key;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('[Database] VAULT_KEY or ENCRYPTION_KEY is required in production — refusing to start without explicit encryption key.');
+  }
   const fallback = String(process.env.JWT_SECRET || '').trim();
   if (fallback) {
     console.warn('[Database] VAULT_KEY and ENCRYPTION_KEY are unset — falling back to JWT_SECRET for master-token encryption. Set VAULT_KEY or ENCRYPTION_KEY for production.');
@@ -1748,15 +1766,19 @@ function getConnectors() {
 
 // Audit Log
 function createAuditLog(entry) {
-  const stmt = db.prepare(`
-    INSERT INTO audit_log (
-      timestamp, requester_id, workspace_id, actor_id, actor_type,
-      action, resource, endpoint, http_method, status_code, scope, ip, details
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
+  // Gracefully handle missing request_id column (before migration runs)
+  const hasRequestId = (() => {
+    try {
+      const cols = db.prepare('PRAGMA table_info(audit_log)').all();
+      return cols.some(c => c.name === 'request_id');
+    } catch { return false; }
+  })();
 
-  stmt.run(
+  const sql = hasRequestId
+    ? `INSERT INTO audit_log (timestamp, requester_id, workspace_id, actor_id, actor_type, action, resource, endpoint, http_method, status_code, scope, ip, details, request_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    : `INSERT INTO audit_log (timestamp, requester_id, workspace_id, actor_id, actor_type, action, resource, endpoint, http_method, status_code, scope, ip, details) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
+  const params = [
     entry.timestamp || new Date().toISOString(),
     entry.requesterId || null,
     entry.workspaceId || null,
@@ -1769,8 +1791,11 @@ function createAuditLog(entry) {
     Number.isFinite(entry.statusCode) ? entry.statusCode : null,
     entry.scope || null,
     entry.ip || null,
-    entry.details ? JSON.stringify(entry.details) : null
-  );
+    entry.details ? JSON.stringify(entry.details) : null,
+  ];
+  if (hasRequestId) params.push(entry.requestId || getCurrentRequestId() || null);
+
+  db.prepare(sql).run(...params);
 }
 
 function getAuditLogs(limit = 50, offset = 0) {
@@ -6158,21 +6183,30 @@ function updateRetentionPolicy(policyId, updates) {
 /**
  * Create compliance audit log (immutable)
  */
-function createComplianceAuditLog(workspaceId, userId, action, entityType, entityId, dataAccessed = null, ipAddress = null, userAgent = null) {
+function createComplianceAuditLog(workspaceId, userId, action, entityType, entityId, dataAccessed = null, ipAddress = null, userAgent = null, requestId = null) {
   const id = 'audit_' + crypto.randomBytes(12).toString('hex');
   const timestamp = Math.floor(Date.now() / 1000);
-  
+
+  const hasRequestId = (() => {
+    try {
+      const cols = db.prepare('PRAGMA table_info(compliance_audit_logs)').all();
+      return cols.some(c => c.name === 'request_id');
+    } catch { return false; }
+  })();
+
   try {
-    const stmt = db.prepare(`
-      INSERT INTO compliance_audit_logs (id, workspace_id, user_id, action, entity_type, entity_id, data_accessed, ip_address, user_agent, status, timestamp)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    
-    stmt.run(id, workspaceId, userId, action, entityType, entityId, dataAccessed, ipAddress, userAgent, 'success', timestamp);
+    const sql = hasRequestId
+      ? `INSERT INTO compliance_audit_logs (id, workspace_id, user_id, action, entity_type, entity_id, data_accessed, ip_address, user_agent, status, timestamp, request_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      : `INSERT INTO compliance_audit_logs (id, workspace_id, user_id, action, entity_type, entity_id, data_accessed, ip_address, user_agent, status, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+
+    const params = [id, workspaceId, userId, action, entityType, entityId, dataAccessed, ipAddress, userAgent, 'success', timestamp];
+    if (hasRequestId) params.push(requestId || getCurrentRequestId() || null);
+
+    db.prepare(sql).run(...params);
     return { id, workspaceId, userId, action, timestamp };
   } catch (error) {
+    // Swallow — compliance log must never crash the caller
     console.error('[Compliance] Audit log error:', error.message);
-    throw error;
   }
 }
 
@@ -6233,17 +6267,8 @@ function executeRetentionCleanup(workspaceId, options = {}) {
       }
 
       if (entityType === 'activity_logs' || entityType === 'audit_log') {
-        const cutoffIso = new Date(cutoffSec * 1000).toISOString();
-        const countStmt = db.prepare(`SELECT COUNT(*) as c FROM audit_log WHERE workspace_id = ? AND timestamp < ?`);
-        const row = countStmt.get(workspaceId, cutoffIso) || { c: 0 };
-        const count = Number(row.c || 0);
-
-        if (!dryRun && count > 0) {
-          db.prepare(`DELETE FROM audit_log WHERE workspace_id = ? AND timestamp < ?`).run(workspaceId, cutoffIso);
-        }
-
-        summary.totalDeleted += count;
-        summary.results.push({ entityType, retentionDays, deleted: count, status: 'ok' });
+        // audit_log is now append-only (SOC2 CC7) — deletion is prohibited.
+        summary.results.push({ entityType, retentionDays, deleted: 0, status: 'skipped', reason: 'immutable_append_only' });
         continue;
       }
 

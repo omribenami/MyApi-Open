@@ -11,11 +11,21 @@ class Logger {
 
   _write(level, message, meta = {}) {
     const timestamp = new Date().toISOString();
+    // Normalise meta: if a non-object was passed (string, number, Error) wrap it
+    let normMeta = meta;
+    if (meta instanceof Error) {
+      normMeta = { error: meta.message, stack: meta.stack };
+    } else if (typeof meta !== 'object' || meta === null) {
+      normMeta = { detail: meta };
+    }
+    const { getCurrentRequestId } = require('../lib/request-context');
+    const requestId = getCurrentRequestId();
     const logEntry = {
       timestamp,
       level,
       message,
-      ...meta
+      ...(requestId ? { requestId } : {}),
+      ...normMeta
     };
 
     const logLine = JSON.stringify(logEntry) + '\n';

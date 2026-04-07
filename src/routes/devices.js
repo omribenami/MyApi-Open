@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const express = require('express');
 const DeviceFingerprint = require('../utils/deviceFingerprint');
 const db = require('../database');
@@ -33,7 +34,7 @@ router.post('/fingerprint', requireAuth, (req, res) => {
       rawData: fingerprint.fingerprint,
     });
   } catch (error) {
-    console.error('Error generating fingerprint:', error);
+    logger.error('Error generating fingerprint:', error);
     res.status(500).json({ error: 'Failed to generate fingerprint' });
   }
 });
@@ -71,7 +72,7 @@ router.get('/approved', requireAuth, (req, res) => {
       total: formattedDevices.length,
     });
   } catch (error) {
-    console.error('Error fetching approved devices:', error);
+    logger.error('Error fetching approved devices:', error);
     res.status(500).json({ error: 'Failed to fetch devices' });
   }
 });
@@ -103,7 +104,7 @@ router.get('/:device_id', requireAuth, (req, res) => {
       info: device.device_info_json ? JSON.parse(device.device_info_json) : null,
     });
   } catch (error) {
-    console.error('Error fetching device:', error);
+    logger.error('Error fetching device:', error);
     res.status(500).json({ error: 'Failed to fetch device' });
   }
 });
@@ -142,7 +143,7 @@ router.post('/:device_id/rename', requireAuth, (req, res) => {
     
     res.json({ success: true, message: 'Device renamed successfully' });
   } catch (error) {
-    console.error('Error renaming device:', error);
+    logger.error('Error renaming device:', error);
     res.status(500).json({ error: 'Failed to rename device' });
   }
 });
@@ -169,7 +170,7 @@ router.post('/:device_id/revoke', requireAuth, (req, res) => {
     const ws = require('../database').getWorkspaces(req.userId);
     if (ws?.length) {
       NotificationDispatcher.onDeviceRevoked(ws[0].id, req.userId, device.device_name)
-        .catch(err => console.error('Notification dispatch error:', err));
+        .catch(err => logger.error('Notification dispatch error:', err));
     }
     
     // Log activity
@@ -196,7 +197,7 @@ router.post('/:device_id/revoke', requireAuth, (req, res) => {
       message: 'Device revoked successfully. It will need to be re-approved to access MyApi.' 
     });
   } catch (error) {
-    console.error('Error revoking device:', error);
+    logger.error('Error revoking device:', error);
     res.status(500).json({ error: 'Failed to revoke device' });
   }
 });
@@ -232,7 +233,7 @@ router.get('/approvals/pending', requireAuth, (req, res) => {
       total: formatted.length,
     });
   } catch (error) {
-    console.error('Error fetching pending approvals:', error);
+    logger.error('Error fetching pending approvals:', error);
     res.status(500).json({ error: 'Failed to fetch pending approvals' });
   }
 });
@@ -293,7 +294,7 @@ router.post('/approve/:approval_id', requireAuth, (req, res) => {
     const ws = require('../database').getWorkspaces(req.userId);
     if (ws?.length) {
       NotificationDispatcher.onDeviceApproved(ws[0].id, req.userId, finalDeviceName)
-        .catch(err => console.error('Notification dispatch error:', err));
+        .catch(err => logger.error('Notification dispatch error:', err));
     }
     
     // Log activity
@@ -321,7 +322,7 @@ router.post('/approve/:approval_id', requireAuth, (req, res) => {
       deviceId,
     });
   } catch (error) {
-    console.error('Error approving device:', error.message, error.stack);
+    logger.error('Error approving device:', error.message, error.stack);
     res.status(500).json({ error: 'Failed to approve device' });
   }
 });
@@ -376,7 +377,7 @@ router.post('/deny/:approval_id', requireAuth, (req, res) => {
       message: 'Device approval request denied',
     });
   } catch (error) {
-    console.error('Error denying device:', error.message, error.stack);
+    logger.error('Error denying device:', error.message, error.stack);
     res.status(500).json({ error: 'Failed to deny device' });
   }
 });
@@ -405,7 +406,7 @@ router.get('/activity/log', requireAuth, (req, res) => {
       total: formatted.length,
     });
   } catch (error) {
-    console.error('Error fetching activity log:', error);
+    logger.error('Error fetching activity log:', error);
     res.status(500).json({ error: 'Failed to fetch activity log' });
   }
 });

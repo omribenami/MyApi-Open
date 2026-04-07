@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const express = require('express');
 const https = require('https');
 const bcrypt = require('bcrypt');
@@ -95,7 +96,7 @@ function createServicesRoutes() {
         }
       }
     } catch (e) {
-      console.error('[services] requireAuth error:', e.message);
+      logger.error('[services] requireAuth error:', e.message);
     }
 
     res.status(401).json({ error: 'Unauthorized' });
@@ -172,7 +173,7 @@ function createServicesRoutes() {
         connected: servicesWithStatus.filter((s) => s.status === 'connected').length,
       });
     } catch (error) {
-      console.error('[Services] Error fetching services:', error);
+      logger.error('[Services] Error fetching services:', error);
       res.status(500).json({ error: 'Failed to fetch services' });
     }
   });
@@ -189,7 +190,7 @@ function createServicesRoutes() {
       }
       res.json({ success: true, data: Array.from(map.values()) });
     } catch (error) {
-      console.error('[Services] Error fetching categories:', error);
+      logger.error('[Services] Error fetching categories:', error);
       res.status(500).json({ error: 'Failed to fetch categories' });
     }
   });
@@ -222,7 +223,7 @@ function createServicesRoutes() {
         },
       });
     } catch (error) {
-      console.error('[Services] Error fetching service detail:', error);
+      logger.error('[Services] Error fetching service detail:', error);
       return res.status(500).json({ error: 'Failed to fetch service detail' });
     }
   });
@@ -236,7 +237,7 @@ function createServicesRoutes() {
         total: SERVICE_CATALOG.length,
       });
     } catch (error) {
-      console.error('[Services] Error fetching available services:', error);
+      logger.error('[Services] Error fetching available services:', error);
       res.status(500).json({ error: 'Failed to fetch available services' });
     }
   });
@@ -248,7 +249,7 @@ function createServicesRoutes() {
 
       res.json({ success: true, data: preferences });
     } catch (error) {
-      console.error('[ServicePreferences] Error fetching preferences:', error);
+      logger.error('[ServicePreferences] Error fetching preferences:', error);
       res.status(500).json({ error: 'Failed to fetch service preferences' });
     }
   });
@@ -266,7 +267,7 @@ function createServicesRoutes() {
 
       res.json({ success: true, data: preference });
     } catch (error) {
-      console.error('[ServicePreferences] Error fetching preference:', error);
+      logger.error('[ServicePreferences] Error fetching preference:', error);
       res.status(500).json({ error: 'Failed to fetch service preference' });
     }
   });
@@ -293,7 +294,7 @@ function createServicesRoutes() {
 
       res.status(201).json({ success: true, data: result });
     } catch (error) {
-      console.error('[ServicePreferences] Error updating preference:', error);
+      logger.error('[ServicePreferences] Error updating preference:', error);
       res.status(500).json({ error: 'Failed to update service preference' });
     }
   });
@@ -320,7 +321,7 @@ function createServicesRoutes() {
 
       res.json({ success: true, data: result });
     } catch (error) {
-      console.error('[ServicePreferences] Error updating preference:', error);
+      logger.error('[ServicePreferences] Error updating preference:', error);
       res.status(500).json({ error: 'Failed to update service preference' });
     }
   });
@@ -346,7 +347,7 @@ function createServicesRoutes() {
 
       res.json({ success: true, message: 'Service preferences deleted' });
     } catch (error) {
-      console.error('[ServicePreferences] Error deleting preference:', error);
+      logger.error('[ServicePreferences] Error deleting preference:', error);
       res.status(500).json({ error: 'Failed to delete service preference' });
     }
   });
@@ -458,7 +459,7 @@ function createServicesRoutes() {
         resultSizeEstimate: resultSizeEstimate || details.length,
       });
     } catch (error) {
-      console.error('[Gmail] Error fetching messages:', error);
+      logger.error('[Gmail] Error fetching messages:', error);
       res.status(500).json({ error: 'Failed to fetch Gmail messages', message: error.message });
     }
   });
@@ -524,7 +525,7 @@ function createServicesRoutes() {
         },
       });
     } catch (error) {
-      console.error('[Gmail] Error fetching message:', error);
+      logger.error('[Gmail] Error fetching message:', error);
       res.status(500).json({ error: 'Failed to fetch Gmail message', message: error.message });
     }
   });

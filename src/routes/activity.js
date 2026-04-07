@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const express = require('express');
 const db = require('../database');
 const { authenticate } = require('../middleware/auth');
@@ -37,7 +38,7 @@ router.get('/', (req, res) => {
       total: parsed.length,
     });
   } catch (error) {
-    console.error('Error fetching activity log:', error);
+    logger.error('Error fetching activity log:', error);
     res.status(500).json({ error: 'Failed to fetch activity log' });
   }
 });
@@ -76,7 +77,7 @@ router.get('/summary', (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Error fetching activity summary:', error);
+    logger.error('Error fetching activity summary:', error);
     res.status(500).json({ error: 'Failed to fetch activity summary' });
   }
 });

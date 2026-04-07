@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const express = require('express');
 const multer = require('multer');
 const JSZip = require('jszip');
@@ -198,7 +199,7 @@ router.post('/', upload.single('file'), async (req, res) => {
         }
       } catch (e) {
         // Log but don't fail on checksum errors
-        console.warn('Checksum validation error:', e.message);
+        logger.warn('Checksum validation error:', e.message);
       }
     }
 
@@ -299,8 +300,8 @@ router.post('/', upload.single('file'), async (req, res) => {
       try {
         const personasText = await personasFile.async('text');
         const personasData = JSON.parse(personasText);
-        console.log(`[IMPORT-PHASE3] Parsed personas from ZIP:`, JSON.stringify(personasData, null, 2).substring(0, 500));
-        console.log(`[IMPORT-PHASE3] Existing personas for user ${ownerId}:`, existingPersonas.map(p => p.name));
+        logger.info(`[IMPORT-PHASE3] Parsed personas from ZIP:`, JSON.stringify(personasData, null, 2).substring(0, 500));
+        logger.info(`[IMPORT-PHASE3] Existing personas for user ${ownerId}:`, existingPersonas.map(p => p.name));
 
         for (const pd of personasData) {
           // Skip if duplicate name exists
@@ -325,7 +326,7 @@ router.post('/', upload.single('file'), async (req, res) => {
               // Strip sensitive data from config
               configObj = stripSensitiveData(configObj);
             } catch (e) {
-              console.warn(`Failed to parse persona config ${pd.id}:`, e.message);
+              logger.warn(`Failed to parse persona config ${pd.id}:`, e.message);
             }
           }
 
@@ -351,8 +352,8 @@ router.post('/', upload.single('file'), async (req, res) => {
       try {
         const skillsText = await skillsFile.async('text');
         const skillsData = JSON.parse(skillsText);
-        console.log(`[IMPORT-PHASE3] Parsed skills from ZIP:`, JSON.stringify(skillsData, null, 2).substring(0, 500));
-        console.log(`[IMPORT-PHASE3] Existing skills for user ${ownerId}:`, existingSkills.map(s => s.name));
+        logger.info(`[IMPORT-PHASE3] Parsed skills from ZIP:`, JSON.stringify(skillsData, null, 2).substring(0, 500));
+        logger.info(`[IMPORT-PHASE3] Existing skills for user ${ownerId}:`, existingSkills.map(s => s.name));
         
         for (const sd of skillsData) {
           // Skip if duplicate name exists
@@ -374,7 +375,7 @@ router.post('/', upload.single('file'), async (req, res) => {
             try {
               scriptContent = await scriptFile.async('text');
             } catch (e) {
-              console.warn(`Failed to read skill script ${sd.id}:`, e.message);
+              logger.warn(`Failed to read skill script ${sd.id}:`, e.message);
             }
           }
 
@@ -388,7 +389,7 @@ router.post('/', upload.single('file'), async (req, res) => {
               // Strip sensitive data from config
               configJson = stripSensitiveData(configJson);
             } catch (e) {
-              console.warn(`Failed to parse skill config ${sd.id}:`, e.message);
+              logger.warn(`Failed to parse skill config ${sd.id}:`, e.message);
             }
           }
 
@@ -415,7 +416,7 @@ router.post('/', upload.single('file'), async (req, res) => {
     
     if (kbDir) {
       try {
-        console.log(`[IMPORT-PHASE3] Processing knowledge base documents...`);
+        logger.info(`[IMPORT-PHASE3] Processing knowledge base documents...`);
         
         // Iterate through all files in knowledge/docs/
         for (const [relativePath, file] of Object.entries(kbDir.files)) {
@@ -434,16 +435,16 @@ router.post('/', upload.single('file'), async (req, res) => {
               title: docName // Use filename as title if not available
             });
             
-            console.log(`[IMPORT-PHASE3] Queued KB doc: ${relativePath}`);
+            logger.info(`[IMPORT-PHASE3] Queued KB doc: ${relativePath}`);
           } catch (e) {
-            console.warn(`[IMPORT-PHASE3] Failed to read KB doc ${relativePath}:`, e.message);
+            logger.warn(`[IMPORT-PHASE3] Failed to read KB doc ${relativePath}:`, e.message);
             summary.errors.push(`KB doc read error: ${relativePath} - ${e.message}`);
           }
         }
         
-        console.log(`[IMPORT-PHASE3] Parsed ${kbDocsToImport.length} knowledge base documents`);
+        logger.info(`[IMPORT-PHASE3] Parsed ${kbDocsToImport.length} knowledge base documents`);
       } catch (e) {
-        console.warn(`[IMPORT-PHASE3] Knowledge base folder processing error:`, e.message);
+        logger.warn(`[IMPORT-PHASE3] Knowledge base folder processing error:`, e.message);
         // Don't fail the entire import if KB processing fails
       }
     }
@@ -467,20 +468,20 @@ router.post('/', upload.single('file'), async (req, res) => {
     // ============================================================
 
     // DEBUG: Log what we're about to import
-    console.log(`[IMPORT] Starting import for user ${ownerId}`);
-    console.log(`[IMPORT] Personas to import: ${personasToImport.length}`, personasToImport);
-    console.log(`[IMPORT] Skills to import: ${skillsToImport.length}`, skillsToImport);
+    logger.info(`[IMPORT] Starting import for user ${ownerId}`);
+    logger.info(`[IMPORT] Personas to import: ${personasToImport.length}`, personasToImport);
+    logger.info(`[IMPORT] Skills to import: ${skillsToImport.length}`, skillsToImport);
 
     try {
       // Start transaction
       const importRawDb = db.getRawDB ? db.getRawDB() : db;
       const insertProfile = importRawDb.transaction(() => {
-        console.log(`[IMPORT-TX] Transaction callback started`);
+        logger.info(`[IMPORT-TX] Transaction callback started`);
 
         // 4.1 Update user profile
         if (profileData) {
           try {
-            console.log(`[IMPORT-TX] Updating user profile for ${ownerId}`);
+            logger.info(`[IMPORT-TX] Updating user profile for ${ownerId}`);
             importRawDb.prepare(`
               UPDATE users SET
                 displayName = COALESCE(?, displayName),
@@ -492,9 +493,9 @@ router.post('/', upload.single('file'), async (req, res) => {
               ownerId
             );
             summary.imported.profile = 1;
-            console.log(`[IMPORT-TX] Profile updated successfully`);
+            logger.info(`[IMPORT-TX] Profile updated successfully`);
           } catch (e) {
-            console.error(`[IMPORT-TX] Profile update error:`, e.message);
+            logger.error(`[IMPORT-TX] Profile update error:`, e.message);
             summary.errors.push(`Profile update failed: ${e.message}`);
           }
         }
@@ -508,14 +509,14 @@ router.post('/', upload.single('file'), async (req, res) => {
 
             if (userMdContent && userMdContent.trim()) {
               fs.writeFileSync(userMdPath, userMdContent);
-              console.log(`[IMPORT-TX] Wrote USER.md to ${userMdPath}`);
+              logger.info(`[IMPORT-TX] Wrote USER.md to ${userMdPath}`);
             }
             if (soulMdContent && soulMdContent.trim()) {
               fs.writeFileSync(soulMdPath, soulMdContent);
-              console.log(`[IMPORT-TX] Wrote SOUL.md to ${soulMdPath}`);
+              logger.info(`[IMPORT-TX] Wrote SOUL.md to ${soulMdPath}`);
             }
           } catch (e) {
-            console.error(`[IMPORT-TX] Markdown file write error:`, e.message);
+            logger.error(`[IMPORT-TX] Markdown file write error:`, e.message);
             summary.errors.push(`Markdown file write failed: ${e.message}`);
           }
         }
@@ -526,7 +527,7 @@ router.post('/', upload.single('file'), async (req, res) => {
             const privacy = settingsData.privacyPreferences || {};
             const notifications = settingsData.notifications || {};
 
-            console.log(`[IMPORT-TX] Updating settings for ${ownerId}`);
+            logger.info(`[IMPORT-TX] Updating settings for ${ownerId}`);
             importRawDb.prepare(`
               UPDATE users SET
                 profile_public = COALESCE(?, profile_public),
@@ -544,18 +545,18 @@ router.post('/', upload.single('file'), async (req, res) => {
               ownerId
             );
             summary.imported.settings = 1;
-            console.log(`[IMPORT-TX] Settings updated successfully`);
+            logger.info(`[IMPORT-TX] Settings updated successfully`);
           } catch (e) {
-            console.error(`[IMPORT-TX] Settings update error:`, e.message);
+            logger.error(`[IMPORT-TX] Settings update error:`, e.message);
             summary.errors.push(`Settings update failed: ${e.message}`);
           }
         }
 
         // 4.3 Import personas
-        console.log(`[IMPORT-TX] Starting persona import (${personasToImport.length} personas)`);
+        logger.info(`[IMPORT-TX] Starting persona import (${personasToImport.length} personas)`);
         for (const persona of personasToImport) {
           try {
-            console.log(`[IMPORT-TX] Creating persona: "${persona.name}"`);
+            logger.info(`[IMPORT-TX] Creating persona: "${persona.name}"`);
             const result = createPersona(
               persona.name,
               persona.config?.soul_content || '',
@@ -565,23 +566,23 @@ router.post('/', upload.single('file'), async (req, res) => {
             );
             if (result && result.id) {
               summary.imported.personas++;
-              console.log(`[IMPORT-TX] ✓ Persona created: "${persona.name}" (ID: ${result.id})`);
+              logger.info(`[IMPORT-TX] ✓ Persona created: "${persona.name}" (ID: ${result.id})`);
             } else {
-              console.error(`[IMPORT-TX] ✗ createPersona returned falsy result:`, result);
+              logger.error(`[IMPORT-TX] ✗ createPersona returned falsy result:`, result);
               summary.errors.push(`Persona import failed (${persona.name}): createPersona returned no ID`);
             }
           } catch (e) {
-            console.error(`[IMPORT-TX] ✗ Persona import error for "${persona.name}":`, e.message, e.stack);
+            logger.error(`[IMPORT-TX] ✗ Persona import error for "${persona.name}":`, e.message, e.stack);
             summary.errors.push(`Persona import failed (${persona.name}): ${e.message}`);
           }
         }
-        console.log(`[IMPORT-TX] Persona import complete. Counter: ${summary.imported.personas}/${personasToImport.length}`);
+        logger.info(`[IMPORT-TX] Persona import complete. Counter: ${summary.imported.personas}/${personasToImport.length}`);
 
         // 4.4 Import skills
-        console.log(`[IMPORT-TX] Starting skill import (${skillsToImport.length} skills)`);
+        logger.info(`[IMPORT-TX] Starting skill import (${skillsToImport.length} skills)`);
         for (const skill of skillsToImport) {
           try {
-            console.log(`[IMPORT-TX] Creating skill: "${skill.name}"`);
+            logger.info(`[IMPORT-TX] Creating skill: "${skill.name}"`);
             const result = createSkill(
               skill.name,
               skill.description,
@@ -595,23 +596,23 @@ router.post('/', upload.single('file'), async (req, res) => {
             );
             if (result && result.id) {
               summary.imported.skills++;
-              console.log(`[IMPORT-TX] ✓ Skill created: "${skill.name}" (ID: ${result.id})`);
+              logger.info(`[IMPORT-TX] ✓ Skill created: "${skill.name}" (ID: ${result.id})`);
             } else {
-              console.error(`[IMPORT-TX] ✗ createSkill returned falsy result:`, result);
+              logger.error(`[IMPORT-TX] ✗ createSkill returned falsy result:`, result);
               summary.errors.push(`Skill import failed (${skill.name}): createSkill returned no ID`);
             }
           } catch (e) {
-            console.error(`[IMPORT-TX] ✗ Skill import error for "${skill.name}":`, e.message, e.stack);
+            logger.error(`[IMPORT-TX] ✗ Skill import error for "${skill.name}":`, e.message, e.stack);
             summary.errors.push(`Skill import failed (${skill.name}): ${e.message}`);
           }
         }
-        console.log(`[IMPORT-TX] Skill import complete. Counter: ${summary.imported.skills}/${skillsToImport.length}`);
+        logger.info(`[IMPORT-TX] Skill import complete. Counter: ${summary.imported.skills}/${skillsToImport.length}`);
 
         // 4.5 Import knowledge base documents
-        console.log(`[IMPORT-TX] Starting KB document import (${kbDocsToImport.length} documents)`);
+        logger.info(`[IMPORT-TX] Starting KB document import (${kbDocsToImport.length} documents)`);
         for (const doc of kbDocsToImport) {
           try {
-            console.log(`[IMPORT-TX] Creating KB document: "${doc.title}"`);
+            logger.info(`[IMPORT-TX] Creating KB document: "${doc.title}"`);
             const result = addKBDocument(
               'imported', // source
               doc.title,
@@ -622,23 +623,23 @@ router.post('/', upload.single('file'), async (req, res) => {
             );
             if (result && result.id) {
               summary.imported.knowledge++;
-              console.log(`[IMPORT-TX] ✓ KB document created: "${doc.title}" (ID: ${result.id})`);
+              logger.info(`[IMPORT-TX] ✓ KB document created: "${doc.title}" (ID: ${result.id})`);
             } else {
-              console.error(`[IMPORT-TX] ✗ addKBDocument returned falsy result:`, result);
+              logger.error(`[IMPORT-TX] ✗ addKBDocument returned falsy result:`, result);
               summary.errors.push(`KB document import failed (${doc.title}): addKBDocument returned no ID`);
             }
           } catch (e) {
-            console.error(`[IMPORT-TX] ✗ KB document import error for "${doc.title}":`, e.message, e.stack);
+            logger.error(`[IMPORT-TX] ✗ KB document import error for "${doc.title}":`, e.message, e.stack);
             summary.errors.push(`KB document import failed (${doc.title}): ${e.message}`);
           }
         }
-        console.log(`[IMPORT-TX] KB document import complete. Counter: ${summary.imported.knowledge}/${kbDocsToImport.length}`);
+        logger.info(`[IMPORT-TX] KB document import complete. Counter: ${summary.imported.knowledge}/${kbDocsToImport.length}`);
       });
 
       // Execute transaction
-      console.log(`[IMPORT] Executing transaction...`);
+      logger.info(`[IMPORT] Executing transaction...`);
       insertProfile(); // better-sqlite3 transaction fn — called with no args (closure captures all vars)
-      console.log(`[IMPORT] Transaction executed successfully`);
+      logger.info(`[IMPORT] Transaction executed successfully`);
     } catch (error) {
       summary.errors.push(`Transaction failed: ${error.message}`);
       return res.status(500).json({
@@ -658,7 +659,7 @@ router.post('/', upload.single('file'), async (req, res) => {
                          summary.imported.knowledge;
     const totalSkipped = summary.skipped.personas + summary.skipped.skills;
 
-    console.log(`[IMPORT] Final summary:`, JSON.stringify(summary, null, 2));
+    logger.info(`[IMPORT] Final summary:`, JSON.stringify(summary, null, 2));
 
     // Check if we were supposed to import personas/skills/knowledge but didn't
     const hadPersonasToImport = personasToImport.length > 0;
@@ -669,10 +670,10 @@ router.post('/', upload.single('file'), async (req, res) => {
     const knowledgeImportFailed = hadKnowledgeToImport && summary.imported.knowledge === 0;
 
     if (personaImportFailed || skillImportFailed || knowledgeImportFailed) {
-      console.error(`[IMPORT] CRITICAL: Data loss detected!`);
-      console.error(`  - Personas: expected ${personasToImport.length}, got ${summary.imported.personas}`);
-      console.error(`  - Skills: expected ${skillsToImport.length}, got ${summary.imported.skills}`);
-      console.error(`  - Knowledge: expected ${kbDocsToImport.length}, got ${summary.imported.knowledge}`);
+      logger.error(`[IMPORT] CRITICAL: Data loss detected!`);
+      logger.error(`  - Personas: expected ${personasToImport.length}, got ${summary.imported.personas}`);
+      logger.error(`  - Skills: expected ${skillsToImport.length}, got ${summary.imported.skills}`);
+      logger.error(`  - Knowledge: expected ${kbDocsToImport.length}, got ${summary.imported.knowledge}`);
 
       return res.status(500).json({
         success: false,
@@ -710,7 +711,7 @@ router.post('/', upload.single('file'), async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Import error:', error);
+    logger.error('Import error:', error);
     return res.status(500).json({
       error: 'Internal server error during import',
       message: error.message

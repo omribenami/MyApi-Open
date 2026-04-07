@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 /**
  * FAL Image Generation Routes
  * Provides REST API endpoints for generating images using FAL models
@@ -44,7 +45,7 @@ router.post('/generate', async (req, res) => {
       });
     }
 
-    console.log(`[FAL] Generating image with model: ${model}`);
+    logger.info(`[FAL] Generating image with model: ${model}`);
 
     // Call FAL API
     const falResponse = await fetch('https://api.fal.ai/v1/models/submit', {
@@ -67,7 +68,7 @@ router.post('/generate', async (req, res) => {
 
     if (!falResponse.ok) {
       const error = await falResponse.text();
-      console.error('[FAL] API Error:', error);
+      logger.error('[FAL] API Error:', error);
       return res.status(falResponse.status).json({ 
         error: `FAL API error: ${falResponse.status}`,
         details: error 
@@ -77,7 +78,7 @@ router.post('/generate', async (req, res) => {
     const submitData = await falResponse.json();
     const requestId = submitData.request_id;
 
-    console.log(`[FAL] Generation submitted, request_id: ${requestId}`);
+    logger.info(`[FAL] Generation submitted, request_id: ${requestId}`);
 
     // Poll for result (with timeout)
     const maxAttempts = 120; // 2 minutes with 1s polling
@@ -93,7 +94,7 @@ router.post('/generate', async (req, res) => {
       });
 
       if (!pollResponse.ok) {
-        console.error('[FAL] Poll error:', pollResponse.status);
+        logger.error('[FAL] Poll error:', pollResponse.status);
         return res.status(pollResponse.status).json({ error: 'Failed to check generation status' });
       }
 
@@ -103,7 +104,7 @@ router.post('/generate', async (req, res) => {
         result = pollData;
         break;
       } else if (pollData.status === 'FAILED') {
-        console.error('[FAL] Generation failed:', pollData);
+        logger.error('[FAL] Generation failed:', pollData);
         return res.status(500).json({ 
           error: 'Image generation failed',
           details: pollData.error || 'Unknown error'
@@ -119,7 +120,7 @@ router.post('/generate', async (req, res) => {
       return res.status(408).json({ error: 'Image generation timeout. Please try again.' });
     }
 
-    console.log(`[FAL] ✅ Generation completed in ${attempts}s`);
+    logger.info(`[FAL] ✅ Generation completed in ${attempts}s`);
 
     return res.json({
       success: true,
@@ -131,7 +132,7 @@ router.post('/generate', async (req, res) => {
     });
 
   } catch (err) {
-    console.error('[FAL] Error:', err);
+    logger.error('[FAL] Error:', err);
     return res.status(500).json({ 
       error: 'Failed to generate image'
     });
@@ -225,7 +226,7 @@ router.post('/upscale', async (req, res) => {
       return res.status(403).json({ error: 'FAL API key not configured' });
     }
 
-    console.log(`[FAL] Upscaling image: ${imageUrl}`);
+    logger.info(`[FAL] Upscaling image: ${imageUrl}`);
 
     const falResponse = await fetch('https://api.fal.ai/v1/models/submit', {
       method: 'POST',
@@ -255,7 +256,7 @@ router.post('/upscale', async (req, res) => {
     });
 
   } catch (err) {
-    console.error('[FAL] Upscale error:', err);
+    logger.error('[FAL] Upscale error:', err);
     return res.status(500).json({ error: 'Failed to upscale image' });
   }
 });
@@ -303,7 +304,7 @@ router.post('/test', async (req, res) => {
     });
 
   } catch (err) {
-    console.error('[FAL] Test error:', err);
+    logger.error('[FAL] Test error:', err);
     return res.status(500).json({ 
       error: 'Failed to test FAL API'
     });

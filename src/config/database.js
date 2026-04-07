@@ -100,6 +100,55 @@ function createTables() {
     CREATE INDEX IF NOT EXISTS idx_tokens_type ON tokens(type);
     CREATE INDEX IF NOT EXISTS idx_identity_category ON identity_vault(category);
   `);
+
+  // Enforce append-only semantics on audit_log (SOC2 CC7)
+  db.exec(`
+    CREATE TRIGGER IF NOT EXISTS trg_audit_log_no_update
+    BEFORE UPDATE ON audit_log
+    BEGIN
+      SELECT RAISE(ABORT, 'audit_log is append-only');
+    END;
+  `);
+  db.exec(`
+    CREATE TRIGGER IF NOT EXISTS trg_audit_log_no_delete
+    BEFORE DELETE ON audit_log
+    BEGIN
+      SELECT RAISE(ABORT, 'audit_log is append-only');
+    END;
+  `);
+
+  // Compliance audit log (immutable, SOC2 CC7)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS compliance_audit_logs (
+      id TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL DEFAULT 'system',
+      user_id TEXT,
+      action TEXT NOT NULL,
+      entity_type TEXT NOT NULL DEFAULT 'system',
+      entity_id TEXT,
+      ip_address TEXT,
+      user_agent TEXT,
+      status TEXT DEFAULT 'info',
+      details TEXT,
+      timestamp INTEGER NOT NULL
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_gw_compliance_ts ON compliance_audit_logs(timestamp)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_gw_compliance_action ON compliance_audit_logs(action)`);
+  db.exec(`
+    CREATE TRIGGER IF NOT EXISTS trg_gw_compliance_no_update
+    BEFORE UPDATE ON compliance_audit_logs
+    BEGIN
+      SELECT RAISE(ABORT, 'compliance_audit_logs is append-only');
+    END;
+  `);
+  db.exec(`
+    CREATE TRIGGER IF NOT EXISTS trg_gw_compliance_no_delete
+    BEFORE DELETE ON compliance_audit_logs
+    BEGIN
+      SELECT RAISE(ABORT, 'compliance_audit_logs is append-only');
+    END;
+  `);
 }
 
 function getDatabase() {

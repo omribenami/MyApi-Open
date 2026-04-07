@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 /**
  * OAuth 2.0 Authorization Server
  * Allows external AI clients (ChatGPT, Claude, etc.) to authenticate with MyApi
@@ -170,7 +171,7 @@ function renderConsentPage({ clientName, username, clientId, redirectUri, state,
 
 // GET /api/v1/oauth-server/authorize
 router.get('/authorize', (req, res) => {
-  console.log('[OAuthServer] GET /authorize hit — query:', JSON.stringify(req.query), '| session user:', req.session?.user?.id || 'none');
+  logger.info('[OAuthServer] GET /authorize hit — query:', JSON.stringify(req.query), '| session user:', req.session?.user?.id || 'none');
   const { response_type, client_id, redirect_uri, state, scope, code_challenge, code_challenge_method } = req.query;
 
   if (response_type !== 'code') {
@@ -309,27 +310,27 @@ async function handleTokenExchange(params, res) {
 
 // POST /api/v1/oauth-server/token — standard OAuth token exchange
 router.post('/token', express.urlencoded({ extended: false }), express.json(), async (req, res) => {
-  console.log('[OAuthServer] POST /token body:', JSON.stringify(req.body));
+  logger.info('[OAuthServer] POST /token body:', JSON.stringify(req.body));
   try {
     const params = { ...req.body };
     if (!params.grant_type && params.code) params.grant_type = 'authorization_code';
     await handleTokenExchange(params, res);
   } catch (err) {
-    console.error('[OAuthServer] POST /token unhandled error:', err);
+    logger.error('[OAuthServer] POST /token unhandled error:', err);
     if (!res.headersSent) res.status(500).json({ error: 'server_error', error_description: err.message });
   }
 });
 
 // GET /api/v1/oauth-server/token — some clients (ChatGPT) use GET with query params
 router.get('/token', async (req, res) => {
-  console.log('[OAuthServer] GET /token params:', JSON.stringify(req.query));
+  logger.info('[OAuthServer] GET /token params:', JSON.stringify(req.query));
   // ChatGPT may omit grant_type — infer it when code is present
   try {
     const params = { ...req.query };
     if (!params.grant_type && params.code) params.grant_type = 'authorization_code';
     await handleTokenExchange(params, res);
   } catch (err) {
-    console.error('[OAuthServer] GET /token unhandled error:', err);
+    logger.error('[OAuthServer] GET /token unhandled error:', err);
     if (!res.headersSent) res.status(500).json({ error: 'server_error', error_description: err.message });
   }
 });

@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 /**
  * Authentication Routes
  * Handles user login/registration and persistent user management
@@ -97,7 +98,7 @@ router.post('/token-login', (req, res) => {
       res.json({ success: true, message: 'Logged in with token' });
     });
   } catch (error) {
-    console.error('Token login error:', error);
+    logger.error('Token login error:', error);
     res.status(500).json({ error: 'Login failed' });
   }
 });
@@ -118,7 +119,7 @@ router.post('/login', async (req, res) => {
     try {
       user = getUserByEmail(email);
     } catch (e) {
-      console.error('Error fetching user:', e);
+      logger.error('Error fetching user:', e);
       return res.status(500).json({ error: 'Internal server error', message: 'Service temporarily unavailable' });
     }
     
@@ -169,7 +170,7 @@ router.post('/login', async (req, res) => {
       });
     });
   } catch (error) {
-    console.error('Login error:', error);
+    logger.error('Login error:', error);
     res.status(500).json({ error: 'Login failed' });
   }
 });
@@ -218,7 +219,7 @@ router.post('/register', (req, res) => {
     // FIX BUG-3: Return 201 for successful creation
     return res.status(201).json({ data: { token: sessionToken, user: { id, username, displayName: display_name || username, email: email || '', timezone: timezone || 'UTC' }, needsOnboarding: true } });
   } catch (err) {
-    console.error('Registration error:', err);
+    logger.error('Registration error:', err);
     return res.status(500).json({ error: 'Registration failed' });
   }
 });
@@ -244,9 +245,9 @@ router.post('/logout', (req, res) => {
     // Nothing to revoke here — the session destruction below is the entire logout action.
     if (userId) {
       try {
-        console.log(`[Logout] User ${userId}: session destroyed (master token and service connections preserved)`);
+        logger.info(`[Logout] User ${userId}: session destroyed (master token and service connections preserved)`);
       } catch (err) {
-        console.error('[Logout] Error during logout:', err);
+        logger.error('[Logout] Error during logout:', err);
       }
     }
 
@@ -298,7 +299,7 @@ router.post('/logout', (req, res) => {
       // Save the cleared session first
       req.session.save((saveErr) => {
         if (saveErr) {
-          console.error('Error saving cleared session:', saveErr);
+          logger.error('Error saving cleared session:', saveErr);
         }
         
         // THEN destroy the session entirely
@@ -308,20 +309,20 @@ router.post('/logout', (req, res) => {
           }
 
           if (err) {
-            console.error('Session destruction error:', err);
+            logger.error('Session destruction error:', err);
             return res.status(500).json({ success: false, error: 'Failed to logout' });
           }
 
-          console.log(`[Auth] User ${userId} logged out successfully (all tokens revoked/deleted)`);
+          logger.info(`[Auth] User ${userId} logged out successfully (all tokens revoked/deleted)`);
           return res.json({ success: true, message: 'Successfully logged out', cleared: true });
         });
       });
     } else {
-      console.log(`[Auth] No session to destroy`);
+      logger.info(`[Auth] No session to destroy`);
       return res.json({ success: true, message: 'Successfully logged out', cleared: true });
     }
   } catch (error) {
-    console.error('Logout error:', error);
+    logger.error('Logout error:', error);
     res.status(500).json({ success: false, error: 'Logout failed' });
   }
 });
@@ -342,19 +343,19 @@ router.get('/me', (req, res) => {
     let userId = null;
     if (req.session && req.session.user && req.session.user.id) {
       userId = String(req.session.user.id);
-      console.log(`[Auth/Me] Authenticated via session: ${userId}`);
+      logger.info(`[Auth/Me] Authenticated via session: ${userId}`);
     }
     
     // Fallback to tokenMeta (set by authenticate middleware if this route is wrapped)
     if (!userId && req.tokenMeta?.ownerId) {
       userId = String(req.tokenMeta.ownerId);
-      console.log(`[Auth/Me] Authenticated via req.tokenMeta: ${userId}`);
+      logger.info(`[Auth/Me] Authenticated via req.tokenMeta: ${userId}`);
     }
     
     // Fallback to req.user (in case this route is later wrapped in authenticate())
     if (!userId && req.user?.id) {
       userId = String(req.user.id);
-      console.log(`[Auth/Me] Authenticated via req.user: ${userId}`);
+      logger.info(`[Auth/Me] Authenticated via req.user: ${userId}`);
     }
 
     // Fallback: directly validate Bearer token from Authorization header.
@@ -383,7 +384,7 @@ router.get('/me', (req, res) => {
     }
 
     if (!userId) {
-      console.log(`[Auth/Me] No authentication found (no session, no valid Bearer token)`);
+      logger.info(`[Auth/Me] No authentication found (no session, no valid Bearer token)`);
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
@@ -429,7 +430,7 @@ router.get('/me', (req, res) => {
         if (req.session) {
           delete req.session.masterTokenRaw;
           delete req.session.masterTokenId;
-          req.session.save?.((err) => { if (err) console.error('[Auth/Me] Session clear error:', err); });
+          req.session.save?.((err) => { if (err) logger.error('[Auth/Me] Session clear error:', err); });
         }
       }
     }
@@ -443,7 +444,7 @@ router.get('/me', (req, res) => {
         if (req.session) {
           req.session.masterTokenRaw = masterTokenRaw;
           req.session.masterTokenId  = masterTokenId;
-          req.session.save?.((err) => { if (err) console.error('[Auth/Me] Session save error:', err); });
+          req.session.save?.((err) => { if (err) logger.error('[Auth/Me] Session save error:', err); });
         }
       }
     }
@@ -465,7 +466,7 @@ router.get('/me', (req, res) => {
       bootstrap: masterTokenRaw ? { masterToken: masterTokenRaw, tokenId: masterTokenId } : null,
     });
   } catch (error) {
-    console.error('Get user error:', error);
+    logger.error('Get user error:', error);
     res.status(500).json({ error: 'Failed to get user' });
   }
 });

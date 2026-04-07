@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 const express = require('express');
 const { db, createAuditLog } = require('../database');
 
@@ -110,7 +111,7 @@ function createAuditSecurityRouter({ sessionDb, sessionStore }) {
 
       res.json({ data: rows, meta: { total, limit, offset } });
     } catch (err) {
-      console.error('Error in audit/logs:', err.message);
+      logger.error('Error in audit/logs:', err.message);
       res.status(500).json({ error: 'Internal server error' });
     }
   });
@@ -132,7 +133,7 @@ function createAuditSecurityRouter({ sessionDb, sessionStore }) {
 
       res.json({ data: { total, last24h, byAction, byResource } });
     } catch (err) {
-      console.error('Error in audit/summary:', err.message);
+      logger.error('Error in audit/summary:', err.message);
       res.status(500).json({ error: 'Internal server error' });
     }
   });

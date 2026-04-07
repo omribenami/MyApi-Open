@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 /**
  * Email Management Routes
  * Outbound-only operations (no inbox read/search)
@@ -46,7 +47,7 @@ router.post('/process', async (req, res) => {
       ...result,
     });
   } catch (error) {
-    console.error('Error processing emails:', error);
+    logger.error('Error processing emails:', error);
     res.status(500).json({ error: 'Failed to process emails' });
   }
 });
@@ -63,7 +64,7 @@ router.get('/test', async (req, res) => {
     const result = await emailService.testConnection();
     res.json(result);
   } catch (error) {
-    console.error('Error testing email service:', error);
+    logger.error('Error testing email service:', error);
     res.status(500).json({ 
       success: false,
       error: error.message,
@@ -92,7 +93,7 @@ router.get('/status', async (req, res) => {
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    console.error('Error getting email status:', error);
+    logger.error('Error getting email status:', error);
     res.status(500).json({ success: false, error: 'Failed to get email status' });
   }
 });
@@ -123,7 +124,7 @@ router.post('/send-test', async (req, res) => {
     const result = await emailService.sendTestEmail(to);
     res.json(result);
   } catch (error) {
-    console.error('Error sending test email:', error);
+    logger.error('Error sending test email:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -148,7 +149,7 @@ router.get('/jobs', (req, res) => {
       queue: getEmailQueueStats(),
     });
   } catch (error) {
-    console.error('Error getting email jobs:', error);
+    logger.error('Error getting email jobs:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch email jobs' });
   }
 });

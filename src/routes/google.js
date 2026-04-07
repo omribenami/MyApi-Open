@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 /**
  * Google service proxy routes
  * Proxies Gmail (and future Google) API calls using the stored OAuth token.
@@ -130,7 +131,7 @@ function createGoogleRoutes() {
       });
     } catch (err) {
       const status = err.status || 500;
-      console.error('[Google/Gmail] listMessages error:', err.message);
+      logger.error('[Google/Gmail] listMessages error:', err.message);
       res.status(status).json({ error: err.message, ...(err.googleError ? { googleError: err.googleError } : {}) });
     }
   });
@@ -194,7 +195,7 @@ function createGoogleRoutes() {
       });
     } catch (err) {
       const status = err.status || 500;
-      console.error('[Google/Gmail] getMessage error:', err.message);
+      logger.error('[Google/Gmail] getMessage error:', err.message);
       res.status(status).json({ error: err.message });
     }
   });

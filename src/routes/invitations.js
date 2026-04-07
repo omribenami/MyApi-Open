@@ -1,3 +1,4 @@
+const logger = require('../utils/logger');
 /**
  * Invitation Management Routes
  * Handles user-specific invitation operations (accept, decline, view)
@@ -37,7 +38,7 @@ router.get('/:id', (req, res) => {
       invitation: invitation
     });
   } catch (error) {
-    console.error('Get invitation error:', error);
+    logger.error('Get invitation error:', error);
     res.status(500).json({ error: 'Failed to fetch invitation' });
   }
 });
@@ -82,7 +83,7 @@ router.post('/:id/accept', (req, res) => {
       message: 'Invitation accepted successfully'
     });
   } catch (error) {
-    console.error('Accept invitation error:', error);
+    logger.error('Accept invitation error:', error);
     res.status(500).json({ error: 'Failed to accept invitation' });
   }
 });
@@ -131,7 +132,7 @@ router.delete('/:id', (req, res) => {
       message: 'Invitation revoked successfully'
     });
   } catch (error) {
-    console.error('Revoke invitation error:', error);
+    logger.error('Revoke invitation error:', error);
     res.status(500).json({ error: 'Failed to revoke invitation' });
   }
 });
@@ -151,12 +152,12 @@ router.get('/', (req, res) => {
     // Primary: Check session auth (works on desktop)
     if (req.user && req.user.email) {
       userEmail = req.user.email;
-      console.log('[Invitations] Using session auth:', userEmail);
+      logger.info('[Invitations] Using session auth:', userEmail);
     }
     // Fallback: Check header sent by client (mobile fix for lost session cookie)
     else if (req.headers['x-user-email']) {
       userEmail = req.headers['x-user-email'];
-      console.log('[Invitations] Using header fallback auth:', userEmail);
+      logger.info('[Invitations] Using header fallback auth:', userEmail);
     }
     // Fallback 2: Check if Authorization Bearer token can decode user
     else if (req.headers.authorization) {
@@ -175,7 +176,7 @@ router.get('/', (req, res) => {
         if (session) {
           const data = JSON.parse(session.data);
           userEmail = data.user?.email;
-          console.log('[Invitations] Extracted from session token:', userEmail);
+          logger.info('[Invitations] Extracted from session token:', userEmail);
         }
       } catch (e) {
         // Silently fail fallback
@@ -183,10 +184,10 @@ router.get('/', (req, res) => {
     }
 
     if (!userEmail) {
-      console.log('[Invitations] ❌ No auth method available');
-      console.log('  - req.user:', req.user ? 'exists' : 'NONE');
-      console.log('  - X-User-Email header:', req.headers['x-user-email'] ? 'exists' : 'NONE');
-      console.log('  - Authorization:', req.headers.authorization ? 'exists' : 'NONE');
+      logger.info('[Invitations] ❌ No auth method available');
+      logger.info('  - req.user:', req.user ? 'exists' : 'NONE');
+      logger.info('  - X-User-Email header:', req.headers['x-user-email'] ? 'exists' : 'NONE');
+      logger.info('  - Authorization:', req.headers.authorization ? 'exists' : 'NONE');
       return res.status(401).json({ error: 'Authentication required' });
     }
 
@@ -199,7 +200,7 @@ router.get('/', (req, res) => {
       count: invitations.length
     });
   } catch (error) {
-    console.error('Get user invitations error:', error);
+    logger.error('Get user invitations error:', error);
     res.status(500).json({ error: 'Failed to fetch invitations' });
   }
 });
