@@ -35,7 +35,7 @@ function Dashboard() {
     marketplace: 0,
     knowledge: 0,
   });
-  const [connectorsSummary, setConnectorsSummary] = useState({ connected: 0, total: 0, names: [], afpDevices: 0, afpOnline: 0 });
+  const [connectorsSummary, setConnectorsSummary] = useState({ afpDevices: 0, afpOnline: 0, names: [] });
 
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -53,24 +53,17 @@ function Dashboard() {
     }
   };
 
-  // Fetch connectors + AFP summary
+  // Fetch AFP devices for connectors summary card
   const fetchConnectorsSummary = async () => {
     if (!isAuthenticated) return;
     try {
-      const [oauthRes, afpRes] = await Promise.all([
-        apiClient.get('/oauth/status').catch(() => null),
-        apiClient.get('/afp/devices').catch(() => null),
-      ]);
-      const services = oauthRes?.data?.services || oauthRes?.data?.data || [];
-      const connected = services.filter((s) => s.status === 'connected');
+      const afpRes = await apiClient.get('/afp/devices').catch(() => null);
       const afpDevices = afpRes?.data?.devices || afpRes?.data?.data || [];
       const afpOnline = afpDevices.filter((d) => d.status === 'online');
       setConnectorsSummary({
-        connected: connected.length,
-        total: services.length,
-        names: connected.slice(0, 4).map((s) => s.name || s.id),
         afpDevices: afpDevices.length,
         afpOnline: afpOnline.length,
+        names: afpDevices.slice(0, 4).map((d) => d.device_name || d.name || d.id),
       });
     } catch (err) {
       console.error('Failed to fetch connectors summary:', err);
@@ -525,54 +518,50 @@ function Dashboard() {
 
         {/* Card 4: Connectors Summary */}
         <Link
-          to="/services"
+          to="/connectors"
           className="rounded-lg border border-indigo-500/20 bg-slate-900/50 backdrop-blur p-6 hover:border-indigo-500/40 hover:bg-slate-800/40 transition-all duration-200 block"
         >
-          <div className="mb-4">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-8 h-8 rounded bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
-                <svg className="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest">
-                Connectors
-              </h3>
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-8 h-8 rounded bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
+              <svg className="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
             </div>
-            <div className="flex items-baseline gap-2">
-              <p className="text-2xl font-bold text-indigo-400 tracking-tight">
-                {connectorsSummary.connected}
-              </p>
-              <span className="text-xs text-slate-500">/ {connectorsSummary.total} services</span>
-            </div>
+            <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest">Connectors</h3>
           </div>
-          <div className="pt-4 border-t border-slate-700/30 space-y-3">
-            {connectorsSummary.afpDevices > 0 && (
+
+          <div className="space-y-3">
+            {/* AI connectors row */}
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-400">AI connectors</span>
+              <div className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                <span className="text-xs text-emerald-400 font-medium">ChatGPT</span>
+              </div>
+            </div>
+
+            {/* AFP devices row */}
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-400">PC devices</span>
               <div className="flex items-center gap-1.5">
-                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${connectorsSummary.afpOnline > 0 ? 'bg-emerald-400' : 'bg-slate-600'}`} />
-                <span className="text-xs text-slate-400">
-                  {connectorsSummary.afpOnline}/{connectorsSummary.afpDevices} PC{connectorsSummary.afpDevices !== 1 ? 's' : ''} online
+                <span className={`w-2 h-2 rounded-full ${connectorsSummary.afpOnline > 0 ? 'bg-emerald-400' : connectorsSummary.afpDevices > 0 ? 'bg-amber-400' : 'bg-slate-600'}`} />
+                <span className={`text-xs font-medium ${connectorsSummary.afpOnline > 0 ? 'text-emerald-400' : connectorsSummary.afpDevices > 0 ? 'text-amber-400' : 'text-slate-500'}`}>
+                  {connectorsSummary.afpDevices === 0
+                    ? 'none registered'
+                    : `${connectorsSummary.afpOnline}/${connectorsSummary.afpDevices} online`}
                 </span>
               </div>
-            )}
-            {connectorsSummary.names.length > 0 ? (
-              <div className="flex flex-wrap gap-1">
+            </div>
+
+            {/* Device name chips if any */}
+            {connectorsSummary.afpDevices > 0 && (
+              <div className="pt-2 border-t border-slate-700/30 flex flex-wrap gap-1">
                 {connectorsSummary.names.map((name) => (
-                  <span
-                    key={name}
-                    className="px-1.5 py-0.5 rounded text-[10px] bg-indigo-900/30 text-indigo-300 border border-indigo-500/20 capitalize"
-                  >
+                  <span key={name} className="px-1.5 py-0.5 rounded text-[10px] bg-indigo-900/30 text-indigo-300 border border-indigo-500/20">
                     {name}
                   </span>
                 ))}
-                {connectorsSummary.connected > 4 && (
-                  <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-500 border border-slate-700">
-                    +{connectorsSummary.connected - 4}
-                  </span>
-                )}
               </div>
-            ) : (
-              <p className="text-xs text-slate-500">No services connected yet</p>
             )}
           </div>
         </Link>
