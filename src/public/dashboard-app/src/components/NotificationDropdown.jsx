@@ -21,7 +21,7 @@ function NotificationDropdown({ open, onClose }) {
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
 
   useEffect(() => {
-    if (open && masterToken) {
+    if (open) {
       fetchNotifications(masterToken, displayLimit, 0);
       setOffset(0);
     }

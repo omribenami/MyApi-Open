@@ -2051,6 +2051,31 @@ app.use('/api/v1/skills', authenticate, createSkillsRoutes(
   getSkillOwnershipClaims
 ));
 
+// In-memory cache for validated Bearer tokens: rawToken → { tokenMeta, expiresAt }
+// Avoids repeating bcrypt.compareSync (85ms each) on every request.
+const _tokenCache = new Map();
+const TOKEN_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+function _getCachedToken(rawToken) {
+  const entry = _tokenCache.get(rawToken);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) { _tokenCache.delete(rawToken); return null; }
+  return entry.tokenMeta;
+}
+
+function _setCachedToken(rawToken, tokenMeta) {
+  // Evict old entries if cache gets large
+  if (_tokenCache.size > 500) {
+    const now = Date.now();
+    for (const [k, v] of _tokenCache) { if (now > v.expiresAt) _tokenCache.delete(k); }
+  }
+  _tokenCache.set(rawToken, { tokenMeta, expiresAt: Date.now() + TOKEN_CACHE_TTL_MS });
+}
+
+function _invalidateCachedToken(rawToken) {
+  if (rawToken) _tokenCache.delete(rawToken);
+}
+
 function authenticate(req, res, next) {
   // SKIP authentication for public endpoints (OAuth authorize/callback, login signup)
   const fullPath = req.baseUrl + req.path;
@@ -2124,30 +2149,36 @@ function authenticate(req, res, next) {
     console.warn('[AUTH 401] missing token/session', { method: req.method, fullPath, baseUrl: req.baseUrl, path: req.path, isPublicPath });
     return res.status(401).json({ error: "Missing session, Authorization: Bearer token, or ?token= query parameter" });
   }
-  let tokens;
-  try {
-    tokens = getAccessTokens();
-  } catch (dbError) {
-    console.error('[AUTH] Database error while fetching tokens:', dbError.message);
-    return res.status(500).json({ error: "Internal server error", message: "Service temporarily unavailable" });
-  }
-  let matched = null;
-  for (const tokenMeta of tokens) {
-    // Check that token is not revoked, not expired, and hash matches
-    if (!tokenMeta.revokedAt && tokenMeta.hash && bcrypt.compareSync(rawToken, tokenMeta.hash)) {
-      // Check expiration: if expiresAt is set and is in the past, reject the token
-      if (tokenMeta.expiresAt) {
-        const expiryTime = new Date(tokenMeta.expiresAt);
-        const now = new Date();
-        if (expiryTime <= now) {
-          console.warn('[AUTH] Token has expired', { tokenId: tokenMeta.tokenId, expiresAt: tokenMeta.expiresAt });
-          continue; // Skip this expired token
-        }
-      }
-      matched = tokenMeta;
-      break;
+  // Fast path: check in-memory cache before doing bcrypt scan
+  let matched = _getCachedToken(rawToken);
+
+  if (!matched) {
+    let tokens;
+    try {
+      tokens = getAccessTokens();
+    } catch (dbError) {
+      console.error('[AUTH] Database error while fetching tokens:', dbError.message);
+      return res.status(500).json({ error: "Internal server error", message: "Service temporarily unavailable" });
     }
+    for (const tokenMeta of tokens) {
+      // Check that token is not revoked, not expired, and hash matches
+      if (!tokenMeta.revokedAt && tokenMeta.hash && bcrypt.compareSync(rawToken, tokenMeta.hash)) {
+        // Check expiration: if expiresAt is set and is in the past, reject the token
+        if (tokenMeta.expiresAt) {
+          const expiryTime = new Date(tokenMeta.expiresAt);
+          const now = new Date();
+          if (expiryTime <= now) {
+            console.warn('[AUTH] Token has expired', { tokenId: tokenMeta.tokenId, expiresAt: tokenMeta.expiresAt });
+            continue; // Skip this expired token
+          }
+        }
+        matched = tokenMeta;
+        break;
+      }
+    }
+    if (matched) _setCachedToken(rawToken, matched);
   }
+
   if (!matched) {
     createAuditLog({ requesterId: "unknown", action: "auth_fail", resource: req.path, ip: req.ip });
     return res.status(401).json({ error: "Invalid or revoked token" });
@@ -4478,6 +4509,7 @@ app.post("/api/v1/tokens/:id/regenerate", authenticate, (req, res) => {
   if (!token) return res.status(404).json({ error: "Token not found" });
   if (token.revokedAt) return res.status(400).json({ error: "Cannot regenerate a revoked token" });
 
+  _tokenCache.clear(); // old raw token is now invalid
   const rawToken = 'myapi_' + crypto.randomBytes(32).toString("hex");
   const hash = bcrypt.hashSync(rawToken, 10);
   const now = new Date().toISOString();
@@ -4587,6 +4619,7 @@ app.post('/api/v1/tokens/master/bootstrap', authenticate, (req, res) => {
 // Revoke (delete) a token
 app.delete("/api/v1/tokens/:id", authenticate, (req, res) => {
   if (!isMaster(req)) return res.status(403).json({ error: "Only master token can revoke tokens" });
+  _tokenCache.clear(); // invalidate all cached tokens on any revocation
   const revoked = revokeAccessToken(req.params.id);
   if (!revoked) return res.status(404).json({ error: "Token not found" });
 

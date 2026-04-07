@@ -85,6 +85,7 @@ function NavDropdown({ label, items, isActiveFn, onMobileClick }) {
 function Layout({ children, onLogout }) {
   const location = useLocation();
   const { user } = useAuthStore();
+  const masterToken = useAuthStore((state) => state.masterToken);
   const unreadCount = useNotificationStore(state => state.unreadCount);
   const fetchUnreadCount = useNotificationStore(state => state.fetchUnreadCount);
   const toasts = useNotificationStore(state => state.toasts) || [];
@@ -107,10 +108,10 @@ function Layout({ children, onLogout }) {
 
   // Fetch unread notification count on mount and periodically
   useEffect(() => {
-    fetchUnreadCount();
-    const interval = setInterval(() => fetchUnreadCount(), 30000); // Poll every 30s
+    fetchUnreadCount(masterToken);
+    const interval = setInterval(() => fetchUnreadCount(masterToken), 30000); // Poll every 30s
     return () => clearInterval(interval);
-  }, [fetchUnreadCount]);
+  }, [fetchUnreadCount, masterToken]);
 
   const tokenData = (() => {
     try { return JSON.parse(localStorage.getItem('tokenData') || '{}'); } catch { return {}; }
