@@ -7,6 +7,9 @@ WORKDIR /app
 # Copy src/ contents (the actual app)
 COPY src/ .
 
+# Copy legal docs (Privacy Policy, Terms of Use)
+COPY docs/ /docs/
+
 # Stage AFP binaries from connectors/
 RUN mkdir -p afp-dist afp-oauth-dist
 COPY connectors/afp-daemon/dist/ afp-dist/

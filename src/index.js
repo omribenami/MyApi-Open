@@ -4758,6 +4758,7 @@ const BILLING_PLANS = {
       'Attach unlimited Skills per Persona',
       '100,000 API calls/month',
       'Up to 10 team members',
+      'AFP PC File Access (remote file & shell operations)',
       'Priority support'
     ],
     monthlyApiCallLimit: 100000,
@@ -4782,6 +4783,7 @@ const BILLING_PLANS = {
       'Attach unlimited Skills per Persona',
       'Unlimited API calls/month',
       'Unlimited team members',
+      'AFP PC File Access (remote file & shell operations)',
       'Priority 24/7 support',
       'Custom SLA & onboarding',
       'Dedicated infrastructure option'

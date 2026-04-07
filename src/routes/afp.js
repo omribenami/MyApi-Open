@@ -15,6 +15,7 @@ const {
   createAuditLog,
 } = require('../database');
 const { pendingRequests, afpConnections } = require('../lib/afp-state');
+const { resolveRequesterPlan } = require('../lib/planEnforcement');
 
 const router = express.Router();
 
@@ -26,6 +27,20 @@ function requireMaster(req, res, next) {
   const ok = m.scope === 'full' || m.tokenType === 'master' ||
              String(m.tokenId || '').startsWith('sess_');
   if (!ok) return res.status(403).json({ error: 'Master token required for AFP routes' });
+  next();
+}
+
+// ── Pro/Enterprise plan gate ──────────────────────────────────────────────────
+function requireAfpPlan(req, res, next) {
+  const plan = resolveRequesterPlan(req);
+  if (plan !== 'pro' && plan !== 'enterprise') {
+    return res.status(403).json({
+      error: 'AFP connectors require a Pro or Enterprise plan',
+      plan,
+      feature: 'afp',
+      upgradeHint: 'Upgrade to Pro or Enterprise to use AFP connectors',
+    });
+  }
   next();
 }
 
@@ -103,7 +118,7 @@ async function fileOp(req, res, op, params) {
 // ── Device management (static routes BEFORE /:deviceId) ──────────────────────
 
 // GET /api/v1/afp/devices — list all registered daemons for this user
-router.get('/devices', requireMaster, (req, res) => {
+router.get('/devices', requireMaster, requireAfpPlan, (req, res) => {
   const userId = req.tokenMeta.ownerId;
   try {
     const devices = getAfpDevices(userId).map(d => ({
@@ -127,7 +142,7 @@ router.get('/devices', requireMaster, (req, res) => {
 
 // POST /api/v1/afp/devices/register — daemon self-registers
 // Returns: { deviceId, deviceToken }  ← store token in daemon env, never log it
-router.post('/devices/register', requireMaster, async (req, res) => {
+router.post('/devices/register', requireMaster, requireAfpPlan, async (req, res) => {
   const { deviceName, hostname, platform, arch, capabilities = ['fs', 'exec'] } = req.body;
   if (!deviceName || typeof deviceName !== 'string' || !deviceName.trim()) {
     return res.status(400).json({ ok: false, error: 'deviceName is required' });
@@ -161,7 +176,7 @@ router.post('/devices/register', requireMaster, async (req, res) => {
 });
 
 // DELETE /api/v1/afp/devices/:deviceId — revoke a daemon
-router.delete('/devices/:deviceId', requireMaster, (req, res) => {
+router.delete('/devices/:deviceId', requireMaster, requireAfpPlan, (req, res) => {
   const userId = req.tokenMeta.ownerId;
   const { deviceId } = req.params;
 
@@ -195,19 +210,19 @@ router.delete('/devices/:deviceId', requireMaster, (req, res) => {
 // ── File system + exec operations ─────────────────────────────────────────────
 
 // GET  /:deviceId/ls?path=<dir>
-router.get('/:deviceId/ls', requireMaster, (req, res) =>
+router.get('/:deviceId/ls', requireMaster, requireAfpPlan, (req, res) =>
   fileOp(req, res, 'ls', { path: req.query.path || '.' }));
 
 // GET  /:deviceId/read?path=<file>
-router.get('/:deviceId/read', requireMaster, (req, res) =>
+router.get('/:deviceId/read', requireMaster, requireAfpPlan, (req, res) =>
   fileOp(req, res, 'read', { path: req.query.path }));
 
 // GET  /:deviceId/stat?path=<path>
-router.get('/:deviceId/stat', requireMaster, (req, res) =>
+router.get('/:deviceId/stat', requireMaster, requireAfpPlan, (req, res) =>
   fileOp(req, res, 'stat', { path: req.query.path }));
 
 // POST /:deviceId/write  body: { path, content, encoding? }
-router.post('/:deviceId/write', requireMaster, (req, res) =>
+router.post('/:deviceId/write', requireMaster, requireAfpPlan, (req, res) =>
   fileOp(req, res, 'write', {
     path: req.body.path,
     content: req.body.content,
@@ -215,21 +230,21 @@ router.post('/:deviceId/write', requireMaster, (req, res) =>
   }));
 
 // DELETE /:deviceId/rm  body: { path, recursive? }
-router.delete('/:deviceId/rm', requireMaster, (req, res) =>
+router.delete('/:deviceId/rm', requireMaster, requireAfpPlan, (req, res) =>
   fileOp(req, res, 'rm', {
     path: req.body.path,
     recursive: !!req.body.recursive,
   }));
 
 // POST /:deviceId/mkdir  body: { path, recursive? }
-router.post('/:deviceId/mkdir', requireMaster, (req, res) =>
+router.post('/:deviceId/mkdir', requireMaster, requireAfpPlan, (req, res) =>
   fileOp(req, res, 'mkdir', {
     path: req.body.path,
     recursive: req.body.recursive !== false,
   }));
 
 // POST /:deviceId/exec  body: { cmd, cwd?, timeout?, shell? }
-router.post('/:deviceId/exec', requireMaster, (req, res) =>
+router.post('/:deviceId/exec', requireMaster, requireAfpPlan, (req, res) =>
   fileOp(req, res, 'exec', {
     cmd: req.body.cmd,
     cwd: req.body.cwd || undefined,

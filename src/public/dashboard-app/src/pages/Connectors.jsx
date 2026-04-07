@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import apiClient from '../utils/apiClient';
+import { useAuthStore } from '../stores/authStore';
 
 const CONNECTORS = [
   {
@@ -234,6 +235,9 @@ const OS_PLATFORMS = [
 ];
 
 function AfpConnectorCard() {
+  const { user } = useAuthStore();
+  const isAfpEnabled = ['pro', 'enterprise'].includes(String(user?.plan || 'free').toLowerCase());
+
   const [devices, setDevices] = useState([]);
   const [downloadInfo, setDownloadInfo] = useState([]);
   const [downloadOAuthInfo, setDownloadOAuthInfo] = useState([]);
@@ -367,89 +371,107 @@ function AfpConnectorCard() {
         </div>
       </div>
 
-      <div className="p-6 space-y-8">
+      {isAfpEnabled ? (
+        <div className="p-6 space-y-8">
 
-        {/* ── OAuth Edition ─────────────────────────────────────────────────── */}
-        <div>
-          <div className="flex items-center gap-3 mb-4">
-            <div>
-              <p className="text-sm font-semibold text-slate-200">Sign-in Edition <span className="ml-1.5 text-xs font-medium px-2 py-0.5 rounded-full bg-violet-400/10 text-violet-400 border border-violet-400/20">Recommended</span></p>
-              <p className="text-xs text-slate-500 mt-0.5">Opens your browser for a one-click login. Works with myapiai.com accounts.</p>
-            </div>
-          </div>
-          <DownloadGrid type="oauth" accentRing="focus:ring-violet-500/40" />
-          <div className="mt-4 rounded-xl bg-slate-800/40 border border-slate-700/40 overflow-hidden">
-            <div className="px-5 py-3 border-b border-slate-700/40">
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">How to install</p>
-            </div>
-            <div className="p-5 space-y-3">
-              {[
-                { n: '1', title: 'Download', body: 'Pick your OS above and save the file. No installation wizard, no dependencies.' },
-                { n: '2', title: 'Run it', body: 'Double-click it (Windows) or open a terminal and run it (Mac/Linux). Your browser will open automatically.' },
-                { n: '3', title: 'Sign in', body: 'Log in to your MyApi account and click Authorize. The app connects in the background and stays running.' },
-                { n: '4', title: 'Done', body: 'Your PC will appear in the Connected Devices list below. AI agents can now access it.' },
-              ].map(s => (
-                <div key={s.n} className="flex gap-3">
-                  <span className="w-5 h-5 rounded-full bg-violet-500/10 border border-violet-500/20 text-violet-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{s.n}</span>
-                  <div><p className="text-sm font-medium text-slate-300">{s.title}</p><p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{s.body}</p></div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* ── Token Edition ─────────────────────────────────────────────────── */}
-        <div>
-          <div className="mb-4">
-            <p className="text-sm font-semibold text-slate-200">Token Edition <span className="ml-1.5 text-xs font-medium px-2 py-0.5 rounded-full bg-slate-700/50 text-slate-400 border border-slate-700">Self-hosted</span></p>
-            <p className="text-xs text-slate-500 mt-0.5">For self-hosted deployments. Connects using your master API token.</p>
-          </div>
-          <DownloadGrid type="daemon" accentRing="focus:ring-cyan-500/40" />
-          <div className="mt-4 rounded-xl bg-slate-800/40 border border-slate-700/40 overflow-hidden">
-            <div className="px-5 py-3 border-b border-slate-700/40">
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">How to install</p>
-            </div>
-            <div className="p-5 space-y-3">
-              {[
-                { n: '1', title: 'Download', body: 'Pick your OS above and save the file.' },
-                { n: '2', title: 'Run it', body: 'Double-click (Windows) or run from terminal (Mac/Linux). A setup wizard will ask for your server URL and API token.' },
-                { n: '3', title: 'Auto-start', body: 'The wizard can install it as a background service so it starts automatically when you log in.' },
-                { n: '4', title: 'Done', body: 'Your PC will appear in the Connected Devices list below.' },
-              ].map(s => (
-                <div key={s.n} className="flex gap-3">
-                  <span className="w-5 h-5 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{s.n}</span>
-                  <div><p className="text-sm font-medium text-slate-300">{s.title}</p><p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{s.body}</p></div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* ── Connected devices ──────────────────────────────────────────────── */}
-        {!loading && totalCount > 0 && (
+          {/* ── OAuth Edition ─────────────────────────────────────────────────── */}
           <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">Connected Devices</p>
-            <div className="space-y-2">
-              {devices.map(device => (
-                <DeviceRow
-                  key={device.id}
-                  device={device}
-                  onRevoke={id => {
-                    apiClient.delete(`/afp/devices/${id}`)
-                      .then(() => setDevices(ds => ds.filter(d => d.id !== id)))
-                      .catch(() => alert('Failed to revoke device'));
-                  }}
-                />
-              ))}
+            <div className="flex items-center gap-3 mb-4">
+              <div>
+                <p className="text-sm font-semibold text-slate-200">Sign-in Edition <span className="ml-1.5 text-xs font-medium px-2 py-0.5 rounded-full bg-violet-400/10 text-violet-400 border border-violet-400/20">Recommended</span></p>
+                <p className="text-xs text-slate-500 mt-0.5">Opens your browser for a one-click login. Works with myapiai.com accounts.</p>
+              </div>
+            </div>
+            <DownloadGrid type="oauth" accentRing="focus:ring-violet-500/40" />
+            <div className="mt-4 rounded-xl bg-slate-800/40 border border-slate-700/40 overflow-hidden">
+              <div className="px-5 py-3 border-b border-slate-700/40">
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">How to install</p>
+              </div>
+              <div className="p-5 space-y-3">
+                {[
+                  { n: '1', title: 'Download', body: 'Pick your OS above and save the file. No installation wizard, no dependencies.' },
+                  { n: '2', title: 'Run it', body: 'Double-click it (Windows) or open a terminal and run it (Mac/Linux). Your browser will open automatically.' },
+                  { n: '3', title: 'Sign in', body: 'Log in to your MyApi account and click Authorize. The app connects in the background and stays running.' },
+                  { n: '4', title: 'Done', body: 'Your PC will appear in the Connected Devices list below. AI agents can now access it.' },
+                ].map(s => (
+                  <div key={s.n} className="flex gap-3">
+                    <span className="w-5 h-5 rounded-full bg-violet-500/10 border border-violet-500/20 text-violet-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{s.n}</span>
+                    <div><p className="text-sm font-medium text-slate-300">{s.title}</p><p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{s.body}</p></div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
-        )}
 
-        {!loading && totalCount === 0 && (
-          <p className="text-sm text-slate-500 text-center py-2">No devices connected yet — download and run the app above to get started.</p>
-        )}
+          {/* ── Token Edition ─────────────────────────────────────────────────── */}
+          <div>
+            <div className="mb-4">
+              <p className="text-sm font-semibold text-slate-200">Token Edition <span className="ml-1.5 text-xs font-medium px-2 py-0.5 rounded-full bg-slate-700/50 text-slate-400 border border-slate-700">Self-hosted</span></p>
+              <p className="text-xs text-slate-500 mt-0.5">For self-hosted deployments. Connects using your master API token.</p>
+            </div>
+            <DownloadGrid type="daemon" accentRing="focus:ring-cyan-500/40" />
+            <div className="mt-4 rounded-xl bg-slate-800/40 border border-slate-700/40 overflow-hidden">
+              <div className="px-5 py-3 border-b border-slate-700/40">
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">How to install</p>
+              </div>
+              <div className="p-5 space-y-3">
+                {[
+                  { n: '1', title: 'Download', body: 'Pick your OS above and save the file.' },
+                  { n: '2', title: 'Run it', body: 'Double-click (Windows) or run from terminal (Mac/Linux). A setup wizard will ask for your server URL and API token.' },
+                  { n: '3', title: 'Auto-start', body: 'The wizard can install it as a background service so it starts automatically when you log in.' },
+                  { n: '4', title: 'Done', body: 'Your PC will appear in the Connected Devices list below.' },
+                ].map(s => (
+                  <div key={s.n} className="flex gap-3">
+                    <span className="w-5 h-5 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{s.n}</span>
+                    <div><p className="text-sm font-medium text-slate-300">{s.title}</p><p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{s.body}</p></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
 
-      </div>
+          {/* ── Connected devices ──────────────────────────────────────────────── */}
+          {!loading && totalCount > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">Connected Devices</p>
+              <div className="space-y-2">
+                {devices.map(device => (
+                  <DeviceRow
+                    key={device.id}
+                    device={device}
+                    onRevoke={id => {
+                      apiClient.delete(`/afp/devices/${id}`)
+                        .then(() => setDevices(ds => ds.filter(d => d.id !== id)))
+                        .catch(() => alert('Failed to revoke device'));
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!loading && totalCount === 0 && (
+            <p className="text-sm text-slate-500 text-center py-2">No devices connected yet — download and run the app above to get started.</p>
+          )}
+
+        </div>
+      ) : (
+        <div className="p-8 text-center space-y-4">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-semibold">
+            Pro &amp; Enterprise only
+          </div>
+          <p className="text-slate-400 text-sm max-w-sm mx-auto">
+            AFP connectors are available on Pro and Enterprise plans.
+            Upgrade to install the daemon and give AI agents access to your files and shell.
+          </p>
+          <a
+            href="/dashboard/settings?section=billing"
+            className="inline-block mt-2 px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold transition-colors"
+          >
+            Upgrade Plan
+          </a>
+        </div>
+      )}
     </div>
   );
 }
