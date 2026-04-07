@@ -125,7 +125,7 @@ function httpRequest(method, url, body, headers = {}) {
   });
 }
 
-function httpForm(url, formData, headers = {}) {
+function httpForm(url, formData, headers = {}, redirects = 5) {
   return new Promise((resolve, reject) => {
     const parsed = new URL(url);
     const lib = parsed.protocol === 'https:' ? https : http;
@@ -142,6 +142,11 @@ function httpForm(url, formData, headers = {}) {
       },
     };
     const req = lib.request(opts, (res) => {
+      if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location && redirects > 0) {
+        const next = new URL(res.headers.location, url).toString();
+        res.resume();
+        return resolve(httpForm(next, formData, headers, redirects - 1));
+      }
       let raw = '';
       res.on('data', (c) => raw += c);
       res.on('end', () => {
@@ -236,7 +241,7 @@ async function runOAuthFlow() {
   });
 
   if (tokenRes.status !== 200 || !tokenRes.body.access_token) {
-    throw new Error(`Token exchange failed: ${JSON.stringify(tokenRes.body)}`);
+    throw new Error(`Token exchange failed (HTTP ${tokenRes.status}): ${JSON.stringify(tokenRes.body)}`);
   }
 
   const accessToken = tokenRes.body.access_token;
