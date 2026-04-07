@@ -68,14 +68,13 @@ function handleDashboardMetrics(req, res) {
     const knowledge = (getKBDocuments(userId) || []).length;
     const memories = (getMemories(userId, workspaceId) || []).length;
 
-    // audit_log.requester_id stores token IDs — join via access_tokens to filter by owner
+    // Get recent meaningful activity — exclude internal/system noise
     const auditRows = db.prepare(`
-      SELECT a.action, a.resource, a.timestamp
-      FROM audit_log a
-      LEFT JOIN access_tokens t ON t.id = a.requester_id
-      WHERE t.owner_id = ? OR a.requester_id = ?
-      ORDER BY a.timestamp DESC LIMIT 5
-    `).all(userId, userId);
+      SELECT action, resource, timestamp FROM audit_log
+      WHERE requester_id NOT IN ('system', 'anonymous', 'unknown')
+        AND action NOT IN ('uncaught_exception', 'db_integrity_warning', 'blocked_sensitive_file_access')
+      ORDER BY timestamp DESC LIMIT 5
+    `).all();
     const recentActivity = auditRows.map((item) => {
       const action = item.action || '';
       const resource = item.resource || '';
