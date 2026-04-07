@@ -555,7 +555,7 @@ function Dashboard() {
                   </div>
                   <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest">Personas</h3>
                 </div>
-                <Link to="/marketplace" title="Marketplace" className="text-slate-600 hover:text-slate-400 transition-colors">
+                <Link to="/marketplace" title="Marketplace" className="text-cyan-600 hover:text-cyan-400 transition-colors">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
                   </svg>
@@ -585,7 +585,7 @@ function Dashboard() {
                   </div>
                   <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest">Skills</h3>
                 </div>
-                <Link to="/marketplace" title="Marketplace" className="text-slate-600 hover:text-slate-400 transition-colors">
+                <Link to="/marketplace" title="Marketplace" className="text-cyan-600 hover:text-cyan-400 transition-colors">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
                   </svg>
