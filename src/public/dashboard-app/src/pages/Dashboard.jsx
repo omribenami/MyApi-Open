@@ -528,57 +528,47 @@ function Dashboard() {
           </Link>
         </div>
 
-        {/* Card 4: Connectors Summary */}
-        <Link
-          to="/connectors"
-          className="rounded-lg border border-indigo-500/20 bg-slate-900/50 backdrop-blur p-6 hover:border-indigo-500/40 hover:bg-slate-800/40 transition-all duration-200 block"
-        >
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-8 h-8 rounded bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
-              <svg className="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
+        {/* Card 4: Connectors */}
+        <div className="rounded-lg border border-slate-700/50 bg-slate-900/50 backdrop-blur p-6 hover:border-slate-600/50 transition-all duration-200">
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-8 h-8 rounded bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
+                <svg className="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest">Connectors</h3>
             </div>
-            <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest">Connectors</h3>
+            <p className="text-2xl font-bold text-slate-100 tracking-tight">
+              {connectorsSummary.afpDevices}
+            </p>
+            <p className="text-xs text-slate-400 mt-1">PC Devices</p>
           </div>
-
-          <div className="space-y-3">
-            {/* AI connectors row */}
+          <div className="pt-4 border-t border-slate-700/30 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-400">Online</span>
+              <span className={`text-sm font-semibold ${connectorsSummary.afpOnline > 0 ? 'text-emerald-400' : 'text-slate-500'}`}>
+                {connectorsSummary.afpOnline}/{connectorsSummary.afpDevices}
+              </span>
+            </div>
             <div className="flex items-center justify-between">
               <span className="text-xs text-slate-400">ChatGPT</span>
-              <div className="flex items-center gap-1.5">
+              <span className={`inline-flex items-center gap-1 text-xs font-semibold ${connectorsSummary.chatgptActive ? 'text-emerald-400' : 'text-slate-500'}`}>
                 <span className={`w-2 h-2 rounded-full ${connectorsSummary.chatgptActive ? 'bg-emerald-400' : 'bg-slate-600'}`} />
-                <span className={`text-xs font-medium ${connectorsSummary.chatgptActive ? 'text-emerald-400' : 'text-slate-500'}`}>
-                  {connectorsSummary.chatgptActive ? 'signed in' : 'not connected'}
-                </span>
-              </div>
+                {connectorsSummary.chatgptActive ? 'Connected' : 'Not connected'}
+              </span>
             </div>
-
-            {/* AFP devices row */}
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-400">PC devices</span>
-              <div className="flex items-center gap-1.5">
-                <span className={`w-2 h-2 rounded-full ${connectorsSummary.afpOnline > 0 ? 'bg-emerald-400' : connectorsSummary.afpDevices > 0 ? 'bg-amber-400' : 'bg-slate-600'}`} />
-                <span className={`text-xs font-medium ${connectorsSummary.afpOnline > 0 ? 'text-emerald-400' : connectorsSummary.afpDevices > 0 ? 'text-amber-400' : 'text-slate-500'}`}>
-                  {connectorsSummary.afpDevices === 0
-                    ? 'none registered'
-                    : `${connectorsSummary.afpOnline}/${connectorsSummary.afpDevices} online`}
-                </span>
-              </div>
-            </div>
-
-            {/* Device name chips if any */}
-            {connectorsSummary.afpDevices > 0 && (
-              <div className="pt-2 border-t border-slate-700/30 flex flex-wrap gap-1">
-                {connectorsSummary.names.map((name) => (
-                  <span key={name} className="px-1.5 py-0.5 rounded text-[10px] bg-indigo-900/30 text-indigo-300 border border-indigo-500/20">
-                    {name}
-                  </span>
-                ))}
-              </div>
-            )}
           </div>
-        </Link>
+          <Link
+            to="/connectors"
+            className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors"
+          >
+            Manage Connectors
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </Link>
+        </div>
       </div>
 
       {/* AI & Data Section - Personas, Skills, Marketplace, Knowledge */}
