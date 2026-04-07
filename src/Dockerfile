@@ -1,6 +1,6 @@
 # Production Dockerfile for MyApi
 # Build context: repo root (one level above src/)
-FROM node:22
+FROM node:22-noble
 
 WORKDIR /app
 
