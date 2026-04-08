@@ -1,6 +1,62 @@
+const crypto = require('crypto');
 const DeviceFingerprint = require('../utils/deviceFingerprint');
 const db = require('../database');
 const NotificationService = require('../services/notificationService');
+
+// ─── ASC: Ed25519 signature verification ─────────────────────────────────────
+
+function verifyASCSignature(req, userId, tokenId) {
+  const pubKeyB64  = req.headers['x-agent-publickey'];
+  const sigB64     = req.headers['x-agent-signature'];
+  const tsHeader   = req.headers['x-agent-timestamp'];
+
+  if (!pubKeyB64 || !sigB64 || !tsHeader) return null; // not an ASC request
+
+  // Replay protection: timestamp must be within 60 seconds
+  const ts = parseInt(tsHeader, 10);
+  const now = Math.floor(Date.now() / 1000);
+  if (isNaN(ts) || Math.abs(now - ts) > 60) {
+    return { valid: false, reason: 'timestamp_invalid' };
+  }
+
+  // Decode public key — must be 32 bytes (raw Ed25519)
+  let pubKeyBuf;
+  try {
+    pubKeyBuf = Buffer.from(pubKeyB64, 'base64');
+  } catch {
+    return { valid: false, reason: 'publickey_invalid' };
+  }
+  if (pubKeyBuf.length !== 32) {
+    return { valid: false, reason: 'publickey_invalid' };
+  }
+
+  // Compute key fingerprint (first 32 hex chars of SHA256)
+  const keyFingerprint = crypto.createHash('sha256').update(pubKeyBuf).digest('hex').substring(0, 32);
+
+  // Verify Ed25519 signature: message = "<timestamp>:<tokenId>"
+  const message = Buffer.from(`${tsHeader}:${tokenId}`);
+  let sigBuf;
+  try {
+    sigBuf = Buffer.from(sigB64, 'base64');
+  } catch {
+    return { valid: false, reason: 'signature_invalid' };
+  }
+
+  let sigValid = false;
+  try {
+    // Node 22 supports Ed25519 verify with raw 32-byte key via SubjectPublicKeyInfo wrapping
+    const spkiPrefix = Buffer.from('302a300506032b6570032100', 'hex'); // SPKI prefix for Ed25519
+    const spkiKey = Buffer.concat([spkiPrefix, pubKeyBuf]);
+    const keyObj = crypto.createPublicKey({ key: spkiKey, format: 'der', type: 'spki' });
+    sigValid = crypto.verify(null, message, keyObj, sigBuf);
+  } catch {
+    return { valid: false, reason: 'signature_invalid' };
+  }
+
+  if (!sigValid) return { valid: false, reason: 'signature_mismatch' };
+
+  return { valid: true, keyFingerprint, pubKeyB64 };
+}
 
 /**
  * Device Approval Middleware
@@ -80,6 +136,47 @@ function deviceApprovalMiddleware(req, res, next) {
   if (!userId || !tokenId) {
     console.log('[Device Approval] Skipping - not an API token');
     return next();
+  }
+
+  // ── ASC: Ed25519 signed request ──────────────────────────────────────────
+  const ascResult = verifyASCSignature(req, userId, tokenId);
+  if (ascResult !== null) {
+    // Headers were present — this is an ASC request
+    if (!ascResult.valid) {
+      return res.status(401).json({
+        error: 'asc_signature_invalid',
+        code: 'ASC_INVALID',
+        reason: ascResult.reason,
+        message: 'Request signature is invalid or timestamp is too old.',
+      });
+    }
+    // Signature valid — check if this key is approved
+    const ascDevice = db.getApprovedDeviceByKeyFingerprint(userId, ascResult.keyFingerprint);
+    if (ascDevice && !ascDevice.revoked_at) {
+      db.updateDeviceLastUsed(ascDevice.id);
+      return next();
+    }
+    if (ascDevice && ascDevice.revoked_at) {
+      return res.status(403).json({
+        error: 'device_not_approved',
+        code: 'DEVICE_APPROVAL_REQUIRED',
+        message: 'Access denied — waiting for the user to approve you in the dashboard.',
+        key_fingerprint: ascResult.keyFingerprint,
+      });
+    }
+    // Key not registered at all — create pending approval
+    const pending = db.getPendingApprovals(userId, tokenId);
+    const existingPending = pending.find(p => p.device_fingerprint_hash === ascResult.keyFingerprint);
+    if (!existingPending) {
+      db.createPendingApproval(tokenId, userId, ascResult.keyFingerprint,
+        { type: 'asc', key_fingerprint: ascResult.keyFingerprint }, req.ip);
+    }
+    return res.status(403).json({
+      error: 'device_not_approved',
+      code: 'DEVICE_APPROVAL_REQUIRED',
+      message: 'Access denied — waiting for the user to approve you in the dashboard.',
+      key_fingerprint: ascResult.keyFingerprint,
+    });
   }
 
   // OAuth-issued tokens (label ends with "(OAuth)") are pre-authorized by the user during
@@ -323,6 +420,15 @@ function deviceApprovalMiddleware(req, res, next) {
       device: currentFingerprint.summary,
       ipAddress: currentFingerprint.fingerprint.ipAddress,
       suspiciousActivity: suspiciousAnalysis.warnings.length > 0 ? suspiciousAnalysis : null,
+      ...(isMasterToken ? {
+        recommendation: {
+          message: 'Using a master token is not recommended for AI agents. Each agent should have its own identity.',
+          alternatives: [
+            { method: 'device_flow', label: 'OAuth Device Flow', description: 'Get a dedicated token with one browser approval.', url: '/dashboard/connectors' },
+            { method: 'asc', label: 'ASC (Agentic Secure Connection)', description: 'Use an Ed25519 keypair for cryptographic identity per agent.', url: '/dashboard/connectors' },
+          ],
+        },
+      } : {}),
     });
   } catch (error) {
     console.error('[Device Approval Middleware CRITICAL ERROR]', {

@@ -2310,6 +2310,7 @@ function authenticate(req, res, next) {
                              routePath.startsWith('/api/v1/billing') ||
                              routePath.startsWith('/api/v1/afp') ||
                              routePath.startsWith('/api/v1/dashboard') ||
+                             routePath.startsWith('/api/v1/agentic/') || // Device Flow + ASC bootstrap (have own auth)
                              (routePath.startsWith('/api/v1/activity') && req.method === 'GET');
 
   if (skipDeviceApproval) {
@@ -2466,6 +2467,9 @@ app.use('/api/v1/fal', authenticate, falImagesRoutes);
 // OAuth Server — MyApi as authorization server for external AI clients (ChatGPT, etc.)
 const oauthServerRoutes = require('./routes/oauth-server');
 app.use('/api/v1/oauth-server', oauthServerRoutes);
+
+const agenticRoutes = require('./routes/agentic');
+app.use('/api/v1/agentic', agenticRoutes);
 
 const createGoogleRoutes = require('./routes/google');
 app.use('/api/v1/google', createGoogleRoutes());

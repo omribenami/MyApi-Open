@@ -4489,6 +4489,83 @@ function denyPendingApproval(approvalId, reason = null) {
   return result.changes > 0;
 }
 
+// ─── OAuth Device Flow (RFC 8628) ────────────────────────────────────────────
+
+function createDeviceCode({ id, deviceCode, userCode, clientId, scope, expiresAt }) {
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO oauth_device_codes (id, device_code, user_code, client_id, scope, expires_at, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(id, deviceCode, userCode, clientId, scope || null, expiresAt, now);
+  return id;
+}
+
+function getDeviceCodeByDeviceCode(deviceCode) {
+  return db.prepare('SELECT * FROM oauth_device_codes WHERE device_code = ?').get(deviceCode);
+}
+
+function getDeviceCodeByUserCode(userCode) {
+  return db.prepare('SELECT * FROM oauth_device_codes WHERE UPPER(user_code) = UPPER(?)').get(userCode);
+}
+
+function getPendingDeviceCodes(userId) {
+  return db.prepare(
+    "SELECT * FROM oauth_device_codes WHERE user_id IS NULL AND status = 'pending' AND expires_at > ? ORDER BY created_at DESC"
+  ).all(new Date().toISOString());
+}
+
+function approveDeviceCode(id, userId, accessTokenId) {
+  const now = new Date().toISOString();
+  const result = db.prepare(`
+    UPDATE oauth_device_codes SET status = 'approved', user_id = ?, access_token_id = ?, approved_at = ?
+    WHERE id = ? AND status = 'pending' AND expires_at > ?
+  `).run(userId, accessTokenId, now, id, now);
+  return result.changes > 0;
+}
+
+function denyDeviceCode(id) {
+  const now = new Date().toISOString();
+  const result = db.prepare(`
+    UPDATE oauth_device_codes SET status = 'denied', denied_at = ?
+    WHERE id = ? AND status = 'pending'
+  `).run(now, id);
+  return result.changes > 0;
+}
+
+function expireOldDeviceCodes() {
+  const now = new Date().toISOString();
+  db.prepare("UPDATE oauth_device_codes SET status = 'expired' WHERE status = 'pending' AND expires_at <= ?").run(now);
+}
+
+// ─── ASC: approved device with public key ────────────────────────────────────
+
+function createApprovedDeviceASC(tokenId, userId, keyFingerprint, publicKey, deviceName, summary, ipAddress) {
+  const id = `device_${crypto.randomBytes(16).toString('hex')}`;
+  const now = new Date().toISOString();
+  // Use key_fingerprint as the device_fingerprint_hash so existing lookup paths work
+  db.prepare(`
+    INSERT INTO approved_devices
+      (id, token_id, user_id, device_fingerprint, device_fingerprint_hash, device_name,
+       device_info_json, ip_address, approved_at, created_at, connection_type, public_key, key_fingerprint)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'asc', ?, ?)
+  `).run(
+    id, tokenId, userId,
+    keyFingerprint, keyFingerprint,
+    deviceName || 'ASC Agent',
+    JSON.stringify(summary || {}),
+    ipAddress || 'unknown',
+    now, now,
+    publicKey, keyFingerprint
+  );
+  return id;
+}
+
+function getApprovedDeviceByKeyFingerprint(userId, keyFingerprint) {
+  return db.prepare(
+    'SELECT * FROM approved_devices WHERE user_id = ? AND key_fingerprint = ?'
+  ).get(userId, keyFingerprint);
+}
+
 function cleanupExpiredApprovals() {
   // Delete approvals that expired more than 7 days ago
   const cutoffDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -6644,6 +6721,17 @@ module.exports = {
   denyPendingApproval,
   cleanupExpiredApprovals,
   getDeviceApprovalHistory,
+  // OAuth Device Flow (RFC 8628)
+  createDeviceCode,
+  getDeviceCodeByDeviceCode,
+  getDeviceCodeByUserCode,
+  getPendingDeviceCodes,
+  approveDeviceCode,
+  denyDeviceCode,
+  expireOldDeviceCodes,
+  // ASC (Agentic Secure Connection)
+  createApprovedDeviceASC,
+  getApprovedDeviceByKeyFingerprint,
   // Service Preferences (Phase 3)
   createServicePreference,
   getServicePreference,
