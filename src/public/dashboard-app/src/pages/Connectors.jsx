@@ -352,7 +352,7 @@ function AfpConnectorCard() {
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 flex-wrap">
-              <h3 className="text-lg font-semibold text-white">AFP — PC File Access</h3>
+              <h3 className="text-lg font-semibold text-white">AFP — API File Protocol</h3>
               {!loading && totalCount > 0 && (
                 <span className={`text-xs font-medium px-2.5 py-0.5 rounded-full flex items-center gap-1.5 ${
                   onlineCount > 0
@@ -365,7 +365,7 @@ function AfpConnectorCard() {
               )}
             </div>
             <p className="mt-1.5 text-sm text-slate-400 leading-relaxed">
-              Install a small background app on any computer to give AI agents secure access to its files and commands — no port forwarding or technical setup required.
+              Install a background daemon on any computer to give AI agents secure, sandboxed access to its files and commands.
             </p>
           </div>
         </div>
