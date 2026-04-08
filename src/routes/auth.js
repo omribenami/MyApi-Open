@@ -386,6 +386,12 @@ router.get('/me', (req, res) => {
         // If the user has revoked this token's device, deny even /auth/me.
         if (matchedToken) {
           try {
+            // Skip device revocation check for the user's own browser (session expired fallback)
+            const referer = req.headers.referer || req.headers.referrer || '';
+            const origin = req.headers.origin || '';
+            const isDashboardBrowser = referer.includes('/dashboard') || origin === `${req.protocol}://${req.get('host')}`;
+            if (isDashboardBrowser) { /* skip device check for dashboard browser */ }
+            else {
             const { db: dbInstance, getPendingApprovals, createPendingApproval } = require('../database');
             const DeviceFingerprint = require('../utils/deviceFingerprint');
             const revoked = dbInstance.prepare(
@@ -404,6 +410,7 @@ router.get('/me', (req, res) => {
                 message: 'Access denied — waiting for the user to approve you in the dashboard.',
               });
             }
+            } // end else (non-dashboard browser)
           } catch (_) { /* never block on error */ }
         }
       }

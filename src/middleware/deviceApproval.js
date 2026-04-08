@@ -53,6 +53,16 @@ function deviceApprovalMiddleware(req, res, next) {
     return next();
   }
 
+  // Browser requests from the dashboard (session expired, falling back to Bearer) should
+  // never be blocked by device approval — that gate is for AI agents and external API clients.
+  // Detect by Referer or Origin pointing to the dashboard.
+  const referer = req.headers.referer || req.headers.referrer || '';
+  const origin = req.headers.origin || '';
+  const isDashboardBrowser = referer.includes('/dashboard') || origin === `${req.protocol}://${req.get('host')}`;
+  if (isDashboardBrowser) {
+    return next();
+  }
+
   // Extract user context from token metadata ONLY (no session fallback)
   const userId = req.tokenMeta?.ownerId;
   const tokenId = req.tokenMeta?.tokenId;
