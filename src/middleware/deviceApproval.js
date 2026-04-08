@@ -118,13 +118,17 @@ function deviceApprovalMiddleware(req, res, next) {
     // Device not approved - return 403 immediately
     // (Do NOT rate limit the rejection itself, only the approval request creation)
     
+    // Get token info for device name generation (must be before rate-limit block that uses tokenName)
+    const tokenInfo = db.db.prepare('SELECT label, token_type FROM access_tokens WHERE id = ?').get(tokenId);
+    const tokenName = tokenInfo?.label || (isMasterToken ? 'Master Token' : 'Guest Token');
+
     // But first, check if approval already pending
     const pendingApprovals = db.getPendingApprovals(userId, tokenId);
     const existingPending = pendingApprovals.find(p => p.device_fingerprint_hash === fingerprintHash);
 
     // Check rate limit ONLY for new approval requests (not for the 403 response itself)
     const canCreateApproval = checkApprovalRateLimit(tokenId);
-    
+
     if (!existingPending && !canCreateApproval) {
       // RATE LIMITED - but we still return 403 to maintain security posture
       // (The rate limit applies only to creating NEW pending approvals)
@@ -137,10 +141,6 @@ function deviceApprovalMiddleware(req, res, next) {
         approval_id: null,
       });
     }
-
-    // Get token info for device name generation
-    const tokenInfo = db.db.prepare('SELECT label, token_type FROM access_tokens WHERE id = ?').get(tokenId);
-    const tokenName = tokenInfo?.label || (isMasterToken ? 'Master Token' : 'Guest Token');
 
     // Create pending approval if not already exists
     let approvalId = null;
