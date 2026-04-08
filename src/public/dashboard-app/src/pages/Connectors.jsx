@@ -1,6 +1,50 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import apiClient from '../utils/apiClient';
 import { useAuthStore } from '../stores/authStore';
+
+// ── Copy block: shows a copyable prompt / code snippet ────────────────────────
+function CopyBlock({ text, label, accent = 'blue' }) {
+  const [copied, setCopied] = useState(false);
+  const accentBtn = accent === 'violet'
+    ? 'bg-violet-500/10 hover:bg-violet-500/20 text-violet-400 border-violet-500/20'
+    : 'bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border-blue-500/20';
+
+  const copy = useCallback(() => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }, [text]);
+
+  return (
+    <div className="rounded-lg bg-slate-950 border border-slate-800 overflow-hidden">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-slate-800">
+        <span className="text-xs text-slate-500">{label}</span>
+        <button
+          onClick={copy}
+          className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md border transition-colors ${accentBtn}`}
+        >
+          {copied ? (
+            <>
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              Copied!
+            </>
+          ) : (
+            <>
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+              Copy
+            </>
+          )}
+        </button>
+      </div>
+      <pre className="text-xs text-slate-400 p-3 overflow-x-auto leading-relaxed whitespace-pre-wrap break-words"><code>{text}</code></pre>
+    </div>
+  );
+}
 
 const CONNECTORS = [
   {
@@ -611,51 +655,34 @@ export default function Connectors() {
                 <span className="ml-auto text-xs font-medium px-2 py-0.5 rounded-full bg-green-400/10 text-green-400 border border-green-400/20">Recommended</span>
               </div>
               <p className="text-xs text-slate-500 leading-relaxed">
-                The AI prints a short code and a URL. You visit the URL, enter the code, and approve — the AI instantly receives a scoped token. No tokens to paste, no setup.
+                The AI prints a short code and a URL. You visit the URL, enter the code, and approve — the AI instantly receives its own scoped token. No tokens to paste, no setup.
               </p>
             </div>
 
-            <div className="p-6 space-y-4 flex-1">
-              <div className="space-y-3">
-                {[
-                  { n: '1', title: 'AI starts the flow', body: 'POST /api/v1/agentic/device/authorize with its client_id. Gets back a device_code and user_code.' },
-                  { n: '2', title: 'AI shows you the code', body: 'The agent prints something like: "Open myapiai.com/dashboard/activate and enter: ABCD-EFGH"' },
-                  { n: '3', title: 'You approve in the browser', body: 'Visit the Activate page, enter the code, give the agent a name, and click Approve.' },
-                  { n: '4', title: 'AI gets its token', body: 'The agent\'s polling request returns a scoped access token. It stores it and uses it for all future requests.' },
-                ].map(s => (
-                  <div key={s.n} className="flex gap-3">
-                    <span className="w-5 h-5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{s.n}</span>
-                    <div><p className="text-xs font-medium text-slate-300">{s.title}</p><p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{s.body}</p></div>
-                  </div>
-                ))}
+            <div className="p-6 space-y-5 flex-1">
+              {/* Agent prompt — copy to AI */}
+              <div>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Step 1 — Tell your AI agent</p>
+                <p className="text-xs text-slate-500 mb-2">Copy this prompt and paste it into your AI agent's chat or system prompt:</p>
+                <CopyBlock
+                  label="Agent prompt"
+                  accent="blue"
+                  text={`Please connect to my MyApi account using OAuth Device Flow so you can access my data.
+
+Here's how:
+1. Send a POST request to https://www.myapiai.com/api/v1/agentic/device/authorize with body: {"client_id":"<your-agent-name>","scope":"read"}
+2. Show me the user_code from the response (format: XXXX-XXXX) and tell me to visit: https://www.myapiai.com/dashboard/activate
+3. Then poll POST https://www.myapiai.com/api/v1/agentic/device/token every 5 seconds with {"device_code":"<device_code>","client_id":"<your-agent-name>"} until you get a 200 with access_token
+4. Store the access_token and use it as Bearer token for all future MyApi API calls`}
+                />
               </div>
 
-              <div className="rounded-lg bg-slate-950 border border-slate-800 overflow-hidden">
-                <div className="px-3 py-2 border-b border-slate-800 flex items-center justify-between">
-                  <span className="text-xs text-slate-500 font-mono">Step 1 — start the flow (curl)</span>
-                </div>
-                <pre className="text-xs text-slate-400 p-3 overflow-x-auto leading-relaxed"><code>{`curl -X POST https://www.myapiai.com/api/v1/agentic/device/authorize \\
-  -H "Content-Type: application/json" \\
-  -d '{"client_id":"my-claude-agent","scope":"read"}'
-
-# Response:
-# { "user_code": "ABCD-EFGH",
-#   "verification_uri": "https://www.myapiai.com/dashboard/activate",
-#   "device_code": "<long code>",
-#   "expires_in": 900, "interval": 5 }`}</code></pre>
-              </div>
-
-              <div className="rounded-lg bg-slate-950 border border-slate-800 overflow-hidden">
-                <div className="px-3 py-2 border-b border-slate-800">
-                  <span className="text-xs text-slate-500 font-mono">Step 3 — poll for the token</span>
-                </div>
-                <pre className="text-xs text-slate-400 p-3 overflow-x-auto leading-relaxed"><code>{`# Poll every 5 seconds until approved:
-curl -X POST https://www.myapiai.com/api/v1/agentic/device/token \\
-  -H "Content-Type: application/json" \\
-  -d '{"device_code":"<long code>","client_id":"my-claude-agent"}'
-
-# While pending: HTTP 428 { "error": "authorization_pending" }
-# On approval:  HTTP 200 { "access_token": "myapi_...", "token_type": "Bearer" }`}</code></pre>
+              {/* What happens next */}
+              <div>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Step 2 — You approve</p>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Your agent will show you a code like <span className="font-mono text-slate-300 bg-slate-800 px-1.5 py-0.5 rounded">ABCD-EFGH</span>. Visit the Activate page, enter the code, give the agent a name, and click Approve. The agent gets its token instantly and is ready to go.
+                </p>
               </div>
             </div>
 
@@ -683,53 +710,46 @@ curl -X POST https://www.myapiai.com/api/v1/agentic/device/token \\
                 <span className="ml-auto text-xs font-medium px-2 py-0.5 rounded-full bg-violet-400/10 text-violet-400 border border-violet-400/20">Advanced</span>
               </div>
               <p className="text-xs text-slate-500 leading-relaxed">
-                The AI generates an Ed25519 keypair once, registers the public key, and signs every request. Different machines with the same token are cryptographically distinct.
+                The AI generates an Ed25519 keypair once and signs every request. Works across different IPs and machines — cryptographically proves it's the same agent each time.
               </p>
             </div>
 
-            <div className="p-6 space-y-4 flex-1">
-              <div className="space-y-3">
-                {[
-                  { n: '1', title: 'Generate a keypair (once)', body: 'The agent generates an Ed25519 keypair and saves the private key securely on its machine.' },
-                  { n: '2', title: 'Register the public key', body: 'POST /api/v1/agentic/asc/register with the base64-encoded public key. A pending approval appears in your dashboard.' },
-                  { n: '3', title: 'You approve the key fingerprint', body: 'In Dashboard → Devices, you see the key fingerprint (like an SSH key). Click Approve.' },
-                  { n: '4', title: 'Sign every request', body: 'Add X-Agent-PublicKey, X-Agent-Timestamp, and X-Agent-Signature headers. The server verifies the signature on each request.' },
-                ].map(s => (
-                  <div key={s.n} className="flex gap-3">
-                    <span className="w-5 h-5 rounded-full bg-violet-500/10 border border-violet-500/20 text-violet-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{s.n}</span>
-                    <div><p className="text-xs font-medium text-slate-300">{s.title}</p><p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{s.body}</p></div>
-                  </div>
-                ))}
+            <div className="p-6 space-y-5 flex-1">
+              {/* Agent prompt — copy to AI */}
+              <div>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Step 1 — Tell your AI agent</p>
+                <p className="text-xs text-slate-500 mb-2">Copy this prompt and paste it into your AI agent:</p>
+                <CopyBlock
+                  label="Agent prompt"
+                  accent="violet"
+                  text={`Please set up an ASC (Agentic Secure Connection) to my MyApi account so you have a cryptographic identity.
+
+Here's how:
+1. Generate an Ed25519 keypair using Node.js crypto:
+   const { generateKeyPairSync } = require('crypto');
+   const { privateKey, publicKey } = generateKeyPairSync('ed25519');
+   const pubDer = publicKey.export({ type: 'spki', format: 'der' });
+   const pubKeyB64 = pubDer.slice(-32).toString('base64');
+   Save the private key securely (e.g. agent.key file).
+
+2. Register your public key — POST https://www.myapiai.com/api/v1/agentic/asc/register
+   Headers: Authorization: Bearer <your-token>
+   Body: {"public_key":"<pubKeyB64>","label":"<your-agent-name>"}
+   Tell me the key_fingerprint from the response so I can approve it.
+
+3. After I approve, sign every request by adding these headers:
+   X-Agent-PublicKey: <pubKeyB64>
+   X-Agent-Timestamp: <unix seconds>
+   X-Agent-Signature: base64(sign(null, Buffer.from(timestamp+":"+tokenId), privateKey))`}
+                />
               </div>
 
-              <div className="rounded-lg bg-slate-950 border border-slate-800 overflow-hidden">
-                <div className="px-3 py-2 border-b border-slate-800">
-                  <span className="text-xs text-slate-500 font-mono">Node.js — keygen + sign</span>
-                </div>
-                <pre className="text-xs text-slate-400 p-3 overflow-x-auto leading-relaxed"><code>{`const { generateKeyPairSync, sign } = require('crypto');
-const fs = require('fs');
-
-// ── One-time setup ────────────────────────────────
-const { privateKey, publicKey } = generateKeyPairSync('ed25519');
-const pubDer  = publicKey.export({ type: 'spki', format: 'der' });
-const privDer = privateKey.export({ type: 'pkcs8', format: 'der' });
-const pubKeyB64 = pubDer.slice(-32).toString('base64');   // raw 32 bytes
-fs.writeFileSync('agent.key', privDer);  // keep secret!
-
-// Register:
-// POST /api/v1/agentic/asc/register  { public_key: pubKeyB64 }
-
-// ── Per-request signing ───────────────────────────
-const privDer2 = fs.readFileSync('agent.key');
-const privKey2 = crypto.createPrivateKey({ key: privDer2, format: 'der', type: 'pkcs8' });
-const ts  = Math.floor(Date.now() / 1000).toString();
-const msg = Buffer.from(\`\${ts}:YOUR_TOKEN_ID\`);
-const sig = sign(null, msg, privKey2).toString('base64');
-
-// Headers to add to every request:
-// X-Agent-PublicKey: <pubKeyB64>
-// X-Agent-Timestamp: <ts>
-// X-Agent-Signature: <sig>`}</code></pre>
+              {/* What happens next */}
+              <div>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Step 2 — You approve the key</p>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Your agent will show you a short key fingerprint. Go to <span className="text-slate-300">Dashboard → Devices</span>, find the pending ASC request, and click Approve. From that point on, any request signed with the agent's private key is trusted — regardless of IP or machine.
+                </p>
               </div>
             </div>
 
