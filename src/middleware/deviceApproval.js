@@ -72,15 +72,19 @@ function deviceApprovalMiddleware(req, res, next) {
     return next();
   }
 
-  // Check if this token requires device approval
-  // Tokens without requires_approval=1 (e.g. bundle tokens without the approval checkbox) skip this gate
-  try {
-    const tokenRow = db.db.prepare('SELECT requires_approval FROM access_tokens WHERE id = ?').get(tokenId);
-    if (!tokenRow || !tokenRow.requires_approval) {
-      return next(); // token doesn't require approval — pass through
+  // Master tokens always go through device approval — they're used by AI agents and external
+  // clients, which is exactly what the approval gate is designed to control.
+  // Guest/scoped tokens respect the per-token requires_approval flag (set via the "Require
+  // device approval" checkbox when creating a scoped token).
+  if (!isMasterToken) {
+    try {
+      const tokenRow = db.db.prepare('SELECT requires_approval FROM access_tokens WHERE id = ?').get(tokenId);
+      if (!tokenRow || !tokenRow.requires_approval) {
+        return next(); // scoped token without approval requirement — pass through
+      }
+    } catch (_) {
+      // If lookup fails, fall through to full device check
     }
-  } catch (_) {
-    // If lookup fails, fall through to full device check
   }
 
   try {
