@@ -5,6 +5,7 @@
 
 const express = require('express');
 const crypto = require('crypto');
+const bcrypt = require('bcrypt');
 const router = express.Router();
 const db = require('../database');
 const logger = require('../utils/logger');
@@ -80,9 +81,9 @@ router.post('/device/authorize', requireAuth, (req, res) => {
  */
 router.post('/device/token', (req, res) => {
   try {
-    const { device_code, client_id } = req.body || {};
-    if (!device_code || !client_id) {
-      return res.status(400).json({ error: 'device_code and client_id are required' });
+    const { device_code } = req.body || {};
+    if (!device_code) {
+      return res.status(400).json({ error: 'device_code is required' });
     }
 
     db.expireOldDeviceCodes();
@@ -90,9 +91,6 @@ router.post('/device/token', (req, res) => {
 
     if (!code) {
       return res.status(400).json({ error: 'invalid_grant', error_description: 'Device code not found or expired' });
-    }
-    if (code.client_id !== client_id) {
-      return res.status(400).json({ error: 'invalid_client', error_description: 'client_id mismatch' });
     }
 
     if (code.status === 'expired' || new Date(code.expires_at) < new Date()) {
@@ -105,13 +103,19 @@ router.post('/device/token', (req, res) => {
       return res.status(428).json({ error: 'authorization_pending', error_description: 'The user has not yet approved this request.' });
     }
     if (code.status === 'approved' && code.access_token_id) {
-      // Return the token value
-      const tokenRow = db.db.prepare('SELECT token, label, scope FROM access_tokens WHERE id = ?').get(code.access_token_id);
+      // Decrypt the stored token and return it to the agent
+      const tokenRow = db.db.prepare('SELECT encrypted_token, label, scope FROM access_tokens WHERE id = ?').get(code.access_token_id);
       if (!tokenRow) {
         return res.status(500).json({ error: 'server_error', error_description: 'Token not found' });
       }
+      let rawToken;
+      try {
+        rawToken = db.decryptRawToken(tokenRow.encrypted_token);
+      } catch {
+        return res.status(500).json({ error: 'server_error', error_description: 'Failed to retrieve token' });
+      }
       return res.json({
-        access_token: tokenRow.token,
+        access_token: rawToken,
         token_type: 'Bearer',
         scope: tokenRow.scope,
         label: tokenRow.label,
@@ -157,15 +161,11 @@ router.post('/device/approve/:id', requireAuth, (req, res) => {
     const tokenLabel = label || `${code.client_id} (Device Flow)`;
     const tokenScope = scope || code.scope || 'read';
 
-    // Create a scoped access token for this agent
+    // Create a properly hashed + encrypted scoped access token for this agent
     const tokenValue = `myapi_${crypto.randomBytes(32).toString('hex')}`;
-    const tokenId = `tok_${crypto.randomBytes(16).toString('hex')}`;
-    const now = new Date().toISOString();
-
-    db.db.prepare(`
-      INSERT INTO access_tokens (id, token, label, scope, token_type, owner_id, created_at, requires_approval)
-      VALUES (?, ?, ?, ?, 'agent', ?, ?, 0)
-    `).run(tokenId, tokenValue, tokenLabel, tokenScope, String(req.userId), now);
+    const tokenHash = bcrypt.hashSync(tokenValue, 10);
+    // createAccessToken(hash, ownerId, scope, label, expiresAt, allowedPersonas, workspaceId, rawToken, tokenType)
+    const tokenId = db.createAccessToken(tokenHash, String(req.userId), tokenScope, tokenLabel, null, null, null, tokenValue, 'agent');
 
     db.approveDeviceCode(code.id, String(req.userId), tokenId);
 
