@@ -10802,11 +10802,6 @@ const sendDashboardIndex = (req, res) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
   res.set('Pragma', 'no-cache');
   res.set('Expires', '0');
-  const indexPath = path.join(__dirname, 'public', 'dist', 'index.html');
-  console.error(`[DEBUG] __dirname=${__dirname}, indexPath=${indexPath}`);
-  console.error(`[DEBUG] File exists: ${fs.existsSync(indexPath)}`);
-  const content = fs.readFileSync(indexPath, 'utf8');
-  console.error(`[DEBUG] File content has hash: ${content.includes('967lJ4z1') ? 'NEW (967lJ4z1)' : (content.includes('DVt2_1Di') ? 'OLD (DVt2_1Di)' : 'UNKNOWN')}`);
   res.sendFile('index.html', { root: path.join(__dirname, 'public', 'dist') }, (err) => {
     if (err) console.error(`[SPA Shell] sendFile error: ${err.message}`);
   });

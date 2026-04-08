@@ -28,6 +28,7 @@ import TeamSettings from './pages/TeamSettings';
 import Connectors from './pages/Connectors';
 import Memory from './pages/Memory';
 import OAuthAuthorize from './pages/OAuthAuthorize';
+import LogIn from './pages/LogIn';
 import Layout from './components/Layout';
 
 // Create React Query client
@@ -121,6 +122,8 @@ function App() {
             return fetch('/api/v1/auth/me', { credentials: 'include' })
               .then(res => res.ok ? res.json() : null);
           }
+          // Confirm failed — fall through with null so the failure path runs
+          return null;
         })
         .then((sessionUser) => {
           if (sessionUser?.user) {
@@ -133,11 +136,24 @@ function App() {
             setUser(sessionUser.user);
             // Clear OAuth params from URL
             window.history.replaceState({}, document.title, '/dashboard/');
+          } else {
+            // Confirm or auth/me failed — send user back to landing to re-authenticate
+            window.location.replace('/');
           }
         })
         .catch(() => {
-          // Silently fail - user will see dashboard or login based on auth state
+          window.location.replace('/');
         });
+    } else if (oauthStatus === 'pending_2fa') {
+      // User has 2FA enabled — redirect to the login page which has the 2FA input form.
+      // Guard: if already on /login, don't redirect again (prevents infinite loop).
+      if (!window.location.pathname.endsWith('/login')) {
+        window.location.replace(`/dashboard/login${window.location.search}`);
+      }
+    } else if (oauthStatus && oauthStatus !== 'connected') {
+      // Unhandled oauth_status (e.g. 'error', 'signup_required') with no confirm token —
+      // strip the params and redirect to landing so the user isn't stuck forever.
+      window.location.replace('/');
     }
   }, []);
 
@@ -194,6 +210,7 @@ function App() {
           {!isAuthenticated && (
             <>
               <Route path="/authorize" element={<OAuthAuthorize />} />
+              <Route path="/login" element={<LogIn />} />
               <Route path="*" element={
                 <div className="min-h-screen grid place-items-center bg-slate-950 text-slate-300">
                   <div className="text-center">

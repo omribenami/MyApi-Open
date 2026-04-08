@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { clearAuthArtifacts, isLogoutInProgress, setLogoutInProgress, redirectToLoginOnce } from '../utils/authRuntime';
+import apiClient from '../utils/apiClient';
 
 const readCookie = (name) => {
   try {
@@ -67,22 +68,22 @@ export const useAuthStore = create((set, get) => ({
           sessionToken = sessionStorage.getItem('sessionToken');
         } catch { /* ignored */ }
 
-        // Track whether the first session check definitively returned 401 (no active session).
-        // This prevents a redundant second session-only call that would also return 401.
-        let sessionReturned401 = false;
-
+        // Single combined probe: send session cookie + Bearer token (if available) together.
+        // The server checks session first, then Bearer, so this handles both auth paths in
+        // one request — eliminating the session-probe 401 that showed in console for
+        // masterToken-only users.
         try {
-          const sessionCheckRes = await fetch('/api/v1/auth/me', { credentials: 'include' });
-          if (sessionCheckRes.ok) {
+          const headers = {};
+          if (masterToken) headers.Authorization = `Bearer ${masterToken}`;
+          const probeRes = await fetch('/api/v1/auth/me', { headers, credentials: 'include' });
+          if (probeRes.ok) {
             resetAuthMeFailureCountOnSuccess();
-            const sessionData = await sessionCheckRes.json();
-            const user = normalizeUserPayload(sessionData);
-            const bootstrapToken = sessionData?.bootstrap?.masterToken || null;
-
+            const payload = await probeRes.json();
+            const user = normalizeUserPayload(payload);
+            const bootstrapToken = payload?.bootstrap?.masterToken || null;
             if (bootstrapToken) {
               try { localStorage.setItem('masterToken', bootstrapToken); } catch { /* ignored */ }
             }
-
             set({
               user,
               masterToken: bootstrapToken || masterToken || null,
@@ -93,9 +94,14 @@ export const useAuthStore = create((set, get) => ({
             });
             return;
           }
-          if (sessionCheckRes.status === 401) {
+          if (probeRes.status === 401) {
             resetAuthMeFailureCountOnSuccess();
-            sessionReturned401 = true;
+            // Token in localStorage is invalid/expired — clear it before trying cookie fallback.
+            if (masterToken) {
+              clearAuthArtifacts();
+              masterToken = null;
+              sessionToken = null;
+            }
           } else {
             incrementAuthMeFailureCount();
           }
@@ -103,51 +109,15 @@ export const useAuthStore = create((set, get) => ({
           incrementAuthMeFailureCount();
         }
 
-        if (masterToken) {
+        // Fallback: try a master token stored in a cookie (set by OAuth login on another device/tab).
+        const cookieMasterToken = !wasLoggedOut() ? readCookie('myapi_master_token') : null;
+        if (authMeFailureCount < 2 && cookieMasterToken) {
           try {
-            const validateRes = await fetch('/api/v1/auth/me', {
-              headers: { Authorization: `Bearer ${masterToken}` },
+            try { localStorage.setItem('masterToken', cookieMasterToken); } catch { /* ignored */ }
+            const res = await fetch('/api/v1/auth/me', {
+              headers: { Authorization: `Bearer ${cookieMasterToken}` },
               credentials: 'include',
             });
-            if (validateRes.ok) {
-              const validatePayload = await validateRes.json().catch(() => ({}));
-              const user = normalizeUserPayload(validatePayload);
-              set({ user, masterToken, sessionToken, isAuthenticated: true, isInitialized: true, error: null });
-              return;
-            }
-          } catch { /* ignored */ }
-
-          clearAuthArtifacts();
-          masterToken = null;
-          sessionToken = null;
-        }
-
-        const cookieMasterToken = readCookie('myapi_master_token');
-        // Never restore from cookie if the user explicitly logged out on this device
-        if (cookieMasterToken && !sessionReturned401 && !wasLoggedOut()) {
-          try { localStorage.setItem('masterToken', cookieMasterToken); } catch { /* ignored */ }
-        }
-
-        const cookieUser = readCookie('myapi_user');
-        if (cookieUser) {
-          // Advisory only; authentication must still be confirmed via /auth/me.
-          try { JSON.parse(decodeURIComponent(cookieUser)); } catch { /* ignored */ }
-        }
-
-        // If the first session check already returned 401 and we have a cookie master token,
-        // validate it via Bearer auth. If there is no token at all, skip the redundant
-        // session-only check (it would also return 401, causing a second console error).
-        if (authMeFailureCount < 2 && (!sessionReturned401 || cookieMasterToken) && !wasLoggedOut()) {
-          try {
-            let fetchOptions;
-            if (sessionReturned401 && cookieMasterToken) {
-              // Session is confirmed gone; validate the cookie token via Bearer auth instead.
-              fetchOptions = { headers: { Authorization: `Bearer ${cookieMasterToken}` }, credentials: 'include' };
-            } else {
-              fetchOptions = { credentials: 'include' };
-            }
-
-            const res = await fetch('/api/v1/auth/me', fetchOptions);
             if (res.ok) {
               resetAuthMeFailureCountOnSuccess();
               const payload = await res.json();
@@ -281,30 +251,24 @@ export const useAuthStore = create((set, get) => ({
   fetchWorkspaces: async () => {
     set({ workspacesLoading: true });
     try {
-      const response = await fetch('/api/v1/workspaces', {
-        credentials: 'include',
-      });
-      if (response.ok) {
-        const data = await response.json();
-        const workspaces = data.workspaces || [];
-        let currentWorkspace = null;
+      const response = await apiClient.get('/workspaces');
+      const data = response.data;
+      const workspaces = data.workspaces || [];
+      let currentWorkspace = null;
 
-        try {
-          const stored = localStorage.getItem('currentWorkspace');
-          if (stored) {
-            currentWorkspace = workspaces.find(w => w.id === stored);
-          }
-        } catch { /* ignored */ }
-
-        if (!currentWorkspace && workspaces.length > 0) {
-          currentWorkspace = workspaces[0];
+      try {
+        const stored = localStorage.getItem('currentWorkspace');
+        if (stored) {
+          currentWorkspace = workspaces.find(w => w.id === stored);
         }
+      } catch { /* ignored */ }
 
-        set({ workspaces, currentWorkspace, workspacesLoading: false });
-        return { success: true, workspaces };
+      if (!currentWorkspace && workspaces.length > 0) {
+        currentWorkspace = workspaces[0];
       }
-      set({ workspacesLoading: false });
-      return { success: false, error: 'Failed to fetch workspaces' };
+
+      set({ workspaces, currentWorkspace, workspacesLoading: false });
+      return { success: true, workspaces };
     } catch (error) {
       set({ workspacesLoading: false });
       return { success: false, error: error.message };
@@ -313,20 +277,13 @@ export const useAuthStore = create((set, get) => ({
 
   switchWorkspace: async (workspaceId) => {
     try {
-      const response = await fetch(`/api/v1/workspace-switch/${workspaceId}`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      if (response.ok) {
-        const data = await response.json();
-        const workspace = data.workspace;
-        try {
-          localStorage.setItem('currentWorkspace', workspaceId);
-        } catch { /* ignored */ }
-        set({ currentWorkspace: workspace });
-        return { success: true, workspace };
-      }
-      return { success: false, error: 'Failed to switch workspace' };
+      const response = await apiClient.post(`/workspace-switch/${workspaceId}`);
+      const workspace = response.data.workspace;
+      try {
+        localStorage.setItem('currentWorkspace', workspaceId);
+      } catch { /* ignored */ }
+      set({ currentWorkspace: workspace });
+      return { success: true, workspace };
     } catch (error) {
       return { success: false, error: error.message };
     }
