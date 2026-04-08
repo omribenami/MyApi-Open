@@ -34,24 +34,26 @@ function ed25519KeyFingerprint(publicKeyBase64) {
 
 /**
  * POST /api/v1/agentic/device/authorize
- * AI agent initiates device flow. Returns device_code + user_code.
- * Public endpoint — no auth required (the AI may not have a token yet).
+ * AI agent initiates device flow. Requires a Bearer token so the platform
+ * knows which account to link the new agent token to.
  *
- * Body: { client_id, scope? }
+ * Body: { label: "My Claude Agent", scope?: "read" }
  */
-router.post('/device/authorize', (req, res) => {
+router.post('/device/authorize', requireAuth, (req, res) => {
   try {
-    const { client_id, scope } = req.body || {};
-    if (!client_id) {
-      return res.status(400).json({ error: 'client_id is required' });
-    }
+    const { label, scope } = req.body || {};
+    const clientId = label || 'AI Agent';
 
     const id = `dc_${crypto.randomBytes(16).toString('hex')}`;
     const deviceCode = crypto.randomBytes(32).toString('hex');
     const userCode = generateUserCode();
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // 15 min
 
-    db.createDeviceCode({ id, deviceCode, userCode, clientId: client_id, scope, expiresAt });
+    // Store the requesting user_id so we know which account to provision under
+    const row = { id, deviceCode, userCode, clientId, scope, expiresAt };
+    db.createDeviceCode(row);
+    // Pre-link to the authenticated user so /activate knows whose account this is
+    db.db.prepare('UPDATE oauth_device_codes SET user_id = ? WHERE id = ?').run(String(req.userId), id);
 
     const baseUrl = `${req.protocol}://${req.get('host')}`;
 
@@ -60,8 +62,8 @@ router.post('/device/authorize', (req, res) => {
       user_code: userCode,
       verification_uri: `${baseUrl}/dashboard/activate`,
       verification_uri_complete: `${baseUrl}/dashboard/activate?code=${userCode}`,
-      expires_in: 900, // 15 minutes
-      interval: 5,     // poll every 5 seconds
+      expires_in: 900,
+      interval: 5,
     });
   } catch (err) {
     logger.error('[DeviceFlow] authorize error:', err.message);

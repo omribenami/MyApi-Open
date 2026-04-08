@@ -4510,8 +4510,8 @@ function getDeviceCodeByUserCode(userCode) {
 
 function getPendingDeviceCodes(userId) {
   return db.prepare(
-    "SELECT * FROM oauth_device_codes WHERE user_id IS NULL AND status = 'pending' AND expires_at > ? ORDER BY created_at DESC"
-  ).all(new Date().toISOString());
+    "SELECT * FROM oauth_device_codes WHERE user_id = ? AND status = 'pending' AND expires_at > ? ORDER BY created_at DESC"
+  ).all(String(userId), new Date().toISOString());
 }
 
 function approveDeviceCode(id, userId, accessTokenId) {

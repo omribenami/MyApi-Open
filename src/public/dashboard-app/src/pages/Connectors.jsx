@@ -672,13 +672,15 @@ export default function Connectors() {
                 <CopyBlock
                   label="Agent prompt"
                   accent="blue"
-                  text={`Please connect to my MyApi account using OAuth Device Flow so you can access my data.
+                  text={`Please connect to my MyApi account using OAuth Device Flow to get your own dedicated access token.
 
 Here's how:
-1. Send a POST request to https://www.myapiai.com/api/v1/agentic/device/authorize with body: {"client_id":"<your-agent-name>","scope":"read"}
-2. Show me the user_code from the response (format: XXXX-XXXX) and tell me to visit: https://www.myapiai.com/dashboard/activate
-3. Then poll POST https://www.myapiai.com/api/v1/agentic/device/token every 5 seconds with {"device_code":"<device_code>","client_id":"<your-agent-name>"} until you get a 200 with access_token
-4. Store the access_token and use it as Bearer token for all future MyApi API calls`}
+1. Send a POST request to https://www.myapiai.com/api/v1/agentic/device/authorize
+   Headers: Authorization: Bearer <my-master-token>
+   Body: {"label":"<your-agent-name>","scope":"read"}
+2. Show me the user_code from the response (format: XXXX-XXXX) and remind me to visit: https://www.myapiai.com/dashboard/activate
+3. Poll POST https://www.myapiai.com/api/v1/agentic/device/token every 5 seconds with body: {"device_code":"<device_code from step 1>","client_id":"<your-agent-name>"} until you receive a 200 with access_token
+4. Save the access_token — use it as your Bearer token for all future MyApi requests instead of my master token`}
                 />
               </div>
 
@@ -686,7 +688,7 @@ Here's how:
               <div>
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Step 2 — You approve</p>
                 <p className="text-xs text-slate-500 leading-relaxed">
-                  Your agent will show you a code like <span className="font-mono text-slate-300 bg-slate-800 px-1.5 py-0.5 rounded">ABCD-EFGH</span>. Visit the Activate page, enter the code, give the agent a name, and click Approve. The agent gets its token instantly and is ready to go.
+                  Your agent will show you a code like <span className="font-mono text-slate-300 bg-slate-800 px-1.5 py-0.5 rounded">ABCD-EFGH</span>. Visit the Activate page, enter the code, give the agent a name, and click Approve. The agent instantly receives its own scoped token — from then on it uses that instead of your master token.
                 </p>
               </div>
             </div>
