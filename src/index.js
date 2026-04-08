@@ -2310,11 +2310,6 @@ function authenticate(req, res, next) {
                              routePath.startsWith('/api/v1/billing') ||
                              routePath.startsWith('/api/v1/afp') ||
                              routePath.startsWith('/api/v1/dashboard') ||
-                             routePath.startsWith('/api/v1/notifications') ||
-                             routePath.startsWith('/api/v1/tokens') ||
-                             routePath.startsWith('/api/v1/workspaces') ||
-                             routePath === '/api/v1/workspace-switch' ||
-                             routePath.startsWith('/api/v1/workspace-switch/') ||
                              (routePath.startsWith('/api/v1/activity') && req.method === 'GET');
 
   if (skipDeviceApproval) {
