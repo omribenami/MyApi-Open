@@ -86,14 +86,20 @@ function deviceApprovalMiddleware(req, res, next) {
         const anyRevoked = db.db.prepare(
           'SELECT id FROM approved_devices WHERE token_id = ? AND user_id = ? AND revoked_at IS NOT NULL LIMIT 1'
         ).get(tokenId, userId);
+        const fingerprint = DeviceFingerprint.fromRequest(req);
         if (anyRevoked) {
+          // Revoked — create a new pending approval so the user can re-approve from the dashboard
+          const pendingApprovals = db.getPendingApprovals(userId, tokenId);
+          const existingPending = pendingApprovals.find(p => p.device_fingerprint_hash === fingerprint.fingerprintHash);
+          if (!existingPending) {
+            db.createPendingApproval(tokenId, userId, fingerprint.fingerprintHash, fingerprint.summary, fingerprint.fingerprint.ipAddress);
+          }
           return res.status(403).json({
             error: 'device_not_approved',
-            code: 'DEVICE_REVOKED',
-            message: 'Access denied — this device has been revoked by the user.',
+            code: 'DEVICE_APPROVAL_REQUIRED',
+            message: 'Access denied — waiting for the user to approve you in the dashboard.',
           });
         }
-        const fingerprint = DeviceFingerprint.fromRequest(req);
         const existing = db.getApprovedDeviceByHash(userId, fingerprint.fingerprintHash);
         if (!existing) {
           db.createApprovedDevice(tokenId, userId, fingerprint.fingerprintHash, tokenRow.label, fingerprint.summary, fingerprint.fingerprint.ipAddress);

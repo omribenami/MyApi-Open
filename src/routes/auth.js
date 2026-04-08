@@ -386,15 +386,22 @@ router.get('/me', (req, res) => {
         // If the user has revoked this token's device, deny even /auth/me.
         if (matchedToken) {
           try {
-            const { db: dbInstance } = require('../database');
+            const { db: dbInstance, getPendingApprovals, createPendingApproval } = require('../database');
+            const DeviceFingerprint = require('../utils/deviceFingerprint');
             const revoked = dbInstance.prepare(
               'SELECT id FROM approved_devices WHERE token_id = ? AND user_id = ? AND revoked_at IS NOT NULL LIMIT 1'
             ).get(matchedToken.tokenId, userId);
             if (revoked) {
+              const fingerprint = DeviceFingerprint.fromRequest(req);
+              const pendingApprovals = getPendingApprovals(userId, matchedToken.tokenId);
+              const existingPending = pendingApprovals.find(p => p.device_fingerprint_hash === fingerprint.fingerprintHash);
+              if (!existingPending) {
+                createPendingApproval(matchedToken.tokenId, userId, fingerprint.fingerprintHash, fingerprint.summary, fingerprint.fingerprint.ipAddress);
+              }
               return res.status(403).json({
                 error: 'device_not_approved',
-                code: 'DEVICE_REVOKED',
-                message: 'Access denied — this device has been revoked by the user.',
+                code: 'DEVICE_APPROVAL_REQUIRED',
+                message: 'Access denied — waiting for the user to approve you in the dashboard.',
               });
             }
           } catch (_) { /* never block on error */ }
