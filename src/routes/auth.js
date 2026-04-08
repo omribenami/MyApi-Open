@@ -394,21 +394,29 @@ router.get('/me', (req, res) => {
             else {
             const { db: dbInstance, getPendingApprovals, createPendingApproval } = require('../database');
             const DeviceFingerprint = require('../utils/deviceFingerprint');
-            const revoked = dbInstance.prepare(
-              'SELECT id FROM approved_devices WHERE token_id = ? AND user_id = ? AND revoked_at IS NOT NULL LIMIT 1'
+            // Block only if there are NO active (non-revoked) approved devices for this token.
+            // If at least one approved entry exists, the user has approved this token — allow it.
+            const anyApproved = dbInstance.prepare(
+              'SELECT id FROM approved_devices WHERE token_id = ? AND user_id = ? AND revoked_at IS NULL LIMIT 1'
             ).get(matchedToken.tokenId, userId);
-            if (revoked) {
-              const fingerprint = DeviceFingerprint.fromRequest(req);
-              const pendingApprovals = getPendingApprovals(userId, matchedToken.tokenId);
-              const existingPending = pendingApprovals.find(p => p.device_fingerprint_hash === fingerprint.fingerprintHash);
-              if (!existingPending) {
-                createPendingApproval(matchedToken.tokenId, userId, fingerprint.fingerprintHash, fingerprint.summary, fingerprint.fingerprint.ipAddress);
+            if (!anyApproved) {
+              const anyRevoked = dbInstance.prepare(
+                'SELECT id FROM approved_devices WHERE token_id = ? AND user_id = ? AND revoked_at IS NOT NULL LIMIT 1'
+              ).get(matchedToken.tokenId, userId);
+              if (anyRevoked) {
+                // Token had approved devices but all were revoked — require re-approval
+                const fingerprint = DeviceFingerprint.fromRequest(req);
+                const pendingApprovals = getPendingApprovals(userId, matchedToken.tokenId);
+                const existingPending = pendingApprovals.find(p => p.device_fingerprint_hash === fingerprint.fingerprintHash);
+                if (!existingPending) {
+                  createPendingApproval(matchedToken.tokenId, userId, fingerprint.fingerprintHash, fingerprint.summary, fingerprint.fingerprint.ipAddress);
+                }
+                return res.status(403).json({
+                  error: 'device_not_approved',
+                  code: 'DEVICE_APPROVAL_REQUIRED',
+                  message: 'Access denied — waiting for the user to approve you in the dashboard.',
+                });
               }
-              return res.status(403).json({
-                error: 'device_not_approved',
-                code: 'DEVICE_APPROVAL_REQUIRED',
-                message: 'Access denied — waiting for the user to approve you in the dashboard.',
-              });
             }
             } // end else (non-dashboard browser)
           } catch (_) { /* never block on error */ }

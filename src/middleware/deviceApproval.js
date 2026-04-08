@@ -131,13 +131,13 @@ function deviceApprovalMiddleware(req, res, next) {
     const currentFingerprint = DeviceFingerprint.fromRequest(req);
     const fingerprintHash = currentFingerprint.fingerprintHash;
 
-    // Check if device is already approved
+    // Check if device is already approved by fingerprint
     const approvedDevice = db.getApprovedDeviceByHash(userId, fingerprintHash);
-    
+
     if (approvedDevice && !approvedDevice.revoked_at) {
       // Device is approved, update last used
       db.updateDeviceLastUsed(approvedDevice.id);
-      
+
       // Attach device info to request
       req.device = {
         id: approvedDevice.id,
@@ -145,12 +145,31 @@ function deviceApprovalMiddleware(req, res, next) {
         fingerprint: fingerprintHash,
         approvedAt: approvedDevice.approved_at,
       };
-      
+
       // Set cache-control headers to prevent stale device status
       res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
       res.set('Pragma', 'no-cache');
       res.set('Expires', '0');
-      
+
+      return next();
+    }
+
+    // Token-level approval: if ANY non-revoked approved device exists for this token,
+    // the user has already approved this token — allow access and silently register
+    // the new fingerprint (AI agents can rotate IPs or use different infra).
+    const anyApprovedForToken = db.db.prepare(
+      'SELECT id, device_name FROM approved_devices WHERE token_id = ? AND user_id = ? AND revoked_at IS NULL LIMIT 1'
+    ).get(tokenId, userId);
+
+    if (anyApprovedForToken) {
+      // Silently register this new fingerprint under the same token
+      try {
+        db.createApprovedDevice(tokenId, userId, fingerprintHash,
+          anyApprovedForToken.device_name, currentFingerprint.summary, currentFingerprint.fingerprint.ipAddress);
+      } catch (_) { /* ignore duplicate key race */ }
+      res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.set('Pragma', 'no-cache');
+      res.set('Expires', '0');
       return next();
     }
 
