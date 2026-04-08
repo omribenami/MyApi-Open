@@ -267,7 +267,9 @@ const {
   getComplianceAuditLogs,
   executeRetentionCleanup,
   upsertOAuthServerClient,
+  createApprovedDevice,
 } = require("./database");
+const DeviceFingerprint = require('./utils/deviceFingerprint');
 
 // OAuth service adapters
 const GoogleAdapter = require("./services/google-adapter");
@@ -2184,6 +2186,31 @@ function authenticate(req, res, next) {
       req.workspaceId = req.session.currentWorkspace;
     }
 
+    // Auto-approve the user's own device fingerprint whenever they authenticate via session.
+    // This ensures that when their session later expires and they fall back to Bearer-only mode,
+    // their device is already in approved_devices and they don't hit the device approval gate.
+    // We do this silently and without blocking — any error must never affect the request.
+    try {
+      const userId = String(req.session.user.id);
+      const fingerprint = DeviceFingerprint.fromRequest(req);
+      const existing = getApprovedDeviceByHash(userId, fingerprint.fingerprintHash);
+      if (!existing) {
+        // Find any active master token for this user to associate the device with
+        const masterToken = getAccessTokens().find(t =>
+          !t.revokedAt && t.ownerId === userId && t.scope === 'full'
+        );
+        if (masterToken) {
+          createApprovedDevice(
+            masterToken.tokenId, userId,
+            fingerprint.fingerprintHash,
+            'Dashboard (auto-approved)',
+            fingerprint.summary,
+            fingerprint.fingerprint.ipAddress
+          );
+        }
+      }
+    } catch (_) { /* never block the request */ }
+
     // SKIP device approval entirely for session auth.
     // Browsers don't have "devices" in the master-token sense; they have sessions.
     // Device approval is only for API token/agent access.
@@ -2282,6 +2309,12 @@ function authenticate(req, res, next) {
                              routePath.startsWith('/api/v1/users') ||
                              routePath.startsWith('/api/v1/billing') ||
                              routePath.startsWith('/api/v1/afp') ||
+                             routePath.startsWith('/api/v1/dashboard') ||
+                             routePath.startsWith('/api/v1/notifications') ||
+                             routePath.startsWith('/api/v1/tokens') ||
+                             routePath.startsWith('/api/v1/workspaces') ||
+                             routePath === '/api/v1/workspace-switch' ||
+                             routePath.startsWith('/api/v1/workspace-switch/') ||
                              (routePath.startsWith('/api/v1/activity') && req.method === 'GET');
 
   if (skipDeviceApproval) {
