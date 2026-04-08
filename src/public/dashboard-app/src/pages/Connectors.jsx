@@ -625,18 +625,6 @@ export default function Connectors() {
           </p>
         </div>
 
-        {/* Master token warning */}
-        <div className="flex gap-3 items-start bg-amber-500/5 border border-amber-500/20 rounded-xl px-4 py-3.5">
-          <svg className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd"/>
-          </svg>
-          <p className="text-xs text-amber-300/80 leading-relaxed">
-            <strong className="text-amber-300">Master tokens are not recommended for AI agents.</strong>{' '}
-            They can't distinguish between different AI instances, and revoking one blocks all of them.
-            Use OAuth Device Flow or ASC below — each agent gets its own identity and can be revoked independently.
-          </p>
-        </div>
-
         <div className="grid gap-6 lg:grid-cols-2">
 
           {/* ── Method A: OAuth Device Flow ─────────────────────────────── */}

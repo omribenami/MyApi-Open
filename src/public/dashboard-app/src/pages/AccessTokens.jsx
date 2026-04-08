@@ -549,6 +549,31 @@ function AccessTokens() {
             Regenerating rotates your master token immediately. Your current session keeps working, but any old copied master token stops working.
           </p>
         </div>
+
+        {/* Master token warning */}
+        <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 px-4 py-4 space-y-2">
+          <div className="flex gap-2.5 items-start">
+            <svg className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd"/>
+            </svg>
+            <div className="space-y-1.5">
+              <p className="text-xs font-semibold text-amber-300">Not recommended for AI agents</p>
+              <p className="text-xs text-amber-300/70 leading-relaxed">
+                The master token is a single shared credential — it can't tell two different AI agents apart. Giving it to an agent means revoking that agent also blocks every other tool or session using this token.
+              </p>
+              <p className="text-xs text-amber-300/70 leading-relaxed">
+                When an agent uses the master token for the first time, it will request a <strong className="text-amber-300">one-time device approval</strong>. Once you approve, that agent is trusted permanently — no further approvals needed.
+              </p>
+              <p className="text-xs text-amber-300/70 leading-relaxed">
+                For better security, use <strong className="text-amber-300">ASC</strong> or <strong className="text-amber-300">OAuth Device Flow</strong> instead — each agent gets its own revocable identity.
+                Find the setup instructions in{' '}
+                <a href="/dashboard/connectors#asc" className="underline text-amber-300 hover:text-amber-200 transition-colors">
+                  Connectors → Agentic Secure Connection
+                </a>.
+              </p>
+            </div>
+          </div>
+        </div>
       </section>
 
       {/* ── Section 2: Guest Tokens ── */}
