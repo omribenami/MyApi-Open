@@ -569,6 +569,216 @@ export default function Connectors() {
         <AfpConnectorCard />
       </section>
 
+      {/* ── ASC — Agentic Secure Connection ─────────────────────────────── */}
+      <section className="space-y-5" id="asc">
+        <div>
+          <div className="flex items-center gap-3 mb-1">
+            <h2 className="text-xl font-bold text-slate-100">Agentic Secure Connection</h2>
+            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-violet-500/10 text-violet-400 border border-violet-500/20">ASC</span>
+          </div>
+          <p className="text-slate-400 text-sm max-w-2xl">
+            Connect AI agents directly to your MyApi account with strong, per-agent identity. Two methods: <strong className="text-slate-300">OAuth Device Flow</strong> for one-click browser approval, and <strong className="text-slate-300">ASC keypairs</strong> for cryptographic identity without any browser.
+          </p>
+        </div>
+
+        {/* Master token warning */}
+        <div className="flex gap-3 items-start bg-amber-500/5 border border-amber-500/20 rounded-xl px-4 py-3.5">
+          <svg className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd"/>
+          </svg>
+          <p className="text-xs text-amber-300/80 leading-relaxed">
+            <strong className="text-amber-300">Master tokens are not recommended for AI agents.</strong>{' '}
+            They can't distinguish between different AI instances, and revoking one blocks all of them.
+            Use OAuth Device Flow or ASC below — each agent gets its own identity and can be revoked independently.
+          </p>
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-2">
+
+          {/* ── Method A: OAuth Device Flow ─────────────────────────────── */}
+          <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col">
+            <div className="px-6 pt-6 pb-4 border-b border-slate-800">
+              <div className="flex items-center gap-2.5 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
+                  <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-200">OAuth Device Flow</p>
+                  <p className="text-xs text-slate-500">RFC 8628 · Browser approval</p>
+                </div>
+                <span className="ml-auto text-xs font-medium px-2 py-0.5 rounded-full bg-green-400/10 text-green-400 border border-green-400/20">Recommended</span>
+              </div>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                The AI prints a short code and a URL. You visit the URL, enter the code, and approve — the AI instantly receives a scoped token. No tokens to paste, no setup.
+              </p>
+            </div>
+
+            <div className="p-6 space-y-4 flex-1">
+              <div className="space-y-3">
+                {[
+                  { n: '1', title: 'AI starts the flow', body: 'POST /api/v1/agentic/device/authorize with its client_id. Gets back a device_code and user_code.' },
+                  { n: '2', title: 'AI shows you the code', body: 'The agent prints something like: "Open myapiai.com/dashboard/activate and enter: ABCD-EFGH"' },
+                  { n: '3', title: 'You approve in the browser', body: 'Visit the Activate page, enter the code, give the agent a name, and click Approve.' },
+                  { n: '4', title: 'AI gets its token', body: 'The agent\'s polling request returns a scoped access token. It stores it and uses it for all future requests.' },
+                ].map(s => (
+                  <div key={s.n} className="flex gap-3">
+                    <span className="w-5 h-5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{s.n}</span>
+                    <div><p className="text-xs font-medium text-slate-300">{s.title}</p><p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{s.body}</p></div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="rounded-lg bg-slate-950 border border-slate-800 overflow-hidden">
+                <div className="px-3 py-2 border-b border-slate-800 flex items-center justify-between">
+                  <span className="text-xs text-slate-500 font-mono">Step 1 — start the flow (curl)</span>
+                </div>
+                <pre className="text-xs text-slate-400 p-3 overflow-x-auto leading-relaxed"><code>{`curl -X POST https://www.myapiai.com/api/v1/agentic/device/authorize \\
+  -H "Content-Type: application/json" \\
+  -d '{"client_id":"my-claude-agent","scope":"read"}'
+
+# Response:
+# { "user_code": "ABCD-EFGH",
+#   "verification_uri": "https://www.myapiai.com/dashboard/activate",
+#   "device_code": "<long code>",
+#   "expires_in": 900, "interval": 5 }`}</code></pre>
+              </div>
+
+              <div className="rounded-lg bg-slate-950 border border-slate-800 overflow-hidden">
+                <div className="px-3 py-2 border-b border-slate-800">
+                  <span className="text-xs text-slate-500 font-mono">Step 3 — poll for the token</span>
+                </div>
+                <pre className="text-xs text-slate-400 p-3 overflow-x-auto leading-relaxed"><code>{`# Poll every 5 seconds until approved:
+curl -X POST https://www.myapiai.com/api/v1/agentic/device/token \\
+  -H "Content-Type: application/json" \\
+  -d '{"device_code":"<long code>","client_id":"my-claude-agent"}'
+
+# While pending: HTTP 428 { "error": "authorization_pending" }
+# On approval:  HTTP 200 { "access_token": "myapi_...", "token_type": "Bearer" }`}</code></pre>
+              </div>
+            </div>
+
+            <div className="px-6 pb-6">
+              <a href="/dashboard/activate"
+                className="block w-full py-2.5 text-center rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold transition-colors">
+                Open Activate Page →
+              </a>
+            </div>
+          </div>
+
+          {/* ── Method B: ASC Keypair ────────────────────────────────────── */}
+          <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col">
+            <div className="px-6 pt-6 pb-4 border-b border-slate-800">
+              <div className="flex items-center gap-2.5 mb-2">
+                <div className="w-8 h-8 rounded-lg bg-violet-500/10 border border-violet-500/20 flex items-center justify-center">
+                  <svg className="w-4 h-4 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-200">ASC — Keypair Identity</p>
+                  <p className="text-xs text-slate-500">Ed25519 · No browser needed</p>
+                </div>
+                <span className="ml-auto text-xs font-medium px-2 py-0.5 rounded-full bg-violet-400/10 text-violet-400 border border-violet-400/20">Advanced</span>
+              </div>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                The AI generates an Ed25519 keypair once, registers the public key, and signs every request. Different machines with the same token are cryptographically distinct.
+              </p>
+            </div>
+
+            <div className="p-6 space-y-4 flex-1">
+              <div className="space-y-3">
+                {[
+                  { n: '1', title: 'Generate a keypair (once)', body: 'The agent generates an Ed25519 keypair and saves the private key securely on its machine.' },
+                  { n: '2', title: 'Register the public key', body: 'POST /api/v1/agentic/asc/register with the base64-encoded public key. A pending approval appears in your dashboard.' },
+                  { n: '3', title: 'You approve the key fingerprint', body: 'In Dashboard → Devices, you see the key fingerprint (like an SSH key). Click Approve.' },
+                  { n: '4', title: 'Sign every request', body: 'Add X-Agent-PublicKey, X-Agent-Timestamp, and X-Agent-Signature headers. The server verifies the signature on each request.' },
+                ].map(s => (
+                  <div key={s.n} className="flex gap-3">
+                    <span className="w-5 h-5 rounded-full bg-violet-500/10 border border-violet-500/20 text-violet-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{s.n}</span>
+                    <div><p className="text-xs font-medium text-slate-300">{s.title}</p><p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{s.body}</p></div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="rounded-lg bg-slate-950 border border-slate-800 overflow-hidden">
+                <div className="px-3 py-2 border-b border-slate-800">
+                  <span className="text-xs text-slate-500 font-mono">Node.js — keygen + sign</span>
+                </div>
+                <pre className="text-xs text-slate-400 p-3 overflow-x-auto leading-relaxed"><code>{`const { generateKeyPairSync, sign } = require('crypto');
+const fs = require('fs');
+
+// ── One-time setup ────────────────────────────────
+const { privateKey, publicKey } = generateKeyPairSync('ed25519');
+const pubDer  = publicKey.export({ type: 'spki', format: 'der' });
+const privDer = privateKey.export({ type: 'pkcs8', format: 'der' });
+const pubKeyB64 = pubDer.slice(-32).toString('base64');   // raw 32 bytes
+fs.writeFileSync('agent.key', privDer);  // keep secret!
+
+// Register:
+// POST /api/v1/agentic/asc/register  { public_key: pubKeyB64 }
+
+// ── Per-request signing ───────────────────────────
+const privDer2 = fs.readFileSync('agent.key');
+const privKey2 = crypto.createPrivateKey({ key: privDer2, format: 'der', type: 'pkcs8' });
+const ts  = Math.floor(Date.now() / 1000).toString();
+const msg = Buffer.from(\`\${ts}:YOUR_TOKEN_ID\`);
+const sig = sign(null, msg, privKey2).toString('base64');
+
+// Headers to add to every request:
+// X-Agent-PublicKey: <pubKeyB64>
+// X-Agent-Timestamp: <ts>
+// X-Agent-Signature: <sig>`}</code></pre>
+              </div>
+            </div>
+
+            <div className="px-6 pb-6">
+              <a href="/dashboard/devices"
+                className="block w-full py-2.5 text-center rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold transition-colors">
+                View Approved Devices →
+              </a>
+            </div>
+          </div>
+        </div>
+
+        {/* Comparison table */}
+        <div className="bg-slate-900/60 border border-slate-800 rounded-xl overflow-hidden">
+          <div className="px-5 py-3 border-b border-slate-800">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Method comparison</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-slate-800">
+                  <th className="text-left px-5 py-3 text-slate-500 font-medium"></th>
+                  <th className="text-center px-4 py-3 text-slate-400 font-semibold">Master Token</th>
+                  <th className="text-center px-4 py-3 text-blue-400 font-semibold">Device Flow</th>
+                  <th className="text-center px-4 py-3 text-violet-400 font-semibold">ASC Keypair</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/50">
+                {[
+                  ['Requires browser', '✗ No', '✓ Once', '✗ No'],
+                  ['Per-agent identity', '✗ No', '✓ Yes', '✓ Yes'],
+                  ['Revoke one agent only', '✗ No', '✓ Yes', '✓ Yes'],
+                  ['Works across IPs', '— By fingerprint', '✓ Yes', '✓ Yes'],
+                  ['Cryptographic proof', '✗ No', '✗ No', '✓ Yes'],
+                  ['Setup complexity', 'None', 'Low', 'Medium'],
+                ].map(([label, master, flow, asc]) => (
+                  <tr key={label}>
+                    <td className="px-5 py-2.5 text-slate-400">{label}</td>
+                    <td className="px-4 py-2.5 text-center text-slate-500">{master}</td>
+                    <td className="px-4 py-2.5 text-center text-slate-300">{flow}</td>
+                    <td className="px-4 py-2.5 text-center text-slate-300">{asc}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
     </div>
   );
 }

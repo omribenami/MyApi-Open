@@ -29,6 +29,7 @@ import Connectors from './pages/Connectors';
 import Memory from './pages/Memory';
 import OAuthAuthorize from './pages/OAuthAuthorize';
 import LogIn from './pages/LogIn';
+import Activate from './pages/Activate';
 import Layout from './components/Layout';
 
 // Create React Query client
@@ -227,6 +228,8 @@ function App() {
             <>
               {/* OAuth consent page — no Layout/sidebar, standalone */}
               <Route path="/authorize" element={<OAuthAuthorize />} />
+              {/* Device Flow activation — standalone, no sidebar */}
+              <Route path="/activate" element={<Activate />} />
               <Route
                 path="/*"
                 element={
