@@ -79,7 +79,17 @@ function deviceApprovalMiddleware(req, res, next) {
   try {
     const tokenRow = db.db.prepare('SELECT label, requires_approval FROM access_tokens WHERE id = ?').get(tokenId);
     if (tokenRow?.label && tokenRow.label.endsWith('(OAuth)')) {
-      return next(); // OAuth-consented token — already authorized by the user
+      // Still register in approved_devices so the user can see and revoke it from the dashboard
+      try {
+        const fingerprint = DeviceFingerprint.fromRequest(req);
+        const existing = db.getApprovedDeviceByHash(userId, fingerprint.fingerprintHash);
+        if (!existing) {
+          db.createApprovedDevice(tokenId, userId, fingerprint.fingerprintHash, tokenRow.label, fingerprint.summary, fingerprint.fingerprint.ipAddress);
+        } else if (!existing.revoked_at) {
+          db.updateDeviceLastUsed(existing.id);
+        }
+      } catch (_) { /* never block */ }
+      return next();
     }
     if (!isMasterToken && !tokenRow?.requires_approval) {
       return next(); // scoped token without approval requirement — pass through
