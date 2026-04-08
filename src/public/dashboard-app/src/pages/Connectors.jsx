@@ -287,6 +287,7 @@ function AfpConnectorCard() {
   const [downloadOAuthInfo, setDownloadOAuthInfo] = useState([]);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(null); // e.g. "oauth-win" or "daemon-linux"
+  const [installOpen, setInstallOpen] = useState({ oauth: false, daemon: false });
 
   useEffect(() => {
     Promise.all([
@@ -428,22 +429,30 @@ function AfpConnectorCard() {
             </div>
             <DownloadGrid type="oauth" accentRing="focus:ring-violet-500/40" />
             <div className="mt-4 rounded-xl bg-slate-800/40 border border-slate-700/40 overflow-hidden">
-              <div className="px-5 py-3 border-b border-slate-700/40">
+              <button
+                onClick={() => setInstallOpen(s => ({ ...s, oauth: !s.oauth }))}
+                className="w-full flex items-center justify-between px-5 py-3 text-left hover:bg-slate-700/20 transition-colors"
+              >
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">How to install</p>
-              </div>
-              <div className="p-5 space-y-3">
-                {[
-                  { n: '1', title: 'Download', body: 'Pick your OS above and save the file. No installation wizard, no dependencies.' },
-                  { n: '2', title: 'Run it', body: 'Double-click it (Windows) or open a terminal and run it (Mac/Linux). Your browser will open automatically.' },
-                  { n: '3', title: 'Sign in', body: 'Log in to your MyApi account and click Authorize. The app connects in the background and stays running.' },
-                  { n: '4', title: 'Done', body: 'Your PC will appear in the Connected Devices list below. AI agents can now access it.' },
-                ].map(s => (
-                  <div key={s.n} className="flex gap-3">
-                    <span className="w-5 h-5 rounded-full bg-violet-500/10 border border-violet-500/20 text-violet-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{s.n}</span>
-                    <div><p className="text-sm font-medium text-slate-300">{s.title}</p><p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{s.body}</p></div>
-                  </div>
-                ))}
-              </div>
+                <svg className={`w-4 h-4 text-slate-500 transition-transform ${installOpen.oauth ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {installOpen.oauth && (
+                <div className="p-5 space-y-3 border-t border-slate-700/40">
+                  {[
+                    { n: '1', title: 'Download', body: 'Pick your OS above and save the file. No installation wizard, no dependencies.' },
+                    { n: '2', title: 'Run it', body: 'Double-click it (Windows) or open a terminal and run it (Mac/Linux). Your browser will open automatically.' },
+                    { n: '3', title: 'Sign in', body: 'Log in to your MyApi account and click Authorize. The app connects in the background and stays running.' },
+                    { n: '4', title: 'Done', body: 'Your PC will appear in the Connected Devices list below. AI agents can now access it.' },
+                  ].map(s => (
+                    <div key={s.n} className="flex gap-3">
+                      <span className="w-5 h-5 rounded-full bg-violet-500/10 border border-violet-500/20 text-violet-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{s.n}</span>
+                      <div><p className="text-sm font-medium text-slate-300">{s.title}</p><p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{s.body}</p></div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -455,22 +464,30 @@ function AfpConnectorCard() {
             </div>
             <DownloadGrid type="daemon" accentRing="focus:ring-cyan-500/40" />
             <div className="mt-4 rounded-xl bg-slate-800/40 border border-slate-700/40 overflow-hidden">
-              <div className="px-5 py-3 border-b border-slate-700/40">
+              <button
+                onClick={() => setInstallOpen(s => ({ ...s, daemon: !s.daemon }))}
+                className="w-full flex items-center justify-between px-5 py-3 text-left hover:bg-slate-700/20 transition-colors"
+              >
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">How to install</p>
-              </div>
-              <div className="p-5 space-y-3">
-                {[
-                  { n: '1', title: 'Download', body: 'Pick your OS above and save the file.' },
-                  { n: '2', title: 'Run it', body: 'Double-click (Windows) or run from terminal (Mac/Linux). A setup wizard will ask for your server URL and API token.' },
-                  { n: '3', title: 'Auto-start', body: 'The wizard can install it as a background service so it starts automatically when you log in.' },
-                  { n: '4', title: 'Done', body: 'Your PC will appear in the Connected Devices list below.' },
-                ].map(s => (
-                  <div key={s.n} className="flex gap-3">
-                    <span className="w-5 h-5 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{s.n}</span>
-                    <div><p className="text-sm font-medium text-slate-300">{s.title}</p><p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{s.body}</p></div>
-                  </div>
-                ))}
-              </div>
+                <svg className={`w-4 h-4 text-slate-500 transition-transform ${installOpen.daemon ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {installOpen.daemon && (
+                <div className="p-5 space-y-3 border-t border-slate-700/40">
+                  {[
+                    { n: '1', title: 'Download', body: 'Pick your OS above and save the file.' },
+                    { n: '2', title: 'Run it', body: 'Double-click (Windows) or run from terminal (Mac/Linux). A setup wizard will ask for your server URL and API token.' },
+                    { n: '3', title: 'Auto-start', body: 'The wizard can install it as a background service so it starts automatically when you log in.' },
+                    { n: '4', title: 'Done', body: 'Your PC will appear in the Connected Devices list below.' },
+                  ].map(s => (
+                    <div key={s.n} className="flex gap-3">
+                      <span className="w-5 h-5 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{s.n}</span>
+                      <div><p className="text-sm font-medium text-slate-300">{s.title}</p><p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{s.body}</p></div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
