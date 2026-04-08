@@ -367,6 +367,7 @@ router.get('/me', (req, res) => {
       if (parts.length === 2 && parts[0] === 'Bearer') {
         const rawToken = parts[1];
         const tokens = getAccessTokens() || [];
+        let matchedToken = null;
         for (const tokenRecord of tokens) {
           if (
             !tokenRecord.revokedAt &&
@@ -377,8 +378,26 @@ router.get('/me', (req, res) => {
               continue; // skip expired tokens
             }
             userId = String(tokenRecord.ownerId);
+            matchedToken = tokenRecord;
             break;
           }
+        }
+        // Check device revocation for Bearer token requests.
+        // If the user has revoked this token's device, deny even /auth/me.
+        if (matchedToken) {
+          try {
+            const { db: dbInstance } = require('../database');
+            const revoked = dbInstance.prepare(
+              'SELECT id FROM approved_devices WHERE token_id = ? AND user_id = ? AND revoked_at IS NOT NULL LIMIT 1'
+            ).get(matchedToken.tokenId, userId);
+            if (revoked) {
+              return res.status(403).json({
+                error: 'device_not_approved',
+                code: 'DEVICE_REVOKED',
+                message: 'Access denied — this device has been revoked by the user.',
+              });
+            }
+          } catch (_) { /* never block on error */ }
         }
       }
     }

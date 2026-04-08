@@ -2303,7 +2303,7 @@ function authenticate(req, res, next) {
   // and read-only activity don't require approval.
   // Use req.baseUrl to get the full path (req.path is relative to mount point)
   const routePath = req.baseUrl + req.path;
-  const skipDeviceApproval = routePath.startsWith('/api/v1/auth/') ||
+  const skipDeviceApproval = (routePath.startsWith('/api/v1/auth/') && routePath !== '/api/v1/auth/me') ||
                              routePath.startsWith('/api/v1/devices') ||
                              routePath.startsWith('/api/v1/oauth/') ||
                              routePath.startsWith('/api/v1/users') ||
