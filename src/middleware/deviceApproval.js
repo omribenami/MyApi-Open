@@ -79,16 +79,28 @@ function deviceApprovalMiddleware(req, res, next) {
   try {
     const tokenRow = db.db.prepare('SELECT label, requires_approval FROM access_tokens WHERE id = ?').get(tokenId);
     if (tokenRow?.label && tokenRow.label.endsWith('(OAuth)')) {
-      // Still register in approved_devices so the user can see and revoke it from the dashboard
+      // Register/track in approved_devices so the user can see and revoke from the dashboard.
+      // Revocation is token-level: if the user has revoked any device for this token,
+      // block ALL requests from this token (regardless of fingerprint) until re-approved.
       try {
+        const anyRevoked = db.db.prepare(
+          'SELECT id FROM approved_devices WHERE token_id = ? AND user_id = ? AND revoked_at IS NOT NULL LIMIT 1'
+        ).get(tokenId, userId);
+        if (anyRevoked) {
+          return res.status(403).json({
+            error: 'device_not_approved',
+            code: 'DEVICE_REVOKED',
+            message: 'Access denied — this device has been revoked by the user.',
+          });
+        }
         const fingerprint = DeviceFingerprint.fromRequest(req);
         const existing = db.getApprovedDeviceByHash(userId, fingerprint.fingerprintHash);
         if (!existing) {
           db.createApprovedDevice(tokenId, userId, fingerprint.fingerprintHash, tokenRow.label, fingerprint.summary, fingerprint.fingerprint.ipAddress);
-        } else if (!existing.revoked_at) {
+        } else {
           db.updateDeviceLastUsed(existing.id);
         }
-      } catch (_) { /* never block */ }
+      } catch (_) { /* never block on unexpected errors */ }
       return next();
     }
     if (!isMasterToken && !tokenRow?.requires_approval) {
