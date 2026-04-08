@@ -4481,11 +4481,12 @@ function approvePendingDevice(approvalId, deviceName) {
 
 function denyPendingApproval(approvalId, reason = null) {
   const now = new Date().toISOString();
-  db.prepare(`
-    UPDATE device_approvals_pending 
-    SET status = 'denied', denied_at = ?, denial_reason = ? 
+  const result = db.prepare(`
+    UPDATE device_approvals_pending
+    SET status = 'denied', denied_at = ?, denial_reason = ?
     WHERE id = ?
   `).run(now, reason, approvalId);
+  return result.changes > 0;
 }
 
 function cleanupExpiredApprovals() {
