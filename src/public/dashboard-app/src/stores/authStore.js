@@ -176,7 +176,12 @@ export const useAuthStore = create((set, get) => ({
           }
         }
 
-        set({ user: null, masterToken: null, sessionToken: null, isAuthenticated: false, isInitialized: true, error: null });
+        // Don't overwrite if another handler (e.g. OAuth confirm) already authenticated the user
+        if (!get().isAuthenticated) {
+          set({ user: null, masterToken: null, sessionToken: null, isAuthenticated: false, isInitialized: true, error: null });
+        } else {
+          set({ isInitialized: true });
+        }
       } catch (err) {
         if (err?.message?.includes('Corruption')) {
           set({ isInitialized: true, isAuthenticated: false });

@@ -7,7 +7,7 @@ const logger = require('../utils/logger');
 const express = require('express');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
-const { getAccessTokens, getExistingMasterToken, db } = require('../database');
+const { getAccessTokens, getExistingMasterToken, createAccessToken, db } = require('../database');
 
 const router = express.Router();
 
@@ -440,12 +440,26 @@ router.get('/me', (req, res) => {
       if (existing) {
         masterTokenRaw = existing.rawToken;
         masterTokenId  = existing.tokenId;
-        // Cache in session for subsequent requests within the same session
-        if (req.session) {
-          req.session.masterTokenRaw = masterTokenRaw;
-          req.session.masterTokenId  = masterTokenId;
-          req.session.save?.((err) => { if (err) logger.error('[Auth/Me] Session save error:', err); });
+      } else {
+        // No master token exists yet — create the canonical one for this user.
+        // Platform-generated, not linked to any OAuth service. Persists until
+        // the user explicitly rotates it via /tokens/master/regenerate.
+        try {
+          const rawToken = 'myapi_' + crypto.randomBytes(32).toString('hex');
+          const hash = bcrypt.hashSync(rawToken, 10);
+          const tokenId = createAccessToken(hash, userId, 'full', 'Master Token', null, null, null, rawToken, 'master');
+          masterTokenRaw = rawToken;
+          masterTokenId  = tokenId;
+          logger.info('[Auth/Me] Created initial master token', { userId, tokenId });
+        } catch (mintErr) {
+          logger.error('[Auth/Me] Failed to create master token', { error: mintErr.message });
         }
+      }
+
+      if (masterTokenRaw && req.session) {
+        req.session.masterTokenRaw = masterTokenRaw;
+        req.session.masterTokenId  = masterTokenId;
+        req.session.save?.((err) => { if (err) logger.error('[Auth/Me] Session save error:', err); });
       }
     }
 

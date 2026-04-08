@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from './stores/authStore';
 import OnboardingModal from './components/OnboardingModal';
+import SessionExpiredOverlay from './components/SessionExpiredOverlay';
 import { wasOnboardingDismissed } from './utils/onboardingUtils';
 import Dashboard from './pages/Dashboard';
 import DashboardHome from './pages/DashboardHome';
@@ -60,6 +61,7 @@ function App() {
   const fetchWorkspaces = useAuthStore((state) => state.fetchWorkspaces);
   const user = useAuthStore((state) => state.user);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showSessionExpired, setShowSessionExpired] = useState(false);
 
   // Initialize auth store on mount
   useEffect(() => {
@@ -120,11 +122,13 @@ function App() {
               .then(res => res.ok ? res.json() : null);
           }
         })
-        .then(sessionUser => {
+        .then((sessionUser) => {
           if (sessionUser?.user) {
             const { setMasterToken, setUser } = useAuthStore.getState();
-            if (sessionUser.user?.bootstrap?.masterToken) {
-              setMasterToken(sessionUser.user.bootstrap.masterToken);
+            // /auth/me always returns the platform-generated master token in
+            // bootstrap.masterToken (creating it on first login if needed).
+            if (sessionUser.bootstrap?.masterToken) {
+              setMasterToken(sessionUser.bootstrap.masterToken);
             }
             setUser(sessionUser.user);
             // Clear OAuth params from URL
@@ -137,9 +141,18 @@ function App() {
     }
   }, []);
 
-  // Load workspaces once authenticated
+  // Show a friendly overlay when the session expires due to inactivity.
+  // Only show it if the user was actively authenticated — not during login
+  // flows, initial load, or after an explicit logout (which sets isAuthenticated
+  // false before firing the event).
   useEffect(() => {
-    const onAuthExpired = () => forceUnauthenticated();
+    const onAuthExpired = () => {
+      const wasAuthenticated = useAuthStore.getState().isAuthenticated;
+      forceUnauthenticated();
+      if (wasAuthenticated) {
+        setShowSessionExpired(true);
+      }
+    };
     window.addEventListener('myapi:auth-expired', onAuthExpired);
     return () => window.removeEventListener('myapi:auth-expired', onAuthExpired);
   }, [forceUnauthenticated]);
@@ -168,6 +181,9 @@ function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      {showSessionExpired && (
+        <SessionExpiredOverlay onDismiss={() => setShowSessionExpired(false)} />
+      )}
       <Router basename="/dashboard">
         {isAuthenticated && showOnboarding && (
           <OnboardingModal onClose={() => setShowOnboarding(false)} />

@@ -32,11 +32,7 @@ export async function apiRequest(path, options = {}) {
     return response;
   }
 
-  if (response.status === 401 || response.status === 403) {
-    const data = await response.clone().json().catch(() => ({}));
-    if (response.status === 403 && data?.code === 'DEVICE_APPROVAL_REQUIRED') {
-      return response;
-    }
+  if (response.status === 401) {
     clearAuthArtifacts();
     redirectToLoginOnce();
   }
