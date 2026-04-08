@@ -72,19 +72,20 @@ function deviceApprovalMiddleware(req, res, next) {
     return next();
   }
 
-  // Master tokens always go through device approval — they're used by AI agents and external
-  // clients, which is exactly what the approval gate is designed to control.
-  // Guest/scoped tokens respect the per-token requires_approval flag (set via the "Require
-  // device approval" checkbox when creating a scoped token).
-  if (!isMasterToken) {
-    try {
-      const tokenRow = db.db.prepare('SELECT requires_approval FROM access_tokens WHERE id = ?').get(tokenId);
-      if (!tokenRow || !tokenRow.requires_approval) {
-        return next(); // scoped token without approval requirement — pass through
-      }
-    } catch (_) {
-      // If lookup fails, fall through to full device check
+  // OAuth-issued tokens (label ends with "(OAuth)") are pre-authorized by the user during
+  // the OAuth consent flow — no additional device approval needed.
+  // Daemon tokens (AFP daemon, raw API tokens) must go through device approval.
+  // Guest/scoped tokens respect the per-token requires_approval flag.
+  try {
+    const tokenRow = db.db.prepare('SELECT label, requires_approval FROM access_tokens WHERE id = ?').get(tokenId);
+    if (tokenRow?.label && tokenRow.label.endsWith('(OAuth)')) {
+      return next(); // OAuth-consented token — already authorized by the user
     }
+    if (!isMasterToken && !tokenRow?.requires_approval) {
+      return next(); // scoped token without approval requirement — pass through
+    }
+  } catch (_) {
+    // If lookup fails, fall through to full device check
   }
 
   try {
