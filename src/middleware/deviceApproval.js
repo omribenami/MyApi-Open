@@ -134,7 +134,7 @@ function deviceApprovalMiddleware(req, res, next) {
       // (The rate limit applies only to creating NEW pending approvals)
       return res.status(403).json({
         error: 'device_not_approved',
-        message: 'Device not approved for this token.',
+        message: 'Access denied — waiting for the user to approve you in the dashboard.',
         code: 'DEVICE_NOT_APPROVED',
         token: { kind: tokenKind, name: tokenName },
         approval_pending: false,
@@ -251,7 +251,7 @@ function deviceApprovalMiddleware(req, res, next) {
     return res.status(403).json({
       error: 'device_not_approved',
       code: 'DEVICE_APPROVAL_REQUIRED',
-      message: 'This device requires approval to access MyApi',
+      message: 'Access denied — waiting for the user to approve you in the dashboard.',
       token: {
         kind: tokenKind,
         name: tokenName,
@@ -279,7 +279,7 @@ function deviceApprovalMiddleware(req, res, next) {
     return res.status(403).json({
       error: 'device_approval_error',
       code: 'DEVICE_APPROVAL_FAILED',
-      message: 'Device approval check failed. Please approve this device in Device Management and try again.',
+      message: 'Access denied — waiting for the user to approve you in the dashboard.',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
