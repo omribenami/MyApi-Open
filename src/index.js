@@ -4744,6 +4744,13 @@ app.post('/api/v1/tokens/master/bootstrap', authenticate, (req, res) => {
 // Revoke (delete) a token
 app.delete("/api/v1/tokens/:id", authenticate, (req, res) => {
   if (!isMaster(req)) return res.status(403).json({ error: "Only master token can revoke tokens" });
+
+  // Master tokens can only be changed via POST /tokens/master/regenerate — never deleted directly
+  const targetToken = db.prepare("SELECT token_type FROM access_tokens WHERE id = ?").get(req.params.id);
+  if (targetToken?.token_type === 'master') {
+    return res.status(403).json({ error: "Master tokens cannot be revoked directly. Use POST /api/v1/tokens/master/regenerate to rotate." });
+  }
+
   _tokenCache.clear(); // invalidate all cached tokens on any revocation
   const revoked = revokeAccessToken(req.params.id);
   if (!revoked) return res.status(404).json({ error: "Token not found" });
@@ -10951,6 +10958,8 @@ if (WebSocketServer) {
           afpConnections.set(data.deviceId, ws);
           updateAfpDeviceStatus(data.deviceId, 'online');
           ws.afpDeviceId = data.deviceId;
+          ws.afpAlive = true;
+          ws.on('pong', () => { ws.afpAlive = true; });
           ws.send(JSON.stringify({ type: 'afp:registered', deviceId: data.deviceId }));
           console.log(`[AFP] Daemon connected: ${data.deviceId} (${data.hostname || 'unknown'})`);
 
@@ -11000,6 +11009,22 @@ if (WebSocketServer) {
       console.error('WebSocket error:', err);
     });
   });
+
+  // AFP heartbeat — ping every 30s, terminate and mark offline if no pong within 10s
+  setInterval(() => {
+    afpConnections.forEach((ws, deviceId) => {
+      if (ws.afpAlive === false) {
+        // No pong since last ping — connection is dead
+        afpConnections.delete(deviceId);
+        try { updateAfpDeviceStatus(deviceId, 'offline'); } catch (_) {}
+        console.log(`[AFP] Daemon timed out (no pong): ${deviceId}`);
+        try { ws.terminate(); } catch (_) {}
+        return;
+      }
+      ws.afpAlive = false;
+      try { ws.ping(); } catch (_) {}
+    });
+  }, 30_000);
 
   // Listen for device alert events and broadcast to connected users
   alertEmitter.on('device:pending_approval', (data) => {

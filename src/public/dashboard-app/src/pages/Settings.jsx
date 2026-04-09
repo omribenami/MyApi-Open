@@ -1901,6 +1901,9 @@ function BillingSection() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {plans.map((plan) => {
           const isCurrent = String(current.plan).toLowerCase() === String(plan.id).toLowerCase();
+          const planId = String(plan.id).toLowerCase();
+          const isFree = planId === 'free';
+          const isComingSoon = planId === 'pro' || planId === 'enterprise';
           return (
             <div key={plan.id} className={`bg-slate-900 border rounded-lg p-4 ${isCurrent ? 'border-blue-500 ring-1 ring-blue-500/40' : 'border-slate-700'}`}>
               <div className="flex items-center justify-between gap-2">
@@ -1909,7 +1912,15 @@ function BillingSection() {
                   <span className="text-[10px] uppercase tracking-wide font-semibold px-2 py-1 rounded bg-blue-600 text-white">Current</span>
                 )}
               </div>
-              <p className="text-slate-300 text-xl mt-1">${plan.priceMonthly ?? Math.floor((plan.price_cents || 0) / 100)}<span className="text-sm text-slate-400">/mo</span></p>
+              {isFree ? (
+                <p className="text-slate-300 text-xl mt-1 flex items-baseline gap-2">
+                  <span className="line-through text-slate-500 text-base">$10</span>
+                  <span>Free</span>
+                  <span className="text-xs text-violet-400 font-semibold">Beta</span>
+                </p>
+              ) : (
+                <p className="text-slate-300 text-xl mt-1">${plan.priceMonthly ?? Math.floor((plan.price_cents || 0) / 100)}<span className="text-sm text-slate-400">/mo</span></p>
+              )}
               {plan.description && <p className="text-slate-400 text-xs mt-1">{plan.description}</p>}
               {Array.isArray(plan.features) && plan.features.length > 0 && (
                 <ul className="mt-2 space-y-1 text-xs text-slate-400">
@@ -1922,11 +1933,11 @@ function BillingSection() {
                 </ul>
               )}
               <button
-                disabled={loading || isCurrent}
-                onClick={() => handleCheckout(plan.id)}
-                className="mt-4 w-full px-3 py-2 rounded bg-blue-600 hover:bg-blue-500 text-white text-sm disabled:opacity-50"
+                disabled={loading || isCurrent || isComingSoon}
+                onClick={() => !isComingSoon && handleCheckout(plan.id)}
+                className={`mt-4 w-full px-3 py-2 rounded text-sm text-white disabled:opacity-50 ${isComingSoon ? 'bg-slate-700 cursor-default' : 'bg-blue-600 hover:bg-blue-500'}`}
               >
-                {isCurrent ? 'Current Plan' : 'Choose Plan'}
+                {isCurrent ? 'Current Plan' : isComingSoon ? 'Soon' : 'Choose Plan'}
               </button>
             </div>
           );

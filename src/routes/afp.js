@@ -11,10 +11,28 @@ const {
   getAfpDevices,
   getAfpDeviceById,
   revokeAfpDevice,
+  updateAfpDeviceStatus,
   logAfpCommand,
   createAuditLog,
 } = require('../database');
 const { pendingRequests, afpConnections } = require('../lib/afp-state');
+
+// A device is stale (should be offline) if it has no live WebSocket AND
+// last_seen_at is older than 2 minutes.
+const STALE_THRESHOLD_MS = 2 * 60 * 1000;
+function reconcileDeviceStatus(device) {
+  const isLive = afpConnections.has(device.id);
+  if (isLive) return 'online';
+  if (device.status === 'online') {
+    const lastSeen = device.last_seen_at ? new Date(device.last_seen_at).getTime() : 0;
+    if (Date.now() - lastSeen > STALE_THRESHOLD_MS) {
+      // Mark offline in DB so next read is already correct
+      try { updateAfpDeviceStatus(device.id, 'offline'); } catch (_) {}
+      return 'offline';
+    }
+  }
+  return device.status;
+}
 const { resolveRequesterPlan } = require('../lib/planEnforcement');
 
 const router = express.Router();
@@ -128,7 +146,7 @@ router.get('/devices', requireMaster, requireAfpPlan, (req, res) => {
       platform: d.platform,
       arch: d.arch,
       capabilities: d.capabilities_json ? JSON.parse(d.capabilities_json) : [],
-      status: d.status,
+      status: reconcileDeviceStatus(d),
       afpRoot: d.afp_root || null,
       privileges: d.afp_root ? 'restricted' : 'full',
       lastSeenAt: d.last_seen_at,
