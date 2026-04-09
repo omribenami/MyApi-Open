@@ -70,7 +70,13 @@ jobs:
 
       - name: Build DMG (x64 + arm64)
         working-directory: connectors/afp-app
-        run: npm run build:mac
+        run: |
+          # Unset CSC_LINK if empty/unset — electron-builder treats "" as a file
+          # path, resolves path.resolve(projectDir,"") = projectDir, then throws
+          # "not a file". Unset it so process.env.CSC_LINK === undefined → skip sign.
+          [ -z "${CSC_LINK:-}" ] && unset CSC_LINK || true
+          [ -z "${CSC_KEY_PASSWORD:-}" ] && unset CSC_KEY_PASSWORD || true
+          npm run build:mac
 
       - name: Rename artifacts to fixed names
         working-directory: connectors/afp-app/dist
