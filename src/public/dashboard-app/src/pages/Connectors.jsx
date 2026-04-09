@@ -171,6 +171,26 @@ const OS_PLATFORMS = [
   { platform: 'win',     label: 'Windows', sublabel: 'x86-64',        Logo: WindowsLogo, iconColor: 'text-sky-400',    iconBg: 'bg-sky-400/10',    iconBorder: 'border-sky-400/20'    },
 ];
 
+// ─── Desktop App platform configs (Electron — GitHub Releases) ────────────────
+const GH_RELEASES_BASE = 'https://github.com/omribenami/MyApi/releases/latest/download';
+const DESKTOP_PLATFORMS = [
+  {
+    platform: 'mac-arm', label: 'macOS', sublabel: 'Apple Silicon',
+    Logo: AppleLogo, iconColor: 'text-slate-300', iconBg: 'bg-slate-300/10', iconBorder: 'border-slate-300/20',
+    href: `${GH_RELEASES_BASE}/MyApi-AFP-mac-arm64.dmg`, filename: 'MyApi-AFP-mac-arm64.dmg',
+  },
+  {
+    platform: 'mac',     label: 'macOS', sublabel: 'Intel',
+    Logo: AppleLogo, iconColor: 'text-slate-300', iconBg: 'bg-slate-300/10', iconBorder: 'border-slate-300/20',
+    href: `${GH_RELEASES_BASE}/MyApi-AFP-mac-x64.dmg`, filename: 'MyApi-AFP-mac-x64.dmg',
+  },
+  {
+    platform: 'win',     label: 'Windows', sublabel: 'x86-64',
+    Logo: WindowsLogo, iconColor: 'text-sky-400', iconBg: 'bg-sky-400/10', iconBorder: 'border-sky-400/20',
+    href: `${GH_RELEASES_BASE}/MyApi-AFP-win-x64.exe`, filename: 'MyApi-AFP-win-x64.exe',
+  },
+];
+
 // ─── AfpConnectorCard ──────────────────────────────────────────────────────────
 function AfpConnectorCard() {
   const { user } = useAuthStore();
@@ -180,7 +200,7 @@ function AfpConnectorCard() {
   const [downloadOAuthInfo, setDownloadOAuthInfo] = useState([]);
   const [loading, setLoading]                     = useState(true);
   const [downloading, setDownloading]             = useState(null);
-  const [edition, setEdition]                     = useState('oauth');
+  const [edition, setEdition]                     = useState('desktop');
   const [installOpen, setInstallOpen]             = useState(false);
 
   useEffect(() => {
@@ -234,6 +254,12 @@ function AfpConnectorCard() {
       { title: 'Auto-start', body: 'The wizard can install it as a background service.' },
       { title: 'Done', body: 'Your PC appears in Connected Devices below.' },
     ],
+    desktop: [
+      { title: 'Download', body: 'Pick your platform. macOS: open the DMG and drag to Applications. Windows: run the installer.' },
+      { title: 'First launch', body: 'The app icon appears in your menu bar (Mac) or system tray (Windows) and your browser opens automatically to sign in.' },
+      { title: 'Authorize', body: 'Log in and click Authorize. The app connects and shows a green dot when ready.' },
+      { title: 'Done', body: 'Your device appears in Connected Devices below. Use the tray icon to disconnect, re-authenticate, or toggle Start on Login.' },
+    ],
   };
 
   if (!isAfpEnabled) {
@@ -249,49 +275,76 @@ function AfpConnectorCard() {
   return (
     <div className="space-y-4">
       {/* Edition toggle */}
-      <div className="flex items-center gap-1 p-1 bg-slate-900 border border-slate-800 rounded-lg w-fit">
+      <div className="flex items-center gap-1 p-1 bg-slate-900 border border-slate-800 rounded-lg w-fit flex-wrap">
         {[
-          { id: 'oauth',  label: 'Sign-in Edition', badge: 'Recommended' },
-          { id: 'daemon', label: 'Token Edition',   badge: 'Self-hosted'  },
+          { id: 'desktop', label: 'Desktop App',    badge: 'New',         badgeStyle: 'bg-emerald-500/15 text-emerald-400' },
+          { id: 'oauth',   label: 'CLI Sign-in',    badge: 'Recommended', badgeStyle: 'bg-violet-500/15 text-violet-400'   },
+          { id: 'daemon',  label: 'CLI Token',      badge: 'Self-hosted', badgeStyle: 'bg-slate-700/60 text-slate-500'     },
         ].map(e => (
           <button key={e.id} onClick={() => setEdition(e.id)}
             className={`flex items-center gap-2 px-3.5 py-1.5 rounded-md text-xs font-medium transition-all ${
               edition === e.id ? 'bg-slate-700 text-slate-100 shadow-sm' : 'text-slate-500 hover:text-slate-300'
             }`}>
             {e.label}
-            <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
-              e.id === 'oauth' ? 'bg-violet-500/15 text-violet-400' : 'bg-slate-700/60 text-slate-500'
-            }`}>{e.badge}</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${e.badgeStyle}`}>{e.badge}</span>
           </button>
         ))}
       </div>
 
       {/* Download grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        {OS_PLATFORMS.map(os => {
-          const info = edition === 'oauth' ? downloadOAuthInfo : downloadInfo;
-          const size = getSize(info, os.platform);
-          const key  = `${edition}-${os.platform}`;
-          const isLoading = downloading === key;
-          return (
-            <button key={os.platform} onClick={() => handleDownload(edition, os.platform)} disabled={!!downloading}
-              className="group flex flex-col items-center gap-2 p-4 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 hover:bg-slate-800/80 transition-all disabled:opacity-50 disabled:cursor-wait">
-              <div className={`w-10 h-10 rounded-xl ${os.iconBg} border ${os.iconBorder} flex items-center justify-center transition-transform group-hover:scale-105`}>
-                {isLoading
-                  ? <svg className="w-4 h-4 text-slate-400 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                  : <os.Logo className={`w-5 h-5 ${os.iconColor}`} />
-                }
-              </div>
-              <div className="text-center">
-                <p className="text-xs font-semibold text-slate-200">{os.label}</p>
-                <p className="text-[11px] text-slate-500">{os.sublabel}</p>
-                {size && <p className="text-[11px] text-slate-600 mt-0.5">{size}</p>}
-              </div>
-              {!isLoading && <svg className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>}
-            </button>
-          );
-        })}
-      </div>
+      {edition === 'desktop' ? (
+        <div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-2">
+            {DESKTOP_PLATFORMS.map(os => (
+              <a key={os.platform} href={os.href} download={os.filename}
+                className="group flex flex-col items-center gap-2 p-4 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 hover:bg-slate-800/80 transition-all no-underline">
+                <div className={`w-10 h-10 rounded-xl ${os.iconBg} border ${os.iconBorder} flex items-center justify-center transition-transform group-hover:scale-105`}>
+                  <os.Logo className={`w-5 h-5 ${os.iconColor}`} />
+                </div>
+                <div className="text-center">
+                  <p className="text-xs font-semibold text-slate-200">{os.label}</p>
+                  <p className="text-[11px] text-slate-500">{os.sublabel}</p>
+                </div>
+                <svg className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+              </a>
+            ))}
+          </div>
+          <div className="flex items-start gap-2.5 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3">
+            <svg className="w-3.5 h-3.5 text-amber-400 mt-0.5 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+            <p className="text-[11px] text-amber-300 leading-relaxed">
+              Unsigned build — macOS: right-click → Open to bypass Gatekeeper.
+              Windows: click "More info" → "Run anyway" in SmartScreen.
+              Code signing coming soon.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {OS_PLATFORMS.map(os => {
+            const info = edition === 'oauth' ? downloadOAuthInfo : downloadInfo;
+            const size = getSize(info, os.platform);
+            const key  = `${edition}-${os.platform}`;
+            const isLoading = downloading === key;
+            return (
+              <button key={os.platform} onClick={() => handleDownload(edition, os.platform)} disabled={!!downloading}
+                className="group flex flex-col items-center gap-2 p-4 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 hover:bg-slate-800/80 transition-all disabled:opacity-50 disabled:cursor-wait">
+                <div className={`w-10 h-10 rounded-xl ${os.iconBg} border ${os.iconBorder} flex items-center justify-center transition-transform group-hover:scale-105`}>
+                  {isLoading
+                    ? <svg className="w-4 h-4 text-slate-400 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                    : <os.Logo className={`w-5 h-5 ${os.iconColor}`} />
+                  }
+                </div>
+                <div className="text-center">
+                  <p className="text-xs font-semibold text-slate-200">{os.label}</p>
+                  <p className="text-[11px] text-slate-500">{os.sublabel}</p>
+                  {size && <p className="text-[11px] text-slate-600 mt-0.5">{size}</p>}
+                </div>
+                {!isLoading && <svg className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* How to install */}
       <div className="border border-slate-800 rounded-xl overflow-hidden">

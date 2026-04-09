@@ -1,0 +1,189 @@
+# =============================================================================
+# AFP Desktop App Build Pipeline
+# Builds signed/unsigned Electron DMG (macOS) + NSIS installer (Windows)
+# and uploads to GitHub Releases.
+#
+# Trigger:
+#   git tag afp-app-v1.0.0 && git push --tags
+#   OR: Actions → Build AFP Desktop App → Run workflow
+#
+# Signing (optional — skip for unsigned dev builds):
+#   macOS: set CSC_LINK, CSC_KEY_PASSWORD, APPLE_ID,
+#           APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID in repo secrets
+#   Win:   set WIN_CERT_B64 (base64 .pfx), WIN_CERT_PASSWORD
+# =============================================================================
+
+name: Build AFP Desktop App
+
+on:
+  push:
+    tags:
+      - 'afp-app-v*'
+  workflow_dispatch:
+    inputs:
+      prerelease:
+        description: 'Mark as pre-release'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write   # required to create releases + upload assets
+
+# ─── macOS Build ─────────────────────────────────────────────────────────────
+jobs:
+  build-mac:
+    name: Build macOS (x64 + arm64)
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: connectors/afp-app
+        run: npm ci
+
+      - name: Build DMG (x64 + arm64)
+        working-directory: connectors/afp-app
+        run: npm run build:mac
+        env:
+          # Code signing — skipped when secrets are absent
+          CSC_LINK:                     ${{ secrets.CSC_LINK || '' }}
+          CSC_KEY_PASSWORD:             ${{ secrets.CSC_KEY_PASSWORD || '' }}
+          CSC_IDENTITY_AUTO_DISCOVERY:  ${{ secrets.CSC_LINK && 'true' || 'false' }}
+          APPLE_ID:                     ${{ secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD:  ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID:                ${{ secrets.APPLE_TEAM_ID || '' }}
+
+      - name: Rename artifacts to fixed names
+        working-directory: connectors/afp-app/dist
+        run: |
+          # electron-builder names: "MyApi AFP-1.0.0-x64.dmg" / "MyApi AFP-1.0.0-arm64.dmg"
+          X64=$(ls "MyApi AFP"*x64*.dmg 2>/dev/null | head -1)
+          ARM=$(ls "MyApi AFP"*arm64*.dmg 2>/dev/null | head -1)
+          [ -n "$X64" ]  && mv "$X64"  MyApi-AFP-mac-x64.dmg   && echo "renamed: $X64"
+          [ -n "$ARM" ]  && mv "$ARM"  MyApi-AFP-mac-arm64.dmg && echo "renamed: $ARM"
+          ls -lh *.dmg
+
+      - name: Upload mac artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-dmg
+          path: |
+            connectors/afp-app/dist/MyApi-AFP-mac-x64.dmg
+            connectors/afp-app/dist/MyApi-AFP-mac-arm64.dmg
+          retention-days: 7
+
+  # ─── Windows Build ───────────────────────────────────────────────────────────
+  build-win:
+    name: Build Windows (x64)
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: connectors/afp-app
+        run: npm ci
+
+      - name: Decode signing cert (if present)
+        if: secrets.WIN_CERT_B64 != ''
+        shell: pwsh
+        run: |
+          $bytes = [Convert]::FromBase64String("${{ secrets.WIN_CERT_B64 }}")
+          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\myapi-cert.pfx", $bytes)
+          echo "WIN_CERT_PATH=$env:RUNNER_TEMP\myapi-cert.pfx" >> $env:GITHUB_ENV
+
+      - name: Build NSIS installer
+        working-directory: connectors/afp-app
+        run: npm run build:win
+        env:
+          WIN_CERT_PATH:     ${{ env.WIN_CERT_PATH || '' }}
+          WIN_CERT_PASSWORD: ${{ secrets.WIN_CERT_PASSWORD || '' }}
+
+      - name: Rename artifact to fixed name
+        working-directory: connectors/afp-app/dist
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Filter "*.exe" | Where-Object { $_.Name -notmatch 'Uninstall' } | Select-Object -First 1
+          if ($exe) {
+            Rename-Item $exe.FullName "MyApi-AFP-win-x64.exe"
+            Write-Host "renamed: $($exe.Name)"
+          } else {
+            Write-Error "No installer .exe found in dist/"
+          }
+          Get-ChildItem *.exe | Format-Table Name, Length
+
+      - name: Upload win artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: win-exe
+          path: connectors/afp-app/dist/MyApi-AFP-win-x64.exe
+          retention-days: 7
+
+  # ─── GitHub Release ──────────────────────────────────────────────────────────
+  release:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build-mac, build-win]
+
+    steps:
+      - name: Download mac artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: mac-dmg
+          path: dist/
+
+      - name: Download win artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: win-exe
+          path: dist/
+
+      - name: List release assets
+        run: ls -lh dist/
+
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name:   ${{ github.ref_name }}
+          name:       AFP Desktop App ${{ github.ref_name }}
+          prerelease: ${{ inputs.prerelease || !startsWith(github.ref, 'refs/tags/afp-app-v') }}
+          body: |
+            ## MyApi AFP Desktop App
+
+            System tray connector for Windows and macOS — connect/disconnect, re-authenticate,
+            remove device, and toggle start-on-login from the menu bar.
+
+            ### Downloads
+
+            | Platform | File |
+            |---|---|
+            | macOS Apple Silicon (M1/M2/M3) | `MyApi-AFP-mac-arm64.dmg` |
+            | macOS Intel | `MyApi-AFP-mac-x64.dmg` |
+            | Windows 10/11 (x64) | `MyApi-AFP-win-x64.exe` |
+
+            > **Unsigned build notice**
+            > These binaries are not yet code-signed.
+            > - **macOS**: Right-click the app → Open, then confirm. Or: System Settings → Privacy & Security → Open Anyway.
+            > - **Windows**: Click "More info" → "Run anyway" in the SmartScreen dialog.
+            >
+            > Signing infrastructure is in place — certificates will be added once the Apple Developer Program and Windows EV cert are provisioned.
+
+            ### What's included
+            - System tray icon with connected/disconnected/connecting states
+            - Connect · Disconnect · Re-authenticate · Remove & Reset actions
+            - Start on Login toggle (macOS LoginItems / Windows Registry)
+            - Automatic reconnection with exponential backoff
+            - Stores credentials in the OS user data directory
+          files: |
+            dist/MyApi-AFP-mac-x64.dmg
+            dist/MyApi-AFP-mac-arm64.dmg
+            dist/MyApi-AFP-win-x64.exe
