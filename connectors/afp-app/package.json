@@ -1,0 +1,109 @@
+{
+  "name": "myapi-afp-app",
+  "version": "1.0.0",
+  "description": "MyApi AFP Desktop Connector — system tray daemon for Windows and macOS",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron src/main.js",
+    "build:mac": "electron-builder --mac --x64 --arm64",
+    "build:mac-x64": "electron-builder --mac --x64",
+    "build:mac-arm": "electron-builder --mac --arm64",
+    "build:win": "electron-builder --win --x64",
+    "build:all": "npm run build:mac && npm run build:win"
+  },
+  "dependencies": {
+    "ws": "^8.0.0"
+  },
+  "devDependencies": {
+    "@electron/notarize": "^2.5.0",
+    "electron": "^30.5.1",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.myapi.afp-app",
+    "productName": "MyApi AFP",
+    "copyright": "Copyright © 2026 MyApi",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "!src/assets/**"
+    ],
+    "extraResources": [
+      {
+        "from": "src/assets/",
+        "to": "assets/",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.utilities",
+      "icon": "src/assets/icon.icns",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist"
+    },
+    "afterSign": "build/afterSign.js",
+    "dmg": {
+      "title": "MyApi AFP ${version}",
+      "background": null,
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    },
+    "win": {
+      "icon": "src/assets/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "signingHashAlgorithms": [
+        "sha256"
+      ],
+      "sign": "./build/windowsSign.js"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "runAfterFinish": true,
+      "createDesktopShortcut": false,
+      "createStartMenuShortcut": true,
+      "menuCategory": "MyApi"
+    }
+  }
+}

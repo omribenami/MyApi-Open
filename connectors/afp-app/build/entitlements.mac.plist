@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Allow network (WebSocket connection to MyApi server) -->
+  <key>com.apple.security.network.client</key>
+  <true/>
+
+  <!-- Allow reading/writing files outside the sandbox -->
+  <key>com.apple.security.files.user-selected.read-write</key>
+  <true/>
+
+  <!-- Allow all-files access for AFP path jail support -->
+  <key>com.apple.security.files.all</key>
+  <true/>
+
+  <!-- Required for Electron native modules -->
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+
+  <!-- Allow JIT (required by some Electron internals) -->
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+</dict>
+</plist>
