@@ -135,8 +135,14 @@ function App() {
               setMasterToken(sessionUser.bootstrap.masterToken);
             }
             setUser(sessionUser.user);
-            // Clear OAuth params from URL
-            window.history.replaceState({}, document.title, '/dashboard/');
+            // If login was initiated from an OAuth consent page (e.g. agent-auth installer),
+            // redirect back there instead of dropping the user on the dashboard home.
+            const nextUrl = urlParams.get('next');
+            if (nextUrl && (nextUrl.startsWith('/dashboard/') || nextUrl === '/dashboard')) {
+              window.location.replace(nextUrl);
+            } else {
+              window.history.replaceState({}, document.title, '/dashboard/');
+            }
           } else {
             // Confirm or auth/me failed — send user back to landing to re-authenticate
             window.location.replace('/');

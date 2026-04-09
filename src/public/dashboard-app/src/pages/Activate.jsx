@@ -23,6 +23,8 @@ function CodeInput({ value, onChange }) {
 }
 
 function PendingCodeCard({ code, onApprove, onDeny, loading }) {
+  const [selectedScope, setSelectedScope] = useState('full');
+  const [label, setLabel] = useState('');
   const expiresAt = new Date(code.expires_at);
   const minutesLeft = Math.max(0, Math.floor((expiresAt - Date.now()) / 60000));
 
@@ -40,30 +42,45 @@ function PendingCodeCard({ code, onApprove, onDeny, loading }) {
         </span>
       </div>
 
-      {code.scope && (
-        <div className="flex flex-wrap gap-1.5">
-          {code.scope.split(/[\s,]+/).map(s => (
-            <span key={s} className="text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">{s}</span>
-          ))}
-        </div>
-      )}
-
       <div className="bg-slate-800/60 rounded-lg px-4 py-2.5">
         <p className="text-xs text-slate-500 mb-1">Optionally give this agent a name</p>
         <input
-          id={`label-${code.id}`}
           type="text"
+          value={label}
+          onChange={e => setLabel(e.target.value)}
           placeholder={`${code.client_id} agent`}
+          autoComplete="off"
           className="w-full bg-transparent text-sm text-slate-200 placeholder-slate-600 focus:outline-none"
         />
       </div>
 
+      <div className="bg-slate-800/60 rounded-lg px-4 py-2.5">
+        <p className="text-xs text-slate-500 mb-1.5">Access level</p>
+        <div className="flex gap-2">
+          {[
+            { value: 'full', label: 'Full access', desc: 'Same as master token' },
+            { value: 'read', label: 'Read only', desc: 'No writes or admin' },
+          ].map(opt => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setSelectedScope(opt.value)}
+              className={`flex-1 rounded-lg px-3 py-2 text-left border transition-colors ${
+                selectedScope === opt.value
+                  ? 'border-blue-500 bg-blue-500/10 text-blue-300'
+                  : 'border-slate-700 bg-slate-800 text-slate-400 hover:border-slate-600'
+              }`}
+            >
+              <p className="text-xs font-semibold">{opt.label}</p>
+              <p className="text-xs opacity-60 mt-0.5">{opt.desc}</p>
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="flex gap-2">
         <button
-          onClick={() => {
-            const label = document.getElementById(`label-${code.id}`)?.value || '';
-            onApprove(code.id, label);
-          }}
+          onClick={() => onApprove(code.id, label, selectedScope)}
           disabled={loading}
           className="flex-1 py-2 rounded-lg bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white text-sm font-semibold transition-colors"
         >
@@ -135,10 +152,10 @@ export default function Activate() {
     }
   };
 
-  const handleApprove = async (id, label) => {
+  const handleApprove = async (id, label, scope) => {
     setLoading(true);
     try {
-      await apiClient.post(`/agentic/device/approve/${id}`, { label });
+      await apiClient.post(`/agentic/device/approve/${id}`, { label, scope });
       setStatus({ type: 'success', message: 'Approved! The AI agent now has access and will receive its token automatically.' });
       loadPending();
     } catch (err) {

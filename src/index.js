@@ -2154,6 +2154,8 @@ function authenticate(req, res, next) {
     /^\/oauth\//,
     /^\/api\/v1\/handshakes\/[^/]+\/status$/,  // public: AI agents poll handshake status
     /^\/api\/v1\/afp\/download/,              // public: AFP daemon binary downloads
+    /^\/api\/v1\/agentic\/device\/token$/,    // public: AI agent polls for token (no prior token available)
+    /^\/api\/v1\/agent-auth\/install\.js$/,   // public: OAuth installer script download
   ];
 
   // Allow DELETE on invitations if email query param is provided (for email-based revocation without login)
@@ -2469,7 +2471,23 @@ const oauthServerRoutes = require('./routes/oauth-server');
 app.use('/api/v1/oauth-server', oauthServerRoutes);
 
 const agenticRoutes = require('./routes/agentic');
-app.use('/api/v1/agentic', agenticRoutes);
+app.use('/api/v1/agentic', authenticate, agenticRoutes);
+
+// ─── Public: Agent Auth installer script ──────────────────────────────────────
+// Serve the zero-dependency OAuth PKCE installer so agents/users can run:
+//   curl -sL https://www.myapiai.com/api/v1/agent-auth/install.js | node
+// Path works both locally (src/index.js → ../connectors/) and in container (index.js → connectors/)
+const _connectorBase = require('fs').existsSync(require('path').join(__dirname, 'connectors')) ? __dirname : require('path').join(__dirname, '..');
+const agentAuthScript = require('path').join(_connectorBase, 'connectors/agent-auth/index.js');
+app.get('/api/v1/agent-auth/install.js', (req, res) => {
+  const fs = require('fs');
+  if (!fs.existsSync(agentAuthScript)) {
+    return res.status(404).send('// installer not found');
+  }
+  res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.send(fs.readFileSync(agentAuthScript, 'utf8'));
+});
 
 const createGoogleRoutes = require('./routes/google');
 app.use('/api/v1/google', createGoogleRoutes());
@@ -11161,6 +11179,25 @@ if (process.env.NODE_ENV !== 'test') {
         console.log('[OAuthServer] AFP client bootstrapped (client_id: myapi-afp, PKCE)');
       } catch (e) {
         console.error('[OAuthServer] Failed to bootstrap AFP client:', e.message);
+      }
+    })();
+
+    // Bootstrap myapi-agent public OAuth client (PKCE-only, localhost + HTTPS redirect)
+    (async () => {
+      try {
+        const agentSecret = require('crypto').createHash('sha256').update('agent-pkce-placeholder:' + (process.env.ENCRYPTION_KEY || 'default')).digest('hex');
+        const agentSecretHash = await require('bcrypt').hash(agentSecret, 8);
+        upsertOAuthServerClient({
+          clientId: 'myapi-agent',
+          clientSecretHash: agentSecretHash,
+          clientName: 'AI Agent',
+          // Allow localhost on any port (CLI/desktop agents) and any HTTPS callback (cloud agents)
+          redirectUris: ['http://localhost:*/callback', 'https://*/callback'],
+          ownerId: null,
+        });
+        console.log('[OAuthServer] myapi-agent public client bootstrapped (PKCE-only)');
+      } catch (e) {
+        console.error('[OAuthServer] Failed to bootstrap myapi-agent client:', e.message);
       }
     })();
 

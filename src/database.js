@@ -4451,6 +4451,10 @@ function approvePendingDevice(approvalId, deviceName) {
     'SELECT id, revoked_at FROM approved_devices WHERE user_id = ? AND device_fingerprint_hash = ?'
   ).get(approval.user_id, approval.device_fingerprint_hash);
 
+  let deviceInfo;
+  try { deviceInfo = JSON.parse(approval.device_info_json || '{}'); } catch { deviceInfo = {}; }
+  const isASC = deviceInfo.type === 'asc';
+
   let deviceId;
   if (anyExisting) {
     // Re-approve: clear revoked_at and update name/approved_at
@@ -4458,13 +4462,23 @@ function approvePendingDevice(approvalId, deviceName) {
       UPDATE approved_devices SET revoked_at = NULL, device_name = ?, approved_at = ? WHERE id = ?
     `).run(resolvedName, now, anyExisting.id);
     deviceId = anyExisting.id;
+  } else if (isASC) {
+    deviceId = createApprovedDeviceASC(
+      approval.token_id,
+      approval.user_id,
+      approval.device_fingerprint_hash,
+      deviceInfo.public_key || '',
+      resolvedName,
+      deviceInfo,
+      approval.ip_address
+    );
   } else {
     deviceId = createApprovedDevice(
       approval.token_id,
       approval.user_id,
       approval.device_fingerprint_hash,
       resolvedName,
-      JSON.parse(approval.device_info_json || '{}'),
+      deviceInfo,
       approval.ip_address
     );
   }

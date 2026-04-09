@@ -212,7 +212,7 @@ const DeviceManagement = () => {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {approvedDevices.map((device) => (
-                  <div key={device.id} className="bg-slate-900 border border-slate-700/50 rounded-lg overflow-hidden hover:border-slate-600 transition-colors">
+                  <div key={device.id} className={`bg-slate-900 border rounded-lg overflow-hidden hover:border-slate-600 transition-colors ${device.info?.type === 'asc' ? 'border-blue-700/50' : 'border-slate-700/50'}`}>
                     <div className="p-4 border-b border-slate-700">
                       {renameMode === device.id ? (
                         <div className="flex gap-2">
@@ -239,7 +239,12 @@ const DeviceManagement = () => {
                         </div>
                       ) : (
                         <div className="flex justify-between items-center">
-                          <h3 className="text-lg font-semibold text-slate-100">{device.name}</h3>
+                          <div>
+                            <h3 className="text-lg font-semibold text-slate-100">{device.name}</h3>
+                            {device.info?.type === 'asc' && (
+                              <span className="text-xs text-blue-400 font-mono">ASC / Ed25519</span>
+                            )}
+                          </div>
                           <button
                             className="text-blue-400 hover:text-blue-300 text-sm font-medium"
                             onClick={() => {
@@ -253,14 +258,32 @@ const DeviceManagement = () => {
                       )}
                     </div>
                     <div className="p-4 space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-slate-400">OS:</span>
-                        <span className="text-slate-100 font-mono">{device.info?.os || 'Unknown'}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-slate-400">Browser:</span>
-                        <span className="text-slate-100 font-mono">{device.info?.browser || 'Unknown'}</span>
-                      </div>
+                      {device.info?.type === 'asc' ? (
+                        <>
+                          <div className="text-sm">
+                            <span className="text-slate-400 block mb-1">Key Fingerprint:</span>
+                            <span className="text-slate-500 font-mono text-xs bg-slate-800 px-2 py-1.5 rounded flex items-center gap-1">
+                              <span className="tracking-widest">••••••••••••••••••••••••</span>
+                              <span className="text-slate-300">{(device.info?.key_fingerprint || device.fingerprint || '').slice(-8)}</span>
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-slate-400">Type:</span>
+                            <span className="text-blue-300 font-mono text-xs">Ed25519 / ASC</span>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-slate-400">OS:</span>
+                            <span className="text-slate-100 font-mono">{device.info?.os || 'Unknown'}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-slate-400">Browser:</span>
+                            <span className="text-slate-100 font-mono">{device.info?.browser || 'Unknown'}</span>
+                          </div>
+                        </>
+                      )}
                       <div className="flex justify-between text-sm">
                         <span className="text-slate-400">IP Address:</span>
                         <span className="text-slate-100 font-mono">{device.ip}</span>
@@ -295,23 +318,48 @@ const DeviceManagement = () => {
               <p className="p-6 text-slate-400">No pending device approvals</p>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {pendingApprovals.map((approval) => (
+                {pendingApprovals.map((approval) => {
+                  const isASC = approval.deviceInfo?.type === 'asc';
+                  return (
                   <div key={approval.id} className="bg-slate-900 border border-amber-700/50 rounded-lg overflow-hidden">
                     <div className="p-4 border-b border-slate-700 bg-amber-900/20">
-                      <h3 className="text-lg font-semibold text-amber-300">New Device Request</h3>
+                      <h3 className="text-lg font-semibold text-amber-300">
+                        {isASC ? 'ASC Key Registration' : 'New Device Request'}
+                      </h3>
+                      {isASC && approval.deviceInfo?.name && (
+                        <p className="text-sm text-amber-100 mt-0.5 font-medium">{approval.deviceInfo.name}</p>
+                      )}
                       <p className="text-sm text-amber-200 mt-1">
                         Expires: {formatDate(approval.expiresAt)}
                       </p>
                     </div>
                     <div className="p-4 space-y-2 border-b border-slate-700">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-slate-400">OS:</span>
-                        <span className="text-slate-100 font-mono">{approval.deviceInfo?.os || 'Unknown'}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-slate-400">Browser:</span>
-                        <span className="text-slate-100 font-mono">{approval.deviceInfo?.browser || 'Unknown'}</span>
-                      </div>
+                      {isASC ? (
+                        <>
+                          <div className="text-sm">
+                            <span className="text-slate-400 block mb-1">Key Fingerprint (SHA-256):</span>
+                            <span className="text-slate-500 font-mono text-xs bg-slate-800 px-2 py-1.5 rounded flex items-center gap-1">
+                              <span className="tracking-widest">••••••••••••••••••••••••</span>
+                              <span className="text-slate-300">{(approval.deviceInfo.key_fingerprint || '').slice(-8)}</span>
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-slate-400">Type:</span>
+                            <span className="text-blue-300 font-mono text-xs">Ed25519 / ASC</span>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-slate-400">OS:</span>
+                            <span className="text-slate-100 font-mono">{approval.deviceInfo?.os || 'Unknown'}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-slate-400">Browser:</span>
+                            <span className="text-slate-100 font-mono">{approval.deviceInfo?.browser || 'Unknown'}</span>
+                          </div>
+                        </>
+                      )}
                       <div className="flex justify-between text-sm">
                         <span className="text-slate-400">IP Address:</span>
                         <span className="text-slate-100 font-mono">{approval.ip}</span>
@@ -324,7 +372,7 @@ const DeviceManagement = () => {
                     <div className="p-4 border-b border-slate-700">
                       <input
                         type="text"
-                        placeholder="Device name (e.g., 'Work Laptop')"
+                        placeholder={isASC ? 'Agent name (e.g., \'Claude Agent\')' : 'Device name (e.g., \'Work Laptop\')'}
                         value={newDeviceName}
                         onChange={(e) => setNewDeviceName(e.target.value)}
                         className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-slate-100 text-sm placeholder-slate-500"
@@ -345,7 +393,8 @@ const DeviceManagement = () => {
                       </button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

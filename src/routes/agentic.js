@@ -9,7 +9,6 @@ const bcrypt = require('bcrypt');
 const router = express.Router();
 const db = require('../database');
 const logger = require('../utils/logger');
-
 function requireAuth(req, res, next) {
   const userId = req.user?.id || req.tokenMeta?.ownerId;
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -159,7 +158,7 @@ router.post('/device/approve/:id', requireAuth, (req, res) => {
 
     const { label, scope } = req.body || {};
     const tokenLabel = label || `${code.client_id} (Device Flow)`;
-    const tokenScope = scope || code.scope || 'read';
+    const tokenScope = scope || code.scope || 'full';
 
     // Create a properly hashed + encrypted scoped access token for this agent
     const tokenValue = `myapi_${crypto.randomBytes(32).toString('hex')}`;
@@ -217,20 +216,29 @@ router.post('/asc/register', requireAuth, (req, res) => {
     const { public_key, label } = req.body || {};
     if (!public_key) return res.status(400).json({ error: 'public_key is required' });
 
-    // Validate it's a real Ed25519 public key (32 bytes = 44 base64 chars)
+    // Accept Ed25519 public key in raw (32 bytes) or SPKI DER (44 bytes) format
     let keyBuf;
     try {
       keyBuf = Buffer.from(public_key, 'base64');
     } catch {
       return res.status(400).json({ error: 'public_key must be base64-encoded' });
     }
-    if (keyBuf.length !== 32) {
-      return res.status(400).json({ error: 'public_key must be a 32-byte Ed25519 public key' });
+    // SPKI DER for Ed25519 is 44 bytes; raw is 32 bytes. Extract raw key either way.
+    let rawKeyBuf;
+    if (keyBuf.length === 32) {
+      rawKeyBuf = keyBuf;
+    } else if (keyBuf.length === 44) {
+      // SPKI DER: 12-byte OID prefix + 32-byte raw key
+      rawKeyBuf = keyBuf.slice(12);
+    } else {
+      return res.status(400).json({ error: 'public_key must be a 32-byte raw or 44-byte SPKI Ed25519 public key' });
     }
+    // Normalize to raw base64 for consistent fingerprinting
+    const normalizedPublicKey = rawKeyBuf.toString('base64');
 
     const userId = String(req.userId);
     const tokenId = req.tokenMeta?.tokenId;
-    const keyFingerprint = ed25519KeyFingerprint(public_key);
+    const keyFingerprint = ed25519KeyFingerprint(normalizedPublicKey);
 
     // Check if already registered
     const existing = db.getApprovedDeviceByKeyFingerprint(userId, keyFingerprint);
@@ -248,7 +256,7 @@ router.post('/asc/register', requireAuth, (req, res) => {
 
     if (!existingPending) {
       const deviceLabel = label || `ASC Agent`;
-      const summary = { name: deviceLabel, type: 'asc', key_fingerprint: keyFingerprint };
+      const summary = { name: deviceLabel, type: 'asc', key_fingerprint: keyFingerprint, public_key: normalizedPublicKey };
       db.createPendingApproval(tokenId, userId, keyFingerprint, summary, req.ip);
     }
 
