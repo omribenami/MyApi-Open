@@ -94,12 +94,17 @@ jobs:
         run: npm ci
 
       - name: Decode signing cert (if present)
-        if: secrets.WIN_CERT_B64 != ''
         shell: pwsh
+        env:
+          WIN_CERT_B64: ${{ secrets.WIN_CERT_B64 }}
         run: |
-          $bytes = [Convert]::FromBase64String("${{ secrets.WIN_CERT_B64 }}")
-          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\myapi-cert.pfx", $bytes)
-          echo "WIN_CERT_PATH=$env:RUNNER_TEMP\myapi-cert.pfx" >> $env:GITHUB_ENV
+          if ($env:WIN_CERT_B64) {
+            $bytes = [Convert]::FromBase64String($env:WIN_CERT_B64)
+            [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\myapi-cert.pfx", $bytes)
+            echo "WIN_CERT_PATH=$env:RUNNER_TEMP\myapi-cert.pfx" >> $env:GITHUB_ENV
+          } else {
+            Write-Host "No WIN_CERT_B64 secret — skipping signing."
+          }
 
       - name: Build NSIS installer
         working-directory: connectors/afp-app
