@@ -64,9 +64,9 @@ jobs:
           else
             echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
           fi
-          [ -n "$_APPLE_ID" ]       && echo "APPLE_ID=$_APPLE_ID"                               >> "$GITHUB_ENV"
-          [ -n "$_APPLE_PASSWORD" ] && echo "APPLE_APP_SPECIFIC_PASSWORD=$_APPLE_PASSWORD"      >> "$GITHUB_ENV"
-          [ -n "$_APPLE_TEAM" ]     && echo "APPLE_TEAM_ID=$_APPLE_TEAM"                        >> "$GITHUB_ENV"
+          [ -n "$_APPLE_ID" ]       && echo "APPLE_ID=$_APPLE_ID"                          >> "$GITHUB_ENV" || true
+          [ -n "$_APPLE_PASSWORD" ] && echo "APPLE_APP_SPECIFIC_PASSWORD=$_APPLE_PASSWORD" >> "$GITHUB_ENV" || true
+          [ -n "$_APPLE_TEAM" ]     && echo "APPLE_TEAM_ID=$_APPLE_TEAM"                   >> "$GITHUB_ENV" || true
 
       - name: Build DMG (x64 + arm64)
         working-directory: connectors/afp-app
