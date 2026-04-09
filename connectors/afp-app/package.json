@@ -44,6 +44,7 @@
     "mac": {
       "category": "public.app-category.utilities",
       "icon": "src/assets/icon.icns",
+      "identity": null,
       "target": [
         {
           "target": "dmg",
@@ -60,12 +61,9 @@
           ]
         }
       ],
-      "hardenedRuntime": true,
-      "gatekeeperAssess": false,
-      "entitlements": "build/entitlements.mac.plist",
-      "entitlementsInherit": "build/entitlements.mac.plist"
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
     },
-    "afterSign": "build/afterSign.js",
     "dmg": {
       "title": "MyApi AFP ${version}",
       "background": null,
