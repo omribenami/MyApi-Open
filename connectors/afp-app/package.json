@@ -2,6 +2,7 @@
   "name": "myapi-afp-app",
   "version": "1.0.0",
   "description": "MyApi AFP Desktop Connector — system tray daemon for Windows and macOS",
+  "author": "MyApi",
   "main": "src/main.js",
   "scripts": {
     "start": "electron src/main.js",
@@ -23,6 +24,7 @@
     "appId": "com.myapi.afp-app",
     "productName": "MyApi AFP",
     "copyright": "Copyright © 2026 MyApi",
+    "publish": "never",
     "directories": {
       "output": "dist",
       "buildResources": "build"
