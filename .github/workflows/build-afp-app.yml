@@ -46,17 +46,31 @@ jobs:
         working-directory: connectors/afp-app
         run: npm ci
 
+      - name: Configure code signing
+        env:
+          _CSC_LINK:        ${{ secrets.CSC_LINK }}
+          _CSC_PASSWORD:    ${{ secrets.CSC_KEY_PASSWORD }}
+          _APPLE_ID:        ${{ secrets.APPLE_ID }}
+          _APPLE_PASSWORD:  ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          _APPLE_TEAM:      ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          # Only export signing vars when the certificate is actually present.
+          # Passing CSC_LINK="" causes electron-builder to resolve path.resolve(dir,"")
+          # which equals the project directory, then fails with "not a file".
+          if [ -n "$_CSC_LINK" ]; then
+            echo "CSC_LINK=$_CSC_LINK"           >> "$GITHUB_ENV"
+            echo "CSC_KEY_PASSWORD=$_CSC_PASSWORD" >> "$GITHUB_ENV"
+            echo "CSC_IDENTITY_AUTO_DISCOVERY=true" >> "$GITHUB_ENV"
+          else
+            echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
+          fi
+          [ -n "$_APPLE_ID" ]       && echo "APPLE_ID=$_APPLE_ID"                               >> "$GITHUB_ENV"
+          [ -n "$_APPLE_PASSWORD" ] && echo "APPLE_APP_SPECIFIC_PASSWORD=$_APPLE_PASSWORD"      >> "$GITHUB_ENV"
+          [ -n "$_APPLE_TEAM" ]     && echo "APPLE_TEAM_ID=$_APPLE_TEAM"                        >> "$GITHUB_ENV"
+
       - name: Build DMG (x64 + arm64)
         working-directory: connectors/afp-app
         run: npm run build:mac
-        env:
-          # Code signing — skipped when secrets are absent
-          CSC_LINK:                     ${{ secrets.CSC_LINK || '' }}
-          CSC_KEY_PASSWORD:             ${{ secrets.CSC_KEY_PASSWORD || '' }}
-          CSC_IDENTITY_AUTO_DISCOVERY:  ${{ secrets.CSC_LINK && 'true' || 'false' }}
-          APPLE_ID:                     ${{ secrets.APPLE_ID || '' }}
-          APPLE_APP_SPECIFIC_PASSWORD:  ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
-          APPLE_TEAM_ID:                ${{ secrets.APPLE_TEAM_ID || '' }}
 
       - name: Rename artifacts to fixed names
         working-directory: connectors/afp-app/dist
