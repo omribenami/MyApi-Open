@@ -202,6 +202,7 @@ function AfpConnectorCard() {
   const [downloading, setDownloading]             = useState(null);
   const [edition, setEdition]                     = useState('desktop');
   const [installOpen, setInstallOpen]             = useState(false);
+  const [linuxOpen, setLinuxOpen]                 = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -367,6 +368,72 @@ function AfpConnectorCard() {
           </div>
         )}
       </div>
+
+      {/* Linux service management */}
+      {edition !== 'desktop' && (
+        <div className="border border-slate-800 rounded-xl overflow-hidden">
+          <button onClick={() => setLinuxOpen(o => !o)}
+            className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-slate-800/30 transition-colors">
+            <div className="flex items-center gap-2">
+              <LinuxLogo className="w-3.5 h-3.5 text-yellow-400" />
+              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-widest">Linux — Service Management</span>
+            </div>
+            <svg className={`w-4 h-4 text-slate-600 transition-transform duration-200 ${linuxOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+          </button>
+          {linuxOpen && (
+            <div className="px-4 pb-5 pt-3 border-t border-slate-800 space-y-5">
+
+              {/* Install as service */}
+              <div>
+                <p className="text-xs font-semibold text-slate-300 mb-2">Install as a systemd service</p>
+                <CopyBlock accent="blue" label="bash" text={`sudo mv ./afp-oauth-linux /usr/local/bin/myapi-afp
+sudo chmod +x /usr/local/bin/myapi-afp
+
+sudo tee /etc/systemd/system/myapi-afp.service > /dev/null <<EOF
+[Unit]
+Description=MyApi AFP Connector
+After=network.target
+
+[Service]
+Type=simple
+User=$USER
+ExecStart=/usr/local/bin/myapi-afp
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now myapi-afp`} />
+                <p className="text-[11px] text-slate-500 mt-2">The service starts immediately and will auto-start on every boot.</p>
+              </div>
+
+              {/* Enable / Disable */}
+              <div>
+                <p className="text-xs font-semibold text-slate-300 mb-2">Enable / Disable auto-start</p>
+                <div className="space-y-2">
+                  <CopyBlock accent="blue" label="enable" text="sudo systemctl enable myapi-afp && sudo systemctl start myapi-afp" />
+                  <CopyBlock accent="blue" label="disable" text="sudo systemctl disable myapi-afp && sudo systemctl stop myapi-afp" />
+                </div>
+              </div>
+
+              {/* Uninstall */}
+              <div>
+                <p className="text-xs font-semibold text-slate-300 mb-2">Uninstall</p>
+                <CopyBlock accent="blue" label="bash" text={`sudo systemctl stop myapi-afp
+sudo systemctl disable myapi-afp
+sudo rm /etc/systemd/system/myapi-afp.service
+sudo rm /usr/local/bin/myapi-afp
+sudo systemctl daemon-reload`} />
+                <p className="text-[11px] text-slate-500 mt-2">This removes the binary and service file. Your credentials at <span className="font-mono text-slate-400">~/.myapi/</span> are not deleted — remove that folder manually if desired.</p>
+              </div>
+
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Connected devices */}
       {!loading && totalCount > 0 && (
