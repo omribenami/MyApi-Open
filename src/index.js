@@ -6255,6 +6255,9 @@ app.post('/api/v1/auth/oauth-signup/complete', async (req, res) => {
   if (!confirm) {
     return res.status(400).json({ error: 'OAuth signup confirmation required' });
   }
+  if (body?.termsAccepted !== true) {
+    return res.status(400).json({ error: 'You must accept the Terms of Use to create an account' });
+  }
   if (!nonce || nonce !== String(pending.nonce || '')) {
     return res.status(400).json({ error: 'Invalid or expired OAuth signup nonce' });
   }

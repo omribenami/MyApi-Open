@@ -58,6 +58,7 @@ function Login() {
   const [soulMdText, setSoulMdText] = useState('');
   const [oauthSignupNonce, setOauthSignupNonce] = useState('');
   const [signupCompleting, setSignupCompleting] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const { setMasterToken, setUser, isAuthenticated } = useAuthStore();
 
   // Check for direct signup deep-link. If OAuth callback params are present,
@@ -330,6 +331,7 @@ function Login() {
           timezone: profileData.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
           userMd: userMdText,
           soulMd: soulMdText,
+          termsAccepted: true,
         }),
       });
       const result = await response.json().catch(() => ({}));
@@ -505,10 +507,24 @@ function Login() {
                             className="min-h-[140px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
                             placeholder="Share values, preferences, and work style (optional)"
                           />
+                          <label className="flex items-start gap-3 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={termsAccepted}
+                              onChange={(e) => setTermsAccepted(e.target.checked)}
+                              className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-600 bg-slate-800 accent-blue-500 cursor-pointer"
+                            />
+                            <span className="text-sm text-slate-300">
+                              I have read and accept the{' '}
+                              <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline hover:text-blue-300">Terms of Use</a>
+                              {' '}and{' '}
+                              <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline hover:text-blue-300">Privacy Policy</a>
+                            </span>
+                          </label>
                           <div className="flex gap-3 pt-2">
                             <button onClick={() => setSignupStep(3)} className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-800">Back</button>
-                            <button onClick={completeOAuthSignup} disabled={signupCompleting} className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-60">{signupCompleting ? 'Creating…' : 'Complete'}</button>
-                            <button onClick={() => { setSoulMdText(''); completeOAuthSignup(); }} disabled={signupCompleting} className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-300 transition-colors hover:bg-slate-800 disabled:opacity-60">{signupCompleting ? 'Creating…' : 'Skip'}</button>
+                            <button onClick={completeOAuthSignup} disabled={signupCompleting || !termsAccepted} className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-60">{signupCompleting ? 'Creating…' : 'Complete'}</button>
+                            <button onClick={() => { setSoulMdText(''); completeOAuthSignup(); }} disabled={signupCompleting || !termsAccepted} className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-300 transition-colors hover:bg-slate-800 disabled:opacity-60">{signupCompleting ? 'Creating…' : 'Skip'}</button>
                           </div>
                         </div>
                       )}
