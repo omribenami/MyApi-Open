@@ -46,23 +46,7 @@ You connect your services (Google, GitHub, Slack, and 30+ more) through MyApi on
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                          MyApi Stack                         │
-│                                                              │
-│  React 19 + Vite 7          ← Dashboard (/dashboard/)        │
-│  Tailwind v3, Zustand,        27 pages, 36 components        │
-│  TanStack Query, Axios                                       │
-│            │                                                 │
-│  Express 5 (Node.js 18+)    ← API Gateway (port 4500)        │
-│  /api/v1/                     Auth, RBAC, Scopes, Audit      │
-│            │                                                 │
-│  SQLite (better-sqlite3)    ← Database                       │
-│  WAL mode, 50+ tables         Encrypted at rest              │
-│            │                                                 │
-│  Docker Compose             ← Dev + Production               │
-│  PM2 (bare-metal option)                                     │
-│  GitHub Actions CI/CD                                        │
-└──────────────────────────────────────────────────────────────┘
+<img width="1024" height="559" alt="image" src="https://github.com/user-attachments/assets/5bf8bf21-dfca-4afe-b724-9cee6eab8470" />
 ```
 
 **Request flow:**
