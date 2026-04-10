@@ -62,10 +62,10 @@ export const useAuthStore = create((set, get) => ({
         }
 
         let masterToken = null;
-        let sessionToken = null;
+        let _sessionToken = null;
         try {
           masterToken = localStorage.getItem('masterToken');
-          sessionToken = sessionStorage.getItem('sessionToken');
+          _sessionToken = sessionStorage.getItem('sessionToken');
         } catch { /* ignored */ }
 
         // Single combined probe: send session cookie + Bearer token (if available) together.
@@ -100,7 +100,6 @@ export const useAuthStore = create((set, get) => ({
             if (masterToken) {
               clearAuthArtifacts();
               masterToken = null;
-              sessionToken = null;
             }
           } else {
             incrementAuthMeFailureCount();

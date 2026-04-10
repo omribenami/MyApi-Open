@@ -18,7 +18,7 @@ function DriftOrb({ cx, cy, r, delay, duration, color }) {
 }
 
 export default function SessionExpiredOverlay({ onDismiss }) {
-  const [visible, setVisible] = useState(false);
+  const [_visible, setVisible] = useState(false);
   const [leaving, setLeaving] = useState(false);
 
   useEffect(() => {
