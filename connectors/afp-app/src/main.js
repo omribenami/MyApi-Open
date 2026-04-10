@@ -124,6 +124,14 @@ function setState(next, data = {}) {
 function startConnection(cfg) {
   const savedCfg = cfg || config.load();
   if (!savedCfg?.deviceId) { startAuthentication(); return; }
+  // Stop any existing handle before starting a new one. Without this, calling
+  // startConnection() a second time (e.g. user clicks "Connect" from the tray)
+  // leaves the old handle running. If that old handle's device later gets revoked,
+  // it loops forever trying to reconnect against a revoked device.
+  if (state.wsHandle) {
+    state.wsHandle.stop();
+    state.wsHandle = null;
+  }
   setState('connecting', { deviceName: savedCfg.deviceName || os.hostname() });
   state.wsHandle = connection.start(savedCfg, logger, (event, data) => {
     if (event === 'connected')    setState('connected',    data);

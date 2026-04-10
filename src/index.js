@@ -1737,7 +1737,11 @@ const avatarUpload = multer({
   }),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    if (!file.mimetype.startsWith('image/')) return cb(new Error('Only image files allowed'));
+    const ALLOWED_MIMES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+    const ALLOWED_EXTS  = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp']);
+    if (!ALLOWED_MIMES.has(file.mimetype)) return cb(new Error('Only JPEG/PNG/GIF/WebP images allowed'));
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!ALLOWED_EXTS.has(ext)) return cb(new Error('File extension not allowed'));
     cb(null, true);
   },
 });
@@ -1746,6 +1750,24 @@ const avatarUpload = multer({
 app.post('/api/v1/users/me/avatar', authenticate, avatarUpload.single('avatar'), (req, res) => {
   if (!isMaster(req)) return res.status(403).json({ error: 'Only master token can update avatar' });
   if (!req.file) return res.status(400).json({ error: 'No image file provided' });
+
+  // Magic bytes validation — reject files with forged extensions
+  try {
+    const buf = fs.readFileSync(req.file.path);
+    const isJpeg = buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF;
+    const isPng  = buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47;
+    const isGif  = buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46;
+    const isWebp = buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46
+                && buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50;
+    if (!isJpeg && !isPng && !isGif && !isWebp) {
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({ error: 'File content does not match a supported image format' });
+    }
+  } catch (err) {
+    try { fs.unlinkSync(req.file.path); } catch (_) {}
+    return res.status(400).json({ error: 'Could not validate uploaded file' });
+  }
+
   const avatarUrl = `/uploads/avatars/${req.file.filename}`;
   const userId = req.user?.id;
   if (userId) {
@@ -2138,7 +2160,28 @@ function _invalidateCachedToken(rawToken) {
   if (rawToken) _tokenCache.delete(rawToken);
 }
 
-function authenticate(req, res, next) {
+// ── TOTP replay protection (Issue #17) ──────────────────────────────────────
+// Tracks recently used TOTP codes per user to prevent same-code replay attacks.
+// TTL of 90s covers window:2 (±60s) with buffer.
+const usedTotpCodes = new Map(); // key: `${userId}:${code}` → expiresAt
+const TOTP_CODE_TTL_MS = 90_000;
+
+function isTotpCodeUsed(userId, code) {
+  const key = `${userId}:${code}`;
+  const exp = usedTotpCodes.get(key);
+  if (!exp) return false;
+  if (Date.now() > exp) { usedTotpCodes.delete(key); return false; }
+  return true;
+}
+
+function markTotpCodeUsed(userId, code) {
+  const now = Date.now();
+  // Evict expired entries before adding a new one
+  for (const [k, exp] of usedTotpCodes) { if (now > exp) usedTotpCodes.delete(k); }
+  usedTotpCodes.set(`${userId}:${code}`, now + TOTP_CODE_TTL_MS);
+}
+
+async function authenticate(req, res, next) {
   // SKIP authentication for public endpoints (OAuth authorize/callback, login signup)
   const fullPath = req.baseUrl + req.path;
   const publicPaths = [
@@ -2258,7 +2301,7 @@ function authenticate(req, res, next) {
     }
     for (const tokenMeta of tokens) {
       // Check that token is not revoked, not expired, and hash matches
-      if (!tokenMeta.revokedAt && tokenMeta.hash && bcrypt.compareSync(rawToken, tokenMeta.hash)) {
+      if (!tokenMeta.revokedAt && tokenMeta.hash && await bcrypt.compare(rawToken, tokenMeta.hash).catch(() => false)) {
         // Check expiration: if expiresAt is set and is in the past, reject the token
         if (tokenMeta.expiresAt) {
           const expiryTime = new Date(tokenMeta.expiresAt);
@@ -4816,7 +4859,7 @@ app.get("/api/v1/tokens", authenticate, (req, res) => {
 });
 
 // Validate token endpoint (for login page)
-app.post("/api/v1/tokens/validate", authRateLimit, (req, res) => {
+app.post("/api/v1/tokens/validate", authRateLimit, async (req, res) => {
   const { token } = req.body;
   if (!token) return res.status(400).json({ error: "token is required" });
 
@@ -4825,7 +4868,7 @@ app.post("/api/v1/tokens/validate", authRateLimit, (req, res) => {
 
   // Find matching token
   for (const tokenRecord of tokens) {
-    if (!tokenRecord.revokedAt && bcrypt.compareSync(token, tokenRecord.hash)) {
+    if (!tokenRecord.revokedAt && tokenRecord.hash && await bcrypt.compare(token, tokenRecord.hash).catch(() => false)) {
       matched = tokenRecord;
       break;
     }
@@ -5794,6 +5837,7 @@ app.delete('/api/v1/vault/:tokenId/revoke', authenticate, (req, res) => {
     if (!token.is_guest_token) return res.status(400).json({ error: 'Can only revoke guest tokens this way' });
 
     const now = new Date().toISOString();
+    _tokenCache.clear();
     db.prepare('UPDATE access_tokens SET revoked_at = ? WHERE id = ?').run(now, tokenId);
 
     createAuditLog({
@@ -5814,7 +5858,7 @@ app.delete('/api/v1/vault/:tokenId/revoke', authenticate, (req, res) => {
 // ============================
 // PUBLIC AUTH (Register + Login)
 // =============================
-app.post("/api/v1/auth/register", (req, res) => {
+app.post("/api/v1/auth/register", authRateLimit, (req, res) => {
   const { username, password, display_name, email, timezone } = req.body;
   if (!username || !password) return res.status(400).json({ error: "username and password are required" });
 
@@ -5835,10 +5879,10 @@ app.post("/api/v1/auth/register", (req, res) => {
 });
 
 // BUG-15: Add rate limiting to login endpoint to prevent brute force attacks
-app.post("/api/v1/auth/login", authRateLimit, (req, res) => {
+app.post("/api/v1/auth/login", authRateLimit, async (req, res) => {
   try {
     const { username, email, password, totpCode } = req.body;
-    
+
     // Support both username and email login
     let user = null;
     if (username) {
@@ -5846,10 +5890,10 @@ app.post("/api/v1/auth/login", authRateLimit, (req, res) => {
     } else if (email) {
       user = getUserByEmail(email);
     }
-    
+
     if (!user) return res.status(401).json({ error: "Invalid email or password" });
-    
-    const valid = bcrypt.compareSync(password, user.password_hash);
+
+    const valid = await bcrypt.compare(password, user.password_hash || '').catch(() => false);
     if (!valid) {
       createAuditLog({
         requesterId: 'unknown',
@@ -5883,6 +5927,12 @@ app.post("/api/v1/auth/login", authRateLimit, (req, res) => {
         });
         return res.status(401).json({ error: "Invalid 2FA code", requires2FA: true });
       }
+      // Replay protection: reject if this exact code was already used recently
+      const totpKey = String(totpCode).replace(/\s+/g, '');
+      if (isTotpCodeUsed(user.id, totpKey)) {
+        return res.status(401).json({ error: '2FA code already used. Wait for the next code.', requires2FA: true });
+      }
+      markTotpCodeUsed(user.id, totpKey);
     }
 
     // Regenerate session and set user
@@ -5947,16 +5997,19 @@ app.post("/api/v1/auth/login", authRateLimit, (req, res) => {
 });
 
 // Token-based login (for API access tokens)
-app.post("/api/v1/auth/token-login", authRateLimit, (req, res) => {
+app.post("/api/v1/auth/token-login", authRateLimit, async (req, res) => {
   const { token } = req.body;
   if (!token) return res.status(400).json({ error: "token is required" });
 
   // Verify token against stored tokens
   const tokens = getAccessTokens();
-  const tokenRecord = tokens.find(t => {
-    // Check if token matches the hash
-    return bcrypt.compareSync(token, t.hash);
-  });
+  let tokenRecord = null;
+  for (const t of tokens) {
+    if (!t.revokedAt && t.hash && await bcrypt.compare(token, t.hash).catch(() => false)) {
+      tokenRecord = t;
+      break;
+    }
+  }
 
   if (!tokenRecord || tokenRecord.revokedAt) {
     return res.status(401).json({ error: "Invalid or revoked token" });
@@ -6023,6 +6076,11 @@ app.get("/api/v1/auth/me", (req, res) => {
   const token = authHeader.replace("Bearer ", "");
   if (global.sessions && global.sessions[token]) {
     const session = global.sessions[token];
+    const SESSION_TTL = 8 * 60 * 60 * 1000;
+    if (!session.createdAt || Date.now() - session.createdAt > SESSION_TTL) {
+      delete global.sessions[token];
+      return res.status(401).json({ error: 'Session expired' });
+    }
     const user = getUserById(session.userId);
     if (user) {
       const normalizedUser = {
@@ -6089,37 +6147,40 @@ app.delete('/api/v1/account', authenticate, (req, res) => {
     };
 
     rawDb.pragma('foreign_keys = OFF');
-    rawDb.transaction((uid) => {
-      // Delete from all tables that reference this user (in dependency order)
-      safeDelete('DELETE FROM oauth_tokens WHERE user_id = ?', uid);
-      safeDelete('DELETE FROM vault_tokens WHERE owner_id = ?', uid);
-      safeDelete('DELETE FROM access_tokens WHERE owner_id = ?', uid);
-      safeDelete('DELETE FROM approved_devices WHERE user_id = ?', uid);
-      safeDelete('DELETE FROM device_approvals_pending WHERE user_id = ?', uid);
-      safeDelete('DELETE FROM handshakes WHERE user_id = ?', uid);
-      safeDelete('DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)', uid);
-      safeDelete('DELETE FROM conversations WHERE user_id = ?', uid);
-      safeDelete('DELETE FROM notifications WHERE user_id = ?', uid);
-      safeDelete('DELETE FROM notification_preferences WHERE user_id = ?', uid);
-      safeDelete('DELETE FROM service_preferences WHERE user_id = ?', uid);
-      safeDelete('DELETE FROM activity_log WHERE user_id = ?', uid);
-      safeDelete('DELETE FROM email_queue WHERE user_id = ?', uid);
-      safeDelete('DELETE FROM rate_limits WHERE user_id = ?', uid);
-      safeDelete('DELETE FROM subscriptions WHERE user_id = ?', uid);
-      safeDelete('DELETE FROM two_factor_backup_codes WHERE user_id = ?', uid);
-      safeDelete('DELETE FROM team_invitations WHERE sender_id = ? OR recipient_id = ?', uid, uid);
-      safeDelete('DELETE FROM marketplace_listings WHERE owner_id = ?', uid);
-      safeDelete('DELETE FROM persona_documents WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)', uid);
-      safeDelete('DELETE FROM persona_skills WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)', uid);
-      safeDelete('DELETE FROM skills WHERE owner_id = ?', uid);
-      safeDelete('DELETE FROM personas WHERE owner_id = ?', uid);
-      safeDelete('DELETE FROM kb_documents WHERE owner_id = ?', uid);
-      safeDelete('DELETE FROM workspace_members WHERE user_id = ?', uid);
-      safeDelete('DELETE FROM afp_devices WHERE user_id = ?', uid);
-      safeDelete('DELETE FROM user_pii_secure WHERE user_id = ?', uid);
-      safeDelete('DELETE FROM users WHERE id = ?', uid);
-    })(userId);
-    rawDb.pragma('foreign_keys = ON');
+    try {
+      rawDb.transaction((uid) => {
+        // Delete from all tables that reference this user (in dependency order)
+        safeDelete('DELETE FROM oauth_tokens WHERE user_id = ?', uid);
+        safeDelete('DELETE FROM vault_tokens WHERE owner_id = ?', uid);
+        safeDelete('DELETE FROM access_tokens WHERE owner_id = ?', uid);
+        safeDelete('DELETE FROM approved_devices WHERE user_id = ?', uid);
+        safeDelete('DELETE FROM device_approvals_pending WHERE user_id = ?', uid);
+        safeDelete('DELETE FROM handshakes WHERE user_id = ?', uid);
+        safeDelete('DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)', uid);
+        safeDelete('DELETE FROM conversations WHERE user_id = ?', uid);
+        safeDelete('DELETE FROM notifications WHERE user_id = ?', uid);
+        safeDelete('DELETE FROM notification_preferences WHERE user_id = ?', uid);
+        safeDelete('DELETE FROM service_preferences WHERE user_id = ?', uid);
+        safeDelete('DELETE FROM activity_log WHERE user_id = ?', uid);
+        safeDelete('DELETE FROM email_queue WHERE user_id = ?', uid);
+        safeDelete('DELETE FROM rate_limits WHERE user_id = ?', uid);
+        safeDelete('DELETE FROM subscriptions WHERE user_id = ?', uid);
+        safeDelete('DELETE FROM two_factor_backup_codes WHERE user_id = ?', uid);
+        safeDelete('DELETE FROM team_invitations WHERE sender_id = ? OR recipient_id = ?', uid, uid);
+        safeDelete('DELETE FROM marketplace_listings WHERE owner_id = ?', uid);
+        safeDelete('DELETE FROM persona_documents WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)', uid);
+        safeDelete('DELETE FROM persona_skills WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)', uid);
+        safeDelete('DELETE FROM skills WHERE owner_id = ?', uid);
+        safeDelete('DELETE FROM personas WHERE owner_id = ?', uid);
+        safeDelete('DELETE FROM kb_documents WHERE owner_id = ?', uid);
+        safeDelete('DELETE FROM workspace_members WHERE user_id = ?', uid);
+        safeDelete('DELETE FROM afp_devices WHERE user_id = ?', uid);
+        safeDelete('DELETE FROM user_pii_secure WHERE user_id = ?', uid);
+        safeDelete('DELETE FROM users WHERE id = ?', uid);
+      })(userId);
+    } finally {
+      rawDb.pragma('foreign_keys = ON');
+    }
 
     if (req.session) {
       req.session.destroy(() => {});
@@ -6380,6 +6441,11 @@ app.post('/api/v1/auth/2fa/verify', authenticate, (req, res) => {
     });
 
     if (!verified) return res.status(400).json({ error: 'Invalid 2FA code (check phone time sync and try current code)' });
+    const totpKey2 = String(code).replace(/\s+/g, '');
+    if (isTotpCodeUsed(userId, totpKey2)) {
+      return res.status(401).json({ error: '2FA code already used. Wait for the next code.' });
+    }
+    markTotpCodeUsed(userId, totpKey2);
 
     const enabled = enableUserTwoFactor(userId);
     if (!enabled) return res.status(500).json({ error: 'Failed to enable 2FA for this user' });
@@ -6425,6 +6491,11 @@ app.post('/api/v1/auth/2fa/disable', authenticate, (req, res) => {
     });
 
     if (!verified) return res.status(400).json({ error: 'Invalid 2FA code' });
+    const totpKey3 = String(code).replace(/\s+/g, '');
+    if (isTotpCodeUsed(userId, totpKey3)) {
+      return res.status(401).json({ error: '2FA code already used. Wait for the next code.' });
+    }
+    markTotpCodeUsed(userId, totpKey3);
 
     disableUserTwoFactor(userId);
     if (req.session?.user) req.session.user.two_factor_enabled = false;
@@ -6556,7 +6627,7 @@ app.post("/api/v1/auth/logout", (req, res) => {
   delete req.session.masterTokenRaw;
   delete req.session.masterTokenId;
   delete req.session.oauth_login_pending;
-  delete req.session.oauth_confirm_token;
+  delete req.session.oauth_confirm;
   delete req.session.oauth_signup;
   delete req.session.oauthStateMeta;
   delete req.session.isFirstLogin;
@@ -6744,37 +6815,40 @@ app.delete('/api/v1/users/:id', authenticate, (req, res) => {
     };
 
     adminRawDb.pragma('foreign_keys = OFF');
-    adminRawDb.transaction((userId) => {
-      // Delete from all tables that reference this user (in dependency order)
-      adminSafeDelete('DELETE FROM oauth_tokens WHERE user_id = ?', userId);
-      adminSafeDelete('DELETE FROM vault_tokens WHERE owner_id = ?', userId);
-      adminSafeDelete('DELETE FROM access_tokens WHERE owner_id = ?', userId);
-      adminSafeDelete('DELETE FROM approved_devices WHERE user_id = ?', userId);
-      adminSafeDelete('DELETE FROM device_approvals_pending WHERE user_id = ?', userId);
-      adminSafeDelete('DELETE FROM handshakes WHERE user_id = ?', userId);
-      adminSafeDelete('DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)', userId);
-      adminSafeDelete('DELETE FROM conversations WHERE user_id = ?', userId);
-      adminSafeDelete('DELETE FROM notifications WHERE user_id = ?', userId);
-      adminSafeDelete('DELETE FROM notification_preferences WHERE user_id = ?', userId);
-      adminSafeDelete('DELETE FROM service_preferences WHERE user_id = ?', userId);
-      adminSafeDelete('DELETE FROM activity_log WHERE user_id = ?', userId);
-      adminSafeDelete('DELETE FROM email_queue WHERE user_id = ?', userId);
-      adminSafeDelete('DELETE FROM rate_limits WHERE user_id = ?', userId);
-      adminSafeDelete('DELETE FROM subscriptions WHERE user_id = ?', userId);
-      adminSafeDelete('DELETE FROM two_factor_backup_codes WHERE user_id = ?', userId);
-      adminSafeDelete('DELETE FROM team_invitations WHERE sender_id = ? OR recipient_id = ?', userId, userId);
-      adminSafeDelete('DELETE FROM marketplace_listings WHERE owner_id = ?', userId);
-      adminSafeDelete('DELETE FROM persona_documents WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)', userId);
-      adminSafeDelete('DELETE FROM persona_skills WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)', userId);
-      adminSafeDelete('DELETE FROM skills WHERE owner_id = ?', userId);
-      adminSafeDelete('DELETE FROM personas WHERE owner_id = ?', userId);
-      adminSafeDelete('DELETE FROM kb_documents WHERE owner_id = ?', userId);
-      adminSafeDelete('DELETE FROM workspace_members WHERE user_id = ?', userId);
-      adminSafeDelete('DELETE FROM afp_devices WHERE user_id = ?', userId);
-      adminSafeDelete('DELETE FROM user_pii_secure WHERE user_id = ?', userId);
-      adminSafeDelete('DELETE FROM users WHERE id = ?', userId);
-    })(id);
-    adminRawDb.pragma('foreign_keys = ON');
+    try {
+      adminRawDb.transaction((userId) => {
+        // Delete from all tables that reference this user (in dependency order)
+        adminSafeDelete('DELETE FROM oauth_tokens WHERE user_id = ?', userId);
+        adminSafeDelete('DELETE FROM vault_tokens WHERE owner_id = ?', userId);
+        adminSafeDelete('DELETE FROM access_tokens WHERE owner_id = ?', userId);
+        adminSafeDelete('DELETE FROM approved_devices WHERE user_id = ?', userId);
+        adminSafeDelete('DELETE FROM device_approvals_pending WHERE user_id = ?', userId);
+        adminSafeDelete('DELETE FROM handshakes WHERE user_id = ?', userId);
+        adminSafeDelete('DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE user_id = ?)', userId);
+        adminSafeDelete('DELETE FROM conversations WHERE user_id = ?', userId);
+        adminSafeDelete('DELETE FROM notifications WHERE user_id = ?', userId);
+        adminSafeDelete('DELETE FROM notification_preferences WHERE user_id = ?', userId);
+        adminSafeDelete('DELETE FROM service_preferences WHERE user_id = ?', userId);
+        adminSafeDelete('DELETE FROM activity_log WHERE user_id = ?', userId);
+        adminSafeDelete('DELETE FROM email_queue WHERE user_id = ?', userId);
+        adminSafeDelete('DELETE FROM rate_limits WHERE user_id = ?', userId);
+        adminSafeDelete('DELETE FROM subscriptions WHERE user_id = ?', userId);
+        adminSafeDelete('DELETE FROM two_factor_backup_codes WHERE user_id = ?', userId);
+        adminSafeDelete('DELETE FROM team_invitations WHERE sender_id = ? OR recipient_id = ?', userId, userId);
+        adminSafeDelete('DELETE FROM marketplace_listings WHERE owner_id = ?', userId);
+        adminSafeDelete('DELETE FROM persona_documents WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)', userId);
+        adminSafeDelete('DELETE FROM persona_skills WHERE persona_id IN (SELECT id FROM personas WHERE owner_id = ?)', userId);
+        adminSafeDelete('DELETE FROM skills WHERE owner_id = ?', userId);
+        adminSafeDelete('DELETE FROM personas WHERE owner_id = ?', userId);
+        adminSafeDelete('DELETE FROM kb_documents WHERE owner_id = ?', userId);
+        adminSafeDelete('DELETE FROM workspace_members WHERE user_id = ?', userId);
+        adminSafeDelete('DELETE FROM afp_devices WHERE user_id = ?', userId);
+        adminSafeDelete('DELETE FROM user_pii_secure WHERE user_id = ?', userId);
+        adminSafeDelete('DELETE FROM users WHERE id = ?', userId);
+      })(id);
+    } finally {
+      adminRawDb.pragma('foreign_keys = ON');
+    }
 
     createAuditLog({ requesterId: req.tokenMeta.tokenId, action: 'delete_user', resource: `/users/${id}`, scope: req.tokenMeta.scope, ip: req.ip, details: { email: user.email || null } });
     res.json({ ok: true, deletedUserId: id });
@@ -6824,18 +6898,24 @@ app.post('/api/v1/users/cleanup-test-users', authenticate, (req, res) => {
 // ============================
 
 // PUBLIC: AI agent initiates a handshake request (no auth required - this is the entry point)
-app.post("/api/v1/handshakes", (req, res) => {
+app.post("/api/v1/handshakes", rateLimit(60000, 20, 'handshake'), (req, res) => {
   const { agentId, requestedScopes, message } = req.body;
   if (!agentId || !requestedScopes || !Array.isArray(requestedScopes)) {
     return res.status(400).json({ error: "agentId and requestedScopes (array) are required" });
   }
+  if (typeof agentId !== 'string' || agentId.length > 256)
+    return res.status(400).json({ error: 'agentId must be a string of ≤256 chars' });
+  if (message !== undefined && (typeof message !== 'string' || message.length > 2000))
+    return res.status(400).json({ error: 'message must be a string of ≤2000 chars' });
+  if (requestedScopes.length > 10)
+    return res.status(400).json({ error: 'Too many requested scopes (max 10)' });
   const validScopes = ["read", "professional", "availability"];
   const invalidScopes = requestedScopes.filter(s => !validScopes.includes(s));
   if (invalidScopes.length > 0) {
     return res.status(400).json({ error: `Invalid scopes: ${invalidScopes.join(", ")}. Allowed: ${validScopes.join(", ")}` });
   }
   const handshake = createHandshake("owner", agentId, requestedScopes, message);
-  createAuditLog({ requesterId: agentId, action: "handshake_request", resource: `/handshakes/${handshake.id}`, scope: requestedScopes.join(","), ip: req.ip });
+  createAuditLog({ requesterId: agentId, action: "handshake_request", resource: `/handshakes/${handshake.id}`, scope: requestedScopes.slice(0, 10).map(s => String(s).slice(0, 50)).join(',').slice(0, 500), ip: req.ip });
   res.status(201).json({
     data: {
       handshakeId: handshake.id,
@@ -7357,7 +7437,7 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
 
   // Try to authenticate the user to get ownerId
   // This checks session, Bearer token, and masterToken cookie
-  tryAuthenticate(req);
+  await tryAuthenticate(req);
 
   // Get ownerId from multiple sources (SAME priority as callback will use)
   let ownerId = null;
@@ -7714,7 +7794,7 @@ app.get([
 
       // Store BOTH in session AND in database as backup
       // Session: for normal case where cookies are sent
-      req.session.oauth_confirm_token = confirmToken;
+      req.session.oauth_confirm = { token: confirmToken, createdAt: Date.now() };
       // Note: req.session.oauth_login_pending is already set above with appUser data
       // No need to redefine it here
 
@@ -7876,7 +7956,7 @@ app.get([
     // Store in session if found so /api/v1/auth/me can return it to the frontend
     if (masterToken) {
       req.session.masterTokenRaw = masterToken;
-      console.log(`[OAuth Callback] Set req.session.masterTokenRaw = ${masterToken.slice(0, 20)}...`);
+      logger.debug('[OAuth] master token stored in session');
     } else {
       console.log(`[OAuth Callback] No existing master token found — frontend will bootstrap one if needed`);
     }
@@ -7923,22 +8003,16 @@ app.get([
       ip: req.ip,
       details: { service, error: error.message }
     });
-    res.redirect(`/dashboard/?oauth_service=${service}&oauth_status=error&error=${encodeURIComponent(error.message)}`);
+    const safeErrCode = (error.code || 'oauth_error').replace(/[^a-z0-9_]/gi, '').slice(0, 32) || 'oauth_error';
+    res.redirect(`/dashboard/?oauth_service=${service}&oauth_status=error&error=${encodeURIComponent(safeErrCode)}`);
   }
 });
 
 // Helper: Try to authenticate and populate tokenMeta, but don't fail if not present
-function tryAuthenticate(req) {
-  console.log(`[tryAuth] Attempting authentication...`);
-  console.log(`[tryAuth]   Session ID: ${req.sessionID}`);
-  console.log(`[tryAuth]   Session user: ${req.session?.user ? req.session.user.id : 'NONE'}`);
-  console.log(`[tryAuth]   Auth header: ${req.headers["authorization"] ? 'YES' : 'NO'}`);
-  console.log(`[tryAuth]   Cookies:`, Object.keys(req.cookies || {}));
-
+async function tryAuthenticate(req) {
   // Priority 1: Session user
   if (req.session?.user?.id) {
     req.tokenMeta = { tokenId: `sess_${req.session.user.id}`, scope: 'full', ownerId: String(req.session.user.id) };
-    console.log(`[tryAuth] ✅ Authenticated via session: ${req.session.user.id}`);
     return;
   }
 
@@ -7948,21 +8022,13 @@ function tryAuthenticate(req) {
   if (parts.length === 2 && parts[0] === "Bearer") {
     const rawToken = parts[1];
     const tokens = getAccessTokens() || [];
-    console.log(`[tryAuth] Checking Bearer token against ${tokens.length} stored tokens...`);
     for (const tokenMeta of tokens) {
-      if (!tokenMeta.revokedAt && bcrypt.compareSync(rawToken, tokenMeta.hash)) {
+      if (!tokenMeta.revokedAt && tokenMeta.hash && await bcrypt.compare(rawToken, tokenMeta.hash).catch(() => false)) {
         req.tokenMeta = { tokenId: tokenMeta.id, scope: tokenMeta.scope, ownerId: String(tokenMeta.ownerId) };
-        console.log(`[tryAuth] ✅ Authenticated via Bearer token: ${tokenMeta.ownerId}`);
         return;
       }
     }
-    console.log(`[tryAuth] ❌ Bearer token didn't match any stored tokens`);
-  } else {
-    console.log(`[tryAuth] ❌ No Bearer token in Authorization header`);
   }
-
-  // Not authenticated, but that's ok for this endpoint
-  console.log(`[tryAuth] Not authenticated, will show public view (all disconnected)`);
 }
 
 // GET /api/v1/oauth/status - Get all connected services
@@ -8054,7 +8120,7 @@ app.get("/api/v1/oauth/status", async (req, res) => {
 });
 
 // POST /api/v1/oauth/confirm - Confirm pending OAuth login
-app.post("/api/v1/oauth/confirm", (req, res) => {
+app.post("/api/v1/oauth/confirm", authRateLimit, (req, res) => {
   try {
     const { token } = req.body || {};
 
@@ -8062,7 +8128,7 @@ app.post("/api/v1/oauth/confirm", (req, res) => {
     console.log(`  - Session ID: ${req.sessionID}`);
     console.log(`  - Session user: ${req.session?.user ? req.session.user.id : 'NONE'}`);
     console.log(`  - Token provided: ${token ? token.slice(0, 20) + '...' : 'NONE'}`);
-    console.log(`  - oauth_confirm_token: ${req.session?.oauth_confirm_token ? req.session.oauth_confirm_token.slice(0, 20) + '...' : 'NONE'}`);
+    console.log(`  - oauth_confirm: ${req.session?.oauth_confirm ? 'exists' : 'NONE'}`);
     console.log(`  - oauth_login_pending: ${req.session?.oauth_login_pending ? 'YES' : 'NO'}`);
 
     if (!token || typeof token !== 'string') {
@@ -8071,11 +8137,18 @@ app.post("/api/v1/oauth/confirm", (req, res) => {
     }
 
     // Check if token matches what's in the session
-    if (!req.session?.oauth_confirm_token || req.session.oauth_confirm_token !== token) {
+    const oauthConfirm = req.session?.oauth_confirm;
+    if (!oauthConfirm || oauthConfirm.token !== token) {
       console.log(`[OAuth Confirm] ❌ FAILED: Token mismatch or missing`);
-      console.log(`  - Expected: ${req.session?.oauth_confirm_token ? 'exists' : 'MISSING'}`);
-      console.log(`  - Match: ${req.session?.oauth_confirm_token === token ? 'YES' : 'NO'}`);
+      console.log(`  - Expected: ${oauthConfirm ? 'exists' : 'MISSING'}`);
+      console.log(`  - Match: ${oauthConfirm?.token === token ? 'YES' : 'NO'}`);
       return res.status(403).json({ error: 'Invalid confirmation token' });
+    }
+
+    // Check confirm token expiry (15 minutes)
+    if (Date.now() - oauthConfirm.createdAt > 15 * 60 * 1000) {
+      delete req.session.oauth_confirm;
+      return res.status(403).json({ error: 'Confirmation token expired. Please sign in again.' });
     }
 
     // Check if we have pending login credentials (try session first, then database as fallback)
@@ -8128,7 +8201,7 @@ app.post("/api/v1/oauth/confirm", (req, res) => {
 
     // Clear pending login and token
     delete req.session.oauth_login_pending;
-    delete req.session.oauth_confirm_token;
+    delete req.session.oauth_confirm;
 
     // Proactively load the canonical master token into session so the frontend
     // gets it immediately without a separate bootstrap round-trip
@@ -10957,6 +11030,14 @@ if (WebSocketServer) {
             ws.close(4002, 'Invalid AFP device token');
             return;
           }
+          // Close any stale WebSocket that was left over from a previous connection
+          // for this device. Without this, the old WS's close event would later
+          // delete the new entry from afpConnections, causing the next reconnect
+          // to be rejected as "offline".
+          const staleWs = afpConnections.get(data.deviceId);
+          if (staleWs && staleWs !== ws) {
+            try { staleWs.terminate(); } catch (_) {}
+          }
           afpConnections.set(data.deviceId, ws);
           updateAfpDeviceStatus(data.deviceId, 'online');
           ws.afpDeviceId = data.deviceId;
@@ -10997,11 +11078,17 @@ if (WebSocketServer) {
           wsConnections.delete(userId);
         }
       }
-      // AFP daemon disconnect
+      // AFP daemon disconnect — only remove from map if this WS is still the active one.
+      // A newer reconnect may have already replaced it; deleting that entry would
+      // incorrectly mark the fresh connection offline.
       if (ws.afpDeviceId) {
-        afpConnections.delete(ws.afpDeviceId);
-        try { updateAfpDeviceStatus(ws.afpDeviceId, 'offline'); } catch (_) {}
-        console.log(`[AFP] Daemon disconnected: ${ws.afpDeviceId}`);
+        if (afpConnections.get(ws.afpDeviceId) === ws) {
+          afpConnections.delete(ws.afpDeviceId);
+          try { updateAfpDeviceStatus(ws.afpDeviceId, 'offline'); } catch (_) {}
+          console.log(`[AFP] Daemon disconnected: ${ws.afpDeviceId}`);
+        } else {
+          console.log(`[AFP] Stale WS disconnected (superseded): ${ws.afpDeviceId}`);
+        }
       }
       console.log('WebSocket connection closed');
     });
