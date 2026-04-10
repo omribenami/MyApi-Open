@@ -175,19 +175,19 @@ const OS_PLATFORMS = [
 const GH_RELEASES_BASE = 'https://github.com/omribenami/MyApi/releases/latest/download';
 const DESKTOP_PLATFORMS = [
   {
-    platform: 'mac-arm', label: 'macOS', sublabel: 'Apple Silicon',
-    Logo: AppleLogo, iconColor: 'text-slate-300', iconBg: 'bg-slate-300/10', iconBorder: 'border-slate-300/20',
-    href: `${GH_RELEASES_BASE}/MyApi-AFP-mac-arm64.dmg`, filename: 'MyApi-AFP-mac-arm64.dmg',
-  },
-  {
-    platform: 'mac',     label: 'macOS', sublabel: 'Intel',
-    Logo: AppleLogo, iconColor: 'text-slate-300', iconBg: 'bg-slate-300/10', iconBorder: 'border-slate-300/20',
-    href: `${GH_RELEASES_BASE}/MyApi-AFP-mac-x64.dmg`, filename: 'MyApi-AFP-mac-x64.dmg',
-  },
-  {
     platform: 'win',     label: 'Windows', sublabel: 'x86-64',
     Logo: WindowsLogo, iconColor: 'text-sky-400', iconBg: 'bg-sky-400/10', iconBorder: 'border-sky-400/20',
     href: `${GH_RELEASES_BASE}/MyApi-AFP-win-x64.exe`, filename: 'MyApi-AFP-win-x64.exe',
+  },
+  {
+    platform: 'mac-arm', label: 'macOS', sublabel: 'Apple Silicon',
+    Logo: AppleLogo, iconColor: 'text-slate-500', iconBg: 'bg-slate-300/5', iconBorder: 'border-slate-300/10',
+    comingSoon: true,
+  },
+  {
+    platform: 'mac',     label: 'macOS', sublabel: 'Intel',
+    Logo: AppleLogo, iconColor: 'text-slate-500', iconBg: 'bg-slate-300/5', iconBorder: 'border-slate-300/10',
+    comingSoon: true,
   },
 ];
 
@@ -297,25 +297,38 @@ function AfpConnectorCard() {
         <div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-2">
             {DESKTOP_PLATFORMS.map(os => (
-              <a key={os.platform} href={os.href} download={os.filename}
-                className="group flex flex-col items-center gap-2 p-4 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 hover:bg-slate-800/80 transition-all no-underline">
-                <div className={`w-10 h-10 rounded-xl ${os.iconBg} border ${os.iconBorder} flex items-center justify-center transition-transform group-hover:scale-105`}>
-                  <os.Logo className={`w-5 h-5 ${os.iconColor}`} />
+              os.comingSoon ? (
+                <div key={os.platform}
+                  className="flex flex-col items-center gap-2 p-4 rounded-xl bg-slate-900/50 border border-slate-800/50 opacity-50 cursor-not-allowed">
+                  <div className={`w-10 h-10 rounded-xl ${os.iconBg} border ${os.iconBorder} flex items-center justify-center`}>
+                    <os.Logo className={`w-5 h-5 ${os.iconColor}`} />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xs font-semibold text-slate-400">{os.label}</p>
+                    <p className="text-[11px] text-slate-600">{os.sublabel}</p>
+                  </div>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-slate-500 font-medium">Coming soon</span>
                 </div>
-                <div className="text-center">
-                  <p className="text-xs font-semibold text-slate-200">{os.label}</p>
-                  <p className="text-[11px] text-slate-500">{os.sublabel}</p>
-                </div>
-                <svg className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-              </a>
+              ) : (
+                <a key={os.platform} href={os.href} download={os.filename}
+                  className="group flex flex-col items-center gap-2 p-4 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 hover:bg-slate-800/80 transition-all no-underline">
+                  <div className={`w-10 h-10 rounded-xl ${os.iconBg} border ${os.iconBorder} flex items-center justify-center transition-transform group-hover:scale-105`}>
+                    <os.Logo className={`w-5 h-5 ${os.iconColor}`} />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xs font-semibold text-slate-200">{os.label}</p>
+                    <p className="text-[11px] text-slate-500">{os.sublabel}</p>
+                  </div>
+                  <svg className="w-3.5 h-3.5 text-slate-600 group-hover:text-slate-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                </a>
+              )
             ))}
           </div>
           <div className="flex items-start gap-2.5 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3">
             <svg className="w-3.5 h-3.5 text-amber-400 mt-0.5 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
             <p className="text-[11px] text-amber-300 leading-relaxed">
-              Unsigned build — macOS: right-click → Open to bypass Gatekeeper.
-              Windows: click "More info" → "Run anyway" in SmartScreen.
-              Code signing coming soon.
+              Unsigned build — Windows: click "More info" → "Run anyway" in SmartScreen.
+              macOS support coming soon.
             </p>
           </div>
         </div>

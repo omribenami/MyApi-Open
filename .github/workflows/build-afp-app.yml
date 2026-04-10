@@ -1,16 +1,14 @@
 # =============================================================================
 # AFP Desktop App Build Pipeline
-# Builds signed/unsigned Electron DMG (macOS) + NSIS installer (Windows)
-# and uploads to GitHub Releases.
+# Builds Windows NSIS installer and uploads to GitHub Releases.
+# macOS builds are coming soon (pending Apple Developer certificate).
 #
 # Trigger:
 #   git tag afp-app-v1.0.0 && git push --tags
 #   OR: Actions → Build AFP Desktop App → Run workflow
 #
 # Signing (optional — skip for unsigned dev builds):
-#   macOS: set CSC_LINK, CSC_KEY_PASSWORD, APPLE_ID,
-#           APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID in repo secrets
-#   Win:   set WIN_CERT_B64 (base64 .pfx), WIN_CERT_PASSWORD
+#   Win: set WIN_CERT_B64 (base64 .pfx), WIN_CERT_PASSWORD
 # =============================================================================
 
 name: Build AFP Desktop App
@@ -29,74 +27,7 @@ on:
 permissions:
   contents: write   # required to create releases + upload assets
 
-# ─── macOS Build ─────────────────────────────────────────────────────────────
 jobs:
-  build-mac:
-    name: Build macOS (x64 + arm64)
-    runs-on: macos-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install dependencies
-        working-directory: connectors/afp-app
-        run: npm ci
-
-      - name: Configure code signing
-        env:
-          _CSC_LINK:        ${{ secrets.CSC_LINK }}
-          _CSC_PASSWORD:    ${{ secrets.CSC_KEY_PASSWORD }}
-          _APPLE_ID:        ${{ secrets.APPLE_ID }}
-          _APPLE_PASSWORD:  ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          _APPLE_TEAM:      ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          # Only export signing vars when the certificate is actually present.
-          # Passing CSC_LINK="" causes electron-builder to resolve path.resolve(dir,"")
-          # which equals the project directory, then fails with "not a file".
-          if [ -n "$_CSC_LINK" ]; then
-            echo "CSC_LINK=$_CSC_LINK"           >> "$GITHUB_ENV"
-            echo "CSC_KEY_PASSWORD=$_CSC_PASSWORD" >> "$GITHUB_ENV"
-            echo "CSC_IDENTITY_AUTO_DISCOVERY=true" >> "$GITHUB_ENV"
-          else
-            echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
-          fi
-          [ -n "$_APPLE_ID" ]       && echo "APPLE_ID=$_APPLE_ID"                          >> "$GITHUB_ENV" || true
-          [ -n "$_APPLE_PASSWORD" ] && echo "APPLE_APP_SPECIFIC_PASSWORD=$_APPLE_PASSWORD" >> "$GITHUB_ENV" || true
-          [ -n "$_APPLE_TEAM" ]     && echo "APPLE_TEAM_ID=$_APPLE_TEAM"                   >> "$GITHUB_ENV" || true
-
-      - name: Build DMG (x64 + arm64)
-        working-directory: connectors/afp-app
-        run: |
-          # Unset CSC_LINK if empty/unset — electron-builder treats "" as a file
-          # path, resolves path.resolve(projectDir,"") = projectDir, then throws
-          # "not a file". Unset it so process.env.CSC_LINK === undefined → skip sign.
-          [ -z "${CSC_LINK:-}" ] && unset CSC_LINK || true
-          [ -z "${CSC_KEY_PASSWORD:-}" ] && unset CSC_KEY_PASSWORD || true
-          npm run build:mac
-
-      - name: Rename artifacts to fixed names
-        working-directory: connectors/afp-app/dist
-        run: |
-          # electron-builder names: "MyApi AFP-1.0.0-x64.dmg" / "MyApi AFP-1.0.0-arm64.dmg"
-          X64=$(ls "MyApi AFP"*x64*.dmg 2>/dev/null | head -1)
-          ARM=$(ls "MyApi AFP"*arm64*.dmg 2>/dev/null | head -1)
-          [ -n "$X64" ]  && mv "$X64"  MyApi-AFP-mac-x64.dmg   && echo "renamed: $X64"
-          [ -n "$ARM" ]  && mv "$ARM"  MyApi-AFP-mac-arm64.dmg && echo "renamed: $ARM"
-          ls -lh *.dmg
-
-      - name: Upload mac artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: mac-dmg
-          path: |
-            connectors/afp-app/dist/MyApi-AFP-mac-x64.dmg
-            connectors/afp-app/dist/MyApi-AFP-mac-arm64.dmg
-          retention-days: 7
-
   # ─── Windows Build ───────────────────────────────────────────────────────────
   build-win:
     name: Build Windows (x64)
@@ -157,15 +88,9 @@ jobs:
   release:
     name: Publish GitHub Release
     runs-on: ubuntu-latest
-    needs: [build-mac, build-win]
+    needs: [build-win]
 
     steps:
-      - name: Download mac artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: mac-dmg
-          path: dist/
-
       - name: Download win artifact
         uses: actions/download-artifact@v4
         with:
@@ -184,31 +109,28 @@ jobs:
           body: |
             ## MyApi AFP Desktop App
 
-            System tray connector for Windows and macOS — connect/disconnect, re-authenticate,
+            System tray connector for Windows — connect/disconnect, re-authenticate,
             remove device, and toggle start-on-login from the menu bar.
 
             ### Downloads
 
             | Platform | File |
             |---|---|
-            | macOS Apple Silicon (M1/M2/M3) | `MyApi-AFP-mac-arm64.dmg` |
-            | macOS Intel | `MyApi-AFP-mac-x64.dmg` |
             | Windows 10/11 (x64) | `MyApi-AFP-win-x64.exe` |
+            | macOS Apple Silicon (M1/M2/M3) | Coming soon |
+            | macOS Intel | Coming soon |
 
             > **Unsigned build notice**
-            > These binaries are not yet code-signed.
-            > - **macOS**: Right-click the app → Open, then confirm. Or: System Settings → Privacy & Security → Open Anyway.
+            > This binary is not yet code-signed.
             > - **Windows**: Click "More info" → "Run anyway" in the SmartScreen dialog.
             >
-            > Signing infrastructure is in place — certificates will be added once the Apple Developer Program and Windows EV cert are provisioned.
+            > macOS builds are coming soon pending Apple Developer Program enrollment.
 
             ### What's included
             - System tray icon with connected/disconnected/connecting states
             - Connect · Disconnect · Re-authenticate · Remove & Reset actions
-            - Start on Login toggle (macOS LoginItems / Windows Registry)
+            - Start on Login toggle (Windows Registry)
             - Automatic reconnection with exponential backoff
             - Stores credentials in the OS user data directory
           files: |
-            dist/MyApi-AFP-mac-x64.dmg
-            dist/MyApi-AFP-mac-arm64.dmg
             dist/MyApi-AFP-win-x64.exe
