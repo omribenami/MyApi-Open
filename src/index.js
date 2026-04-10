@@ -6338,6 +6338,7 @@ app.post('/api/v1/auth/oauth-signup/complete', async (req, res) => {
     avatarUrl: createdUser.avatarUrl || null,
     two_factor_enabled: Boolean(createdUser.twoFactorEnabled),
     roles: createdUser.roles || 'user',
+    needsOnboarding: true,
   };
 
   // Set default workspace for new user
