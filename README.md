@@ -16,7 +16,7 @@ Connect your services once. Issue scoped tokens to AI agents. Keep full control 
 
 Most AI agent setups share the same problems: raw credentials scattered across tools, no way to revoke a single agent without rotating everything, no audit trail, and a setup that lives entirely in your head with no backup. MyApi fixes all of this by acting as a **privacy-first gateway** between your data and the agents that use it.
 
-<img width="1268" height="1080" alt="image" src="https://github.com/user-attachments/assets/62ebccc0-2b70-4097-b9db-59672f5b19ab" />
+<img width="1268" height="1080" alt="image" align="center" src="https://github.com/user-attachments/assets/62ebccc0-2b70-4097-b9db-59672f5b19ab" />
 
 
 You connect your services (Google, GitHub, Slack, and 30+ more) through MyApi once. Agents get a scoped token — or better yet, authenticate via **cryptographic keypair signing (ASC)** so no raw secret ever crosses the wire. Your credentials are never exposed, every action is logged, and a one-click ZIP export means your entire agent setup is always backed up and portable.
