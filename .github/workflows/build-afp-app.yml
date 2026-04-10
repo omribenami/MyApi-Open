@@ -19,6 +19,10 @@ on:
       - main
     tags:
       - 'afp-app-v*'
+    paths:
+      - 'connectors/afp-app/**'
+      - 'connectors/afp-oauth/**'
+      - 'connectors/afp-daemon/**'
   workflow_dispatch:
     inputs:
       prerelease:
