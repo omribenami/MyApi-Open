@@ -16,10 +16,24 @@ Connect your services once. Issue scoped tokens to AI agents. Keep full control 
 
 ## What is MyApi?
 
-Most AI agent setups share the same problems: raw credentials scattered across tools, no way to revoke a single agent without rotating everything, no audit trail, and a setup that lives entirely in your head with no backup. MyApi fixes all of this by acting as a **privacy-first gateway** between your data and the agents that use it.
+## Why MyApi?
 
+Most AI agent setups suffer from the same fundamental flaws: raw credentials scattered across local environments, zero audit trails, and the inability to revoke access without rotating every key you own. Whether you're using **OpenClaw**, **Hermes**, or **Claude Code**, your security is only as strong as your last `.env` file.
+
+**MyApi flips the equation.** Instead of configuring every agent individually, MyApi acts as a privacy-first gateway and central hub between your sensitive data and the agents that use it. Connect your services once; authorize your agents forever.
+
+### Core Advantages
+
+* **Unified Connection:** Your agents across different platforms share the same data and services seamlessly.
+* **Agent Management:** Centrally manage personas, specialized skills, and knowledge bases from a single dashboard.
+* **Multiple Agents - One Brain:** Ensure all your agents have a consistent "memory" and context by connecting them to a single source of truth.
+* **Shareable Scoped Tokens:** Grant an agent access to a **"Bundle"** (Persona + unique skills + unique knowledge base) rather than giving them raw, unfettered access to your entire infrastructure.
+* **Secure Infrastructure:** Provide agents with a hardened connection to your services and workstations via one secure, audited API.
+* **Instant Revocation:** Kill access for a single agent or tool instantly without touching your primary service credentials.
+
+<p align="center">
 <img width="1268" height="1080" alt="image" align="center" src="https://github.com/user-attachments/assets/62ebccc0-2b70-4097-b9db-59672f5b19ab" />
-
+</p>
 
 You connect your services (Google, GitHub, Slack, and 30+ more) through MyApi once. Agents get a scoped token — or better yet, authenticate via **cryptographic keypair signing (ASC)** so no raw secret ever crosses the wire. Your credentials are never exposed, every action is logged, and a one-click ZIP export means your entire agent setup is always backed up and portable.
 
@@ -47,8 +61,9 @@ You connect your services (Google, GitHub, Slack, and 30+ more) through MyApi on
 
 ## Architecture
 
-<img src="https://github.com/user-attachments/assets/5bf8bf21-dfca-4afe-b724-9cee6eab8470" align="center" width="512" alt="MyApi Stack">
-
+<p align="center">
+  <img width="512" src="https://github.com/user-attachments/assets/5bf8bf21-dfca-4afe-b724-9cee6eab8470" alt="MyApi Stack">
+</p>
 **Request flow:**
 ```
 Request → auth middleware → scope validator → RBAC → device approval gate
