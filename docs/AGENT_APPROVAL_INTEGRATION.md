@@ -80,7 +80,7 @@ node src/index.js
 Test with an AI agent making a request:
 
 ```bash
-curl -X GET https://www.myapiai.com/api/v1/services/google \
+curl -X GET http://localhost:4500/api/v1/services/google \
   -H "Authorization: Bearer myapi_xxx" \
   -H "User-Agent: Claude/1.0" \
   -H "X-Agent-ID: my-assistant"

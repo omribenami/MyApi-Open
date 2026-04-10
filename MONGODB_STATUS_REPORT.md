@@ -139,7 +139,7 @@ The MyApi codebase has:
 
 ## Deployment Instructions 📝
 
-### Deploy to VPS (YOUR_SERVER_IP)
+### Deploy to VPS
 
 ```bash
 cd /opt/MyApi
@@ -164,7 +164,7 @@ curl https://www.myapiai.com/health
 curl https://www.myapiai.com/api/v1/
 
 # Check logs
-ssh root@YOUR_SERVER_IP 'pm2 logs myapi'
+ssh USER@YOUR_SERVER_IP 'pm2 logs myapi'
 ```
 
 ---

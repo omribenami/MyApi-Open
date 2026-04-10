@@ -143,7 +143,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  MyApi       [🌙] [📬] [👤 Omri ▼]  [Settings] [Logout]         │
+│  MyApi       [🌙] [📬] [👤 User ▼]  [Settings] [Logout]         │
 ├──────────────┬──────────────────────────────────────────────────┤
 │              │                                                  │
 │ • Services   │  Services / Connectors                           │
@@ -458,7 +458,7 @@ User clicks [+ Create Persona]
 │ [Tab: Persona] │                                              │
 │                │ Name: Main Persona                           │
 │ Name:          │ Emoji: 😊                                     │
-│ YOUR_NAME    │ Vibe: Helpful, Friendly                      │
+│ Jane Smith     │ Vibe: Helpful, Friendly                      │
 │                │                                              │
 │ Location:      │ Fundamental Principles:                      │
 │ Tel Aviv       │ • Always be helpful                          │
@@ -495,10 +495,10 @@ User clicks [+ Create Persona]
 │                                        │
 │ Basic Information                      │
 │ ──────────────────────────────────     │
-│ Name: [YOUR_NAME           ] *       │
-│ Email: [user@example.com     ] *       │
-│ Location: [Tel Aviv          ]         │
-│ Timezone: [GMT+2 (Israel)    ▼]        │
+│ Name: [Jane Smith            ] *       │
+│ Email: [jane@example.com     ] *       │
+│ Location: [Your City         ]         │
+│ Timezone: [UTC+0             ▼]        │
 │ Website: [https://example.com]         │
 │                                        │
 │ Professional Information                │

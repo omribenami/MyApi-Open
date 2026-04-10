@@ -1,7 +1,7 @@
 # MyApi Services Integration Manual
 
-**Base URL**: `https://www.myapiai.com`
-**OAuth Callback Pattern**: `https://www.myapiai.com/api/v1/oauth/callback/{service_name}`
+**Base URL**: `https://your.domain.com` (or `http://localhost:4500` for local dev; managed service: [myapiai.com](https://www.myapiai.com))  
+**OAuth Callback Pattern**: `https://your.domain.com/api/v1/oauth/callback/{service_name}`
 
 ---
 
@@ -64,7 +64,7 @@
 - **Required credentials**:
   - `TWITTER_CLIENT_ID`
   - `TWITTER_CLIENT_SECRET`
-- **Callback URL**: `https://www.myapiai.com/api/v1/oauth/callback/twitter`
+- **Callback URL**: `https://your.domain.com/api/v1/oauth/callback/twitter`
 - **Scopes**: `tweet.read`, `tweet.write`, `users.read`, `offline.access`
 - **API Base**: `https://api.twitter.com/2`
 - **Setup steps**:
@@ -80,7 +80,7 @@
 - **Required credentials**:
   - `FACEBOOK_CLIENT_ID` (App ID)
   - `FACEBOOK_CLIENT_SECRET` (App Secret)
-- **Callback URL**: `https://www.myapiai.com/api/v1/oauth/callback/facebook`
+- **Callback URL**: `https://your.domain.com/api/v1/oauth/callback/facebook`
 - **Scopes**: `public_profile`, `email`, `pages_manage_posts`, `pages_read_engagement`
 - **API Base**: `https://graph.facebook.com`
 - **Setup steps**:
@@ -95,7 +95,7 @@
 - **Required credentials**:
   - `LINKEDIN_CLIENT_ID`
   - `LINKEDIN_CLIENT_SECRET`
-- **Callback URL**: `https://www.myapiai.com/api/v1/oauth/callback/linkedin`
+- **Callback URL**: `https://your.domain.com/api/v1/oauth/callback/linkedin`
 - **Scopes**: `r_liteprofile`, `r_emailaddress`, `w_member_social`
 - **API Base**: `https://api.linkedin.com/v2`
 - **Setup steps**:
@@ -110,7 +110,7 @@
 - **Required credentials**:
   - `INSTAGRAM_CLIENT_ID` (Facebook App ID)
   - `INSTAGRAM_CLIENT_SECRET` (Facebook App Secret)
-- **Callback URL**: `https://www.myapiai.com/api/v1/oauth/callback/instagram`
+- **Callback URL**: `https://your.domain.com/api/v1/oauth/callback/instagram`
 - **Scopes**: `instagram_basic`, `instagram_content_publish`, `instagram_manage_insights`
 - **API Base**: `https://graph.instagram.com`
 - **Setup steps**:
@@ -125,7 +125,7 @@
 - **Required credentials**:
   - `TIKTOK_CLIENT_KEY`
   - `TIKTOK_CLIENT_SECRET`
-- **Callback URL**: `https://www.myapiai.com/api/v1/oauth/callback/tiktok`
+- **Callback URL**: `https://your.domain.com/api/v1/oauth/callback/tiktok`
 - **Scopes**: `user.info.basic`, `video.list`, `video.upload`
 - **API Base**: `https://open.tiktok.com/v1`
 - **Setup steps**:
@@ -140,7 +140,7 @@
 - **Required credentials**:
   - `REDDIT_CLIENT_ID`
   - `REDDIT_CLIENT_SECRET`
-- **Callback URL**: `https://www.myapiai.com/api/v1/oauth/callback/reddit`
+- **Callback URL**: `https://your.domain.com/api/v1/oauth/callback/reddit`
 - **Scopes**: `identity`, `read`, `submit`, `history`
 - **API Base**: `https://oauth.reddit.com`
 - **Setup steps**:
@@ -155,7 +155,7 @@
 - **Required credentials**:
   - `YOUTUBE_CLIENT_ID` (Google OAuth Client ID)
   - `YOUTUBE_CLIENT_SECRET`
-- **Callback URL**: `https://www.myapiai.com/api/v1/oauth/callback/youtube`
+- **Callback URL**: `https://your.domain.com/api/v1/oauth/callback/youtube`
 - **Scopes**: `https://www.googleapis.com/auth/youtube.readonly`, `youtube.upload`
 - **API Base**: `https://www.googleapis.com/youtube/v3`
 - **Setup steps**:
@@ -170,7 +170,7 @@
 - **Required credentials**:
   - `TWITCH_CLIENT_ID`
   - `TWITCH_CLIENT_SECRET`
-- **Callback URL**: `https://www.myapiai.com/api/v1/oauth/callback/twitch`
+- **Callback URL**: `https://your.domain.com/api/v1/oauth/callback/twitch`
 - **Scopes**: `user:read:email`, `channel:read:subscriptions`
 - **API Base**: `https://api.twitch.tv/helix`
 - **Setup steps**:
@@ -198,7 +198,7 @@
   - `MASTODON_CLIENT_ID`
   - `MASTODON_CLIENT_SECRET`
   - `MASTODON_INSTANCE` (e.g. `mastodon.social`)
-- **Callback URL**: `https://www.myapiai.com/api/v1/oauth/callback/mastodon`
+- **Callback URL**: `https://your.domain.com/api/v1/oauth/callback/mastodon`
 - **Scopes**: `read`, `write`, `follow`
 - **API Base**: `https://{instance}/api/v1`
 - **Setup steps**:
@@ -217,7 +217,7 @@
 - **Required credentials**:
   - `GITHUB_CLIENT_ID`
   - `GITHUB_CLIENT_SECRET`
-- **Callback URL**: `https://www.myapiai.com/api/v1/oauth/callback/github`
+- **Callback URL**: `https://your.domain.com/api/v1/oauth/callback/github`
 - **Scopes**: `user`, `repo`, `read:org`
 - **API Base**: `https://api.github.com`
 - **Setup steps**:
@@ -232,7 +232,7 @@
 - **Required credentials**:
   - `GITLAB_CLIENT_ID` (Application ID)
   - `GITLAB_CLIENT_SECRET` (Secret)
-- **Callback URL**: `https://www.myapiai.com/api/v1/oauth/callback/gitlab`
+- **Callback URL**: `https://your.domain.com/api/v1/oauth/callback/gitlab`
 - **Scopes**: `read_user`, `read_api`, `read_repository`
 - **API Base**: `https://gitlab.com/api/v4`
 - **Setup steps**:
@@ -246,7 +246,7 @@
 - **Required credentials**:
   - `BITBUCKET_CLIENT_ID` (Key)
   - `BITBUCKET_CLIENT_SECRET` (Secret)
-- **Callback URL**: `https://www.myapiai.com/api/v1/oauth/callback/bitbucket`
+- **Callback URL**: `https://your.domain.com/api/v1/oauth/callback/bitbucket`
 - **Scopes**: `account`, `repository`
 - **API Base**: `https://api.bitbucket.org/2.0`
 - **Setup steps**:
@@ -260,7 +260,7 @@
 - **Required credentials**:
   - `AZUREDEVOPS_CLIENT_ID` (App ID)
   - `AZUREDEVOPS_CLIENT_SECRET`
-- **Callback URL**: `https://www.myapiai.com/api/v1/oauth/callback/azuredevops`
+- **Callback URL**: `https://your.domain.com/api/v1/oauth/callback/azuredevops`
 - **Scopes**: `vso.code`, `vso.project`
 - **API Base**: `https://dev.azure.com`
 
@@ -290,7 +290,7 @@
   - `GITEA_CLIENT_ID`
   - `GITEA_CLIENT_SECRET`
   - `GITEA_INSTANCE` (e.g. `https://gitea.example.com`)
-- **Callback URL**: `https://www.myapiai.com/api/v1/oauth/callback/gitea`
+- **Callback URL**: `https://your.domain.com/api/v1/oauth/callback/gitea`
 - **API Base**: `https://{instance}/api/v1`
 
 ---
@@ -303,7 +303,7 @@
 - **Required credentials**:
   - `NOTION_CLIENT_ID` (OAuth Client ID)
   - `NOTION_CLIENT_SECRET` (OAuth Client Secret)
-- **Callback URL**: `https://www.myapiai.com/api/v1/oauth/callback/notion`
+- **Callback URL**: `https://your.domain.com/api/v1/oauth/callback/notion`
 - **Scopes**: Set in integration settings (read content, update content, etc.)
 - **API Base**: `https://api.notion.com/v1`
 - **Setup steps**:
@@ -326,7 +326,7 @@
 - **Required credentials**:
   - `ASANA_CLIENT_ID`
   - `ASANA_CLIENT_SECRET`
-- **Callback URL**: `https://www.myapiai.com/api/v1/oauth/callback/asana`
+- **Callback URL**: `https://your.domain.com/api/v1/oauth/callback/asana`
 - **API Base**: `https://app.asana.com/api/1.0`
 
 #### Monday.com
@@ -343,7 +343,7 @@
 - **Required credentials**:
   - `TRELLO_CLIENT_ID` (API Key)
   - `TRELLO_CLIENT_SECRET` (OAuth Secret)
-- **Callback URL**: `https://www.myapiai.com/api/v1/oauth/callback/trello`
+- **Callback URL**: `https://your.domain.com/api/v1/oauth/callback/trello`
 - **API Base**: `https://api.trello.com/1`
 
 #### Jira
@@ -352,7 +352,7 @@
 - **Required credentials**:
   - `JIRA_CLIENT_ID`
   - `JIRA_CLIENT_SECRET`
-- **Callback URL**: `https://www.myapiai.com/api/v1/oauth/callback/jira`
+- **Callback URL**: `https://your.domain.com/api/v1/oauth/callback/jira`
 - **Scopes**: `read:jira-work`, `write:jira-work`, `read:jira-user`
 - **API Base**: `https://your-domain.atlassian.net/rest/api/2`
 
@@ -384,7 +384,7 @@
   - `STRIPE_PUBLISHABLE_KEY` (starts with `pk_`, for frontend)
   - `STRIPE_WEBHOOK_SECRET` (for webhook verification)
 - **Callback URL**: N/A (uses webhooks)
-- **Webhook URL**: `https://www.myapiai.com/api/v1/webhooks/stripe`
+- **Webhook URL**: `https://your.domain.com/api/v1/webhooks/stripe`
 - **API Base**: `https://api.stripe.com/v1`
 
 #### PayPal
@@ -393,7 +393,7 @@
 - **Required credentials**:
   - `PAYPAL_CLIENT_ID`
   - `PAYPAL_CLIENT_SECRET`
-- **Callback URL**: `https://www.myapiai.com/api/v1/oauth/callback/paypal`
+- **Callback URL**: `https://your.domain.com/api/v1/oauth/callback/paypal`
 - **API Base**: `https://api-m.paypal.com` (live) / `https://api-m.sandbox.paypal.com` (sandbox)
 
 #### Shopify
@@ -403,7 +403,7 @@
   - `SHOPIFY_CLIENT_ID` (API Key)
   - `SHOPIFY_CLIENT_SECRET` (API Secret Key)
   - `SHOPIFY_STORE` (your-store.myshopify.com)
-- **Callback URL**: `https://www.myapiai.com/api/v1/oauth/callback/shopify`
+- **Callback URL**: `https://your.domain.com/api/v1/oauth/callback/shopify`
 - **Scopes**: `read_products`, `write_orders`, etc.
 - **API Base**: `https://{store}.myshopify.com/admin/api/2024-01`
 
@@ -413,7 +413,7 @@
 - **Required credentials**:
   - `SQUARE_CLIENT_ID` (Application ID)
   - `SQUARE_CLIENT_SECRET` (Application Secret)
-- **Callback URL**: `https://www.myapiai.com/api/v1/oauth/callback/square`
+- **Callback URL**: `https://your.domain.com/api/v1/oauth/callback/square`
 - **API Base**: `https://api.square.com/v2`
 
 ---
@@ -426,7 +426,7 @@
 - **Required credentials**:
   - `GMAIL_CLIENT_ID`
   - `GMAIL_CLIENT_SECRET`
-- **Callback URL**: `https://www.myapiai.com/api/v1/oauth/callback/email`
+- **Callback URL**: `https://your.domain.com/api/v1/oauth/callback/email`
 - **Scopes**: `https://www.googleapis.com/auth/gmail.send`, `gmail.readonly`
 - **API Base**: `smtp.gmail.com` (SMTP) or `https://gmail.googleapis.com/gmail/v1` (API)
 
@@ -436,7 +436,7 @@
 - **Required credentials**:
   - `TELEGRAM_BOT_TOKEN`
 - **Callback URL**: N/A (uses webhooks or polling)
-- **Webhook URL**: `https://www.myapiai.com/api/v1/webhooks/telegram`
+- **Webhook URL**: `https://your.domain.com/api/v1/webhooks/telegram`
 - **API Base**: `https://api.telegram.org/bot{token}`
 - **Setup steps**:
   1. Message @BotFather on Telegram
@@ -469,7 +469,7 @@
   - `MATTERMOST_CLIENT_ID`
   - `MATTERMOST_CLIENT_SECRET`
   - `MATTERMOST_URL` (your instance URL)
-- **Callback URL**: `https://www.myapiai.com/api/v1/oauth/callback/mattermost`
+- **Callback URL**: `https://your.domain.com/api/v1/oauth/callback/mattermost`
 - **API Base**: `https://{instance}/api/v4`
 
 ---
@@ -493,7 +493,7 @@
   - `AZURE_CLIENT_ID` (Application ID)
   - `AZURE_CLIENT_SECRET`
   - `AZURE_TENANT_ID`
-- **Callback URL**: `https://www.myapiai.com/api/v1/oauth/callback/azure`
+- **Callback URL**: `https://your.domain.com/api/v1/oauth/callback/azure`
 - **API Base**: `https://management.azure.com`
 
 #### Google Cloud
@@ -540,7 +540,7 @@
 - **Required credentials**:
   - `GA_CLIENT_ID` (Google OAuth Client ID)
   - `GA_CLIENT_SECRET`
-- **Callback URL**: `https://www.myapiai.com/api/v1/oauth/callback/googleanalytics`
+- **Callback URL**: `https://your.domain.com/api/v1/oauth/callback/googleanalytics`
 - **Scopes**: `https://www.googleapis.com/auth/analytics.readonly`
 - **API Base**: `https://www.googleapis.com/analytics/v3`
 
@@ -657,7 +657,7 @@ GA_CLIENT_SECRET=
 
 All OAuth services use the same pattern:
 ```
-https://www.myapiai.com/api/v1/oauth/callback/{service_name}
+https://your.domain.com/api/v1/oauth/callback/{service_name}
 ```
 
 Where `{service_name}` matches the `name` field in the services database (e.g., `google`, `twitter`, `facebook`, `linkedin`).

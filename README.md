@@ -10,6 +10,8 @@
 
 Connect your services once. Issue scoped tokens to AI agents. Keep full control over who accesses what — with a full audit trail of every action.
 
+> **Prefer zero-ops?** A fully managed, always-updated instance is available at **[myapiai.com](https://www.myapiai.com)** — sign up for free and skip the server setup entirely.
+
 ---
 
 ## What is MyApi?
@@ -138,8 +140,8 @@ OAuth providers follow the pattern `{SERVICE}_CLIENT_ID` / `{SERVICE}_CLIENT_SEC
 MyApi is fully self-hostable. For a production deployment you'll need:
 
 - A server with Docker + Docker Compose (or Node.js 18+)
-- A domain with HTTPS (nginx + Let's Encrypt, or Cloudflare Tunnel)
-- The environment variables above
+- A domain with HTTPS — e.g. `https://your.domain.com` (nginx + Let's Encrypt, or Cloudflare Tunnel)
+- The environment variables above filled in for your domain
 
 See the full deployment guide: [`DEPLOYMENT_GUIDE.md`](DEPLOYMENT_GUIDE.md)
 
@@ -150,11 +152,21 @@ See the full deployment guide: [`DEPLOYMENT_GUIDE.md`](DEPLOYMENT_GUIDE.md)
 
 ---
 
+## Hosted Service
+
+**Don't want to manage your own server?**
+
+[**myapiai.com**](https://www.myapiai.com) is the official managed version of this project — always running the latest release, with automatic backups, SSL, and email included out of the box.
+
+- Free tier available
+- Same open-source codebase, zero infrastructure work
+- Pro and Enterprise tiers for teams
+
 ## Roadmap
 
 - Expanded agent capabilities (streaming responses, webhook triggers)
 - Additional OAuth providers (target 60+, including more enterprise services)
-- Managed cloud hosting at [myapiai.com](https://myapiai.com) (Pro / Enterprise tiers)
+- Additional enterprise features on [myapiai.com](https://www.myapiai.com)
 
 ---
 

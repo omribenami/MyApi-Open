@@ -149,7 +149,7 @@ Users can add **any service** via vault tokens. Common examples:
 
 ### Get Gmail Messages (OAuth)
 ```bash
-curl -X POST https://www.myapiai.com/api/v1/services/google/proxy \
+curl -X POST http://localhost:4500/api/v1/services/google/proxy \
   -H "Authorization: Bearer myapi_xxx" \
   -d '{
     "path": "/gmail/v1/users/me/messages",
@@ -159,7 +159,7 @@ curl -X POST https://www.myapiai.com/api/v1/services/google/proxy \
 
 ### Create Stripe Charge (API Key)
 ```bash
-curl -X POST https://www.myapiai.com/api/v1/services/stripe/proxy \
+curl -X POST http://localhost:4500/api/v1/services/stripe/proxy \
   -H "Authorization: Bearer myapi_xxx" \
   -d '{
     "path": "/v1/charges",
@@ -174,7 +174,7 @@ curl -X POST https://www.myapiai.com/api/v1/services/stripe/proxy \
 
 ### Control Home Assistant (Vault Token)
 ```bash
-curl -X POST https://www.myapiai.com/api/v1/services/home-assistant/proxy \
+curl -X POST http://localhost:4500/api/v1/services/home-assistant/proxy \
   -H "Authorization: Bearer myapi_xxx" \
   -d '{
     "path": "/api/states",
@@ -184,7 +184,7 @@ curl -X POST https://www.myapiai.com/api/v1/services/home-assistant/proxy \
 
 ### Post to Slack (OAuth)
 ```bash
-curl -X POST https://www.myapiai.com/api/v1/services/slack/proxy \
+curl -X POST http://localhost:4500/api/v1/services/slack/proxy \
   -H "Authorization: Bearer myapi_xxx" \
   -d '{
     "path": "/api/chat.postMessage",
@@ -202,7 +202,7 @@ curl -X POST https://www.myapiai.com/api/v1/services/slack/proxy \
 
 ```bash
 # List all connected services for current user
-curl -X GET https://www.myapiai.com/api/v1/connectors \
+curl -X GET http://localhost:4500/api/v1/connectors \
   -H "Authorization: Bearer myapi_xxx"
 ```
 
@@ -244,7 +244,7 @@ Example:
 # User stores Home Assistant JWT in vault
 # User labels it: "home-assistant"
 # Agent can now call it:
-curl -X POST https://www.myapiai.com/api/v1/services/home-assistant/proxy
+curl -X POST http://localhost:4500/api/v1/services/home-assistant/proxy
 ```
 
 ---

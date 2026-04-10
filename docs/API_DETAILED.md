@@ -2,6 +2,8 @@
 
 Complete technical documentation for AI agents using MyApi.
 
+> **Base URL:** All `curl` examples in this document use `http://localhost:4500` (local dev). Replace with `https://your.domain.com` for self-hosted production, or use the managed service at **[myapiai.com](https://www.myapiai.com)**.
+
 ---
 
 ## Table of Contents
@@ -138,7 +140,7 @@ Examples: Home Assistant, Postquee, custom backends
 #### Get Gmail Messages
 
 ```bash
-curl -X POST https://www.myapiai.com/api/v1/services/google/proxy \
+curl -X POST http://localhost:4500/api/v1/services/google/proxy \
   -H "Authorization: Bearer myapi_xxx" \
   -H "Content-Type: application/json" \
   -d '{
@@ -166,7 +168,7 @@ curl -X POST https://www.myapiai.com/api/v1/services/google/proxy \
 #### Get GitHub Repositories
 
 ```bash
-curl -X POST https://www.myapiai.com/api/v1/services/github/proxy \
+curl -X POST http://localhost:4500/api/v1/services/github/proxy \
   -H "Authorization: Bearer myapi_xxx" \
   -H "Content-Type: application/json" \
   -d '{
@@ -179,7 +181,7 @@ curl -X POST https://www.myapiai.com/api/v1/services/github/proxy \
 #### Create a Google Calendar Event
 
 ```bash
-curl -X POST https://www.myapiai.com/api/v1/services/google/proxy \
+curl -X POST http://localhost:4500/api/v1/services/google/proxy \
   -H "Authorization: Bearer myapi_xxx" \
   -H "Content-Type: application/json" \
   -d '{
@@ -196,7 +198,7 @@ curl -X POST https://www.myapiai.com/api/v1/services/google/proxy \
 #### Send a Slack Message
 
 ```bash
-curl -X POST https://www.myapiai.com/api/v1/services/slack/proxy \
+curl -X POST http://localhost:4500/api/v1/services/slack/proxy \
   -H "Authorization: Bearer myapi_xxx" \
   -H "Content-Type: application/json" \
   -d '{
@@ -226,7 +228,7 @@ For services that don't have OAuth (like Home Assistant, custom APIs, or self-ho
 
 ```bash
 # Retrieve Home Assistant data
-curl -X POST https://www.myapiai.com/api/v1/services/home-assistant/proxy \
+curl -X POST http://localhost:4500/api/v1/services/home-assistant/proxy \
   -H "Authorization: Bearer myapi_xxx" \
   -H "Content-Type: application/json" \
   -d '{
@@ -245,7 +247,7 @@ curl -X POST https://www.myapiai.com/api/v1/services/home-assistant/proxy \
 
 ```bash
 # Call a custom backend service
-curl -X POST https://www.myapiai.com/api/v1/services/my-api/proxy \
+curl -X POST http://localhost:4500/api/v1/services/my-api/proxy \
   -H "Authorization: Bearer myapi_xxx" \
   -H "Content-Type: application/json" \
   -d '{
@@ -285,7 +287,7 @@ POST /api/v1/identity             # Store identity data
 ### Get Identity Data
 
 ```bash
-curl -X GET "https://www.myapiai.com/api/v1/identity?category=contact" \
+curl -X GET "http://localhost:4500/api/v1/identity?category=contact" \
   -H "Authorization: Bearer myapi_xxx"
 ```
 
@@ -296,12 +298,12 @@ curl -X GET "https://www.myapiai.com/api/v1/identity?category=contact" \
   "data": [
     {
       "key": "name",
-      "value": "YOUR_NAME",
+      "value": "Jane Smith",
       "category": "contact"
     },
     {
       "key": "email",
-      "value": "admin@your.domain.com",
+      "value": "jane@example.com",
       "category": "contact"
     }
   ]
@@ -311,7 +313,7 @@ curl -X GET "https://www.myapiai.com/api/v1/identity?category=contact" \
 ### Store Identity Data
 
 ```bash
-curl -X POST https://www.myapiai.com/api/v1/identity \
+curl -X POST http://localhost:4500/api/v1/identity \
   -H "Authorization: Bearer myapi_xxx" \
   -H "Content-Type: application/json" \
   -d '{
@@ -338,7 +340,7 @@ POST /api/v1/preferences           # Store a preference
 ### Get Preferences
 
 ```bash
-curl -X GET https://www.myapiai.com/api/v1/preferences?category=notifications \
+curl -X GET http://localhost:4500/api/v1/preferences?category=notifications \
   -H "Authorization: Bearer myapi_xxx"
 ```
 

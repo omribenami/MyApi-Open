@@ -39,12 +39,12 @@
 ```bash
 # Legacy JSON export (v2)
 curl -H "Authorization: Bearer <token>" \
-  "https://www.myapiai.com/api/v1/export?mode=portable"
+  "http://localhost:4500/api/v1/export?mode=portable"
 ```
 
 ```bash
 # ZIP export (v3)
 curl -L -H "Authorization: Bearer <token>" \
-  "https://www.myapiai.com/api/v1/export?format=zip&mode=portable&includeFiles=false" \
+  "http://localhost:4500/api/v1/export?format=zip&mode=portable&includeFiles=false" \
   -o myapi-export.zip
 ```

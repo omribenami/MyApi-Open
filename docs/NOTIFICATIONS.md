@@ -114,14 +114,14 @@ Users can configure notifications in:
 
 **Get notification preferences:**
 ```bash
-curl -X GET https://www.myapiai.com/api/v1/notifications/preferences \
+curl -X GET http://localhost:4500/api/v1/notifications/preferences \
   -H "Authorization: Bearer {token}" \
   -H "Content-Type: application/json"
 ```
 
 **Disable email notifications for a specific channel:**
 ```bash
-curl -X PUT https://www.myapiai.com/api/v1/notifications/preferences/email \
+curl -X PUT http://localhost:4500/api/v1/notifications/preferences/email \
   -H "Authorization: Bearer {token}" \
   -d '{
     "enabled": false
@@ -130,13 +130,13 @@ curl -X PUT https://www.myapiai.com/api/v1/notifications/preferences/email \
 
 **Get unread notification count:**
 ```bash
-curl -X GET https://www.myapiai.com/api/v1/notifications/unread-count \
+curl -X GET http://localhost:4500/api/v1/notifications/unread-count \
   -H "Authorization: Bearer {token}"
 ```
 
 **Mark notification as read:**
 ```bash
-curl -X POST https://www.myapiai.com/api/v1/notifications/{id}/read \
+curl -X POST http://localhost:4500/api/v1/notifications/{id}/read \
   -H "Authorization: Bearer {token}"
 ```
 

@@ -170,9 +170,9 @@ A: Yes. If denied, the agent must request approval again.
 
 ## 🔗 External Links
 
-- **GitHub:** https://github.com/omribenami/MyApi
+- **GitHub:** https://github.com/YOUR_GITHUB_USERNAME/MyApi
 - **Website:** https://www.myapiai.com
-- **API Base:** https://www.myapiai.com/api/v1
+- **API Base:** https://your.domain.com/api/v1 (or `http://localhost:4500/api/v1` locally)
 
 ---
 

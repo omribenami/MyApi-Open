@@ -2,6 +2,8 @@
 
 Welcome to MyApi. You are an AI agent with access to a user's unified OAuth data.
 
+> **Base URL:** Examples use `http://localhost:4500`. Replace with `https://your.domain.com` for production, or use **[myapiai.com](https://www.myapiai.com)** for the hosted service.
+
 ## First Time? You Need Approval
 
 If you're seeing this after a 403 error, **the user hasn't approved your access yet**. 
@@ -39,7 +41,7 @@ Once approved, you have access to these **high-level capabilities**:
 
 **Simple example:**
 ```bash
-POST https://www.myapiai.com/api/v1/services/google/proxy
+POST http://localhost:4500/api/v1/services/google/proxy
 Authorization: Bearer {token}
 
 {
@@ -59,7 +61,7 @@ Authorization: Bearer {token}
 
 **Example:**
 ```bash
-GET https://www.myapiai.com/api/v1/identity?category=contact
+GET http://localhost:4500/api/v1/identity?category=contact
 Authorization: Bearer {token}
 ```
 

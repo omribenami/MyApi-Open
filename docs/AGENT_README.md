@@ -2,6 +2,8 @@
 
 You are an AI agent with access to a user's unified OAuth data through MyApi.
 
+> **Base URL:** Examples use `http://localhost:4500`. Replace with `https://your.domain.com` for self-hosted production, or use the managed service at **[myapiai.com](https://www.myapiai.com)**.
+
 ---
 
 ## ⚡ Quick Start (30 seconds)
@@ -11,7 +13,7 @@ The user will give you a token like: `myapi_8e04fdb632ee790fe5e95263bf4049a1c086
 
 ### 2. Make your first request
 ```bash
-curl -X POST https://www.myapiai.com/api/v1/services/google/proxy \
+curl -X POST http://localhost:4500/api/v1/services/google/proxy \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -98,7 +100,7 @@ Authorization: Bearer {token}
 
 ### Get Gmail messages
 ```javascript
-const response = await fetch('https://www.myapiai.com/api/v1/services/google/proxy', {
+const response = await fetch('http://localhost:4500/api/v1/services/google/proxy', {
   method: 'POST',
   headers: {
     'Authorization': `Bearer ${token}`,
@@ -116,7 +118,7 @@ console.log(data.data.messages);
 
 ### Get GitHub repos
 ```javascript
-const response = await fetch('https://www.myapiai.com/api/v1/services/github/proxy', {
+const response = await fetch('http://localhost:4500/api/v1/services/github/proxy', {
   method: 'POST',
   headers: {
     'Authorization': `Bearer ${token}`,
@@ -132,7 +134,7 @@ const response = await fetch('https://www.myapiai.com/api/v1/services/github/pro
 
 ### Send a Slack message
 ```javascript
-await fetch('https://www.myapiai.com/api/v1/services/slack/proxy', {
+await fetch('http://localhost:4500/api/v1/services/slack/proxy', {
   method: 'POST',
   headers: {
     'Authorization': `Bearer ${token}`,

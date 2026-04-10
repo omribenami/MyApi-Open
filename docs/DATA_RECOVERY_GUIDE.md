@@ -149,16 +149,16 @@ You can now upload knowledge base documents (the table was missing, now fixed).
 
 ```bash
 # Check OAuth services connected
-curl -H "Authorization: Bearer <token>" https://www.myapiai.com/api/v1/services
+curl -H "Authorization: Bearer <token>" http://localhost:4500/api/v1/services
 
 # Check skills
-curl -H "Authorization: Bearer <token>" https://www.myapiai.com/api/v1/skills
+curl -H "Authorization: Bearer <token>" http://localhost:4500/api/v1/skills
 
 # Check KB documents
-curl -H "Authorization: Bearer <token>" https://www.myapiai.com/api/v1/knowledge-base
+curl -H "Authorization: Bearer <token>" http://localhost:4500/api/v1/knowledge-base
 
 # Check vault tokens
-curl -H "Authorization: Bearer <token>" https://www.myapiai.com/api/v1/vault-tokens
+curl -H "Authorization: Bearer <token>" http://localhost:4500/api/v1/vault-tokens
 ```
 
 ---

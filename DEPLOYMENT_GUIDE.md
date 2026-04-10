@@ -1,12 +1,14 @@
 # MyApi Production Deployment Guide
-**VPS:** YOUR_SERVER_IP  
-**User:** root  
-**Repository:** https://github.com/omribenami/MyApi.git  
+
+> **Don't want to self-host?** MyApi is available as a fully managed cloud service at **[myapiai.com](https://www.myapiai.com)** — zero infrastructure, instant setup.
+
+**Server:** YOUR_SERVER_IP  
+**Repository:** https://github.com/YOUR_GITHUB_USERNAME/MyApi.git  
 **Branch:** main  
 
 ## Prerequisites
 
-- SSH access to VPS (root@YOUR_SERVER_IP)
+- SSH access to your VPS (USER@YOUR_SERVER_IP)
 - GitHub repository access
 - PM2 installed on VPS
 - Node.js v18+ installed
@@ -16,19 +18,19 @@
 ### 1. Connect to VPS
 
 ```bash
-ssh root@YOUR_SERVER_IP
+ssh USER@YOUR_SERVER_IP
 ```
 
 ### 2. Navigate to Application Directory
 
 ```bash
-cd /root/MyApi
+cd /opt/MyApi
 ```
 
 If the directory doesn't exist:
 ```bash
-git clone https://github.com/omribenami/MyApi.git /root/MyApi
-cd /root/MyApi
+git clone https://github.com/YOUR_GITHUB_USERNAME/MyApi.git /opt/MyApi
+cd /opt/MyApi
 ```
 
 ### 3. Pull Latest Code
@@ -49,83 +51,90 @@ npm install --production
 
 Check if `.env` exists:
 ```bash
-ls -la .env
+ls -la src/.env
 ```
 
-If not, create it:
+If not, create it from the example:
 ```bash
-cat > .env << 'EOF'
+cp src/.env.example src/.env
+nano src/.env
+```
+
+Fill in the following values — replace every placeholder with your own:
+
+```bash
 # MyApi Production Configuration
 NODE_ENV=production
 PORT=4500
 
 # Database (SQLite - production ready)
-DB_PATH=/root/MyApi/data/myapi.db
+DB_PATH=/opt/MyApi/data/myapi.db
 
-# Security
+# Security — generate each with: openssl rand -hex 32
 SESSION_SECRET=REPLACE_WITH_RANDOM_STRING
-ENCRYPTION_KEY=REPLACE_WITH_RANDOM_STRING
-VAULT_KEY=REPLACE_WITH_RANDOM_STRING
+ENCRYPTION_KEY=REPLACE_WITH_32_CHAR_STRING
+VAULT_KEY=REPLACE_WITH_32_CHAR_STRING
 JWT_SECRET=REPLACE_WITH_RANDOM_STRING
 
-# URLs
-BASE_URL=https://www.myapiai.com
-PUBLIC_URL=https://www.myapiai.com
+# URLs — replace with your own domain
+BASE_URL=https://your.domain.com
+PUBLIC_URL=https://your.domain.com
 
 # Session Cookie
 SESSION_COOKIE_SECURE=true
-SESSION_COOKIE_DOMAIN=.myapiai.com
+SESSION_COOKIE_DOMAIN=.your.domain.com
 
 # CORS
-CORS_ORIGIN=https://www.myapiai.com
+CORS_ORIGIN=https://your.domain.com
 
-# Email (Resend)
-RESEND_API_KEY=re_...
-EMAIL_FROM=noreply@myapiai.com
+# Email (Resend or SMTP)
+RESEND_API_KEY=re_YOUR_RESEND_API_KEY
+EMAIL_FROM=noreply@your.domain.com
 EMAIL_FROM_NAME=MyApi
 
-# Power User
+# Power User — email address granted User Management access in the dashboard
 POWER_USER_EMAIL=admin@your.domain.com
 
-# OAuth Credentials
+# OAuth Credentials — register apps at each provider's developer console
+# See docs/SERVICES_MANUAL.md for full instructions per service
+
 GITHUB_CLIENT_ID=YOUR_GITHUB_CLIENT_ID
 GITHUB_CLIENT_SECRET=YOUR_GITHUB_CLIENT_SECRET
-GITHUB_REDIRECT_URI=https://www.myapiai.com/api/v1/oauth/callback/github
+GITHUB_REDIRECT_URI=https://your.domain.com/api/v1/oauth/callback/github
 
 SLACK_CLIENT_ID=YOUR_SLACK_CLIENT_ID
 SLACK_CLIENT_SECRET=YOUR_SLACK_CLIENT_SECRET
-SLACK_REDIRECT_URI=https://www.myapiai.com/api/v1/oauth/callback/slack
+SLACK_REDIRECT_URI=https://your.domain.com/api/v1/oauth/callback/slack
 
 DISCORD_CLIENT_ID=YOUR_DISCORD_CLIENT_ID
 DISCORD_CLIENT_SECRET=YOUR_DISCORD_CLIENT_SECRET
-DISCORD_REDIRECT_URI=https://www.myapiai.com/api/v1/oauth/callback/discord
+DISCORD_REDIRECT_URI=https://your.domain.com/api/v1/oauth/callback/discord
 
 LINKEDIN_CLIENT_ID=YOUR_LINKEDIN_CLIENT_ID
 LINKEDIN_CLIENT_SECRET=YOUR_LINKEDIN_CLIENT_SECRET
-LINKEDIN_REDIRECT_URI=https://www.myapiai.com/api/v1/oauth/callback/linkedin
+LINKEDIN_REDIRECT_URI=https://your.domain.com/api/v1/oauth/callback/linkedin
 
 NOTION_CLIENT_ID=YOUR_NOTION_CLIENT_ID
 NOTION_CLIENT_SECRET=YOUR_NOTION_CLIENT_SECRET
-NOTION_REDIRECT_URI=https://www.myapiai.com/api/v1/oauth/callback/notion
+NOTION_REDIRECT_URI=https://your.domain.com/api/v1/oauth/callback/notion
 
 FACEBOOK_CLIENT_ID=YOUR_FACEBOOK_CLIENT_ID
 FACEBOOK_CLIENT_SECRET=YOUR_FACEBOOK_CLIENT_SECRET
-FACEBOOK_REDIRECT_URI=https://www.myapiai.com/api/v1/oauth/callback/facebook
+FACEBOOK_REDIRECT_URI=https://your.domain.com/api/v1/oauth/callback/facebook
 
-# Stripe (PostQuee account)
-STRIPE_SECRET_KEY=sk_live_REPLACE_WITH_FULL_KEY
-STRIPE_PUBLISHABLE_KEY=YOUR_STRIPE_PUBLISHABLE_KEY
-STRIPE_WEBHOOK_SECRET=YOUR_STRIPE_WEBHOOK_SECRET
+# Stripe
+STRIPE_SECRET_KEY=sk_live_YOUR_STRIPE_SECRET_KEY
+STRIPE_PUBLISHABLE_KEY=pk_live_YOUR_STRIPE_PUBLISHABLE_KEY
+STRIPE_WEBHOOK_SECRET=whsec_YOUR_STRIPE_WEBHOOK_SECRET
 
 # Google Maps
 GOOGLE_MAPS_API_KEY=YOUR_GOOGLE_MAPS_API_KEY
-EOF
 ```
 
 ### 6. Create Data Directory
 
 ```bash
-mkdir -p /root/MyApi/data
+mkdir -p /opt/MyApi/data
 ```
 
 ### 7. Stop Existing Instance
@@ -163,14 +172,14 @@ curl http://localhost:4500/health
 
 From external:
 ```bash
-curl https://www.myapiai.com/health
+curl https://your.domain.com/health
 ```
 
 ## Post-Deployment Checks
 
 ### 1. Health Check
 ```bash
-curl https://www.myapiai.com/health
+curl https://your.domain.com/health
 ```
 
 Expected response:
@@ -186,15 +195,15 @@ Expected response:
 
 ### 2. API Discovery
 ```bash
-curl https://www.myapiai.com/api/v1/
+curl https://your.domain.com/api/v1/
 ```
 
 ### 3. Dashboard Access
-Open in browser: https://www.myapiai.com/dashboard/
+Open in browser: https://your.domain.com/dashboard/
 
 ### 4. Check Logs
 ```bash
-ssh root@YOUR_SERVER_IP 'pm2 logs myapi --lines 100'
+ssh USER@YOUR_SERVER_IP 'pm2 logs myapi --lines 100'
 ```
 
 ## Troubleshooting
@@ -209,13 +218,13 @@ pm2 restart myapi
 ### Database Errors
 ```bash
 # Check database file
-ls -lh /root/MyApi/data/myapi.db
+ls -lh /opt/MyApi/data/myapi.db
 
 # Check permissions
-chown -R root:root /root/MyApi/data
+chown -R USER:USER /opt/MyApi/data
 
 # Reset if corrupted (WARNING: loses data)
-rm /root/MyApi/data/myapi.db
+rm /opt/MyApi/data/myapi.db
 pm2 restart myapi
 ```
 
@@ -225,7 +234,7 @@ pm2 restart myapi
 pm2 show myapi
 
 # Update .env file
-nano /root/MyApi/.env
+nano src/.env
 
 # Restart to apply
 pm2 restart myapi
@@ -240,7 +249,7 @@ npm install -g pm2
 
 If deployment fails:
 ```bash
-cd /root/MyApi
+cd /opt/MyApi
 git log --oneline -n 5  # Find previous working commit
 git reset --hard <commit-hash>
 pm2 restart myapi
@@ -270,14 +279,15 @@ pm2 save
    ```bash
    openssl rand -hex 32  # For SESSION_SECRET, JWT_SECRET, VAULT_KEY
    ```
-3. **Backup Database**: Regularly backup `/root/MyApi/data/myapi.db`
+3. **Backup Database**: Regularly backup `/opt/MyApi/data/myapi.db`
 4. **SSL Certificate**: Ensure reverse proxy (nginx/caddy) handles HTTPS
+5. **Never commit `.env`**: The `.env` file is in `.gitignore` — keep it that way
 
 ## Success Indicators
 
 ✅ `pm2 status myapi` shows "online"  
-✅ `curl https://www.myapiai.com/health` returns `{ "status": "ok" }`  
-✅ Dashboard loads at https://www.myapiai.com/dashboard/  
+✅ `curl https://your.domain.com/health` returns `{ "status": "ok" }`  
+✅ Dashboard loads at https://your.domain.com/dashboard/  
 ✅ No errors in `pm2 logs myapi`  
 ✅ API responds to authenticated requests  
 
@@ -285,6 +295,11 @@ pm2 save
 
 If issues persist:
 1. Check logs: `pm2 logs myapi --lines 200 --err`
-2. Check database: `ls -lh /root/MyApi/data/`
+2. Check database: `ls -lh /opt/MyApi/data/`
 3. Check environment: `pm2 show myapi`
 4. Restart: `pm2 restart myapi`
+5. Open an issue: https://github.com/YOUR_GITHUB_USERNAME/MyApi/issues
+
+---
+
+> **Prefer zero-ops?** Skip all of this and use the hosted service at **[myapiai.com](https://www.myapiai.com)**.

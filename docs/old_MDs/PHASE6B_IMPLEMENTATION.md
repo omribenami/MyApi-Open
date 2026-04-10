@@ -245,8 +245,8 @@ Response:
   "users": [
     {
       "id": "user-456",
-      "username": "benami.omri",
-      "email": "admin@your.domain.com",
+      "username": "jane.smith",
+      "email": "jane.smith@example.com",
       "roles": [
         { "id": "role-789", "name": "developer" }
       ]

@@ -72,4 +72,3 @@ MyApi follows a coordinated vulnerability disclosure model:
 
 - Security reports: security@myapiai.com
 - General enquiries: hello@myapiai.com
-- Incident Commander: YOUR_NAME (admin@your.domain.com)
