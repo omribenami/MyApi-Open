@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Self-hosted Personal API for AI Agents",
   "scripts": {
-    "test": "jest --detectOpenHandles",
+    "test": "jest --detectOpenHandles --forceExit",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "dev": "cd src && npx nodemon index.js",
