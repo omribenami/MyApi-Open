@@ -116,10 +116,13 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Create placeholder connector dist dirs
+        run: mkdir -p connectors/afp-daemon/dist connectors/afp-oauth/dist
+
       - name: Build backend image
         uses: docker/build-push-action@v5
         with:
-          context: ./src
+          context: .
           file: ./src/Dockerfile
           push: false
           tags: myapi-backend:${{ github.sha }}
