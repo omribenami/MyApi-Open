@@ -10,6 +10,8 @@ const {
   createAfpDevice,
   getAfpDevices,
   getAfpDeviceById,
+  findAfpDeviceByHostname,
+  rotateAfpDeviceToken,
   revokeAfpDevice,
   updateAfpDeviceStatus,
   logAfpCommand,
@@ -159,7 +161,9 @@ router.get('/devices', requireMaster, requireAfpPlan, (req, res) => {
 });
 
 // POST /api/v1/afp/devices/register — daemon self-registers
-// Returns: { deviceId, deviceToken }  ← store token in daemon env, never log it
+// Upserts: if a non-revoked device already exists for this user + hostname + platform,
+// rotate its token in-place rather than creating a duplicate row.
+// Returns: { deviceId, deviceToken }  ← store token in daemon; never log it
 router.post('/devices/register', requireMaster, requireAfpPlan, async (req, res) => {
   const { deviceName, hostname, platform, arch, capabilities = ['fs', 'exec'] } = req.body;
   if (!deviceName || typeof deviceName !== 'string' || !deviceName.trim()) {
@@ -167,30 +171,42 @@ router.post('/devices/register', requireMaster, requireAfpPlan, async (req, res)
   }
 
   const rawToken = 'afpd_' + crypto.randomBytes(32).toString('hex');
-  const tokenHash = await bcrypt.hash(rawToken, 10); // cost 10: one-time handshake, not user password
+  const tokenHash = await bcrypt.hash(rawToken, 10);
   const userId = req.tokenMeta.ownerId;
-
   const afpRoot = req.body.afpRoot || null;
 
   let deviceId;
+  let isNew = true;
+
   try {
-    deviceId = createAfpDevice(
-      userId, deviceName.trim(), hostname || null,
-      platform || null, arch || null, capabilities, tokenHash, afpRoot,
-    );
+    // Re-use an existing device row if one exists for the same machine.
+    // This prevents a new row from appearing in the Devices list every time
+    // the app re-authenticates (e.g. after a token rotation or re-install).
+    const existing = hostname ? findAfpDeviceByHostname(userId, hostname, platform || null) : null;
+
+    if (existing) {
+      rotateAfpDeviceToken(existing.id, deviceName.trim(), arch || null, capabilities, tokenHash, afpRoot);
+      deviceId = existing.id;
+      isNew = false;
+    } else {
+      deviceId = createAfpDevice(
+        userId, deviceName.trim(), hostname || null,
+        platform || null, arch || null, capabilities, tokenHash, afpRoot,
+      );
+    }
   } catch (e) {
     return res.status(500).json({ ok: false, error: 'Failed to register device' });
   }
 
   createAuditLog({
     requesterId: userId,
-    action: 'afp:device_registered',
+    action: isNew ? 'afp:device_registered' : 'afp:device_token_rotated',
     resource: deviceId,
     ip: req.ip,
     details: { deviceName: deviceName.trim(), platform, hostname },
   });
 
-  res.status(201).json({ ok: true, deviceId, deviceToken: rawToken });
+  res.status(isNew ? 201 : 200).json({ ok: true, deviceId, deviceToken: rawToken });
 });
 
 // DELETE /api/v1/afp/devices/:deviceId — revoke a daemon

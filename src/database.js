@@ -6549,6 +6549,24 @@ function getAfpDeviceById(deviceId) {
   return db.prepare(`SELECT * FROM afp_devices WHERE id = ?`).get(deviceId);
 }
 
+// Returns the first non-revoked device matching this user + hostname + platform.
+// Used by the register endpoint to avoid creating duplicate rows for the same machine.
+function findAfpDeviceByHostname(userId, hostname, platform) {
+  return db.prepare(
+    `SELECT * FROM afp_devices WHERE user_id = ? AND hostname = ? AND platform = ? AND revoked_at IS NULL LIMIT 1`
+  ).get(userId, hostname || null, platform || null);
+}
+
+function rotateAfpDeviceToken(deviceId, deviceName, arch, capabilities, tokenHash, afpRoot) {
+  const now = new Date().toISOString();
+  db.prepare(`
+    UPDATE afp_devices
+      SET device_token_hash = ?, device_name = ?, arch = ?,
+          capabilities_json = ?, afp_root = ?, status = 'offline', last_seen_at = ?
+      WHERE id = ?
+  `).run(tokenHash, deviceName, arch || null, JSON.stringify(capabilities || []), afpRoot || null, now, deviceId);
+}
+
 function revokeAfpDevice(deviceId) {
   db.prepare(`UPDATE afp_devices SET revoked_at = ?, status = 'offline' WHERE id = ?`)
     .run(new Date().toISOString(), deviceId);
@@ -6851,6 +6869,8 @@ module.exports = {
   createAfpDevice,
   getAfpDevices,
   getAfpDeviceById,
+  findAfpDeviceByHostname,
+  rotateAfpDeviceToken,
   revokeAfpDevice,
   updateAfpDeviceStatus,
   logAfpCommand,
