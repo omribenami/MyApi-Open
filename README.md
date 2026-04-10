@@ -16,8 +16,6 @@ Connect your services once. Issue scoped tokens to AI agents. Keep full control 
 
 ## What is MyApi?
 
-## Why MyApi?
-
 Most AI agent setups suffer from the same fundamental flaws: raw credentials scattered across local environments, zero audit trails, and the inability to revoke access without rotating every key you own. Whether you're using **OpenClaw**, **Hermes**, or **Claude Code**, your security is only as strong as your last `.env` file.
 
 **MyApi flips the equation.** Instead of configuring every agent individually, MyApi acts as a privacy-first gateway and central hub between your sensitive data and the agents that use it. Connect your services once; authorize your agents forever.
