@@ -16,24 +16,10 @@ Connect your services once. Issue scoped tokens to AI agents. Keep full control 
 
 Most AI agent setups share the same problems: raw credentials scattered across tools, no way to revoke a single agent without rotating everything, no audit trail, and a setup that lives entirely in your head with no backup. MyApi fixes all of this by acting as a **privacy-first gateway** between your data and the agents that use it.
 
-```
-    Your Dashboard
-          │
-  ┌───────┴────────────────────────────────────┐
-  │               MyApi Gateway                │
-  │  ┌──────────┐  ┌──────────┐  ┌──────────┐ │
-  │  │  OAuth   │  │  Token   │  │ Personas │ │
-  │  │  Vault   │  │  Vault   │  │+ Skills  │ │
-  │  └──────────┘  └──────────┘  └──────────┘ │
-  └───────┬────────────────────────────────────┘
-          │  Scoped Bearer Tokens (approval-gated)
-    ┌─────▼────┐  ┌──────────┐  ┌──────────┐
-    │  Claude  │  │ ChatGPT  │  │  Custom  │
-    │  Agent   │  │  Plugin  │  │  Agent   │
-    └──────────┘  └──────────┘  └──────────┘
-```
+<img width="1268" height="1080" alt="image" src="https://github.com/user-attachments/assets/62ebccc0-2b70-4097-b9db-59672f5b19ab" />
 
-You connect your services (Google, GitHub, Slack, and 40+ more) through MyApi once. Agents get a scoped token — or better yet, authenticate via **cryptographic keypair signing (ASC)** so no raw secret ever crosses the wire. Your credentials are never exposed, every action is logged, and a one-click ZIP export means your entire agent setup is always backed up and portable.
+
+You connect your services (Google, GitHub, Slack, and 30+ more) through MyApi once. Agents get a scoped token — or better yet, authenticate via **cryptographic keypair signing (ASC)** so no raw secret ever crosses the wire. Your credentials are never exposed, every action is logged, and a one-click ZIP export means your entire agent setup is always backed up and portable.
 
 ---
 
@@ -41,7 +27,7 @@ You connect your services (Google, GitHub, Slack, and 40+ more) through MyApi on
 
 | Feature | Description |
 |---|---|
-| **OAuth Aggregation** | Connect 45+ services (Google, GitHub, Slack, Notion, Salesforce, Jira...) in one place. Tokens auto-refresh. Agents proxy through MyApi — never touch credentials. |
+| **OAuth Aggregation** | Connect 30+ (and counting) services (Google, GitHub, Slack, Notion, Salesforce, Jira...) in one place. Tokens auto-refresh. Agents proxy through MyApi — never touch credentials. |
 | **AI Agent Gateway** | Issue scoped Bearer tokens to any AI agent. First access requires your approval. Every request is logged. |
 | **Persona System** | Multiple AI identities, each with its own soul content (SOUL.md), attached knowledge docs, and skills. Active persona shapes every API response. |
 | **Knowledge Base** | Upload or write Markdown/PDF documents. Attach them to specific personas for grounded, contextual responses. |
