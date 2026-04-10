@@ -157,8 +157,11 @@ function App() {
       if (!window.location.pathname.endsWith('/login')) {
         window.location.replace(`/dashboard/login${window.location.search}`);
       }
+    } else if (oauthStatus === 'signup_required') {
+      // New-user signup flow — Login.jsx handles it via its own useEffect.
+      // Do NOT redirect; just let the router render the login page with the params intact.
     } else if (oauthStatus && oauthStatus !== 'connected') {
-      // Unhandled oauth_status (e.g. 'error', 'signup_required') with no confirm token —
+      // Unhandled oauth_status (e.g. unknown 'error') with no confirm token —
       // strip the params and redirect to landing so the user isn't stuck forever.
       window.location.replace('/');
     }
