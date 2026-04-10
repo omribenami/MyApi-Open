@@ -172,12 +172,11 @@ const OS_PLATFORMS = [
 ];
 
 // ─── Desktop App platform configs (Electron — GitHub Releases) ────────────────
-const GH_RELEASES_BASE = 'https://github.com/omribenami/MyApi/releases/download/windows-latest';
 const DESKTOP_PLATFORMS = [
   {
     platform: 'win',     label: 'Windows', sublabel: 'x86-64',
     Logo: WindowsLogo, iconColor: 'text-sky-400', iconBg: 'bg-sky-400/10', iconBorder: 'border-sky-400/20',
-    href: `${GH_RELEASES_BASE}/MyApi-AFP-win-x64.exe`, filename: 'MyApi-AFP-win-x64.exe',
+    href: '/api/v1/afp/download/installer/win', filename: 'MyApi-AFP-win-x64.exe',
   },
   {
     platform: 'mac-arm', label: 'macOS', sublabel: 'Apple Silicon',

@@ -301,6 +301,30 @@ router.get('/download/:platform', (req, res) => {
   res.sendFile(filePath);
 });
 
+// GET /api/v1/afp/download/installer/:platform — serve desktop app installer
+// No auth required — public download endpoint.
+// platform: win
+
+const INSTALLER_DIR = path.join(__dirname, '..', '..', 'connectors', 'afp-app', 'dist');
+
+const INSTALLER_FILES = {
+  win: { file: 'MyApi-AFP-win-x64.exe', name: 'MyApi-AFP-win-x64.exe', mime: 'application/vnd.microsoft.portable-executable' },
+};
+
+router.get('/download/installer/:platform', (req, res) => {
+  const meta = INSTALLER_FILES[req.params.platform];
+  if (!meta) {
+    return res.status(400).json({ error: 'Unknown platform. Available: win' });
+  }
+  const filePath = path.join(INSTALLER_DIR, meta.file);
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: 'Installer not yet available. Check back soon.' });
+  }
+  res.setHeader('Content-Disposition', `attachment; filename="${meta.name}"`);
+  res.setHeader('Content-Type', meta.mime);
+  res.sendFile(filePath);
+});
+
 // GET /api/v1/afp/download-info — return available platforms + file sizes
 router.get('/download-info', (req, res) => {
   const platforms = Object.entries(PLATFORM_FILES).map(([platform, meta]) => {
