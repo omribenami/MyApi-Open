@@ -339,7 +339,7 @@ function Login() {
 
       if (result?.data?.bootstrap?.masterToken) setMasterToken(result.data.bootstrap.masterToken);
       if (result?.data?.user) setUser(result.data.user);
-      window.location.href = '/dashboard/';
+      window.location.href = '/dashboard/onboarding';
     } catch (err) {
       setError(err.message || 'Failed to complete signup');
       setSignupCompleting(false);

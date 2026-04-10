@@ -30,6 +30,8 @@ import Memory from './pages/Memory';
 import OAuthAuthorize from './pages/OAuthAuthorize';
 import LogIn from './pages/LogIn';
 import Login from './pages/Login';
+import SignUp from './pages/SignUp';
+import Onboarding from './pages/Onboarding';
 import Activate from './pages/Activate';
 import Layout from './components/Layout';
 
@@ -201,7 +203,8 @@ function App() {
     const urlParams = new URLSearchParams(window.location.search);
     const isAuthorizePath = window.location.pathname.includes('/authorize');
     const isLoginPath = window.location.pathname.endsWith('/login');
-    if (!urlParams.has('oauth_status') && !isAuthorizePath && !isLoginPath) {
+    const isSignupPath = window.location.pathname.endsWith('/signup');
+    if (!urlParams.has('oauth_status') && !isAuthorizePath && !isLoginPath && !isSignupPath) {
       window.location.replace('/');
       return null;
     }
@@ -223,6 +226,7 @@ function App() {
             <>
               <Route path="/authorize" element={<OAuthAuthorize />} />
               <Route path="/login" element={<LogIn />} />
+              <Route path="/signup" element={<SignUp />} />
               <Route path="/" element={<Login />} />
               <Route path="*" element={
                 <div className="min-h-screen grid place-items-center bg-slate-950 text-slate-300">
@@ -242,6 +246,8 @@ function App() {
               <Route path="/authorize" element={<OAuthAuthorize />} />
               {/* Device Flow activation — standalone, no sidebar */}
               <Route path="/activate" element={<Activate />} />
+              {/* Post-signup onboarding wizard — standalone, no sidebar */}
+              <Route path="/onboarding" element={<Onboarding />} />
               <Route
                 path="/*"
                 element={
