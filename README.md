@@ -45,9 +45,7 @@ You connect your services (Google, GitHub, Slack, and 30+ more) through MyApi on
 
 ## Architecture
 
-```
 <img width="1024" height="559" alt="image" src="https://github.com/user-attachments/assets/5bf8bf21-dfca-4afe-b724-9cee6eab8470" />
-```
 
 **Request flow:**
 ```
