@@ -260,7 +260,7 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
       await navigator.clipboard.writeText(prompt);
       setPromptCopied(true);
       setTimeout(() => setPromptCopied(false), 2000);
-    } catch {}
+    } catch (_e) { /* clipboard not available */ }
   };
 
   const filteredDocs = availableDocuments.filter(d =>
@@ -269,13 +269,6 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
   const filteredSkills = availableSkills.filter(s =>
     !skillSearch || (s.name || '').toLowerCase().includes(skillSearch.toLowerCase())
   );
-
-  const completedSections = [
-    formData.name,
-    formData.tone || formData.traits,
-    formData.formatting || formData.doNotActions || formData.alwaysActions,
-    formData.attachedDocuments.length > 0 || formData.attachedSkills.length > 0,
-  ].filter(Boolean).length;
 
   return (
     <div className="space-y-0">
