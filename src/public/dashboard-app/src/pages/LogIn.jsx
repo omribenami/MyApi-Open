@@ -87,6 +87,9 @@ function LogIn() {
             authInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
           }
         }, 100);
+      } else if (callback.status === 'signup_required') {
+        // New user — hand off to Login.jsx (at /dashboard/) which has the full signup wizard.
+        window.location.replace(`/dashboard/${window.location.search}`);
       } else if (callback.error) {
         setError(`OAuth error: ${callback.error}`);
         window.history.replaceState({}, document.title, '/dashboard/login');
@@ -210,7 +213,7 @@ function LogIn() {
 
             <div className="mt-6 border-t border-slate-700 pt-6">
               <p className="text-center text-xs text-slate-400 mb-4">
-                Don't have an account? <a href="/dashboard/signup" className="font-semibold text-blue-400 hover:text-blue-300 transition-colors">Create one</a>
+                Don't have an account? <a href="/?signup=true" className="font-semibold text-blue-400 hover:text-blue-300 transition-colors">Create one</a>
               </p>
             </div>
           </div>

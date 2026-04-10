@@ -29,6 +29,7 @@ import Connectors from './pages/Connectors';
 import Memory from './pages/Memory';
 import OAuthAuthorize from './pages/OAuthAuthorize';
 import LogIn from './pages/LogIn';
+import Login from './pages/Login';
 import Activate from './pages/Activate';
 import Layout from './components/Layout';
 
@@ -194,12 +195,13 @@ function App() {
     );
   }
 
-  // Unauthenticated users: redirect to landing page unless they're in an OAuth flow
-  // or on the /authorize consent page
+  // Unauthenticated users: redirect to landing page unless they're in an OAuth flow,
+  // on the /authorize consent page, or on the dedicated /login page.
   if (!isAuthenticated) {
     const urlParams = new URLSearchParams(window.location.search);
     const isAuthorizePath = window.location.pathname.includes('/authorize');
-    if (!urlParams.has('oauth_status') && !isAuthorizePath) {
+    const isLoginPath = window.location.pathname.endsWith('/login');
+    if (!urlParams.has('oauth_status') && !isAuthorizePath && !isLoginPath) {
       window.location.replace('/');
       return null;
     }
@@ -221,6 +223,7 @@ function App() {
             <>
               <Route path="/authorize" element={<OAuthAuthorize />} />
               <Route path="/login" element={<LogIn />} />
+              <Route path="/" element={<Login />} />
               <Route path="*" element={
                 <div className="min-h-screen grid place-items-center bg-slate-950 text-slate-300">
                   <div className="text-center">
