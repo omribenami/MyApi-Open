@@ -116,6 +116,43 @@ if [ ! -f "$ENV_FILE" ]; then
   exit 1
 fi
 
+# Detect environment
+NODE_ENV=$(grep -E '^\s*NODE_ENV\s*=' "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2 | tr -d ' ' || true)
+NODE_ENV="${NODE_ENV:-production}"
+
+# ── Dev environment: restart via PM2, no Docker ──────────────────────────────
+if [ "$NODE_ENV" = "development" ] || [ "$NODE_ENV" = "dev" ]; then
+  echo "[deploy] Dev environment detected — skipping Docker, restarting via PM2..."
+
+  echo "[deploy] Building frontend..."
+  cd "$REPO_DIR/src/public/dashboard-app"
+  npm install --silent
+  npm run build
+  echo "[deploy] Frontend built."
+
+  # Kill any stray process holding the port (e.g. orphaned node from a previous run)
+  PORT=$(grep -E '^\s*PORT\s*=' "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2 | tr -d ' ' || true)
+  PORT="${PORT:-4500}"
+  STALE_PIDS=$(ss -tlnp "sport = :$PORT" 2>/dev/null | grep -oP '(?<=pid=)\d+' | sort -u || true)
+  if [ -n "$STALE_PIDS" ]; then
+    echo "[deploy] Clearing stale port $PORT processes: $STALE_PIDS"
+    kill -9 $STALE_PIDS 2>/dev/null || true
+    sleep 1
+  fi
+
+  cd "$SRC_DIR"
+  if pm2 list | grep -q "myapi-platform"; then
+    pm2 restart myapi-platform --update-env
+    echo "[deploy] PM2 process restarted."
+  else
+    pm2 start ecosystem.config.js --env development
+    echo "[deploy] PM2 process started."
+  fi
+  pm2 status myapi-platform
+  echo "[deploy] Done."
+  exit 0
+fi
+
 # ── Docker build & restart ───────────────────────────────────────────────────
 echo "[deploy] Building Docker image..."
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" build

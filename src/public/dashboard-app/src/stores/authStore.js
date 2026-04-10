@@ -68,6 +68,18 @@ export const useAuthStore = create((set, get) => ({
           _sessionToken = sessionStorage.getItem('sessionToken');
         } catch { /* ignored */ }
 
+        // If a masterToken exists in localStorage but the browser session flag is missing
+        // (sessionStorage is cleared on browser close), the user must re-authenticate fully
+        // (including 2FA). This prevents the persistent token from bypassing 2FA after
+        // the browser is closed and reopened.
+        if (masterToken) {
+          const sessionVerified = (() => { try { return sessionStorage.getItem('sessionAuthVerified'); } catch { return null; } })();
+          if (!sessionVerified) {
+            set({ isAuthenticated: false, isInitialized: true });
+            return;
+          }
+        }
+
         // Single combined probe: send session cookie + Bearer token (if available) together.
         // The server checks session first, then Bearer, so this handles both auth paths in
         // one request — eliminating the session-probe 401 that showed in console for
@@ -169,6 +181,7 @@ export const useAuthStore = create((set, get) => ({
     setLogoutInProgress(false);
     clearLoggedOut();
     try { localStorage.setItem('masterToken', token); } catch { /* ignored */ }
+    try { sessionStorage.setItem('sessionAuthVerified', '1'); } catch { /* ignored */ }
     set({ masterToken: token, isAuthenticated: true, error: null });
   },
 

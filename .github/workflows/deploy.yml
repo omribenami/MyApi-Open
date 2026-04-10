@@ -92,30 +92,8 @@ jobs:
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script: |
             set -e
-            cd ${{ vars.DEPLOY_PATH || '/opt/myapi' }}
-
-            echo "=== Pre-deploy backup ==="
-            node src/scripts/backup.js create --type pre-deploy --label "deploy-${{ github.sha }}" || echo "Warning: backup failed, continuing..."
-
-            echo "=== Pull latest changes ==="
-            git fetch origin main
-            git reset --hard origin/main
-
-            echo "=== Install dependencies ==="
-            npm ci --production
-
-            echo "=== Run database migrations ==="
-            node src/scripts/migrate.js run
-
-            echo "=== Restart application ==="
-            if command -v pm2 &> /dev/null; then
-              pm2 restart myapi || pm2 start src/index.js --name myapi
-            elif command -v systemctl &> /dev/null; then
-              sudo systemctl restart myapi
-            elif command -v docker &> /dev/null; then
-              docker compose up -d --build backend
-            fi
-
+            cd ${{ vars.DEPLOY_PATH || '/opt/MyApi' }}
+            bash deploy.sh
             echo "=== Deployment complete ==="
 
       - name: Verify deployment

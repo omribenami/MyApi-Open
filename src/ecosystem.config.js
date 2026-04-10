@@ -25,15 +25,13 @@ module.exports = {
       exec_mode: 'cluster',
       
       // Environment variables per environment
-      env: {
-        development: {
-          NODE_ENV: 'development',
-          PORT: 4500,
-        },
-        production: {
-          NODE_ENV: 'production',
-          PORT: 4500,
-        }
+      env_development: {
+        NODE_ENV: 'development',
+        PORT: 4500,
+      },
+      env_production: {
+        NODE_ENV: 'production',
+        PORT: 4500,
       },
       
       // Error and output logs
