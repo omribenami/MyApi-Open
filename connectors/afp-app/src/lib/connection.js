@@ -65,7 +65,6 @@ function start(cfg, logger, onStateChange) {
 
     ws.on('open', () => {
       if (stopped) { ws.terminate(); return; }
-      backoffMs = 1000;
       logger.info('WebSocket open. Registering...');
       ws.send(JSON.stringify({
         type:        'afp:register',
@@ -82,7 +81,17 @@ function start(cfg, logger, onStateChange) {
       let data;
       try { data = JSON.parse(raw); } catch (_) { data = null; }
       if (data?.type === 'afp:registered') {
+        backoffMs = 1000; // Reset backoff only on successful registration
         onStateChange?.('connected', { deviceId: data.deviceId || cfg.deviceId });
+      }
+      if (data?.type === 'afp:error') {
+        // Device revoked or unknown — stop reconnecting, credentials are stale
+        logger.error(`Server rejected registration: ${data.message}`);
+        stopped = true;
+        clearTimeout(reconnectTimer);
+        onStateChange?.('needs-reauth', { message: data.message });
+        try { ws.terminate(); } catch (_) {}
+        return;
       }
       handleMsg(ws, raw);
     });

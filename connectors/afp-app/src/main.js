@@ -128,6 +128,12 @@ function startConnection(cfg) {
   state.wsHandle = connection.start(savedCfg, logger, (event, data) => {
     if (event === 'connected')    setState('connected',    data);
     if (event === 'disconnected') setState('disconnected', {});
+    if (event === 'needs-reauth') {
+      state.wsHandle = null;
+      setState('disconnected');
+      notify('MyApi AFP — Re-authentication required', data.message || 'Device credentials are invalid. Please re-authenticate.');
+      reAuthenticate();
+    }
   });
 }
 
@@ -178,7 +184,7 @@ async function reAuthenticate() {
         'DELETE',
         `${cfg.serverUrl || MYAPI_URL}/api/v1/afp/devices/${cfg.deviceId}`,
         null,
-        { Authorization: `Bearer ${cfg.deviceToken}` }
+        { Authorization: `Bearer ${cfg.accessToken}` }
       );
     } catch (_) {}
     // Keep serverUrl + deviceName, clear device creds
@@ -209,7 +215,7 @@ async function removeAndReset() {
         'DELETE',
         `${cfg.serverUrl || MYAPI_URL}/api/v1/afp/devices/${cfg.deviceId}`,
         null,
-        { Authorization: `Bearer ${cfg.deviceToken}` }
+        { Authorization: `Bearer ${cfg.accessToken}` }
       );
     } catch (_) {}
   }

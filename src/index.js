@@ -10947,12 +10947,14 @@ if (WebSocketServer) {
           try { device = getAfpDeviceById(data.deviceId); } catch (_) {}
           if (!device || device.revoked_at) {
             ws.send(JSON.stringify({ type: 'afp:error', message: 'Unknown or revoked AFP device' }));
+            ws.close(4001, 'Unknown or revoked AFP device');
             return;
           }
           const bcrypt = require('bcrypt');
           const valid = bcrypt.compareSync(String(data.deviceToken || ''), device.device_token_hash);
           if (!valid) {
             ws.send(JSON.stringify({ type: 'afp:error', message: 'Invalid AFP device token' }));
+            ws.close(4002, 'Invalid AFP device token');
             return;
           }
           afpConnections.set(data.deviceId, ws);
