@@ -747,7 +747,7 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://static.cloudflareinsights.com", "https://unpkg.com"],
+      scriptSrc: ["'self'", "https://static.cloudflareinsights.com"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://unpkg.com"],
       imgSrc: ["'self'", "data:", "https:", "blob:"],
       fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
@@ -2271,10 +2271,6 @@ async function authenticate(req, res, next) {
 
   if (parts.length === 2 && parts[0] === "Bearer") {
     rawToken = parts[1];
-  } else if (req.query.token) {
-    rawToken = req.query.token;
-  } else if (req.query.api_key) {
-    rawToken = req.query.api_key;
   }
 
   if (!rawToken) {
@@ -2716,10 +2712,6 @@ function requirePowerUser(req, res) {
 
   let email = String(req?.session?.user?.email || req?.user?.email || '').toLowerCase();
   if (!email && req?.tokenMeta?.ownerId) {
-    // Special case: tokens with owner_id = 'owner' are admin tokens (legacy support)
-    if (req.tokenMeta.ownerId === 'owner') {
-      return true;
-    }
     const tokenOwnerUser = getUserById(req.tokenMeta.ownerId);
     email = String(tokenOwnerUser?.email || '').toLowerCase();
   }
@@ -3117,6 +3109,25 @@ function buildCapabilitiesForRequest(req) {
   };
 }
 
+// SSRF: block requests to private/loopback/link-local addresses
+const PRIVATE_RANGES = [
+  /^127\./,
+  /^10\./,
+  /^192\.168\./,
+  /^172\.(1[6-9]|2\d|3[01])\./,
+  /^169\.254\./,
+  /^0\./,
+  /^100\.64\./,
+  /^::1$/,
+  /^fc00:/i,
+  /^fd/i,
+  /^fe80:/i,
+  /^localhost$/i,
+];
+function isPrivateHost(hostname) {
+  return PRIVATE_RANGES.some(r => r.test(hostname));
+}
+
 async function discoverApiFromWebsite(websiteUrl) {
   const normalizedWebsiteUrl = parseAndValidateHttpUrl(websiteUrl);
   if (!normalizedWebsiteUrl) {
@@ -3130,6 +3141,15 @@ async function discoverApiFromWebsite(websiteUrl) {
   }
 
   const urlObj = new URL(normalizedWebsiteUrl);
+  if (isPrivateHost(urlObj.hostname)) {
+    return {
+      sourceWebsiteUrl: websiteUrl,
+      apiBaseUrl: null,
+      authScheme: 'unknown',
+      confidence: 0,
+      notes: 'blocked: private address'
+    };
+  }
   const origin = urlObj.origin;
 
   // Heuristic: If hostname starts with www., guess api.domain.com
@@ -3160,6 +3180,7 @@ async function discoverApiFromWebsite(websiteUrl) {
 
   for (const candidate of probeCandidates) {
     try {
+      if (isPrivateHost(new URL(candidate).hostname)) continue;
       const probeResp = await fetch(candidate, {
         method: 'GET',
         headers: { Accept: 'application/json' },
@@ -4761,7 +4782,7 @@ app.post('/api/v1/tokens/master/bootstrap', authenticate, (req, res) => {
 
     // Also set the persistent cookie so the dashboard picks it up immediately
     res.cookie('myapi_master_token', rawToken, {
-      httpOnly: false, // JS must read this to set Authorization header
+      httpOnly: true,  // Not readable by JS; use GET /api/v1/auth/session-token instead
       secure: secureCookie,
       path: '/',
       maxAge: 30 * 24 * 60 * 60 * 1000,
@@ -6104,6 +6125,20 @@ app.get("/api/v1/auth/me", (req, res) => {
   res.status(401).json({ error: "Invalid session" });
 });
 
+// GET /api/v1/auth/session-token - One-shot endpoint: returns master token from session, then clears it
+// Used by the frontend after OAuth login to retrieve the token without exposing it in cookies
+app.get('/api/v1/auth/session-token', authRateLimit, (req, res) => {
+  if (!req.session?.user?.id) return res.status(401).json({ error: 'Not authenticated' });
+  const token  = req.session.masterTokenRaw || null;
+  const tokenId = req.session.masterTokenId || null;
+  if (token) {
+    delete req.session.masterTokenRaw;
+    delete req.session.masterTokenId;
+    req.session.save?.(() => {});
+  }
+  res.json({ token, tokenId });
+});
+
 // GET /api/v1/auth/oauth-signup/pending - returns pending OAuth signup state
 app.get('/api/v1/auth/oauth-signup/pending', (req, res) => {
   const pending = req.session?.oauth_signup || null;
@@ -6132,7 +6167,8 @@ app.delete('/api/v1/account', authenticate, (req, res) => {
     const user = getUserById(userId);
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    if (String(user.email || '').toLowerCase() === 'admin@your.domain.com') {
+    const _pwrEmail = String(process.env.POWER_USER_EMAIL || process.env.OWNER_EMAIL || '').trim().toLowerCase();
+    if (_pwrEmail && String(user.email || '').toLowerCase() === _pwrEmail) {
       return res.status(400).json({ error: 'Cannot delete power user account from self-service endpoint' });
     }
 
@@ -6326,7 +6362,7 @@ app.post('/api/v1/auth/oauth-signup/complete', async (req, res) => {
   delete req.session.oauth_signup;
 
   res.cookie('myapi_master_token', rawMasterToken, {
-    httpOnly: false, // Required: JS reads this to set Authorization header
+    httpOnly: true,  // Not readable by JS; use GET /api/v1/auth/session-token instead
     secure: secureCookie,
     path: '/',
     maxAge: 7 * 24 * 60 * 60 * 1000,
@@ -6800,7 +6836,8 @@ app.delete('/api/v1/users/:id', authenticate, (req, res) => {
     const { id } = req.params;
     const user = getUserById(id);
     if (!user) return res.status(404).json({ error: 'User not found' });
-    if (String(user.email || '').toLowerCase() === 'admin@your.domain.com') {
+    const _pwrEmail = String(process.env.POWER_USER_EMAIL || process.env.OWNER_EMAIL || '').trim().toLowerCase();
+    if (_pwrEmail && String(user.email || '').toLowerCase() === _pwrEmail) {
       return res.status(400).json({ error: 'Cannot delete power user account' });
     }
 
@@ -7368,19 +7405,13 @@ app.get('/api/v1/oauth/authorize/twitter/x', (req, res) => {
 });
 
 // GET /api/v1/oauth/authorize/:service - Start OAuth flow
-app.get("/api/v1/oauth/authorize/:service", (req, res) => {
+app.get("/api/v1/oauth/authorize/:service", async (req, res) => {
   const { service } = req.params;
   const mode = (req.query.mode || 'connect').toString();
   const explicitForcePrompt = req.query.forcePrompt != null
     ? ['1', 'true', 'yes'].includes(String(req.query.forcePrompt).toLowerCase())
     : null;
   const forcePrompt = explicitForcePrompt == null ? mode === 'login' : explicitForcePrompt;
-
-  // CRITICAL FIX: If masterToken is passed as query param, set it in Authorization header for authentication
-  if (req.query.token && !req.headers.authorization) {
-    req.headers.authorization = `Bearer ${req.query.token}`;
-    console.log(`[OAuth Authorize] Injected Bearer token from query param`);
-  }
 
   // DEBUG: Log all requests
   console.log(`[OAuth] authorize/${service} requested`);
@@ -7452,16 +7483,11 @@ app.get("/api/v1/oauth/authorize/:service", (req, res) => {
     try {
       const masterTokenRaw = req.cookies.myapi_master_token;
       const accessTokens = getAccessTokens() || [];
-      const tokenRecord = accessTokens.find(t => {
-        try {
-          return t.token && bcrypt.compareSync(masterTokenRaw, t.token);
-        } catch {
-          return false;
+      for (const t of accessTokens) {
+        if (t.hash && await bcrypt.compare(masterTokenRaw, t.hash).catch(() => false)) {
+          ownerId = String(t.ownerId);
+          break;
         }
-      });
-      if (tokenRecord) {
-        ownerId = String(tokenRecord.ownerId);
-        console.log(`[OAuth Authorize] Got ownerId from masterToken cookie: ${ownerId}`);
       }
     } catch (err) {
       console.warn(`[OAuth Authorize] Failed to extract ownerId from masterToken:`, err.message);
@@ -7964,7 +7990,7 @@ app.get([
     // Set master token as a persistent cookie so the dashboard can use it
     if (masterToken) {
       res.cookie('myapi_master_token', masterToken, {
-        httpOnly: false, // Required: JS reads this to set Authorization header
+        httpOnly: true,  // Not readable by JS; use GET /api/v1/auth/session-token instead
         secure: secureCookie,
         path: '/',
         maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
@@ -8036,7 +8062,7 @@ async function tryAuthenticate(req) {
 app.get("/api/v1/oauth/status", async (req, res) => {
   // Note: This endpoint is PUBLIC because it's called from dashboard during OAuth flow
   // It needs to work even before user is fully authenticated
-  tryAuthenticate(req); // Best effort to identify user if logged in
+  await tryAuthenticate(req); // Best effort to identify user if logged in
   
   // Get user ID from available sources (in order of priority)
   let userId = null;
@@ -8821,6 +8847,10 @@ app.post('/api/v1/services/:serviceName/proxy', authenticate, async (req, res) =
     const https = require('https');
     const http = require('http');
     const targetUrl = new URL(apiPath.startsWith('/') ? `${apiRoot}${apiPath}` : `${apiRoot}/${apiPath}`);
+
+    if (isPrivateHost(targetUrl.hostname)) {
+      return res.status(400).json({ error: 'Target URL resolves to a private address' });
+    }
 
     // Phase 3: Auto-inject service preferences (defaults)
     let finalBody = reqBody ? JSON.parse(JSON.stringify(reqBody)) : {};  // Deep copy
@@ -10991,7 +11021,7 @@ if (WebSocketServer) {
     let isAuthenticated = false;
 
     // Handle WebSocket messages
-    ws.on('message', (message) => {
+    ws.on('message', async (message) => {
       try {
         const data = JSON.parse(message);
 
@@ -11023,8 +11053,7 @@ if (WebSocketServer) {
             ws.close(4001, 'Unknown or revoked AFP device');
             return;
           }
-          const bcrypt = require('bcrypt');
-          const valid = bcrypt.compareSync(String(data.deviceToken || ''), device.device_token_hash);
+          const valid = await require('bcrypt').compare(String(data.deviceToken || ''), device.device_token_hash).catch(() => false);
           if (!valid) {
             ws.send(JSON.stringify({ type: 'afp:error', message: 'Invalid AFP device token' }));
             ws.close(4002, 'Invalid AFP device token');

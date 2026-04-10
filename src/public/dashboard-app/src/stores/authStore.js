@@ -2,14 +2,6 @@ import { create } from 'zustand';
 import { clearAuthArtifacts, isLogoutInProgress, setLogoutInProgress, redirectToLoginOnce } from '../utils/authRuntime';
 import apiClient from '../utils/apiClient';
 
-const readCookie = (name) => {
-  try {
-    const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
-    return match ? decodeURIComponent(match[1]) : null;
-  } catch {
-    return null;
-  }
-};
 
 let authMeFailureCount = 0;
 let initializePromise = null;
@@ -120,41 +112,32 @@ export const useAuthStore = create((set, get) => ({
           incrementAuthMeFailureCount();
         }
 
-        // Fallback: try a master token stored in a cookie (set by OAuth login on another device/tab).
-        const cookieMasterToken = !wasLoggedOut() ? readCookie('myapi_master_token') : null;
-        if (authMeFailureCount < 2 && cookieMasterToken) {
+        // Fallback: try retrieving the master token from the session-token endpoint
+        // (set by OAuth login — cookie is now httpOnly so JS cannot read it directly).
+        const urlParams = new URLSearchParams(window.location.search);
+        const isOAuthReturn = ['connected', 'error'].includes(urlParams.get('oauth_status'));
+        if (!wasLoggedOut() && isOAuthReturn && authMeFailureCount < 2) {
           try {
-            try { localStorage.setItem('masterToken', cookieMasterToken); } catch { /* ignored */ }
-            const res = await fetch('/api/v1/auth/me', {
-              headers: { Authorization: `Bearer ${cookieMasterToken}` },
-              credentials: 'include',
-            });
-            if (res.ok) {
-              resetAuthMeFailureCountOnSuccess();
-              const payload = await res.json();
-              const user = normalizeUserPayload(payload);
-              let bootstrapToken = payload?.bootstrap?.masterToken;
-
-              if (!bootstrapToken) {
-                try {
-                  const bootRes = await fetch('/api/v1/tokens/master/bootstrap', { method: 'POST', credentials: 'include' });
-                  if (bootRes.ok) {
-                    const bootData = await bootRes.json();
-                    bootstrapToken = bootData?.data?.token || null;
-                  }
-                } catch { /* ignored */ }
+            const stRes = await fetch('/api/v1/auth/session-token', { credentials: 'include' });
+            if (stRes.ok) {
+              const { token: oauthToken } = await stRes.json();
+              if (oauthToken) {
+                try { localStorage.setItem('masterToken', oauthToken); } catch { /* ignored */ }
+                const meRes = await fetch('/api/v1/auth/me', {
+                  headers: { Authorization: `Bearer ${oauthToken}` },
+                  credentials: 'include',
+                });
+                if (meRes.ok) {
+                  resetAuthMeFailureCountOnSuccess();
+                  const payload = await meRes.json();
+                  const user = normalizeUserPayload(payload);
+                  set({ user, masterToken: oauthToken, isAuthenticated: true, isInitialized: true, error: null });
+                  return;
+                }
               }
-
-              if (bootstrapToken) {
-                try { localStorage.setItem('masterToken', bootstrapToken); } catch { /* ignored */ }
-              }
-              set({ user, masterToken: bootstrapToken || cookieMasterToken || null, isAuthenticated: true, error: null, isInitialized: true });
-              return;
             }
-            incrementAuthMeFailureCount();
-          } catch {
-            incrementAuthMeFailureCount();
-          }
+          } catch { /* fall through */ }
+          incrementAuthMeFailureCount();
         }
 
         // Don't overwrite if another handler (e.g. OAuth confirm) already authenticated the user

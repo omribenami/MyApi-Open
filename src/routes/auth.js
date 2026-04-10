@@ -65,7 +65,7 @@ function regenerateSession(req) {
  * POST /api/v1/auth/token-login
  * Login with master token (for cross-device access)
  */
-router.post('/token-login', (req, res) => {
+router.post('/token-login', async (req, res) => {
   try {
     const token = req.body?.token;
     if (!token || typeof token !== 'string' || token.length < 16) {
@@ -80,7 +80,7 @@ router.post('/token-login', (req, res) => {
     for (const tokenRecord of tokens) {
       if (tokenRecord.revokedAt) continue;
       if (tokenRecord.expiresAt && new Date(tokenRecord.expiresAt) <= new Date()) continue;
-      if (tokenRecord.hash && bcryptLib.compareSync(token, tokenRecord.hash)) {
+      if (tokenRecord.hash && await bcryptLib.compare(token, tokenRecord.hash).catch(() => false)) {
         validToken = tokenRecord;
         break;
       }
@@ -127,7 +127,7 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    const passwordMatch = bcrypt.compareSync(password, user.password_hash || '');
+    const passwordMatch = await bcrypt.compare(password, user.password_hash || '').catch(() => false);
     if (!passwordMatch) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
@@ -182,10 +182,11 @@ router.post('/login', async (req, res) => {
  * Body: { username, password, email, timezone, display_name }
  * Response: { success: true, data: { token, user: {...}, needsOnboarding: true } }
  */
-router.post('/register', (req, res) => {
+router.post('/register', async (req, res) => {
   const { username, password, display_name, email, timezone } = req.body || {};
   if (!username || !password) return res.status(400).json({ error: 'username and password required' });
-  if (password.length < 6) return res.status(400).json({ error: 'password must be at least 6 characters' });
+  const { isStrongPassword } = require('../utils/passwordUtils');
+  if (!isStrongPassword(password)) return res.status(400).json({ error: 'Password must be at least 8 characters and contain 3 of: uppercase, lowercase, number, symbol' });
   if (username.length < 3 || username.length > 50) return res.status(400).json({ error: 'username must be between 3 and 50 characters' });
   if (!/^[a-zA-Z0-9_.-]+$/.test(username)) return res.status(400).json({ error: 'username can only contain letters, numbers, underscores, hyphens, and dots' });
   if (password.length > 128) return res.status(400).json({ error: 'password must not exceed 128 characters' });
@@ -200,7 +201,7 @@ router.post('/register', (req, res) => {
     if (existing) return res.status(409).json({ error: 'Username already exists' });
 
     const id = 'usr_' + crypto.randomBytes(16).toString('hex');
-    const hash = bcrypt.hashSync(password, 12);
+    const hash = await bcrypt.hash(password, 12);
     const now = new Date().toISOString();
 
     db.prepare(`INSERT INTO users (id, username, password_hash, display_name, email, timezone, created_at, status, roles)
@@ -334,7 +335,7 @@ router.post('/logout', (req, res) => {
  * so it must check req.session.user directly (for OAuth session auth)
  * and validate Bearer tokens manually.
  */
-router.get('/me', (req, res) => {
+router.get('/me', async (req, res) => {
   try {
     const { getAccessTokens } = require('../database');
     const bcrypt = require('bcrypt');
@@ -372,7 +373,7 @@ router.get('/me', (req, res) => {
           if (
             !tokenRecord.revokedAt &&
             tokenRecord.hash &&
-            bcrypt.compareSync(rawToken, tokenRecord.hash)
+            await bcrypt.compare(rawToken, tokenRecord.hash).catch(() => false)
           ) {
             if (tokenRecord.expiresAt && new Date(tokenRecord.expiresAt) <= new Date()) {
               continue; // skip expired tokens
@@ -487,7 +488,7 @@ router.get('/me', (req, res) => {
         // the user explicitly rotates it via /tokens/master/regenerate.
         try {
           const rawToken = 'myapi_' + crypto.randomBytes(32).toString('hex');
-          const hash = bcrypt.hashSync(rawToken, 10);
+          const hash = await bcrypt.hash(rawToken, 10);
           const tokenId = createAccessToken(hash, userId, 'full', 'Master Token', null, null, null, rawToken, 'master');
           masterTokenRaw = rawToken;
           masterTokenId  = tokenId;

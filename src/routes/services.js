@@ -81,7 +81,7 @@ function createServicesRoutes() {
     if (req.session?.user || req.tokenMeta) return next();
 
     const authHeader = req.headers.authorization || '';
-    const rawToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : (req.query.token || '');
+    const rawToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
     if (!rawToken) return res.status(401).json({ error: 'Unauthorized' });
 
     try {
@@ -89,7 +89,7 @@ function createServicesRoutes() {
       for (const t of tokens) {
         if (t.revokedAt) continue;
         if (t.expiresAt && new Date(t.expiresAt) <= new Date()) continue;
-        if (t.hash && bcrypt.compareSync(rawToken, t.hash)) {
+        if (t.hash && await bcrypt.compare(rawToken, t.hash).catch(() => false)) {
           req.tokenMeta = t;
           req.user = req.user || { id: t.ownerId };
           return next();
