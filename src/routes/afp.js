@@ -305,7 +305,9 @@ router.get('/download/:platform', (req, res) => {
 // No auth required — public download endpoint.
 // platform: win
 
-const INSTALLER_DIR = path.join(__dirname, '..', '..', 'connectors', 'afp-app', 'dist');
+const INSTALLER_DIR = process.env.NODE_ENV === 'production'
+  ? '/app/connectors/afp-app/dist'
+  : path.join(__dirname, '..', '..', 'connectors', 'afp-app', 'dist');
 
 const INSTALLER_FILES = {
   win: { file: 'MyApi-AFP-win-x64.exe', name: 'MyApi-AFP-win-x64.exe', mime: 'application/vnd.microsoft.portable-executable' },

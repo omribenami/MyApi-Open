@@ -30,6 +30,8 @@ services:
       - /opt/MyApi/data:/app/data
       # Application logs
       - myapi-logs:/app/logs
+      # AFP desktop app installers - deployed by CI
+      - /opt/MyApi/connectors/afp-app/dist:/app/connectors/afp-app/dist:ro
 
     # Restart policy
     restart: unless-stopped
