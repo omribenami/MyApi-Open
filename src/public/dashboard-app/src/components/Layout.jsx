@@ -116,7 +116,7 @@ function Layout({ children, onLogout }) {
   const tokenData = (() => {
     try { return JSON.parse(localStorage.getItem('tokenData') || '{}'); } catch { return {}; }
   })();
-  const isPowerUser = String(user?.email || '').toLowerCase() === 'admin@your.domain.com';
+  const isPowerUser = !!user?.isPowerUser;
   const effectivePlan = String(user?.plan || tokenData?.plan || 'free').toLowerCase();
   const hasEnterpriseAccess = effectivePlan === 'enterprise';
 

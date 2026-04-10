@@ -505,6 +505,7 @@ router.get('/me', async (req, res) => {
       }
     }
 
+    const _pwrEmail = String(process.env.POWER_USER_EMAIL || process.env.OWNER_EMAIL || '').trim().toLowerCase();
     const userPayload = {
       id: user.id,
       email: user.email,
@@ -513,6 +514,7 @@ router.get('/me', async (req, res) => {
       avatarUrl: user.avatarUrl,
       timezone: user.timezone,
       plan: user.plan,
+      isPowerUser: !!(_pwrEmail && String(user.email || '').toLowerCase() === _pwrEmail),
     };
 
     res.json({
