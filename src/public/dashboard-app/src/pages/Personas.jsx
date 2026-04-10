@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import PersonaDetailModal from '../components/PersonaDetailModal';
 import EnhancedPersonaBuilder from '../components/EnhancedPersonaBuilder';
+import PersonaCard from '../components/PersonaCard';
 
 function Personas() {
   const token = useAuthStore((state) => state.masterToken);
@@ -309,48 +310,13 @@ function Personas() {
             <p className="text-slate-400">No personas yet. Create one to get started!</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredPersonas.map((persona) => (
-              <div
+              <PersonaCard
                 key={persona.id}
+                persona={persona}
                 onClick={() => handleSelectPersona(persona)}
-                className="bg-slate-800/90 border border-slate-700 rounded-lg p-5 hover:border-blue-500/70 hover:bg-slate-800 cursor-pointer transition-all duration-200 shadow-sm hover:shadow-blue-900/20"
-              >
-                {/* Header */}
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <h3 className="text-lg font-semibold text-white truncate">{persona.name}</h3>
-                  <span
-                    className={`inline-block px-2.5 py-1 rounded-md text-[11px] font-medium border ${
-                      persona.active
-                        ? 'bg-slate-700 text-slate-200 border-slate-600'
-                        : 'bg-slate-800 text-slate-400 border-slate-700'
-                    }`}
-                  >
-                    {persona.active ? 'Active' : 'Inactive'}
-                  </span>
-                </div>
-
-                {/* Description */}
-                <p className="text-slate-400 text-sm mb-3 line-clamp-2">
-                  {persona.description || 'No description yet.'}
-                </p>
-
-                {/* Preview of soul content */}
-                <div className="bg-slate-900/80 rounded border border-slate-700/50 p-3 mb-3 text-xs text-slate-300 max-h-24 overflow-hidden">
-                  <pre className="whitespace-pre-wrap break-words font-mono text-slate-400">
-                    {(persona.soul_content || 'No SOUL.md content yet.').substring(0, 180)}
-                    {(persona.soul_content || '').length > 180 ? '…' : ''}
-                  </pre>
-                </div>
-
-                {/* Meta info */}
-                <p className="text-xs text-slate-500">
-                  Updated {new Date(persona.updated_at || persona.created_at).toLocaleDateString()}
-                </p>
-
-                {/* Click hint */}
-                <p className="text-xs text-blue-400 mt-2 font-medium">Click to view full details →</p>
-              </div>
+              />
             ))}
           </div>
         )}

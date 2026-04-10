@@ -1,37 +1,102 @@
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '../stores/authStore';
 
+const TABS = [
+  {
+    id: 'identity',
+    label: 'Identity',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+        <circle cx="12" cy="7" r="4"/>
+      </svg>
+    ),
+  },
+  {
+    id: 'personality',
+    label: 'Personality',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
+        <line x1="9" y1="9" x2="9.01" y2="9"/>
+        <line x1="15" y1="9" x2="15.01" y2="9"/>
+      </svg>
+    ),
+  },
+  {
+    id: 'rules',
+    label: 'Rules',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <polyline points="9 11 12 14 22 4"/>
+        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+      </svg>
+    ),
+  },
+  {
+    id: 'knowledge',
+    label: 'Knowledge',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+      </svg>
+    ),
+  },
+  {
+    id: 'preview',
+    label: 'Preview',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+        <circle cx="12" cy="12" r="3"/>
+      </svg>
+    ),
+  },
+];
+
+function Field({ label, hint, required, children }) {
+  return (
+    <div>
+      <div className="flex items-baseline gap-2 mb-1.5">
+        <label className="text-sm font-medium text-slate-200">
+          {label}
+          {required && <span className="text-red-400 ml-0.5">*</span>}
+        </label>
+        {hint && <span className="text-xs text-slate-500">{hint}</span>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+const inputCls = 'w-full px-3 py-2 bg-slate-800/80 border border-slate-700 rounded-lg text-sm text-slate-100 placeholder-slate-600 focus:border-blue-500 focus:outline-none focus:bg-slate-800 transition-colors';
+const textareaCls = `${inputCls} resize-none`;
+
 function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
-  const [tab, setTab] = useState('identity'); // identity, personality, rules, preview
+  const [tab, setTab] = useState('identity');
+
   const defaultFormData = {
-    // Identity
     name: '',
     title: '',
     field: '',
     yearsExperience: '',
     achievement: '',
     coreGoal: '',
-
-    // Personality & Tone
     tone: '',
     communicationStyle: '',
     traits: '',
     vocabulary: '',
     avoidWords: '',
-
-    // Operational Rules
     formatting: '',
     knowledgeLimit: '',
     knowledgeLimitTopic: '',
     knowledgeLimitRedirect: '',
     internalLogic: '',
     greeting: '',
-
-    // Constraints
     doNotActions: '',
     alwaysActions: '',
-
-    // Documents + Skills
     attachedDocuments: [],
     attachedSkills: [],
   };
@@ -46,6 +111,9 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
   const [error, setError] = useState('');
   const [availableDocuments, setAvailableDocuments] = useState([]);
   const [availableSkills, setAvailableSkills] = useState([]);
+  const [docSearch, setDocSearch] = useState('');
+  const [skillSearch, setSkillSearch] = useState('');
+  const [promptCopied, setPromptCopied] = useState(false);
   const masterToken = useAuthStore((state) => state.masterToken);
   const currentWorkspace = useAuthStore((state) => state.currentWorkspace);
 
@@ -63,11 +131,9 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
 
   const fetchDocuments = async () => {
     try {
-      const response = await fetch('/api/v1/brain/knowledge-base', {
-        headers: authHeaders(),
-      });
-      if (response.ok) {
-        const data = await response.json();
+      const res = await fetch('/api/v1/brain/knowledge-base', { headers: authHeaders() });
+      if (res.ok) {
+        const data = await res.json();
         setAvailableDocuments(data.data || data.documents || data || []);
       }
     } catch (err) {
@@ -77,12 +143,9 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
 
   const fetchSkills = async () => {
     try {
-      const response = await fetch('/api/v1/skills', {
-        headers: authHeaders(),
-        credentials: 'include',
-      });
-      if (response.ok) {
-        const data = await response.json();
+      const res = await fetch('/api/v1/skills', { headers: authHeaders(), credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
         setAvailableSkills(data.skills || data.data || []);
       }
     } catch (err) {
@@ -90,30 +153,21 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
     }
   };
 
-  const handleInputChange = (field, value) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  };
+  const set = (field, value) => setFormData(prev => ({ ...prev, [field]: value }));
 
-  const handleDocumentToggle = (docId) => {
-    setFormData(prev => ({
-      ...prev,
-      attachedDocuments: prev.attachedDocuments.includes(docId)
-        ? prev.attachedDocuments.filter(id => id !== docId)
-        : [...prev.attachedDocuments, docId]
-    }));
-  };
+  const toggleDoc = (id) => setFormData(prev => ({
+    ...prev,
+    attachedDocuments: prev.attachedDocuments.includes(id)
+      ? prev.attachedDocuments.filter(x => x !== id)
+      : [...prev.attachedDocuments, id],
+  }));
 
-  const handleSkillToggle = (skillId) => {
-    setFormData(prev => ({
-      ...prev,
-      attachedSkills: prev.attachedSkills.includes(skillId)
-        ? prev.attachedSkills.filter(id => id !== skillId)
-        : [...prev.attachedSkills, skillId]
-    }));
-  };
+  const toggleSkill = (id) => setFormData(prev => ({
+    ...prev,
+    attachedSkills: prev.attachedSkills.includes(id)
+      ? prev.attachedSkills.filter(x => x !== id)
+      : [...prev.attachedSkills, id],
+  }));
 
   const generateSystemPrompt = () => {
     let prompt = '';
@@ -155,16 +209,14 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
     if (formData.doNotActions || formData.alwaysActions) {
       prompt += `## Response Constraints\n\n`;
       if (formData.doNotActions) {
-        const actions = formData.doNotActions.split('\n').filter(a => a.trim());
-        actions.forEach(action => {
-          prompt += `- DO NOT ${action.trim()}\n`;
+        formData.doNotActions.split('\n').filter(a => a.trim()).forEach(a => {
+          prompt += `- DO NOT ${a.trim()}\n`;
         });
         prompt += `\n`;
       }
       if (formData.alwaysActions) {
-        const actions = formData.alwaysActions.split('\n').filter(a => a.trim());
-        actions.forEach(action => {
-          prompt += `- ALWAYS ${action.trim()}\n`;
+        formData.alwaysActions.split('\n').filter(a => a.trim()).forEach(a => {
+          prompt += `- ALWAYS ${a.trim()}\n`;
         });
         prompt += `\n`;
       }
@@ -177,7 +229,7 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
     e.preventDefault();
     setError('');
 
-    if (!formData.name) {
+    if (!formData.name.trim()) {
       setError('Persona name is required');
       return;
     }
@@ -192,400 +244,462 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
       await onSave({
         name: formData.name,
         soul_content: systemPrompt,
-        description: `${formData.title || 'Custom Persona'} - ${formData.coreGoal || 'Expert AI'}`,
+        description: `${formData.title || 'Custom Persona'} — ${formData.coreGoal || 'Expert AI'}`,
         attachedDocuments: formData.attachedDocuments,
         attachedSkills: formData.attachedSkills,
-        templateData: {
-          ...formData,
-          createdAt: new Date().toISOString()
-        }
+        templateData: { ...formData, createdAt: new Date().toISOString() },
       });
     } catch (err) {
       setError(err.message || 'Failed to save persona');
     }
   };
 
+  const copyPrompt = async () => {
+    const prompt = generateSystemPrompt();
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setPromptCopied(true);
+      setTimeout(() => setPromptCopied(false), 2000);
+    } catch {}
+  };
+
+  const filteredDocs = availableDocuments.filter(d =>
+    !docSearch || (d.title || '').toLowerCase().includes(docSearch.toLowerCase())
+  );
+  const filteredSkills = availableSkills.filter(s =>
+    !skillSearch || (s.name || '').toLowerCase().includes(skillSearch.toLowerCase())
+  );
+
+  const completedSections = [
+    formData.name,
+    formData.tone || formData.traits,
+    formData.formatting || formData.doNotActions || formData.alwaysActions,
+    formData.attachedDocuments.length > 0 || formData.attachedSkills.length > 0,
+  ].filter(Boolean).length;
+
   return (
-    <div className="space-y-6">
-      {/* Tab Navigation */}
-      <div className="flex gap-2 border-b border-slate-700 overflow-x-auto pb-1 no-scrollbar">
-        {[
-          { id: 'identity', label: '👤 Identity' },
-          { id: 'personality', label: '🎭 Personality' },
-          { id: 'rules', label: '⚙️ Rules' },
-          { id: 'documents', label: '📚 Knowledge' },
-          { id: 'preview', label: '👁️ Preview' },
-        ].map(t => (
+    <div className="space-y-0">
+      {/* Tab bar */}
+      <div className="flex gap-0.5 border-b border-slate-700/60 overflow-x-auto mb-5">
+        {TABS.map(t => (
           <button
             key={t.id}
+            type="button"
             onClick={() => setTab(t.id)}
-            className={`px-4 py-2 font-medium text-sm transition-colors ${
+            className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors -mb-px ${
               tab === t.id
-                ? 'text-blue-400 border-b-2 border-blue-400'
-                : 'text-slate-400 hover:text-slate-300'
+                ? 'text-blue-400 border-blue-500'
+                : 'text-slate-500 border-transparent hover:text-slate-300'
             }`}
           >
+            <span className={tab === t.id ? 'text-blue-400' : 'text-slate-600'}>{t.icon}</span>
             {t.label}
+            {t.id === 'knowledge' && (formData.attachedDocuments.length > 0 || formData.attachedSkills.length > 0) && (
+              <span className="ml-0.5 px-1.5 py-0.5 rounded text-[10px] bg-blue-500/20 text-blue-400 font-medium">
+                {formData.attachedDocuments.length + formData.attachedSkills.length}
+              </span>
+            )}
           </button>
         ))}
       </div>
 
-      {/* Form Sections */}
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Identity Tab */}
+      <form onSubmit={handleSubmit} className="space-y-5">
+
+        {/* ── IDENTITY ── */}
         {tab === 'identity' && (
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-white mb-2">
-                Persona Name *
-              </label>
+            <Field label="Persona Name" required>
               <input
                 type="text"
                 value={formData.name}
-                onChange={(e) => handleInputChange('name', e.target.value)}
-                placeholder="e.g., Bugs Bunny, Dr. Ada Lovelace"
-                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
+                onChange={e => set('name', e.target.value)}
+                placeholder="e.g., Dr. Ada Lovelace, Senior Coder"
+                className={inputCls}
+                autoFocus
               />
-            </div>
+            </Field>
 
-            <div>
-              <label className="block text-sm font-medium text-white mb-2">
-                Title/Role
-              </label>
+            <Field label="Title / Role" hint="optional">
               <input
                 type="text"
                 value={formData.title}
-                onChange={(e) => handleInputChange('title', e.target.value)}
-                placeholder="e.g., Senior Full-Stack Developer, Data Scientist"
-                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
+                onChange={e => set('title', e.target.value)}
+                placeholder="e.g., Senior Full-Stack Developer"
+                className={inputCls}
               />
-            </div>
+            </Field>
 
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-white mb-2">
-                  Field/Domain
-                </label>
+              <Field label="Domain / Field">
                 <input
                   type="text"
                   value={formData.field}
-                  onChange={(e) => handleInputChange('field', e.target.value)}
+                  onChange={e => set('field', e.target.value)}
                   placeholder="e.g., Software Engineering"
-                  className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
+                  className={inputCls}
                 />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-white mb-2">
-                  Years of Experience
-                </label>
+              </Field>
+              <Field label="Experience">
                 <input
                   type="text"
                   value={formData.yearsExperience}
-                  onChange={(e) => handleInputChange('yearsExperience', e.target.value)}
-                  placeholder="e.g., 15 years since the 90s"
-                  className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
+                  onChange={e => set('yearsExperience', e.target.value)}
+                  placeholder="e.g., 15 years"
+                  className={inputCls}
                 />
-              </div>
+              </Field>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-white mb-2">
-                Background/Achievement
-              </label>
+            <Field label="Background / Achievement">
               <textarea
                 value={formData.achievement}
-                onChange={(e) => handleInputChange('achievement', e.target.value)}
+                onChange={e => set('achievement', e.target.value)}
                 placeholder="e.g., Founded 3 startups, authored 2 technical books"
-                rows="3"
-                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
+                rows={3}
+                className={textareaCls}
               />
-            </div>
+            </Field>
 
-            <div>
-              <label className="block text-sm font-medium text-white mb-2">
-                Core Goal/Mission
-              </label>
+            <Field label="Core Goal / Mission">
               <textarea
                 value={formData.coreGoal}
-                onChange={(e) => handleInputChange('coreGoal', e.target.value)}
+                onChange={e => set('coreGoal', e.target.value)}
                 placeholder="e.g., review code with brutal honesty but high technical accuracy"
-                rows="3"
-                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
+                rows={3}
+                className={textareaCls}
               />
-            </div>
+            </Field>
           </div>
         )}
 
-        {/* Personality Tab */}
+        {/* ── PERSONALITY ── */}
         {tab === 'personality' && (
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-white mb-2">
-                Tone
-              </label>
+            <Field label="Tone" hint="overall emotional register">
               <input
                 type="text"
                 value={formData.tone}
-                onChange={(e) => handleInputChange('tone', e.target.value)}
+                onChange={e => set('tone', e.target.value)}
                 placeholder="e.g., Cynical, tired, but secretly helpful"
-                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
+                className={inputCls}
               />
-            </div>
+            </Field>
 
-            <div>
-              <label className="block text-sm font-medium text-white mb-2">
-                Communication Style
-              </label>
+            <Field label="Communication Style">
               <input
                 type="text"
                 value={formData.communicationStyle}
-                onChange={(e) => handleInputChange('communicationStyle', e.target.value)}
+                onChange={e => set('communicationStyle', e.target.value)}
                 placeholder="e.g., Short, direct, and slightly condescending"
-                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
+                className={inputCls}
               />
-            </div>
+            </Field>
 
-            <div>
-              <label className="block text-sm font-medium text-white mb-2">
-                Key Traits (comma-separated)
-              </label>
+            <Field label="Key Traits" hint="comma-separated">
               <input
                 type="text"
                 value={formData.traits}
-                onChange={(e) => handleInputChange('traits', e.target.value)}
+                onChange={e => set('traits', e.target.value)}
                 placeholder="e.g., Impatient, brilliant, caffeinated"
-                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
+                className={inputCls}
               />
-            </div>
+            </Field>
 
-            <div>
-              <label className="block text-sm font-medium text-white mb-2">
-                Vocabulary/Jargon
-              </label>
+            <Field label="Vocabulary / Jargon">
               <textarea
                 value={formData.vocabulary}
-                onChange={(e) => handleInputChange('vocabulary', e.target.value)}
+                onChange={e => set('vocabulary', e.target.value)}
                 placeholder="e.g., old-school dev slang like 'spaghetti code' and 'RTFM'"
-                rows="2"
-                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
+                rows={2}
+                className={textareaCls}
               />
-            </div>
+            </Field>
 
-            <div>
-              <label className="block text-sm font-medium text-white mb-2">
-                Words/Topics to Avoid
-              </label>
+            <Field label="Words / Topics to Avoid">
               <textarea
                 value={formData.avoidWords}
-                onChange={(e) => handleInputChange('avoidWords', e.target.value)}
-                placeholder="e.g., emojis, corporate jargon"
-                rows="2"
-                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
+                onChange={e => set('avoidWords', e.target.value)}
+                placeholder="e.g., emojis, corporate jargon, buzzwords"
+                rows={2}
+                className={textareaCls}
               />
-            </div>
+            </Field>
           </div>
         )}
 
-        {/* Rules Tab */}
+        {/* ── RULES ── */}
         {tab === 'rules' && (
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-white mb-2">
-                Formatting Rules
-              </label>
+            <Field label="Formatting Rules">
               <input
                 type="text"
                 value={formData.formatting}
-                onChange={(e) => handleInputChange('formatting', e.target.value)}
-                placeholder="e.g., Bullet points, code blocks, tables"
-                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
+                onChange={e => set('formatting', e.target.value)}
+                placeholder="e.g., Bullet points, code blocks, numbered steps"
+                className={inputCls}
               />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-white mb-2">
-                  Knowledge Limit Topic
-                </label>
-                <input
-                  type="text"
-                  value={formData.knowledgeLimitTopic}
-                  onChange={(e) => handleInputChange('knowledgeLimitTopic', e.target.value)}
-                  placeholder="e.g., No-Code tools"
-                  className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-white mb-2">
-                  Redirect To
-                </label>
-                <input
-                  type="text"
-                  value={formData.knowledgeLimitRedirect}
-                  onChange={(e) => handleInputChange('knowledgeLimitRedirect', e.target.value)}
-                  placeholder="e.g., Low-code frameworks"
-                  className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
-                />
-              </div>
-            </div>
+            </Field>
 
             <div>
-              <label className="block text-sm font-medium text-white mb-2">
-                Internal Logic / Roleplay
-              </label>
+              <p className="text-sm font-medium text-slate-200 mb-2">Knowledge Limit</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-xs text-slate-500 mb-1.5">Avoid topic</p>
+                  <input
+                    type="text"
+                    value={formData.knowledgeLimitTopic}
+                    onChange={e => set('knowledgeLimitTopic', e.target.value)}
+                    placeholder="e.g., No-Code tools"
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500 mb-1.5">Redirect to</p>
+                  <input
+                    type="text"
+                    value={formData.knowledgeLimitRedirect}
+                    onChange={e => set('knowledgeLimitRedirect', e.target.value)}
+                    placeholder="e.g., Low-code frameworks"
+                    className={inputCls}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <Field label="Internal Logic / Roleplay" hint="scene-setting">
               <textarea
                 value={formData.internalLogic}
-                onChange={(e) => handleInputChange('internalLogic', e.target.value)}
+                onChange={e => set('internalLogic', e.target.value)}
                 placeholder="e.g., Act like you're typing from a dark basement office"
-                rows="2"
-                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
+                rows={2}
+                className={textareaCls}
               />
-            </div>
+            </Field>
 
-            <div>
-              <label className="block text-sm font-medium text-white mb-2">
-                Greeting / Opening Message
-              </label>
+            <Field label="Opening Greeting">
               <textarea
                 value={formData.greeting}
-                onChange={(e) => handleInputChange('greeting', e.target.value)}
+                onChange={e => set('greeting', e.target.value)}
                 placeholder="e.g., 'Sup, what are we fixing today?'"
-                rows="2"
-                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
+                rows={2}
+                className={textareaCls}
               />
-            </div>
+            </Field>
 
-            <div>
-              <label className="block text-sm font-medium text-white mb-2">
-                DO NOT Actions (one per line)
-              </label>
-              <textarea
-                value={formData.doNotActions}
-                onChange={(e) => handleInputChange('doNotActions', e.target.value)}
-                placeholder="use emojis&#10;give medical advice&#10;be diplomatic"
-                rows="3"
-                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-white mb-2">
-                ALWAYS Actions (one per line)
-              </label>
-              <textarea
-                value={formData.alwaysActions}
-                onChange={(e) => handleInputChange('alwaysActions', e.target.value)}
-                placeholder="ask a follow-up question&#10;provide code examples&#10;stay technical"
-                rows="3"
-                className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:border-blue-500 focus:outline-none"
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field label="DO NOT Actions" hint="one per line">
+                <textarea
+                  value={formData.doNotActions}
+                  onChange={e => set('doNotActions', e.target.value)}
+                  placeholder={'use emojis\ngive medical advice\nbe diplomatic'}
+                  rows={4}
+                  className={textareaCls}
+                />
+              </Field>
+              <Field label="ALWAYS Actions" hint="one per line">
+                <textarea
+                  value={formData.alwaysActions}
+                  onChange={e => set('alwaysActions', e.target.value)}
+                  placeholder={'ask a follow-up question\nprovide code examples\nstay technical'}
+                  rows={4}
+                  className={textareaCls}
+                />
+              </Field>
             </div>
           </div>
         )}
 
-        {/* Documents Tab */}
-        {tab === 'documents' && (
-          <div className="space-y-4">
-            <p className="text-sm text-slate-400">
-              Attach knowledge base documents to this persona for context-aware responses.
-            </p>
-            {availableDocuments.length === 0 ? (
-              <div className="text-center py-8 text-slate-400">
-                <p>No documents in knowledge base yet.</p>
-                <p className="text-sm mt-2">Create documents first in the Knowledge Base tab.</p>
-              </div>
-            ) : (
-              <div className="space-y-2 max-h-72 overflow-y-auto">
-                {availableDocuments.map((doc) => (
-                  <label
-                    key={doc.id}
-                    className="flex items-center gap-3 p-3 bg-slate-700 hover:bg-slate-600 rounded-lg cursor-pointer transition-colors"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={formData.attachedDocuments.includes(doc.id)}
-                      onChange={() => handleDocumentToggle(doc.id)}
-                      className="w-4 h-4 accent-blue-500"
-                    />
-                    <div className="flex-1">
-                      <p className="font-medium text-white">{doc.title}</p>
-                      <p className="text-xs text-slate-400">{doc.source}</p>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            )}
-
-            <div className="pt-4 border-t border-slate-700">
-              <p className="text-sm text-slate-400 mb-3">
-                Attach skills to this persona. Persona-scoped tokens will include these skills and their attached docs in context.
-              </p>
-              {availableSkills.length === 0 ? (
-                <div className="text-center py-4 text-slate-400 text-sm">No skills found.</div>
-              ) : (
-                <div className="space-y-2 max-h-72 overflow-y-auto">
-                  {availableSkills.map((skill) => (
-                    <label
-                      key={skill.id}
-                      className="flex items-center gap-3 p-3 bg-slate-700 hover:bg-slate-600 rounded-lg cursor-pointer transition-colors"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={formData.attachedSkills.includes(skill.id)}
-                        onChange={() => handleSkillToggle(skill.id)}
-                        className="w-4 h-4 accent-blue-500"
-                      />
-                      <div className="flex-1">
-                        <p className="font-medium text-white">{skill.name}</p>
-                        <p className="text-xs text-slate-400">{skill.category || 'custom'}</p>
-                      </div>
-                    </label>
-                  ))}
+        {/* ── KNOWLEDGE ── */}
+        {tab === 'knowledge' && (
+          <div className="space-y-6">
+            {/* Documents */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h3 className="text-sm font-medium text-slate-200">Knowledge Base Documents</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Attach documents for context-aware responses</p>
                 </div>
+                {formData.attachedDocuments.length > 0 && (
+                  <span className="text-xs text-blue-400 font-medium">
+                    {formData.attachedDocuments.length} selected
+                  </span>
+                )}
+              </div>
+
+              {availableDocuments.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-700 p-6 text-center">
+                  <p className="text-sm text-slate-500">No documents in your knowledge base yet.</p>
+                </div>
+              ) : (
+                <>
+                  <input
+                    type="text"
+                    value={docSearch}
+                    onChange={e => setDocSearch(e.target.value)}
+                    placeholder="Search documents…"
+                    className={`${inputCls} mb-2`}
+                  />
+                  <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                    {filteredDocs.map(doc => {
+                      const checked = formData.attachedDocuments.includes(doc.id);
+                      return (
+                        <label
+                          key={doc.id}
+                          className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors ${
+                            checked
+                              ? 'bg-blue-500/10 border border-blue-500/25'
+                              : 'bg-slate-800/60 border border-slate-800 hover:border-slate-700'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleDoc(doc.id)}
+                            className="w-4 h-4 accent-blue-500 flex-shrink-0"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-slate-200 truncate">{doc.title}</p>
+                            {doc.source && <p className="text-xs text-slate-500 truncate">{doc.source}</p>}
+                          </div>
+                        </label>
+                      );
+                    })}
+                    {filteredDocs.length === 0 && (
+                      <p className="text-xs text-slate-600 py-3 text-center">No matches</p>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Skills */}
+            <div className="pt-4 border-t border-slate-800">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h3 className="text-sm font-medium text-slate-200">Skills</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Persona-scoped tokens will include these skills in context</p>
+                </div>
+                {formData.attachedSkills.length > 0 && (
+                  <span className="text-xs text-violet-400 font-medium">
+                    {formData.attachedSkills.length} selected
+                  </span>
+                )}
+              </div>
+
+              {availableSkills.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-700 p-6 text-center">
+                  <p className="text-sm text-slate-500">No skills found.</p>
+                </div>
+              ) : (
+                <>
+                  <input
+                    type="text"
+                    value={skillSearch}
+                    onChange={e => setSkillSearch(e.target.value)}
+                    placeholder="Search skills…"
+                    className={`${inputCls} mb-2`}
+                  />
+                  <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                    {filteredSkills.map(skill => {
+                      const checked = formData.attachedSkills.includes(skill.id);
+                      return (
+                        <label
+                          key={skill.id}
+                          className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors ${
+                            checked
+                              ? 'bg-violet-500/10 border border-violet-500/25'
+                              : 'bg-slate-800/60 border border-slate-800 hover:border-slate-700'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleSkill(skill.id)}
+                            className="w-4 h-4 accent-violet-500 flex-shrink-0"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-slate-200 truncate">{skill.name}</p>
+                            <p className="text-xs text-slate-500 truncate">{skill.category || 'custom'}</p>
+                          </div>
+                        </label>
+                      );
+                    })}
+                    {filteredSkills.length === 0 && (
+                      <p className="text-xs text-slate-600 py-3 text-center">No matches</p>
+                    )}
+                  </div>
+                </>
               )}
             </div>
           </div>
         )}
 
-        {/* Preview Tab */}
+        {/* ── PREVIEW ── */}
         {tab === 'preview' && (
           <div className="space-y-4">
-            <div className="bg-slate-900 border border-slate-700 rounded-lg p-6">
-              <h3 className="text-lg font-semibold text-white mb-4">Generated System Prompt</h3>
-              <div className="bg-slate-800 rounded p-4 text-slate-300 whitespace-pre-wrap font-mono text-sm max-h-96 overflow-y-auto">
-                {generateSystemPrompt() || '(Complete the form to see your system prompt)'}
+            <div className="bg-slate-950/60 border border-slate-800 rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
+                <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Generated System Prompt</p>
+                <button
+                  type="button"
+                  onClick={copyPrompt}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    promptCopied
+                      ? 'bg-green-500/20 text-green-400'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                  }`}
+                >
+                  {promptCopied ? (
+                    <>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                      Copied
+                    </>
+                  ) : (
+                    <>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                      </svg>
+                      Copy
+                    </>
+                  )}
+                </button>
+              </div>
+              <div className="p-4 max-h-72 overflow-y-auto">
+                <pre className="whitespace-pre-wrap text-xs text-slate-300 font-mono leading-relaxed">
+                  {generateSystemPrompt() || '(Complete the Identity tab to generate your system prompt)'}
+                </pre>
               </div>
             </div>
 
-            {formData.attachedDocuments.length > 0 && (
-              <div className="bg-slate-900 border border-slate-700 rounded-lg p-6">
-                <h3 className="text-lg font-semibold text-white mb-4">Attached Documents</h3>
-                <div className="space-y-2">
-                  {formData.attachedDocuments.map((docId) => {
-                    const doc = availableDocuments.find(d => d.id === docId);
-                    return (
-                      <div key={docId} className="flex items-center gap-2 text-slate-300 text-sm">
-                        <span>📄</span>
-                        <span>{doc?.title}</span>
+            {(formData.attachedDocuments.length > 0 || formData.attachedSkills.length > 0) && (
+              <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4">
+                <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">Attached Resources</p>
+                <div className="space-y-1.5">
+                  {formData.attachedDocuments.map(id => {
+                    const doc = availableDocuments.find(d => d.id === id);
+                    return doc ? (
+                      <div key={id} className="flex items-center gap-2 text-xs text-slate-400">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-blue-400 flex-shrink-0">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                          <polyline points="14 2 14 8 20 8"/>
+                        </svg>
+                        <span className="truncate">{doc.title}</span>
                       </div>
-                    );
+                    ) : null;
                   })}
-                </div>
-              </div>
-            )}
-
-            {formData.attachedSkills.length > 0 && (
-              <div className="bg-slate-900 border border-slate-700 rounded-lg p-6">
-                <h3 className="text-lg font-semibold text-white mb-4">Attached Skills</h3>
-                <div className="space-y-2">
-                  {formData.attachedSkills.map((skillId) => {
-                    const skill = availableSkills.find((s) => s.id === skillId);
-                    return (
-                      <div key={skillId} className="flex items-center gap-2 text-slate-300 text-sm">
-                        <span>🧩</span>
-                        <span>{skill?.name}</span>
+                  {formData.attachedSkills.map(id => {
+                    const skill = availableSkills.find(s => s.id === id);
+                    return skill ? (
+                      <div key={id} className="flex items-center gap-2 text-xs text-slate-400">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-violet-400 flex-shrink-0">
+                          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                        </svg>
+                        <span className="truncate">{skill.name}</span>
                       </div>
-                    );
+                    ) : null;
                   })}
                 </div>
               </div>
@@ -593,21 +707,21 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
           </div>
         )}
 
-        {/* Error Message */}
+        {/* Error */}
         {error && (
-          <div className="bg-red-900 bg-opacity-30 border border-red-700 rounded-lg p-4">
-            <p className="text-red-200 text-sm">{error}</p>
+          <div className="bg-red-950/30 border border-red-800/50 rounded-lg px-4 py-3">
+            <p className="text-sm text-red-300">{error}</p>
           </div>
         )}
 
-        {/* Submit Button */}
-        <div className="flex gap-3 pt-4">
+        {/* Submit */}
+        <div className="pt-2 flex gap-3">
           <button
             type="submit"
             disabled={isLoading}
-            className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
           >
-            {isLoading ? 'Saving...' : 'Save Persona'}
+            {isLoading ? 'Saving…' : 'Save Persona'}
           </button>
         </div>
       </form>
