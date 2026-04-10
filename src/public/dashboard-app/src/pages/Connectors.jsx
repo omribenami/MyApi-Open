@@ -172,7 +172,7 @@ const OS_PLATFORMS = [
 ];
 
 // ─── Desktop App platform configs (Electron — GitHub Releases) ────────────────
-const GH_RELEASES_BASE = 'https://github.com/omribenami/MyApi/releases/latest/download';
+const GH_RELEASES_BASE = 'https://github.com/omribenami/MyApi/releases/download/windows-latest';
 const DESKTOP_PLATFORMS = [
   {
     platform: 'win',     label: 'Windows', sublabel: 'x86-64',
