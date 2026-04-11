@@ -116,6 +116,95 @@ function createAuditSecurityRouter({ sessionDb, sessionStore }) {
     }
   });
 
+  // SOC 2 Phase 4.2 — Audit Log Export (admin only)
+  // GET /audit/logs/export?format=csv&start=<ISO>&end=<ISO>&action=<str>&limit=<n>
+  router.get('/audit/logs/export', (req, res) => {
+    try {
+      const scope = String(req.tokenMeta?.scope || '');
+      if (!(scope === 'full' || scope.includes('admin'))) {
+        return res.status(403).json({ error: 'Only master/admin tokens can export audit logs' });
+      }
+
+      const format = String(req.query.format || 'csv').toLowerCase();
+      if (!['csv', 'json'].includes(format)) {
+        return res.status(400).json({ error: "format must be 'csv' or 'json'" });
+      }
+
+      const limit = Math.min(Number(req.query.limit) || 10000, 50000);
+      const workspaceId = req.workspaceId || req.query.workspace || null;
+      const action = String(req.query.action || '').trim();
+      const start = String(req.query.start || '').trim();
+      const end = String(req.query.end || '').trim();
+
+      const clauses = [];
+      const params = [];
+      if (workspaceId) {
+        clauses.push('(workspace_id = ? OR workspace_id IS NULL)');
+        params.push(workspaceId);
+      }
+      if (action) {
+        clauses.push('action LIKE ?');
+        params.push(`%${action}%`);
+      }
+      if (start) {
+        clauses.push('timestamp >= ?');
+        params.push(start);
+      }
+      if (end) {
+        clauses.push('timestamp <= ?');
+        params.push(end);
+      }
+
+      const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+      const rows = db.prepare(`
+        SELECT id, timestamp, workspace_id, requester_id, actor_id, actor_type,
+               action, resource, endpoint, http_method, status_code, scope, ip, details, request_id
+        FROM audit_log ${where}
+        ORDER BY timestamp DESC
+        LIMIT ?
+      `).all(...params, limit);
+
+      createAuditLog({
+        requesterId: req.tokenMeta?.tokenId,
+        workspaceId: workspaceId || null,
+        action: 'audit_log_export',
+        resource: '/audit/logs/export',
+        scope: req.tokenMeta?.scope,
+        ip: req.ip,
+        details: { format, rowCount: rows.length, start, end, action },
+      });
+
+      if (format === 'json') {
+        const ts = new Date().toISOString().replace(/[:.]/g, '-');
+        res.setHeader('Content-Disposition', `attachment; filename="audit-logs-${ts}.json"`);
+        res.setHeader('Content-Type', 'application/json');
+        return res.json({ exportedAt: new Date().toISOString(), total: rows.length, rows });
+      }
+
+      // CSV output
+      const COLS = ['id', 'timestamp', 'workspace_id', 'requester_id', 'actor_id', 'actor_type',
+                    'action', 'resource', 'endpoint', 'http_method', 'status_code', 'scope', 'ip',
+                    'details', 'request_id'];
+      const csvEscape = (v) => {
+        if (v == null) return '';
+        const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
+        return s.includes(',') || s.includes('"') || s.includes('\n')
+          ? `"${s.replace(/"/g, '""')}"` : s;
+      };
+      const lines = [COLS.join(',')];
+      for (const row of rows) {
+        lines.push(COLS.map((c) => csvEscape(row[c])).join(','));
+      }
+      const ts = new Date().toISOString().replace(/[:.]/g, '-');
+      res.setHeader('Content-Disposition', `attachment; filename="audit-logs-${ts}.csv"`);
+      res.setHeader('Content-Type', 'text/csv');
+      res.send(lines.join('\r\n'));
+    } catch (err) {
+      logger.error('Error in audit/logs/export:', err.message);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
   router.get('/audit/summary', (req, res) => {
     try {
       const scope = String(req.tokenMeta?.scope || '');

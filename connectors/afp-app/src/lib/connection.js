@@ -110,6 +110,7 @@ function start(cfg, logger, onStateChange) {
 
     ws.on('unexpected-response', (req, res) => {
       logger.error(`WS upgrade failed (HTTP ${res.statusCode})`);
+      res.resume(); // drain response body so the socket can be reused
       if ([301, 302, 307, 308].includes(res.statusCode) && res.headers.location) {
         const next = new URL(res.headers.location, baseUrl).origin;
         if (!stopped) {
@@ -118,6 +119,13 @@ function start(cfg, logger, onStateChange) {
             connect(next);
           }, backoffMs);
         }
+      } else if (!stopped) {
+        // 5xx / 502 / 503 etc — server temporarily unavailable, retry with backoff
+        logger.warn(`Retrying in ${backoffMs}ms...`);
+        reconnectTimer = setTimeout(() => {
+          backoffMs = Math.min(backoffMs * 2, 30000);
+          connect(baseUrl);
+        }, backoffMs);
       }
     });
 

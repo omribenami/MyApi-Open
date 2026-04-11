@@ -744,11 +744,22 @@ if (!process.env.DATABASE_URL) {
 // Propagated automatically via AsyncLocalStorage — no manual threading needed
 app.use(requestContextMiddleware);
 
+// SOC2 Phase 4.3 — CSP nonce: generate a cryptographically random nonce per request.
+// The nonce is injected into the CSP header (scriptSrc) by Helmet and into the dashboard
+// HTML at serve time so script tags can carry matching `nonce=""` attributes.
+// NOTE: styleSrc retains `unsafe-inline` because React inline style={} props emit
+//       `style="..."` attributes in the DOM which cannot carry nonces — removing it
+//       would break every component that uses dynamic styling.
+app.use((req, res, next) => {
+  res.locals.cspNonce = crypto.randomBytes(16).toString('base64');
+  next();
+});
+
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "https://static.cloudflareinsights.com"],
+      scriptSrc: ["'self'", "https://static.cloudflareinsights.com", (req, res) => `'nonce-${res.locals.cspNonce}'`],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://unpkg.com"],
       imgSrc: ["'self'", "data:", "https:", "blob:"],
       fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
@@ -1259,14 +1270,35 @@ app.use((req, res, next) => {
 // Dashboard static files - serve ONLY specific file types, not index.html
 // This allows SPA shell to serve index.html with fresh build
 const dashboardDistPath = path.join(__dirname, 'public', 'dist');
+
+// SOC2 Phase 4.3 — Read the SPA shell once at startup so we can inject the CSP nonce per request
+let _dashboardHtmlTemplate = null;
+function getDashboardHtml() {
+  if (!_dashboardHtmlTemplate) {
+    try {
+      _dashboardHtmlTemplate = fs.readFileSync(path.join(dashboardDistPath, 'index.html'), 'utf8');
+    } catch (_) {
+      _dashboardHtmlTemplate = '';
+    }
+  }
+  return _dashboardHtmlTemplate;
+}
+
 app.use('/dashboard/assets', express.static(path.join(dashboardDistPath, 'assets')));
 app.use('/dashboard', (req, res, next) => {
   // Only serve non-HTML static files directly (images, favicons, etc)
   if (/\.(js|css|svg|png|jpg|jpeg|gif|ico|woff|woff2|ttf|eot)$/i.test(req.path)) {
     return express.static(dashboardDistPath)(req, res, next);
   }
-  // Let SPA shell handle everything else (including / and /index.html)
-  next();
+  // Inject nonce into every <script> and <link rel="stylesheet"> tag in the SPA shell
+  const nonce = res.locals.cspNonce;
+  const html = getDashboardHtml();
+  if (!html) return next();
+  const patched = html
+    .replace(/<script(\b[^>]*)>/gi, (_, attrs) => `<script${attrs} nonce="${nonce}">`)
+    .replace(/<link(\b[^>]*rel=["']stylesheet["'][^>]*)>/gi, (_, attrs) => `<link${attrs} nonce="${nonce}">`);
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(patched);
 });
 
 // General static files
