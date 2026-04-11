@@ -241,7 +241,9 @@ const router = express.Router();
     const inAppEnabled = settings.inApp?.enabled === 1;
     const emailEnabled = settings.email?.enabled === 1;
     const emailFreq = settings.email?.frequency || 'immediate';
-    const emailDigestType = emailFreq === 'none' ? 'disabled' : emailFreq;
+    // When email channel is disabled, always return 'disabled' so the UI radio
+    // button accurately shows the off state rather than the stored frequency.
+    const emailDigestType = !emailEnabled ? 'disabled' : (emailFreq === 'none' ? 'disabled' : emailFreq);
 
     let inAppTypeSettings = {};
     let emailTypeSettings = {};

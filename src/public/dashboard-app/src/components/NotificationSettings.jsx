@@ -37,7 +37,7 @@ function NotificationSettings() {
     try {
       const headers = masterToken ? { Authorization: `Bearer ${masterToken}` } : undefined;
       const response = await apiClient.get('/notifications/settings', { headers });
-      setSettings(response.data?.settings || {});
+      setSettings(response.data?.data?.settings || {});
     } catch (err) {
       console.error('Failed to fetch notification settings:', err);
       setError('Failed to load notification settings');
@@ -53,7 +53,7 @@ function NotificationSettings() {
     try {
       const headers = masterToken ? { Authorization: `Bearer ${masterToken}` } : undefined;
       const response = await apiClient.put('/notifications/settings', updates, { headers });
-      setSettings(response.data.settings || {});
+      setSettings(response.data?.data?.settings || {});
       addToast('Notification settings saved', 'success');
     } catch (err) {
       console.error('Failed to save notification settings:', err);

@@ -92,6 +92,17 @@ function dispatchCommand(deviceId, op, params) {
   });
 }
 
+// ── Path validation helper ─────────────────────────────────────────────────────
+// Detects traversal sequences in a path string. This runs on the server before
+// dispatching to the daemon to provide defense-in-depth, since the daemon enforces
+// afpRoot jailing but we shouldn't forward obviously malicious paths at all.
+function containsTraversal(p) {
+  if (!p || typeof p !== 'string') return false;
+  // Normalize separators and check for .. components
+  const normalized = p.replace(/\\/g, '/');
+  return normalized.split('/').some(seg => seg === '..');
+}
+
 // ── Shared file-op handler ────────────────────────────────────────────────────
 async function fileOp(req, res, op, params) {
   const { deviceId } = req.params;
@@ -111,6 +122,27 @@ async function fileOp(req, res, op, params) {
   }
   if (device.user_id !== userId) {
     return res.status(403).json({ ok: false, error: 'Forbidden' });
+  }
+
+  // Reject paths with traversal sequences before sending to the daemon.
+  if (params.path && containsTraversal(params.path)) {
+    return res.status(400).json({ ok: false, error: 'Invalid path: traversal sequences not allowed' });
+  }
+
+  // When the device has an afpRoot configured, enforce that the requested path
+  // stays within it. We use posix normalization since all daemon targets are
+  // Unix-like; Windows paths are an edge case handled by the daemon itself.
+  if (device.afp_root && params.path) {
+    const root = device.afp_root.replace(/\\/g, '/').replace(/\/$/, '');
+    const requestedPath = params.path.replace(/\\/g, '/');
+    // Absolute paths must start with the root; relative paths are allowed through
+    // (the daemon resolves them relative to afpRoot).
+    if (path.posix.isAbsolute(requestedPath)) {
+      const resolved = path.posix.normalize(requestedPath);
+      if (!resolved.startsWith(root + '/') && resolved !== root) {
+        return res.status(403).json({ ok: false, error: 'Path is outside the permitted directory' });
+      }
+    }
   }
 
   try {

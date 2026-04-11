@@ -202,6 +202,33 @@ router.get('/models', (req, res) => {
   });
 });
 
+// Block URLs that resolve to private/internal addresses to prevent SSRF.
+// FAL's backend would be the one fetching the URL, so this is defense-in-depth
+// against using MyApi as an SSRF relay through FAL's infrastructure.
+function isPublicHttpsUrl(urlStr) {
+  let parsed;
+  try {
+    parsed = new URL(urlStr);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== 'https:') return false;
+  const h = parsed.hostname.toLowerCase();
+  // Reject loopback, link-local, RFC-1918, and cloud metadata addresses.
+  const privatePatterns = [
+    /^localhost$/,
+    /^127\./,
+    /^10\./,
+    /^172\.(1[6-9]|2\d|3[01])\./,
+    /^192\.168\./,
+    /^169\.254\./,
+    /^0\./,
+    /^\[?::1\]?$/,
+    /^fd[0-9a-f]{2}:/i,
+  ];
+  return !privatePatterns.some(p => p.test(h));
+}
+
 /**
  * POST /api/v1/fal/upscale
  * Upscale an existing image
@@ -217,6 +244,10 @@ router.post('/upscale', async (req, res) => {
 
     if (!imageUrl) {
       return res.status(400).json({ error: 'Image URL is required' });
+    }
+
+    if (!isPublicHttpsUrl(imageUrl)) {
+      return res.status(400).json({ error: 'imageUrl must be a public HTTPS URL' });
     }
 
     const prefs = getServicePreferences('fal', userId);
