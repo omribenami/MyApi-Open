@@ -142,9 +142,9 @@ jobs:
       - name: SSH deploy
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          host: ${{ secrets.DEPLOY_HOST || secrets.SSH_HOST }}
+          username: ${{ secrets.DEPLOY_USER || secrets.SSH_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY || secrets.SSH_KEY }}
           script: |
             cd ${{ secrets.DEPLOY_PATH }}
             ./deploy.sh
