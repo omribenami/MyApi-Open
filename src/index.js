@@ -1634,23 +1634,14 @@ app.get('/.well-known/ai-plugin.json', (req, res) => {
 
 // User profile routes
 app.get('/api/v1/users/me', authenticate, (req, res) => {
-  let identity = {};
-  if (fs.existsSync(USER_MD_PATH)) {
-    const raw = fs.readFileSync(USER_MD_PATH, 'utf8');
-    const lines = raw.split('\n');
-    for (const line of lines) {
-      const m = line.match(/^\s*[-*]\s*\*\*(.+?)\*\*[:\s]*(.*)$/);
-      if (m) identity[m[1].trim()] = (m[2] || '').trim();
-    }
-  }
-
-  // Fetch full user data from database to include avatarUrl
   const userId = req.user?.id;
   let user = req.user || { id: 'owner', username: 'owner' };
+  let identity = {};
 
+  let fullUser = null;
   if (userId) {
     try {
-      const fullUser = getUserById(userId);
+      fullUser = getUserById(userId);
       if (fullUser) {
         user = {
           id: fullUser.id,
@@ -1663,8 +1654,29 @@ app.get('/api/v1/users/me', authenticate, (req, res) => {
       }
     } catch (err) {
       console.warn('[GET /users/me] Failed to fetch full user from DB:', err.message);
-      // Fall back to req.user
     }
+  }
+
+  if (isOwnerUser(userId)) {
+    // Owner: serve rich identity from USER.md
+    if (fs.existsSync(USER_MD_PATH)) {
+      const raw = fs.readFileSync(USER_MD_PATH, 'utf8');
+      for (const line of raw.split('\n')) {
+        const m = line.match(/^\s*[-*]\s*\*\*(.+?)\*\*[:\s]*(.*)$/);
+        if (m) identity[m[1].trim()] = (m[2] || '').trim();
+      }
+    }
+    // Also apply any in-session overrides
+    if (vault.identityDocs[userId]) Object.assign(identity, vault.identityDocs[userId]);
+  } else {
+    // Non-owner: serve their own DB record (never the owner's USER.md)
+    identity = buildIdentityFromUser(fullUser) || {};
+    // Overlay any persisted extended fields
+    if (fullUser?.profile_metadata) {
+      try { Object.assign(identity, JSON.parse(fullUser.profile_metadata)); } catch (_) {}
+    }
+    // Overlay any in-session updates (set by PUT /users/me in the same process run)
+    if (vault.identityDocs[userId]) Object.assign(identity, vault.identityDocs[userId]);
   }
 
   res.json({ user, identity });
@@ -1679,43 +1691,51 @@ app.put('/api/v1/users/me', authenticate, (req, res) => {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  // Update USER.md file
-  const lines = (fs.existsSync(USER_MD_PATH) ? fs.readFileSync(USER_MD_PATH, 'utf8') : '# USER.md\n\n').split('\n');
+  const { updateUserOAuthProfile } = require('./database');
 
-  for (const [key, rawValue] of Object.entries(fields)) {
-    const value = typeof rawValue === 'string' ? rawValue.trim() : rawValue;
-    const marker = `- **${key}**:`;
-    const idx = lines.findIndex(l => l.trim().startsWith(marker));
+  if (isOwnerUser(userId)) {
+    // Owner path: update USER.md as before
+    const lines = (fs.existsSync(USER_MD_PATH) ? fs.readFileSync(USER_MD_PATH, 'utf8') : '# USER.md\n\n').split('\n');
 
-    if (value === undefined || value === null || value === '') {
-      if (idx >= 0) lines.splice(idx, 1);
-      continue;
+    for (const [key, rawValue] of Object.entries(fields)) {
+      const value = typeof rawValue === 'string' ? rawValue.trim() : rawValue;
+      const marker = `- **${key}**:`;
+      const idx = lines.findIndex(l => l.trim().startsWith(marker));
+
+      if (value === undefined || value === null || value === '') {
+        if (idx >= 0) lines.splice(idx, 1);
+        continue;
+      }
+
+      if (idx >= 0) lines[idx] = `- **${key}**: ${value}`;
+      else lines.push(`- **${key}**: ${value}`);
     }
 
-    if (idx >= 0) lines[idx] = `- **${key}**: ${value}`;
-    else lines.push(`- **${key}**: ${value}`);
+    const nextMd = `${lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()}\n`;
+    fs.writeFileSync(USER_MD_PATH, nextMd);
+    vault.identityDocs['owner'] = parseUserMd(nextMd);
+    vault.identityDocs[userId]  = vault.identityDocs['owner']; // keep userId-keyed entry in sync
+  } else {
+    // Non-owner path: never touch USER.md — store in per-user vault entry + DB
+    vault.identityDocs[userId] = Object.assign(vault.identityDocs[userId] || {}, fields);
   }
 
-  const nextMd = `${lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()}\n`;
-  fs.writeFileSync(USER_MD_PATH, nextMd);
-  vault.identityDocs['owner'] = parseUserMd(nextMd);
-
-  // Sync to database (critical: frontend reads from DB, not USER.md)
-  const { updateUserOAuthProfile } = require('./database');
+  // Always sync core fields to the users table regardless of owner/non-owner
   try {
     updateUserOAuthProfile(userId, {
-      displayName: fields.Name || fields.displayName,
-      email: fields.Email || fields.email,
-      avatarUrl: fields.AvatarUrl || fields.avatarUrl
+      displayName:     fields.Name || fields.displayName,
+      email:           fields.Email || fields.email,
+      avatarUrl:       fields.AvatarUrl || fields.avatarUrl,
+      timezone:        fields.Timezone || fields.timezone,
+      profileMetadata: isOwnerUser(userId) ? undefined : vault.identityDocs[userId],
     });
   } catch (err) {
     console.error('Failed to sync user profile to database:', err);
-    // Don't fail the request, USER.md is updated
   }
 
   // Return updated user so frontend has fresh data
-  const { getUserById } = require('./database');
-  const updatedUser = getUserById(userId);
+  const { getUserById: _getUserById } = require('./database');
+  const updatedUser = _getUserById(userId);
   res.json({
     ok: true,
     user: updatedUser
@@ -2703,6 +2723,19 @@ function getOwnerEmailFromUserDoc() {
   } catch (_) {
     return '';
   }
+}
+
+function isOwnerUser(userId) {
+  if (!userId) return false;
+  if (userId === 'owner') return true;
+  try {
+    const ownerEmail = String(
+      process.env.POWER_USER_EMAIL || process.env.OWNER_EMAIL || getOwnerEmailFromUserDoc() || ''
+    ).trim().toLowerCase();
+    if (!ownerEmail) return false;
+    const user = getUserById(userId);
+    return String(user?.email || '').toLowerCase() === ownerEmail;
+  } catch (_) { return false; }
 }
 
 function requirePowerUser(req, res) {
@@ -4243,11 +4276,30 @@ function buildIdentityFromUser(user) {
   };
 }
 
+// Helper: resolve per-user identity doc, isolating non-owner users from the owner's vault entry
+function resolveIdentityForUser(userId) {
+  const userObj = getUserById(userId);
+  // Check per-user in-memory vault first (populated on PUT /users/me)
+  if (vault.identityDocs[userId]) {
+    return vault.identityDocs[userId];
+  }
+  // Owner only: fall back to the vault entry loaded from USER.md at startup
+  if (isOwnerUser(userId)) {
+    return vault.identityDocs['owner'] ?? buildIdentityFromUser(userObj) ?? {};
+  }
+  // Non-owner users: build from their own DB record + persisted profile_metadata
+  const base = buildIdentityFromUser(userObj) || {};
+  if (userObj?.profile_metadata) {
+    try { Object.assign(base, JSON.parse(userObj.profile_metadata)); } catch (_) {}
+  }
+  return base;
+}
+
 // --- IDENTITY ---
 app.get("/api/v1/identity", authenticate, (req, res) => {
   if (!hasScope(req, 'basic')) return res.status(403).json({ error: "Requires 'basic' scope" });
   const userId = getRequestOwnerId(req);
-  const identity = vault.identityDocs[userId] ?? vault.identityDocs['owner'] ?? buildIdentityFromUser(getUserById(userId)) ?? {};
+  const identity = resolveIdentityForUser(userId);
   const effectiveScope = isMaster(req) ? "full" : "basic";
   const filtered = filterByScope(identity, effectiveScope);
   createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "read_identity", resource: "/identity", scope: req.tokenMeta.scope, ip: req.ip });
@@ -4257,7 +4309,7 @@ app.get("/api/v1/identity", authenticate, (req, res) => {
 app.get("/api/v1/identity/professional", authenticate, (req, res) => {
   if (!hasScope(req, 'professional')) return res.status(403).json({ error: "Requires 'professional' scope" });
   const userId = getRequestOwnerId(req);
-  const identity = vault.identityDocs[userId] ?? vault.identityDocs['owner'] ?? buildIdentityFromUser(getUserById(userId)) ?? {};
+  const identity = resolveIdentityForUser(userId);
   const filtered = filterByScope(identity, "professional");
   createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "read_identity_professional", resource: "/identity/professional", scope: req.tokenMeta.scope, ip: req.ip });
   res.json({ data: filtered, meta: { scope: "professional" } });
@@ -4266,7 +4318,7 @@ app.get("/api/v1/identity/professional", authenticate, (req, res) => {
 app.get("/api/v1/identity/availability", authenticate, (req, res) => {
   if (!hasScope(req, 'availability')) return res.status(403).json({ error: "Requires 'availability' scope" });
   const userId = getRequestOwnerId(req);
-  const identity = vault.identityDocs[userId] ?? vault.identityDocs['owner'] ?? buildIdentityFromUser(getUserById(userId)) ?? {};
+  const identity = resolveIdentityForUser(userId);
   const filtered = filterByScope(identity, "availability");
   createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "read_availability", resource: "/identity/availability", scope: req.tokenMeta.scope, ip: req.ip });
   res.json({ data: filtered, meta: { scope: "availability" } });
@@ -5582,7 +5634,7 @@ app.get("/api/v1/gateway/context", authenticate, (req, res) => {
     // User identity from DB (what the AI needs to know about the person it's serving)
     // Prefer DB user record; fall back to vault.identityDocs for file-based setups
     const dbUser = getUserById(ownerId) || getUserById('owner');
-    const vaultIdentity = vault.identityDocs[ownerId] || vault.identityDocs['owner'] || {};
+    const vaultIdentity = resolveIdentityForUser(ownerId);
     const userProfile = dbUser ? {
       ...vaultIdentity,  // file-based extras (role, company, etc.) — overridden by DB below
       name: dbUser.displayName || dbUser.username || vaultIdentity.name || 'User',

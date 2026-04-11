@@ -716,6 +716,9 @@ function initDatabase() {
   safeMigration("ALTER TABLE users ADD COLUMN totp_secret TEXT");
   safeMigration("ALTER TABLE users ADD COLUMN two_factor_enabled INTEGER DEFAULT 0");
 
+  // Per-user extended identity storage (JSON blob for fields beyond the core users columns)
+  safeMigration("ALTER TABLE users ADD COLUMN profile_metadata TEXT DEFAULT NULL");
+
   // Migration tracking (non-destructive, rollback-friendly)
   try {
     db.exec(`
@@ -1983,13 +1986,20 @@ function getUserPiiSecure(userId) {
   }
 }
 
-function updateUserOAuthProfile(userId, { displayName, email, avatarUrl } = {}) {
+function updateUserOAuthProfile(userId, { displayName, email, avatarUrl, timezone, profileMetadata } = {}) {
   const current = getUserById(userId);
   if (!current) return null;
   const nextDisplay = (displayName || '').trim() || current.displayName || current.username;
   const nextEmail = (email || '').trim() || current.email || null;
   const nextAvatar = (avatarUrl || '').trim() || current.avatarUrl || null;
-  db.prepare('UPDATE users SET display_name = ?, email = ?, avatar_url = ? WHERE id = ?').run(nextDisplay, nextEmail, nextAvatar, userId);
+  const nextTimezone = (timezone || '').trim() || current.timezone || null;
+  db.prepare('UPDATE users SET display_name = ?, email = ?, avatar_url = ?, timezone = ? WHERE id = ?').run(nextDisplay, nextEmail, nextAvatar, nextTimezone, userId);
+
+  // Persist extended identity fields (bio, location, github, website, etc.)
+  if (profileMetadata !== undefined) {
+    const json = profileMetadata ? JSON.stringify(profileMetadata) : null;
+    db.prepare('UPDATE users SET profile_metadata = ? WHERE id = ?').run(json, userId);
+  }
 
   // Store PII snapshot encrypted (email, displayName, avatarUrl, timezone)
   try {
