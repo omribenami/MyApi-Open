@@ -6304,6 +6304,11 @@ function updateRetentionPolicy(policyId, updates) {
  * Create compliance audit log (immutable)
  */
 function createComplianceAuditLog(workspaceId, userId, action, entityType, entityId, dataAccessed = null, ipAddress = null, userAgent = null, requestId = null) {
+  // Compliance audit logs are workspace-scoped SOC2 records. Skip system-level
+  // events (workspaceId === 'system' or missing) — they would fail the FK
+  // constraint and belong in the regular audit_log instead.
+  if (!workspaceId || workspaceId === 'system') return null;
+
   const id = 'audit_' + crypto.randomBytes(12).toString('hex');
   const timestamp = Math.floor(Date.now() / 1000);
 

@@ -2025,7 +2025,10 @@ function checkDbIntegrity() {
   try {
     const tokens = db.prepare("SELECT id, owner_id, scope, label, created_at FROM access_tokens WHERE revoked_at IS NULL").all();
     const hash = require('crypto').createHash('sha256').update(JSON.stringify(tokens)).digest('hex');
-    const integrityFile = path.join(__dirname, '.db_integrity');
+    // Store alongside the DB file (volume-mounted) so it survives container redeploys.
+    // Storing inside the image (__dirname) caused a false-positive warning on every deploy.
+    const dbDir = path.dirname(process.env.DB_PATH || path.join(__dirname, 'data', 'myapi.db'));
+    const integrityFile = path.join(dbDir, '.db_integrity');
     if (fs.existsSync(integrityFile)) {
       const lastHash = fs.readFileSync(integrityFile, 'utf8').trim();
       if (lastHash !== hash) {
