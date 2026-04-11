@@ -6294,6 +6294,11 @@ app.delete('/api/v1/account', authenticate, (req, res) => {
       rawDb.prepare(sql).run(...params);
     };
 
+    // Send goodbye email BEFORE deleting the user record (email address is lost after)
+    if (user.email && user.email !== '' && !user.email.includes('example.com')) {
+      emailService.sendGoodbyeEmail(user.email, user.display_name || user.displayName || user.username).catch(() => {});
+    }
+
     rawDb.pragma('foreign_keys = OFF');
     try {
       rawDb.transaction((uid) => {

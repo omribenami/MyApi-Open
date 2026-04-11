@@ -8,6 +8,7 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const { getAccessTokens, getExistingMasterToken, createAccessToken, db } = require('../database');
+const emailService = require('../services/emailService');
 
 const router = express.Router();
 
@@ -208,6 +209,11 @@ router.post('/register', async (req, res) => {
       VALUES (?, ?, ?, ?, ?, ?, ?, 'active', 'user')`).run(
       id, username, hash, display_name || username, email || '', timezone || 'UTC', now
     );
+
+    // Fire-and-forget welcome email (does not block the 201 response)
+    if (email) {
+      emailService.sendWelcomeEmail(email, display_name || username).catch(() => {});
+    }
 
     // Auto-login after registration
     req.session.user = { id, username, display_name: display_name || username, roles: 'user', needsOnboarding: true };
