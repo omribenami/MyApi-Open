@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../utils/apiClient';
 import { useAuthStore } from '../stores/authStore';
@@ -142,7 +142,7 @@ export default function OnboardingModal({ onClose }) {
   }, []);
 
   const handleDismiss = () => {
-    try { localStorage.setItem(DISMISSED_KEY, '1'); } catch {}
+    try { localStorage.setItem(DISMISSED_KEY, '1'); } catch (_) { /* ignored */ }
     setVisible(false);
     setTimeout(onClose, 280);
   };

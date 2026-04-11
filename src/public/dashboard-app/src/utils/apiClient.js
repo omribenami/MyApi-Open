@@ -2,8 +2,10 @@ import axios from 'axios';
 import { clearAuthArtifacts, isLogoutInProgress, redirectToLoginOnce } from './authRuntime';
 import { usePlanLimitStore } from '../stores/planLimitStore';
 // Lazy import to avoid circular dependency — only access via getState() at call time
+// eslint-disable-next-line no-undef
 let _authStore = null;
 const getAuthStore = () => {
+  // eslint-disable-next-line no-undef
   if (!_authStore) _authStore = require('../stores/authStore').useAuthStore;
   return _authStore;
 };
