@@ -84,6 +84,8 @@ async function runOAuthFlow({ serverUrl, deviceName, afpRoot, openUrl }) {
   p{font-size:14px;color:#94a3b8;line-height:1.6}
   .device{margin-top:16px;background:rgba(255,255,255,.03);border:1px solid #1e293b;border-radius:8px;padding:10px 14px;font-size:13px;color:#64748b}
   .device span{color:#cbd5e1;font-weight:600}
+  .back{display:inline-block;margin-top:24px;padding:10px 20px;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.25);border-radius:8px;color:#60a5fa;font-size:13px;font-weight:500;text-decoration:none;transition:background .15s}
+  .back:hover{background:rgba(59,130,246,.2)}
 </style>
 </head>
 <body>
@@ -93,6 +95,7 @@ async function runOAuthFlow({ serverUrl, deviceName, afpRoot, openUrl }) {
     <h1>Authorized!</h1>
     <p>AFP is now connected to your MyApi account.<br>You can close this window.</p>
     <div class="device">Device: <span>${name}</span></div>
+    <a href="${base}/dashboard/" class="back">Go to MyApi Dashboard</a>
   </div>
 </body></html>`);
       server.close();
