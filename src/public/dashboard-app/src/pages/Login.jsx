@@ -26,29 +26,11 @@ const OAuthIcons = {
   ),
 };
 
-const features = [
-  {
-    title: 'Built for agents',
-    desc: 'Native support for autonomous AI workflows with full API access and token management.',
-  },
-  {
-    title: 'Unified control',
-    desc: 'Centralize every service, credential, and integration in one secure, auditable place.',
-  },
-  {
-    title: 'Natural collaboration',
-    desc: 'Humans and AI working together — each with the right permissions, visibility, and control.',
-  },
-];
-
 function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [viewMode, setViewMode] = useState('pricing'); // 'pricing' or 'login'
-  const [isSignup, setIsSignup] = useState(false); // true = signup within login tab
+  const [isSignup, setIsSignup] = useState(false);
   const [signupStep, setSignupStep] = useState(1); // 1=oauth, 2=profile, 3=user.md, 4=soul.md
-  const [billingPlans, setBillingPlans] = useState([]);
-  const [plansLoading, setPlansLoading] = useState(true);
   const [twoFactorRequired, setTwoFactorRequired] = useState(false);
   const [twoFactorCode, setTwoFactorCode] = useState('');
   const [profileData, setProfileData] = useState({
@@ -61,21 +43,16 @@ function Login() {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const { setMasterToken, setUser, isAuthenticated } = useAuthStore();
 
-  // Check for direct signup deep-link. If OAuth callback params are present,
-  // let handleOAuthCallback() process them first.
-  // Also capture any returnTo param (e.g. from OAuth server authorize redirect).
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const hasOAuthCallback = params.get('oauth_service') || params.get('oauth_status') || params.get('error');
 
-    // Preserve returnTo so we can redirect after login (survives OAuth round-trip via sessionStorage)
     const returnTo = params.get('returnTo');
     if (returnTo && !hasOAuthCallback) {
       sessionStorage.setItem('pendingOAuthReturn', returnTo);
     }
 
     if (!hasOAuthCallback && params.get('signup') === 'true') {
-      setViewMode('login');
       setIsSignup(true);
       setSignupStep(1);
       window.history.replaceState({}, document.title, '/dashboard/');
@@ -86,7 +63,6 @@ function Login() {
     const callback = handleOAuthCallback();
     if (callback) {
       if (callback.status === 'confirm_login') {
-        // Confirm the OAuth login by posting the token, then fetch user data
         const confirmToken = callback.token;
         fetch('/api/v1/oauth/confirm', {
           method: 'POST',
@@ -113,7 +89,6 @@ function Login() {
               if (sessionUser?.bootstrap?.masterToken) {
                 setMasterToken(sessionUser.bootstrap.masterToken);
               }
-              // Extract user object from response (not the entire response)
               setUser(sessionUser.user || sessionUser);
               const pending = sessionStorage.getItem('pendingOAuthReturn');
               if (pending) { sessionStorage.removeItem('pendingOAuthReturn'); window.location.href = pending; }
@@ -135,7 +110,6 @@ function Login() {
               if (sessionUser?.bootstrap?.masterToken) {
                 setMasterToken(sessionUser.bootstrap.masterToken);
               }
-              // Extract user object from response (not the entire response)
               setUser(sessionUser.user || sessionUser);
               const pending = sessionStorage.getItem('pendingOAuthReturn');
               if (pending) { sessionStorage.removeItem('pendingOAuthReturn'); window.location.href = pending; }
@@ -143,7 +117,6 @@ function Login() {
             }
           });
       } else if (callback.status === 'signup_required') {
-        setViewMode('login');
         setIsSignup(true);
         setSignupStep(2);
         fetch('/api/v1/auth/oauth-signup/pending', { credentials: 'include' })
@@ -162,7 +135,6 @@ function Login() {
         window.history.replaceState({}, document.title, '/dashboard/');
       } else if (callback.status === 'pending_2fa') {
         setTwoFactorRequired(true);
-        setViewMode('login');
         setError('Enter your authenticator code to complete sign-in.');
         window.history.replaceState({}, document.title, '/dashboard/');
         setTimeout(() => {
@@ -179,29 +151,6 @@ function Login() {
     }
   }, []);
 
-  useEffect(() => {
-    const loadPlans = async () => {
-      setPlansLoading(true);
-      try {
-        const res = await fetch('/api/v1/billing/plans');
-        if (!res.ok) {
-          setBillingPlans([]);
-          return;
-        }
-        const data = await res.json();
-        setBillingPlans(Array.isArray(data?.data) ? data.data : []);
-      } catch {
-        setBillingPlans([]);
-      } finally {
-        setPlansLoading(false);
-      }
-    };
-    loadPlans();
-  }, []);
-
-  // After login, redirect to returnTo if set (e.g. ChatGPT OAuth authorize URL), else dashboard.
-  // Read returnTo directly from URL params too — sessionStorage may not be set yet if
-  // isAuthenticated is true on first render (effect runs after render, not before).
   function redirectAfterLogin() {
     const fromStorage = sessionStorage.getItem('pendingOAuthReturn');
     const fromUrl = new URLSearchParams(window.location.search).get('returnTo');
@@ -218,8 +167,6 @@ function Login() {
     redirectAfterLogin();
     return null;
   }
-
-  // Master token login removed - OAuth only
 
   const handleOAuthClick = async (serviceId) => {
     setError('');
@@ -251,7 +198,6 @@ function Login() {
       const masterToken = result?.data?.bootstrap?.masterToken || null;
       if (masterToken) setMasterToken(masterToken);
       if (sessionUser) setUser(sessionUser);
-      // Server returns pendingReturnTo when 2FA was triggered mid-OAuth flow
       const serverReturnTo = result?.data?.pendingReturnTo || null;
       const clientReturnTo = sessionStorage.getItem('pendingOAuthReturn') || new URLSearchParams(window.location.search).get('returnTo');
       const pending = serverReturnTo || clientReturnTo;
@@ -259,51 +205,6 @@ function Login() {
       else { window.location.href = '/dashboard/'; }
     } catch {
       setError('Failed to verify 2FA code. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCheckout = async (plan) => {
-    setError('');
-    setLoading(true);
-    
-    // Check if user is authenticated first
-    try {
-      const authCheck = await fetch('/api/v1/auth/me', { credentials: 'include' });
-      if (!authCheck.ok) {
-        // Not authenticated — redirect to login
-        setError('Please log in to subscribe.');
-        setViewMode('login');
-        setIsSignup(false);
-        setLoading(false);
-        return;
-      }
-    } catch {
-      setError('Please log in to subscribe.');
-      setViewMode('login');
-      setIsSignup(false);
-      setLoading(false);
-      return;
-    }
-    
-    // User is authenticated, proceed with checkout
-    try {
-      const response = await fetch('/api/v1/billing/checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include', // Send session cookie for authentication
-        body: JSON.stringify({ plan }),
-      });
-      if (response.ok) {
-        const result = await response.json();
-        if (result.url) window.location.href = result.url;
-      } else {
-        const errorData = await response.json();
-        setError(errorData.error || 'Failed to initiate checkout.');
-      }
-    } catch {
-      setError('Connection failed. Is the server running?');
     } finally {
       setLoading(false);
     }
@@ -350,299 +251,230 @@ function Login() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
-      <div className="mx-auto w-full max-w-[1440px] px-4 py-10 sm:px-8 sm:py-12 lg:px-12 lg:py-16">
-        <div className="grid gap-8 lg:min-h-[78vh] lg:grid-cols-12 lg:items-center lg:gap-12 xl:gap-16">
-          <section className="lg:col-span-5">
-            <div className="max-w-xl">
-              <BrandLogo size="lg" className="mb-8" />
-              <p className="mb-4 text-sm font-semibold uppercase tracking-[0.14em] text-blue-300">The natural way for humans and AI to work</p>
-              <h1 className="text-3xl font-semibold leading-tight sm:text-4xl lg:text-[2.65rem] lg:leading-[1.1]">
-                Unified API control for you and your agents.
-              </h1>
-              <p className="mt-5 text-base leading-relaxed text-slate-300 sm:text-lg">
-                Connect providers, protect credentials, and run your automation stack from one focused workspace.
-              </p>
+      <div className="mx-auto w-full max-w-[1440px] px-4 py-8 sm:px-8 sm:py-10 lg:px-12">
+        <div className="mb-8 h-6" />
 
-              <div className="mt-10 grid gap-4 sm:grid-cols-3">
-                {features.map((item) => (
-                  <div key={item.title} className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-5">
-                    <h3 className="text-sm font-semibold text-slate-100">{item.title}</h3>
-                    <p className="mt-2 text-xs leading-relaxed text-slate-400">{item.desc}</p>
-                  </div>
-                ))}
+        <div className="mx-auto max-w-lg">
+          <div className="mb-8 text-center">
+            <BrandLogo size="md" className="mb-6 justify-center" />
+            {isSignup ? (
+              <>
+                <h1 className="text-3xl font-semibold">Create your account</h1>
+                <p className="mt-2 text-slate-400">
+                  {signupStep === 1 ? 'Choose a sign-up method to get started' : `Step ${signupStep} of 4`}
+                </p>
+              </>
+            ) : (
+              <>
+                <h1 className="text-3xl font-semibold">Welcome back</h1>
+                <p className="mt-2 text-slate-400">Sign in to your MyApi account</p>
+              </>
+            )}
+          </div>
+
+          <div className="rounded-3xl border border-slate-700/80 bg-slate-900/85 p-5 shadow-2xl shadow-black/40 sm:p-7 lg:p-8">
+            {error && (
+              <div className="mb-5 rounded-xl border border-red-500/35 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                {error}
               </div>
+            )}
 
-              <div className="mt-8 flex flex-wrap items-center gap-3 text-xs text-slate-400 sm:text-sm">
-                <span className="rounded-full border border-slate-700 bg-slate-900/70 px-3 py-1.5">Encrypted token storage</span>
-                <span className="rounded-full border border-slate-700 bg-slate-900/70 px-3 py-1.5">OAuth authentication</span>
-                <span className="rounded-full border border-slate-700 bg-slate-900/70 px-3 py-1.5">Self-host friendly</span>
-              </div>
-            </div>
-          </section>
-
-          <section className="lg:col-span-7">
-            <div className="rounded-3xl border border-slate-700/80 bg-slate-900/85 p-5 shadow-2xl shadow-black/40 sm:p-7 lg:p-8">
-              <div className="mb-6 inline-flex w-full max-w-xs rounded-xl border border-slate-700 bg-slate-900/80 p-1">
-                <button
-                  onClick={() => { setViewMode('pricing'); setIsSignup(false); }}
-                  className={`flex-1 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors ${viewMode === 'pricing' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}
-                >
-                  Pricing
-                </button>
-                <button
-                  onClick={() => { setViewMode('login'); setIsSignup(false); setSignupStep(1); }}
-                  className={`flex-1 rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors ${viewMode === 'login' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800'}`}
-                >
-                  Login
-                </button>
-              </div>
-
-              {error && (
-                <div className="mb-5 rounded-xl border border-red-500/35 bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</div>
-              )}
-
-              {viewMode === 'login' ? (
-                <div className="max-w-xl">
-                  {isSignup ? (
-                    // SIGNUP VIEW
-                    <>
-                      <h2 className="text-2xl font-semibold">Create your account</h2>
-                      <p className="mb-6 mt-2 text-sm text-slate-400 sm:text-base">Step {signupStep} of 4</p>
-
-                      {signupStep === 1 && (
-                        // OAuth selection
-                        <div className="space-y-3">
-                          <p className="text-sm text-slate-300 mb-4">Choose one of these to get started:</p>
-                          {[
-                            { id: 'google', name: 'Google' },
-                            { id: 'facebook', name: 'Facebook' },
-                            { id: 'github', name: 'GitHub' },
-                          ].map((service) => (
-                            <button
-                              key={service.id}
-                              onClick={() => handleOAuthClick(service.id)}
-                              className="flex min-h-[48px] w-full items-center justify-center gap-3 rounded-xl border border-slate-700 bg-slate-800/70 px-4 py-3 text-sm font-medium text-white transition-colors hover:border-slate-500 hover:bg-slate-800"
-                            >
-                              <span>{OAuthIcons[service.id] || null}</span>
-                              <span>Sign up with {service.name}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-
-                      {signupStep === 2 && (
-                        <div className="space-y-4">
-                          <p className="text-sm text-slate-300">Confirm your core profile details from OAuth before continuing.</p>
-                          <div className="space-y-3">
-                            <div>
-                              <label className="mb-2 block text-sm font-medium text-slate-300">Display Name</label>
-                              <input
-                                type="text"
-                                value={profileData.displayName}
-                                onChange={(e) => setProfileData({ ...profileData, displayName: e.target.value })}
-                                className="min-h-[48px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
-                                placeholder="Your display name"
-                              />
-                            </div>
-                            <div>
-                              <label className="mb-2 block text-sm font-medium text-slate-300">Email</label>
-                              <input
-                                type="email"
-                                value={profileData.email}
-                                onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
-                                className="min-h-[48px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
-                                placeholder="your@email.com"
-                              />
-                            </div>
-                            <div>
-                              <label className="mb-2 block text-sm font-medium text-slate-300">Username *</label>
-                              <input
-                                type="text"
-                                value={profileData.username}
-                                onChange={(e) => setProfileData({ ...profileData, username: e.target.value })}
-                                className="min-h-[48px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
-                                placeholder="Choose a username"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="flex gap-3 pt-2">
-                            <button onClick={() => setIsSignup(false)} className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-800">Cancel</button>
-                            <button onClick={() => setSignupStep(3)} disabled={!profileData.username.trim()} className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-60">Next</button>
-                          </div>
-                        </div>
-                      )}
-
-                      {signupStep === 3 && (
-                        <div className="space-y-4">
-                          <div className="rounded-xl border border-slate-700/80 bg-slate-900/60 p-4 mb-4">
-                            <p className="text-xs font-semibold text-slate-300 mb-2">About USER.md</p>
-                            <p className="text-xs text-slate-400 leading-relaxed">USER.md is a quick profile for your assistant: who you are and your context.</p>
-                            <p className="text-xs text-slate-500 mt-2 italic">Example: "I'm Omri, a full-stack developer in Austin. I prefer async communication and work best in the morning."</p>
-                          </div>
-                          <textarea
-                            value={userMdText}
-                            onChange={(e) => setUserMdText(e.target.value)}
-                            className="min-h-[140px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
-                            placeholder="Write a few lines about yourself (optional)"
-                          />
-                          <div className="flex gap-3 pt-2">
-                            <button onClick={() => setSignupStep(2)} className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-800">Back</button>
-                            <button onClick={() => setSignupStep(4)} className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500">Next</button>
-                            <button onClick={() => { setUserMdText(''); setSignupStep(4); }} className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-300 transition-colors hover:bg-slate-800">Skip</button>
-                          </div>
-                        </div>
-                      )}
-
-                      {signupStep === 4 && (
-                        <div className="space-y-4">
-                          <div className="rounded-xl border border-slate-700/80 bg-slate-900/60 p-4 mb-4">
-                            <p className="text-xs font-semibold text-slate-300 mb-2">About SOUL.md</p>
-                            <p className="text-xs text-slate-400 leading-relaxed">SOUL.md captures how you think and like to collaborate.</p>
-                            <p className="text-xs text-slate-500 mt-2 italic">Example: "I value clarity and direct feedback. Prefer concise written communication and autonomy."</p>
-                          </div>
-                          <textarea
-                            value={soulMdText}
-                            onChange={(e) => setSoulMdText(e.target.value)}
-                            className="min-h-[140px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
-                            placeholder="Share values, preferences, and work style (optional)"
-                          />
-                          <label className="flex items-start gap-3 cursor-pointer select-none">
-                            <input
-                              type="checkbox"
-                              checked={termsAccepted}
-                              onChange={(e) => setTermsAccepted(e.target.checked)}
-                              className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-600 bg-slate-800 accent-blue-500 cursor-pointer"
-                            />
-                            <span className="text-sm text-slate-300">
-                              I have read and accept the{' '}
-                              <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline hover:text-blue-300">Terms of Use</a>
-                              {' '}and{' '}
-                              <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline hover:text-blue-300">Privacy Policy</a>
-                            </span>
-                          </label>
-                          <div className="flex gap-3 pt-2">
-                            <button onClick={() => setSignupStep(3)} className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-800">Back</button>
-                            <button onClick={completeOAuthSignup} disabled={signupCompleting || !termsAccepted} className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-60">{signupCompleting ? 'Creating…' : 'Complete'}</button>
-                            <button onClick={() => { setSoulMdText(''); completeOAuthSignup(); }} disabled={signupCompleting || !termsAccepted} className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-300 transition-colors hover:bg-slate-800 disabled:opacity-60">{signupCompleting ? 'Creating…' : 'Skip'}</button>
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    // LOGIN VIEW
-                    <>
-                      <h2 className="text-2xl font-semibold">Welcome back</h2>
-                      <p className="mb-6 mt-2 text-sm text-slate-400 sm:text-base">Sign in securely with OAuth.</p>
-
-                      {twoFactorRequired ? (
-                        <form onSubmit={handleTwoFactorChallenge} className="space-y-4">
-                          <div>
-                            <label htmlFor="twoFactorCode" className="mb-2 block text-sm font-medium text-slate-300">Authenticator Code</label>
-                            <input
-                              id="twoFactorCode"
-                              type="text"
-                              autoComplete="one-time-code"
-                              required
-                              value={twoFactorCode}
-                              onChange={(e) => setTwoFactorCode(e.target.value)}
-                              className="min-h-[48px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
-                              placeholder="Enter 6-digit code"
-                            />
-                          </div>
-                          <button
-                            type="submit"
-                            disabled={loading || !twoFactorCode.trim()}
-                            className="min-h-[48px] w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            {loading ? 'Verifying...' : 'Verify 2FA & Sign In'}
-                          </button>
-                        </form>
-                      ) : (
-                        <div className="space-y-3">
-                          {oauthServices.map((service) => (
-                            <button
-                              key={service.id}
-                              onClick={() => handleOAuthClick(service.id)}
-                              className="flex min-h-[48px] w-full items-center justify-center gap-3 rounded-xl border border-slate-700 bg-slate-800/70 px-4 py-3 text-sm font-medium text-white transition-colors hover:border-slate-500 hover:bg-slate-800"
-                            >
-                              <span>{OAuthIcons[service.id] || null}</span>
-                              <span>Continue with {service.name}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="mt-6 text-center text-sm text-slate-400">
-                        Need an account?{' '}
+            {isSignup ? (
+              // SIGNUP FLOW
+              <>
+                {signupStep === 1 && (
+                  <div className="space-y-3">
+                    {[
+                      { id: 'google', name: 'Google' },
+                      { id: 'facebook', name: 'Facebook' },
+                      { id: 'github', name: 'GitHub' },
+                    ].map((service) => (
+                      <button
+                        key={service.id}
+                        onClick={() => handleOAuthClick(service.id)}
+                        disabled={loading}
+                        className="flex min-h-[48px] w-full items-center justify-center gap-3 rounded-xl border border-slate-700 bg-slate-800/70 px-4 py-3 text-sm font-medium text-white transition-colors hover:border-slate-500 hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <span>{OAuthIcons[service.id] || null}</span>
+                        <span>Sign up with {service.name}</span>
+                      </button>
+                    ))}
+                    <div className="mt-4 border-t border-slate-700 pt-4">
+                      <p className="text-center text-xs text-slate-400 mb-4">
+                        Already have an account?{' '}
                         <button
                           type="button"
-                          onClick={() => { setIsSignup(true); setSignupStep(1); }}
-                          className="font-semibold text-blue-300 underline-offset-2 transition-colors hover:text-blue-200 hover:underline"
+                          onClick={() => setIsSignup(false)}
+                          className="font-semibold text-blue-400 hover:text-blue-300 transition-colors"
                         >
-                          Sign up
+                          Sign in
                         </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-          ) : (
-                <div>
-                  <h2 className="text-2xl font-semibold">Choose your plan</h2>
-                  <p className="mb-6 mt-2 text-sm text-slate-400 sm:text-base">Start free, then upgrade when your automation grows.</p>
-
-                  {plansLoading ? (
-                    <div className="rounded-xl border border-slate-700/80 bg-slate-900/60 px-4 py-10 text-center text-sm text-slate-400">Loading plans…</div>
-                  ) : billingPlans.length === 0 ? (
-                    <div className="rounded-xl border border-slate-700/80 bg-slate-900/60 px-4 py-10 text-center text-sm text-slate-400">No plans available right now. Please try again shortly.</div>
-                  ) : (
-                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                      {billingPlans.map((plan) => (
-                        <div key={plan.id} className={`flex h-full flex-col rounded-2xl border p-5 ${plan.id === 'pro' ? 'border-blue-500/60 bg-blue-500/10' : 'border-slate-700/80 bg-slate-900/60'}`}>
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <h3 className="text-lg font-semibold text-white">{plan.name}</h3>
-                              <p className="mt-1 text-xs leading-relaxed text-slate-400">{plan.description}</p>
-                            </div>
-                            <div className="text-right">
-                              <p className="text-2xl font-semibold text-white">${plan.priceMonthly}<span className="text-sm font-normal text-slate-400">/mo</span></p>
-                            </div>
-                          </div>
-
-                          <ul className="mt-4 space-y-2 text-sm text-slate-300">
-                            {(plan.features || []).map((feature) => (
-                              <li key={feature} className="flex items-start gap-2"><span className="mt-0.5 text-emerald-400">•</span><span>{feature}</span></li>
-                            ))}
-                          </ul>
-
-                          <button
-                            onClick={() => {
-                              if (plan.id === 'free') {
-                                setViewMode('login');
-                                setIsSignup(true);
-                                setSignupStep(1);
-                              } else {
-                                handleCheckout(plan.id);
-                              }
-                            }}
-                            disabled={loading}
-                            className={`mt-5 min-h-[44px] w-full rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${plan.id === 'free' ? 'border border-slate-600 text-slate-200 hover:bg-slate-800' : 'bg-blue-600 text-white hover:bg-blue-500'} disabled:cursor-not-allowed disabled:opacity-50`}
-                          >
-                            {plan.id === 'free' ? 'Start Free' : 'Subscribe'}
-                          </button>
-                        </div>
-                      ))}
+                      </p>
                     </div>
-                  )}
+                  </div>
+                )}
+
+                {signupStep === 2 && (
+                  <div className="space-y-4">
+                    <p className="text-sm text-slate-300">Confirm your core profile details from OAuth before continuing.</p>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-slate-300">Display Name</label>
+                        <input
+                          type="text"
+                          value={profileData.displayName}
+                          onChange={(e) => setProfileData({ ...profileData, displayName: e.target.value })}
+                          className="min-h-[48px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
+                          placeholder="Your display name"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-slate-300">Email</label>
+                        <input
+                          type="email"
+                          value={profileData.email}
+                          onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
+                          className="min-h-[48px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
+                          placeholder="your@email.com"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-slate-300">Username *</label>
+                        <input
+                          type="text"
+                          value={profileData.username}
+                          onChange={(e) => setProfileData({ ...profileData, username: e.target.value })}
+                          className="min-h-[48px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
+                          placeholder="Choose a username"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-3 pt-2">
+                      <button onClick={() => setIsSignup(false)} className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-800">Cancel</button>
+                      <button onClick={() => setSignupStep(3)} disabled={!profileData.username.trim()} className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-60">Next</button>
+                    </div>
+                  </div>
+                )}
+
+                {signupStep === 3 && (
+                  <div className="space-y-4">
+                    <div className="rounded-xl border border-slate-700/80 bg-slate-900/60 p-4 mb-4">
+                      <p className="text-xs font-semibold text-slate-300 mb-2">About USER.md</p>
+                      <p className="text-xs text-slate-400 leading-relaxed">USER.md is a quick profile for your assistant: who you are and your context.</p>
+                      <p className="text-xs text-slate-500 mt-2 italic">Example: "I'm Omri, a full-stack developer in Austin. I prefer async communication and work best in the morning."</p>
+                    </div>
+                    <textarea
+                      value={userMdText}
+                      onChange={(e) => setUserMdText(e.target.value)}
+                      className="min-h-[140px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
+                      placeholder="Write a few lines about yourself (optional)"
+                    />
+                    <div className="flex gap-3 pt-2">
+                      <button onClick={() => setSignupStep(2)} className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-800">Back</button>
+                      <button onClick={() => setSignupStep(4)} className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500">Next</button>
+                      <button onClick={() => { setUserMdText(''); setSignupStep(4); }} className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-300 transition-colors hover:bg-slate-800">Skip</button>
+                    </div>
+                  </div>
+                )}
+
+                {signupStep === 4 && (
+                  <div className="space-y-4">
+                    <div className="rounded-xl border border-slate-700/80 bg-slate-900/60 p-4 mb-4">
+                      <p className="text-xs font-semibold text-slate-300 mb-2">About SOUL.md</p>
+                      <p className="text-xs text-slate-400 leading-relaxed">SOUL.md captures how you think and like to collaborate.</p>
+                      <p className="text-xs text-slate-500 mt-2 italic">Example: "I value clarity and direct feedback. Prefer concise written communication and autonomy."</p>
+                    </div>
+                    <textarea
+                      value={soulMdText}
+                      onChange={(e) => setSoulMdText(e.target.value)}
+                      className="min-h-[140px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
+                      placeholder="Share values, preferences, and work style (optional)"
+                    />
+                    <label className="flex items-start gap-3 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={termsAccepted}
+                        onChange={(e) => setTermsAccepted(e.target.checked)}
+                        className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-600 bg-slate-800 accent-blue-500 cursor-pointer"
+                      />
+                      <span className="text-sm text-slate-300">
+                        I have read and accept the{' '}
+                        <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline hover:text-blue-300">Terms of Use</a>
+                        {' '}and{' '}
+                        <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline hover:text-blue-300">Privacy Policy</a>
+                      </span>
+                    </label>
+                    <div className="flex gap-3 pt-2">
+                      <button onClick={() => setSignupStep(3)} className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-800">Back</button>
+                      <button onClick={completeOAuthSignup} disabled={signupCompleting || !termsAccepted} className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-60">{signupCompleting ? 'Creating…' : 'Complete'}</button>
+                      <button onClick={() => { setSoulMdText(''); completeOAuthSignup(); }} disabled={signupCompleting || !termsAccepted} className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-300 transition-colors hover:bg-slate-800 disabled:opacity-60">{signupCompleting ? 'Creating…' : 'Skip'}</button>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              // LOGIN FLOW
+              <>
+                {twoFactorRequired ? (
+                  <form onSubmit={handleTwoFactorChallenge} className="space-y-4">
+                    <div>
+                      <label htmlFor="twoFactorCode" className="mb-2 block text-sm font-medium text-slate-300">Authenticator Code</label>
+                      <input
+                        id="twoFactorCode"
+                        type="text"
+                        autoComplete="one-time-code"
+                        required
+                        value={twoFactorCode}
+                        onChange={(e) => setTwoFactorCode(e.target.value)}
+                        className="min-h-[48px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
+                        placeholder="Enter 6-digit code"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={loading || !twoFactorCode.trim()}
+                      className="min-h-[48px] w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {loading ? 'Verifying...' : 'Verify 2FA & Sign In'}
+                    </button>
+                  </form>
+                ) : (
+                  <div className="space-y-3">
+                    {oauthServices.map((service) => (
+                      <button
+                        key={service.id}
+                        onClick={() => handleOAuthClick(service.id)}
+                        disabled={loading}
+                        className="flex min-h-[48px] w-full items-center justify-center gap-3 rounded-xl border border-slate-700 bg-slate-800/70 px-4 py-3 text-sm font-medium text-white transition-colors hover:border-slate-500 hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <span>{OAuthIcons[service.id] || null}</span>
+                        <span>Continue with {service.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="mt-6 border-t border-slate-700 pt-6">
+                  <p className="text-center text-xs text-slate-400 mb-4">
+                    Don't have an account?{' '}
+                    <button
+                      type="button"
+                      onClick={() => { setIsSignup(true); setSignupStep(1); }}
+                      className="font-semibold text-blue-400 hover:text-blue-300 transition-colors"
+                    >
+                      Create one
+                    </button>
+                  </p>
                 </div>
-              )}
-            </div>
-          </section>
-        </div>
-        <div className="mt-8 text-center text-sm text-slate-400">
-          <a href="/privacy" className="hover:text-slate-200 transition-colors">Privacy Policy</a>
-          <span className="mx-2">·</span>
-          <a href="/terms" className="hover:text-slate-200 transition-colors">Terms of Use</a>
+              </>
+            )}
+          </div>
+
+          <div className="mt-8 text-center text-sm text-slate-400">
+            <a href="/privacy" className="hover:text-slate-200 transition-colors">Privacy Policy</a>
+            <span className="mx-2">·</span>
+            <a href="/terms" className="hover:text-slate-200 transition-colors">Terms of Use</a>
+          </div>
         </div>
       </div>
     </div>

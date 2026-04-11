@@ -2640,7 +2640,9 @@ app.post('/api/v1/workspace-switch/:workspaceId', authenticate, switchWorkspaceH
 app.use('/api/v1', authenticate, createAuditSecurityRouter({ sessionDb, sessionStore }));
 
 function getRequestOwnerId(req) {
-  return String(req?.tokenMeta?.ownerId || req?.session?.user?.id || 'owner');
+  const id = req?.tokenMeta?.ownerId || req?.session?.user?.id;
+  if (!id) console.warn('[auth] getRequestOwnerId: no user context, falling back to owner');
+  return String(id || 'owner');
 }
 
 function inferMemorySource(req) {
@@ -4228,10 +4230,24 @@ app.get('/.well-known/ai-plugin.json', (req, res) => {
   });
 });
 
+// Build a basic identity object from the DB users record (for non-owner users who
+// don't have a USER.md-based vault entry). Fields match the USER.md parsed format.
+function buildIdentityFromUser(user) {
+  if (!user) return {};
+  return {
+    name: user.displayName || user.username || '',
+    email: user.email || '',
+    username: user.username || '',
+    avatar: user.avatarUrl || '',
+    timezone: user.timezone || 'UTC',
+  };
+}
+
 // --- IDENTITY ---
 app.get("/api/v1/identity", authenticate, (req, res) => {
   if (!hasScope(req, 'basic')) return res.status(403).json({ error: "Requires 'basic' scope" });
-  const identity = vault.identityDocs["owner"] || {};
+  const userId = getRequestOwnerId(req);
+  const identity = vault.identityDocs[userId] ?? vault.identityDocs['owner'] ?? buildIdentityFromUser(getUserById(userId)) ?? {};
   const effectiveScope = isMaster(req) ? "full" : "basic";
   const filtered = filterByScope(identity, effectiveScope);
   createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "read_identity", resource: "/identity", scope: req.tokenMeta.scope, ip: req.ip });
@@ -4240,7 +4256,8 @@ app.get("/api/v1/identity", authenticate, (req, res) => {
 
 app.get("/api/v1/identity/professional", authenticate, (req, res) => {
   if (!hasScope(req, 'professional')) return res.status(403).json({ error: "Requires 'professional' scope" });
-  const identity = vault.identityDocs["owner"] || {};
+  const userId = getRequestOwnerId(req);
+  const identity = vault.identityDocs[userId] ?? vault.identityDocs['owner'] ?? buildIdentityFromUser(getUserById(userId)) ?? {};
   const filtered = filterByScope(identity, "professional");
   createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "read_identity_professional", resource: "/identity/professional", scope: req.tokenMeta.scope, ip: req.ip });
   res.json({ data: filtered, meta: { scope: "professional" } });
@@ -4248,7 +4265,8 @@ app.get("/api/v1/identity/professional", authenticate, (req, res) => {
 
 app.get("/api/v1/identity/availability", authenticate, (req, res) => {
   if (!hasScope(req, 'availability')) return res.status(403).json({ error: "Requires 'availability' scope" });
-  const identity = vault.identityDocs["owner"] || {};
+  const userId = getRequestOwnerId(req);
+  const identity = vault.identityDocs[userId] ?? vault.identityDocs['owner'] ?? buildIdentityFromUser(getUserById(userId)) ?? {};
   const filtered = filterByScope(identity, "availability");
   createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "read_availability", resource: "/identity/availability", scope: req.tokenMeta.scope, ip: req.ip });
   res.json({ data: filtered, meta: { scope: "availability" } });
@@ -4257,15 +4275,17 @@ app.get("/api/v1/identity/availability", authenticate, (req, res) => {
 // --- PREFERENCES ---
 app.get("/api/v1/preferences", authenticate, (req, res) => {
   if (!isMaster(req)) return res.status(403).json({ error: "Insufficient scope" });
+  const userId = getRequestOwnerId(req);
   createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "read_preferences", resource: "/preferences", scope: req.tokenMeta.scope, ip: req.ip });
-  res.json({ data: vault.preferences["owner"] || {} });
+  res.json({ data: vault.preferences[userId] || {} });
 });
 
 app.put("/api/v1/preferences", authenticate, (req, res) => {
   if (!isMaster(req)) return res.status(403).json({ error: "Insufficient scope" });
-  vault.preferences["owner"] = { ...vault.preferences["owner"], ...req.body };
+  const userId = getRequestOwnerId(req);
+  vault.preferences[userId] = { ...(vault.preferences[userId] || {}), ...req.body };
   createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "update_preferences", resource: "/preferences", scope: req.tokenMeta.scope, ip: req.ip });
-  res.json({ data: vault.preferences["owner"] });
+  res.json({ data: vault.preferences[userId] });
 });
 
 // --- VAULT TOKENS (encrypted external API keys) ---

@@ -65,6 +65,7 @@ const {
 
 function normalizeOwnerId(ownerId) {
   const v = String(ownerId || '').trim();
+  if (!v) console.warn('[db] normalizeOwnerId: empty ownerId, falling back to "owner"');
   return v || 'owner';
 }
 

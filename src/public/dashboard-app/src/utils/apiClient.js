@@ -1,6 +1,12 @@
 import axios from 'axios';
 import { clearAuthArtifacts, isLogoutInProgress, redirectToLoginOnce } from './authRuntime';
 import { usePlanLimitStore } from '../stores/planLimitStore';
+// Lazy import to avoid circular dependency — only access via getState() at call time
+let _authStore = null;
+const getAuthStore = () => {
+  if (!_authStore) _authStore = require('../stores/authStore').useAuthStore;
+  return _authStore;
+};
 
 const rateLimitState = new Map();
 
@@ -55,14 +61,16 @@ apiClient.interceptors.request.use((config) => {
     config.headers.Authorization = `Bearer ${masterToken}`;
   }
 
-  // Multi-tenancy: Add X-Workspace-ID header for workspace-scoped API calls
+  // Multi-tenancy: Add X-Workspace-ID header for workspace-scoped API calls.
+  // Read from Zustand state (confirmed from server after login) to avoid sending a
+  // stale previous-user workspace ID that lingers in localStorage between sessions.
   try {
-    const currentWorkspaceId = localStorage.getItem('currentWorkspace');
-    if (currentWorkspaceId) {
-      config.headers['X-Workspace-ID'] = currentWorkspaceId;
+    const storeWorkspaceId = getAuthStore().getState().currentWorkspace?.id;
+    if (storeWorkspaceId) {
+      config.headers['X-Workspace-ID'] = storeWorkspaceId;
     }
   } catch (storageErr) {
-    console.error('[API] Failed to access localStorage:', storageErr.message);
+    console.error('[API] Failed to read workspace from store:', storageErr.message);
   }
 
   return config;

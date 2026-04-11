@@ -88,12 +88,17 @@ export const useAuthStore = create((set, get) => ({
             if (bootstrapToken) {
               try { localStorage.setItem('masterToken', bootstrapToken); } catch { /* ignored */ }
             }
+            // Clear any stale workspace from a previous user's session so the
+            // upcoming fetchWorkspaces() starts fresh and apiClient doesn't send
+            // a leftover X-Workspace-ID from a different account.
+            try { localStorage.removeItem('currentWorkspace'); } catch { /* ignored */ }
             set({
               user,
               masterToken: bootstrapToken || masterToken || null,
               sessionToken: null,
               isAuthenticated: true,
               isInitialized: true,
+              currentWorkspace: null,
               error: null,
             });
             return;
