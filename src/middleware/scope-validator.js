@@ -1,4 +1,5 @@
 const { getTokenScopes, hasPermission, createAuditLog, createComplianceAuditLog } = require('../database');
+const alerting = require('../lib/alerting');
 
 /**
  * Scope validation middleware
@@ -58,6 +59,7 @@ function requireScopes(requiredScopes = []) {
               req.ip, req.get('user-agent')
             );
           } catch (_) {}
+          alerting.trackScopeViolation(req.ip);
           return res.status(403).json({
             error: 'Forbidden',
             message: 'Insufficient scope for this endpoint'
@@ -88,6 +90,7 @@ function requireScopes(requiredScopes = []) {
               req.ip, req.get('user-agent')
             );
           } catch (_) {}
+          alerting.trackScopeViolation(req.ip);
           return res.status(403).json({
             error: 'Forbidden',
             message: 'Insufficient scope for this endpoint'

@@ -128,9 +128,14 @@ function LogIn() {
 
       const sessionUser = result?.data?.user || null;
       const masterToken = result?.data?.bootstrap?.masterToken || null;
+      const pendingReturnTo = result?.data?.pendingReturnTo || null;
       if (masterToken) setMasterToken(masterToken);
       if (sessionUser) setUser(sessionUser);
-      window.location.href = '/dashboard/';
+      if (pendingReturnTo && pendingReturnTo.startsWith('/dashboard/')) {
+        window.location.href = pendingReturnTo;
+      } else {
+        window.location.href = '/dashboard/';
+      }
     } catch {
       setError('Failed to verify 2FA code. Please try again.');
     } finally {

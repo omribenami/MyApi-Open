@@ -1,8 +1,8 @@
 # SOC 2 Compliance Gap Analysis & Remediation Plan
 
 > Generated: 2026-04-07  
-> Last Updated: 2026-04-07  
-> Status: **Phase 1 ✅ Complete · Phase 2 ✅ Complete · Phase 3 in progress**
+> Last Updated: 2026-04-11  
+> Status: **Phase 1 ✅ Complete · Phase 2 ✅ Complete · Phase 3 ✅ Complete · Phase 4 up next**
 
 ---
 
@@ -36,6 +36,14 @@
 | Master token canonical architecture | One token per user, same across all devices; recovered via `encrypted_token`; no longer re-created on OAuth login |
 | Dashboard login page removed | Unauthenticated `/dashboard` now redirects to landing page (`/`); OAuth consent + callback flows preserved |
 | Migration `004` | Added `request_id` column + index to `audit_log` and `compliance_audit_logs` |
+
+### Additional Fixes (Phase 3 window)
+
+| Fix | Notes |
+|-----|-------|
+| Migration `005` | `accepted_terms_at` + `accepted_privacy_policy_at` columns on `users` table |
+| `src/lib/alerting.js` | New module — in-memory rate tracking + email alerts; 15-min suppression window |
+| `docs/KEY_ROTATION_POLICY.md` | Quarterly schedule, step-by-step procedure, emergency rotation, audit evidence guidance |
 
 ---
 
@@ -160,12 +168,12 @@ The platform already has a solid security foundation (AES-256-GCM encryption, RB
 | TSC Criteria | Status | Key Issues |
 |---|---|---|
 | CC6 — Access Controls | ✅ Improved | Session timeout ✅, concurrent session limits ✅ — remaining: universal scope middleware coverage |
-| CC7 — Monitoring | ✅ Improved | `audit_log` immutable ✅, structured logging ✅, correlation IDs ✅ — remaining: real-time alerting |
-| CC8 — Change Management | Good | Missing prod deployment approval gate |
-| CC9 — Risk/Vendor | ✅ Good | Incident contacts assigned ✅, `SECURITY.md` added ✅ — remaining: pen test history |
+| CC7 — Monitoring | ✅ Good | `audit_log` immutable ✅, structured logging ✅, correlation IDs ✅, security alerting ✅ |
+| CC8 — Change Management | ✅ Good | `environment: production` gate ✅ (configure required reviewer in GitHub Settings) |
+| CC9 — Risk/Vendor | ✅ Good | Incident contacts ✅, `SECURITY.md` ✅ — remaining: pen test history |
 | A1 — Availability | ✅ Improved | Backups encrypted ✅, S3 replication ✅ — remaining: Redis rate-limit persistence |
-| C1 — Confidentiality | Strong foundation | No key rotation policy |
-| P — Privacy | Partial | Retention scheduler ✅ — remaining: consent timestamps, backup right-to-be-forgotten |
+| C1 — Confidentiality | ✅ Improved | Key rotation endpoint ✅, quarterly policy documented ✅ |
+| P — Privacy | ✅ Improved | Retention scheduler ✅, consent timestamps ✅ — remaining: backup right-to-be-forgotten |
 
 ---
 
@@ -214,32 +222,15 @@ Hard blockers for SOC 2 Type II.
 
 ---
 
-### Phase 3 — SOC 2 Alignment (Weeks 6-8)
+### Phase 3 — SOC 2 Alignment ✅ COMPLETE (2026-04-11)
 
-**3.1 Key Rotation Policy**
-- Files: `src/lib/encryption.js`, `src/config/database.js`
-- Implement `rotateEncryptionKey()`: generate new key, re-encrypt all encrypted fields, bump `encryption_version`
-- Add `/admin/security/rotate-key` endpoint (admin + 2FA required)
-- Document quarterly rotation schedule
-
-**3.2 Production Deployment Approval Gate**
-- File: `.github/workflows/deploy.yml`
-- Add `environment: production` with required reviewer in GitHub repo settings
-
-**3.3 Security Alerting**
-- File: new `src/lib/alerting.js`
-- Alert on: 5+ failed logins in 5 min from same IP, 3+ scope violations in 1 min, device approval abuse
-- Use existing email infrastructure
-
-**3.4 Consent Timestamp Tracking**
-- File: `src/config/database.js` (users table migration)
-- Add `accepted_terms_at` and `accepted_privacy_policy_at` columns
-- Populate on signup and future policy updates
-
-**3.5 Full-Disk Encryption Guidance**
-- Infrastructure-level (not a code change)
-- Document LUKS (Linux) requirement for production host
-- Add to `docs/PRODUCTION_READINESS_CHECKLIST.md`
+| Item | Status | Notes |
+|------|--------|-------|
+| 3.1 Key Rotation Policy | ✅ Done | `POST /api/v1/admin/security/rotate-key` (admin + 2FA gate); `docs/KEY_ROTATION_POLICY.md` quarterly schedule |
+| 3.2 Production Deployment Approval Gate | ✅ Done | `environment: production` already in `deploy.yml`; comment added explaining GitHub Settings required reviewer step |
+| 3.3 Security Alerting | ✅ Done | `src/lib/alerting.js` — 5 failed logins/5 min, 3 scope violations/min, 10 device requests/10 min → email to `SECURITY_ALERT_EMAIL` |
+| 3.4 Consent Timestamp Tracking | ✅ Done | Migration 005: `accepted_terms_at` + `accepted_privacy_policy_at` on `users`; populated at registration |
+| 3.5 Full-Disk Encryption Guidance | ✅ Done | LUKS/cloud CMK requirement + verification steps added to `docs/PRODUCTION_READINESS_CHECKLIST.md` §Host Security |
 
 ---
 

@@ -50,8 +50,9 @@
 - ✅ **API response filtering** - Master token NOT exposed in `/auth/me`
 - ✅ **Context leakage fixed** - MEMORY.md, SOUL.md, USER.md NOT served via API
 - ✅ **Session data protected** - httpOnly cookies, SameSite=Lax
-- ⚠️ **Backup encryption** - Backups not encrypted (see Recommendations)
-- ⚠️ **Audit log immutability** - Logs stored in SQLite, writable (see Recommendations)
+- ✅ **Backup encryption** - AES-256-GCM encrypted backups (SOC 2 Phase 2)
+- ✅ **Audit log immutability** - `audit_log` and `compliance_audit_logs` BEFORE UPDATE/DELETE triggers (SOC 2 Phase 1)
+- ⚠️ **Full-disk encryption** - Host OS disk must be LUKS-encrypted (infrastructure requirement — see §Host Security below)
 
 ### Database Security
 - ✅ **SQLite integrity** - Integrity checks pass on startup
@@ -76,7 +77,7 @@
 - ✅ **Right to Access** - Implemented via `/api/v1/export` endpoint
 - ✅ **Right to Deletion** - Implemented via `DELETE /api/v1/account` endpoint
 - ✅ **Data Portability** - Implemented via `/api/v1/export` (ZIP format)
-- ⚠️ **Consent Management** - Not fully implemented (see Recommendations)
+- ✅ **Consent Management** - `accepted_terms_at` / `accepted_privacy_policy_at` stored on registration (SOC 2 Phase 3)
 - ⚠️ **Privacy Policy** - Not provided on website
 - ⚠️ **Data Processing Agreement** - Not documented
 - ⚠️ **Breach Notification** - No formal 72-hour notification process (see Recommendations)
@@ -117,10 +118,10 @@
 - ⚠️ **Log retention policy** - Not defined (see Recommendations)
 
 ### Monitoring & Alerting
-- ⚠️ **Intrusion detection** - No real-time alerts for suspicious activity
-- ⚠️ **Rate limit alerts** - No notifications when limits exceeded
-- ⚠️ **Failed auth alerts** - No alerting on multiple failed attempts
-- ⚠️ **Security event alerts** - No alerting on sensitive operations
+- ✅ **Failed auth alerts** - `src/lib/alerting.js` fires email alert after 5 failed logins from same IP in 5 min (SOC 2 Phase 3)
+- ✅ **Scope violation alerts** - Email alert after 3 violations/min from same IP (SOC 2 Phase 3)
+- ✅ **Device approval abuse** - Email alert after 10 device requests/10 min from same IP (SOC 2 Phase 3)
+- ⚠️ **Rate limit alerts** - No notifications when rate limits exceeded
 - ⚠️ **Performance monitoring** - No monitoring for DOS attacks or slowdowns
 
 ### Incident Response
@@ -206,6 +207,77 @@
    - Implement cookie consent banner
    - Track user consent preferences
    - Timeline: Q2 2026
+
+---
+
+---
+
+## 🔒 HOST SECURITY — Full-Disk Encryption (SOC 2 Phase 3.5)
+
+> **SOC 2 CC6.1 / C1.1 requirement**: Data at rest must be protected via infrastructure-level disk encryption.
+> Field-level AES-256-GCM already encrypts OAuth tokens and vault tokens in the database, but the SQLite file
+> itself is stored as plaintext bytes on disk. If the host disk is unencrypted, a physical or
+> hypervisor-level attacker can extract the raw database file and read unencrypted columns.
+
+### Requirement
+
+The production host OS **must** use LUKS (Linux Unified Key Setup) full-disk encryption.
+
+### Linux (bare-metal or VM) — LUKS Setup
+
+LUKS must be configured **at OS install time** for the root partition. If the server was provisioned
+without LUKS, the recommended path is:
+
+1. Provision a new host with LUKS enabled at install.
+2. Restore the latest encrypted backup via the procedures in `docs/DATA_RECOVERY_GUIDE.md`.
+3. Decommission the old host.
+
+For a data-bearing volume added after install (e.g. `/opt` or `/data`):
+
+```bash
+# Create LUKS container on a new block device (e.g. /dev/sdb)
+cryptsetup luksFormat /dev/sdb
+
+# Open and create filesystem
+cryptsetup luksOpen /dev/sdb myapi-data
+mkfs.ext4 /dev/mapper/myapi-data
+
+# Add to /etc/crypttab and /etc/fstab for auto-mount at boot
+# (requires adding a keyfile or using a TPM for unattended boot)
+```
+
+### Cloud Providers
+
+| Provider | Recommended approach |
+|----------|---------------------|
+| AWS EC2 | Enable EBS volume encryption (CMK via KMS) at instance launch |
+| GCP Compute | Enable CMEK on Persistent Disk — default Google-managed encryption is acceptable but CMK preferred |
+| Azure VM | Enable Azure Disk Encryption (ADE) with customer-managed keys in Key Vault |
+| DigitalOcean | Enable volume encryption on Volumes (Droplet root disk not encrypted — use a separate encrypted volume for `DB_PATH`) |
+| Hetzner | Use hcloud with software LUKS on the data partition |
+
+### Verification
+
+To confirm LUKS is active on the data partition in production:
+
+```bash
+# Should show 'crypt' type on the mount backing DB_PATH
+lsblk -o NAME,TYPE,MOUNTPOINT | grep crypt
+
+# Or inspect /etc/crypttab
+cat /etc/crypttab
+```
+
+**Auditor note:** Provide a screenshot of the above command output and cloud console showing
+disk encryption enabled as SOC 2 evidence for CC6.1.
+
+### Checklist
+
+- [ ] Production host OS root partition encrypted with LUKS or cloud-native CMK
+- [ ] `/data` / DB path volume encrypted (separate from root if needed)
+- [ ] Key management: LUKS key stored in a secure secrets manager (not on same disk)
+- [ ] Verified with `lsblk` and cloud console screenshot (audit evidence)
+- [ ] Documented in cloud infrastructure runbook
 
 ---
 

@@ -1189,6 +1189,11 @@ function initDatabase() {
   // Per-type notification settings stored as JSON in notification_preferences
   safeMigration("ALTER TABLE notification_preferences ADD COLUMN type_settings TEXT DEFAULT NULL");
 
+  // SOC 2 Phase 3.4 — Consent timestamp tracking (P criterion)
+  // Stores when users accepted terms and privacy policy; required for GDPR/SOC 2 P audit evidence.
+  safeMigration("ALTER TABLE users ADD COLUMN accepted_terms_at TEXT");
+  safeMigration("ALTER TABLE users ADD COLUMN accepted_privacy_policy_at TEXT");
+
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_access_tokens_shareable ON access_tokens(is_shareable);
     CREATE INDEX IF NOT EXISTS idx_access_tokens_guest ON access_tokens(is_guest_token);
@@ -1833,12 +1838,24 @@ function getAuditLogs(limit = 50, offset = 0) {
 }
 
 // Handshake support (new)
-function createUser(username, displayName, email, timezone, password, plan = 'free', avatarUrl = null) {
+function createUser(username, displayName, email, timezone, password, plan = 'free', avatarUrl = null, consentTimestamps = {}) {
   const id = 'usr_' + crypto.randomBytes(16).toString('hex');
   const now = new Date().toISOString();
   const hash = bcrypt.hashSync(password, 10);
-  const stmt = db.prepare(`INSERT INTO users (id, username, display_name, email, avatar_url, timezone, password_hash, created_at, status, plan) VALUES (?,?,?,?,?,?,?,?,?,?)`);
-  stmt.run(id, username, displayName || null, email || null, avatarUrl || null, timezone || null, hash, now, 'active', plan || 'free');
+
+  const cols = getUsersTableColumns();
+  const hasConsentCols = cols.has('accepted_terms_at') && cols.has('accepted_privacy_policy_at');
+
+  if (hasConsentCols) {
+    const acceptedTermsAt = consentTimestamps.acceptedTermsAt || now;
+    const acceptedPrivacyAt = consentTimestamps.acceptedPrivacyPolicyAt || now;
+    const stmt = db.prepare(`INSERT INTO users (id, username, display_name, email, avatar_url, timezone, password_hash, created_at, status, plan, accepted_terms_at, accepted_privacy_policy_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`);
+    stmt.run(id, username, displayName || null, email || null, avatarUrl || null, timezone || null, hash, now, 'active', plan || 'free', acceptedTermsAt, acceptedPrivacyAt);
+  } else {
+    const stmt = db.prepare(`INSERT INTO users (id, username, display_name, email, avatar_url, timezone, password_hash, created_at, status, plan) VALUES (?,?,?,?,?,?,?,?,?,?)`);
+    stmt.run(id, username, displayName || null, email || null, avatarUrl || null, timezone || null, hash, now, 'active', plan || 'free');
+  }
+
   return { id, username, displayName, email, avatarUrl: avatarUrl || null, timezone, createdAt: now, status: 'active', plan: plan || 'free' };
 }
 

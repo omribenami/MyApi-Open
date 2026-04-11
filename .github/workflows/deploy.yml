@@ -41,6 +41,11 @@ jobs:
     name: Deploy to ${{ github.event.inputs.environment || 'production' }}
     runs-on: ubuntu-latest
     needs: [ci]
+    # SOC 2 Phase 3.2 — Production Deployment Approval Gate
+    # The `environment: production` key activates GitHub's environment protection rules.
+    # To enforce a required reviewer before any production deploy:
+    #   Settings → Environments → production → Required reviewers → add approver(s)
+    # Without that setting this job runs automatically; with it, GitHub blocks until approved.
     environment: ${{ github.event.inputs.environment || 'production' }}
 
     steps:

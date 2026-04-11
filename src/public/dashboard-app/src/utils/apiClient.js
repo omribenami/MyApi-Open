@@ -1,14 +1,9 @@
 import axios from 'axios';
 import { clearAuthArtifacts, isLogoutInProgress, redirectToLoginOnce } from './authRuntime';
 import { usePlanLimitStore } from '../stores/planLimitStore';
-// Lazy import to avoid circular dependency — only access via getState() at call time
-// eslint-disable-next-line no-undef
-let _authStore = null;
-const getAuthStore = () => {
-  // eslint-disable-next-line no-undef
-  if (!_authStore) _authStore = require('../stores/authStore').useAuthStore;
-  return _authStore;
-};
+// Circular dep with authStore (authStore imports apiClient) — safe because useAuthStore
+// is only accessed inside functions, never at module init time.
+import { useAuthStore } from '../stores/authStore';
 
 const rateLimitState = new Map();
 
@@ -67,7 +62,7 @@ apiClient.interceptors.request.use((config) => {
   // Read from Zustand state (confirmed from server after login) to avoid sending a
   // stale previous-user workspace ID that lingers in localStorage between sessions.
   try {
-    const storeWorkspaceId = getAuthStore().getState().currentWorkspace?.id;
+    const storeWorkspaceId = useAuthStore.getState().currentWorkspace?.id;
     if (storeWorkspaceId) {
       config.headers['X-Workspace-ID'] = storeWorkspaceId;
     }

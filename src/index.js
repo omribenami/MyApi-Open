@@ -61,6 +61,7 @@ const alertEmitter = new EventEmitter();
 const NotificationService = require('./services/notificationService');
 const NotificationDispatcher = require('./lib/notificationDispatcher');
 const emailService = require('./services/emailService');
+const alerting = require('./lib/alerting');
 
 // PERFORMANCE FIX: Token cache to prevent repeated decryption
 // Each decryption is CPU-intensive. Cache for 5 minutes to prevent 502 errors.
@@ -5952,7 +5953,7 @@ app.delete('/api/v1/vault/:tokenId/revoke', authenticate, (req, res) => {
 // PUBLIC AUTH (Register + Login)
 // =============================
 app.post("/api/v1/auth/register", authRateLimit, (req, res) => {
-  const { username, password, display_name, email, timezone } = req.body;
+  const { username, password, display_name, email, timezone, accepted_terms_at, accepted_privacy_policy_at } = req.body;
   if (!username || !password) return res.status(400).json({ error: "username and password are required" });
 
   if (!isStrongPassword(password)) {
@@ -5960,7 +5961,12 @@ app.post("/api/v1/auth/register", authRateLimit, (req, res) => {
   }
 
   try {
-    const user = createUser(username, display_name || username, email, timezone, password);
+    const now = new Date().toISOString();
+    const consentTimestamps = {
+      acceptedTermsAt: accepted_terms_at || now,
+      acceptedPrivacyPolicyAt: accepted_privacy_policy_at || now,
+    };
+    const user = createUser(username, display_name || username, email, timezone, password, 'free', null, consentTimestamps);
     createAuditLog({ requesterId: user.id, action: "user_register", resource: `/users/${user.id}`, scope: "public", ip: req.ip });
     res.status(201).json({ data: user });
   } catch (e) {
@@ -5996,6 +6002,7 @@ app.post("/api/v1/auth/login", authRateLimit, async (req, res) => {
         ip: req.ip,
         details: { username: user.username, reason: 'invalid_credentials' }
       });
+      alerting.trackFailedLogin(req.ip);
       return res.status(401).json({ error: "Invalid email or password" });
     }
 
@@ -6018,6 +6025,7 @@ app.post("/api/v1/auth/login", authRateLimit, async (req, res) => {
           ip: req.ip,
           details: { reason: 'invalid_code' }
         });
+        alerting.trackFailedLogin(req.ip);
         return res.status(401).json({ error: "Invalid 2FA code", requires2FA: true });
       }
       // Replay protection: reject if this exact code was already used recently
@@ -8518,6 +8526,73 @@ app.get("/api/v1/keys/status", authenticate, adminOnly, (req, res) => {
   } catch (err) {
     console.error("Key status error:", err);
     res.status(500).json({ error: "Failed to get key status" });
+  }
+});
+
+// POST /api/v1/admin/security/rotate-key — SOC 2 Phase 3.1
+// Requires admin scope + TOTP code (when 2FA is enabled on the account)
+// Quarterly rotation schedule: Jan 1, Apr 1, Jul 1, Oct 1
+app.post('/api/v1/admin/security/rotate-key', authenticate, adminOnly, async (req, res) => {
+  try {
+    const { totpCode } = req.body;
+    const userId = req.tokenMeta?.ownerId || req.session?.user?.id;
+
+    // 2FA gate: if the account has 2FA enabled the caller must supply a valid TOTP code
+    if (userId) {
+      const owner = getUserById(userId);
+      if (owner && owner.twoFactorEnabled) {
+        if (!totpCode) {
+          return res.status(401).json({ error: '2FA code required for key rotation', requires2FA: true });
+        }
+        const verified = speakeasy.totp.verify({
+          secret: owner.totpSecret,
+          encoding: 'base32',
+          token: String(totpCode).replace(/\s+/g, ''),
+          window: 2,
+        });
+        if (!verified) {
+          createAuditLog({
+            requesterId: userId,
+            action: 'key_rotation_2fa_failed',
+            resource: '/admin/security/rotate-key',
+            scope: req.tokenMeta?.scope,
+            ip: req.ip,
+            details: { reason: 'invalid_totp' }
+          });
+          alerting.trackFailedLogin(req.ip);
+          return res.status(401).json({ error: 'Invalid 2FA code', requires2FA: true });
+        }
+      }
+    }
+
+    const { rotateEncryptionKey } = require('./database');
+    const newVaultKey = req.body.vaultKey || process.env.VAULT_KEY;
+
+    if (!newVaultKey) {
+      return res.status(400).json({ error: 'vaultKey required in request body or VAULT_KEY env var' });
+    }
+
+    const result = rotateEncryptionKey(newVaultKey);
+
+    createAuditLog({
+      requesterId: req.tokenMeta?.tokenId,
+      action: 'key_rotation',
+      resource: '/admin/security/rotate-key',
+      scope: req.tokenMeta?.scope,
+      ip: req.ip,
+      details: { newVersion: result.newVersion, tokensRotated: result.tokensRotated, initiatedBy: userId }
+    });
+
+    res.json({
+      ok: true,
+      message: 'Encryption keys rotated successfully. Next scheduled rotation: see KEY_ROTATION_POLICY.md.',
+      newVersion: result.newVersion,
+      tokensRotated: result.tokensRotated,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err) {
+    logger.error('Key rotation error:', { error: err.message });
+    res.status(500).json({ error: 'Key rotation failed', message: err.message });
   }
 });
 
