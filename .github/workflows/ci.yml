@@ -146,5 +146,5 @@ jobs:
           username: ${{ secrets.DEPLOY_USER || secrets.SSH_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY || secrets.SSH_KEY }}
           script: |
-            cd ${{ secrets.DEPLOY_PATH }}
+            cd /opt/MyApi
             ./deploy.sh
