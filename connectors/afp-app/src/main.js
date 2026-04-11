@@ -133,9 +133,10 @@ function startConnection(cfg) {
     state.wsHandle = null;
   }
   setState('connecting', { deviceName: savedCfg.deviceName || os.hostname() });
+  logger.info(`Connecting to ${savedCfg.serverUrl || MYAPI_URL} as device ${savedCfg.deviceId}`);
   state.wsHandle = connection.start(savedCfg, logger, (event, data) => {
-    if (event === 'connected')    setState('connected',    data);
-    if (event === 'disconnected') setState('disconnected', {});
+    if (event === 'connected')    { logger.info(`Connected — device: ${state.deviceName}`); setState('connected', data); }
+    if (event === 'disconnected') { logger.info('Disconnected'); setState('disconnected', {}); }
     if (event === 'needs-reauth') {
       state.wsHandle = null;
       setState('disconnected');
@@ -153,13 +154,15 @@ function stopConnection() {
 
 async function startAuthentication() {
   setState('authenticating');
+  logger.info(`Starting OAuth flow → ${MYAPI_URL}`);
   try {
     const cfg = await oauth.runOAuthFlow({
       serverUrl:  MYAPI_URL,
       deviceName: state.deviceName,
       afpRoot:    null,
-      openUrl:    (url) => shell.openExternal(url),
+      openUrl:    (url) => { logger.info(`Opening browser for OAuth: ${url.split('?')[0]}`); shell.openExternal(url); },
     });
+    logger.info(`OAuth complete — device: ${cfg.deviceId}, name: ${cfg.deviceName}`);
     config.save(cfg);
     credentials.save({ accessToken: cfg.accessToken, deviceId: cfg.deviceId, deviceToken: cfg.deviceToken, registeredAt: cfg.registeredAt });
     setState('connecting', { deviceName: cfg.deviceName, deviceId: cfg.deviceId });
