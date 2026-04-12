@@ -8,7 +8,7 @@ const PROFILE_FIELDS = [
   { key: 'Email', label: 'Email', placeholder: 'your@email.com', type: 'email' },
   { key: 'Location', label: 'Location', placeholder: 'City, Country', type: 'text' },
   { key: 'Timezone', label: 'Timezone', placeholder: 'e.g. UTC, America/New_York', type: 'text' },
-  { key: 'Occupation', label: 'Occupation', placeholder: 'Your role or title', type: 'text' },
+  { key: 'Role', label: 'Role', placeholder: 'Your role or title', type: 'text' },
   { key: 'GitHub', label: 'GitHub', placeholder: 'github.com/username', type: 'text' },
   { key: 'Website', label: 'Website', placeholder: 'https://yoursite.com', type: 'text' },
   { key: 'Bio', label: 'Bio', placeholder: 'A short description about yourself', type: 'textarea' },
@@ -232,14 +232,14 @@ function ProfileTab() {
                 <p className="text-white font-semibold text-lg">
                   {profileDraft?.Name || profile?.user?.username || 'Unknown'}
                 </p>
-                {profileDraft?.Occupation && (
-                  <p className="text-slate-400 text-sm">{profileDraft.Occupation}</p>
+                {profileDraft?.Role && (
+                  <p className="text-slate-400 text-sm">{profileDraft.Role}</p>
                 )}
               </div>
             </div>
 
             <div className="border-t border-slate-700 pt-4 space-y-3">
-              {PROFILE_FIELDS.filter((f) => f.key !== 'Name' && f.key !== 'Occupation').map((field) => {
+              {PROFILE_FIELDS.filter((f) => f.key !== 'Name' && f.key !== 'Role').map((field) => {
                 const val = profileDraft?.[field.key];
                 if (!val) return null;
                 return (

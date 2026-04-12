@@ -30,14 +30,12 @@ function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [isSignup, setIsSignup] = useState(false);
-  const [signupStep, setSignupStep] = useState(1); // 1=oauth, 2=profile, 3=user.md, 4=soul.md
+  const [signupStep, setSignupStep] = useState(1); // 1=oauth, 2=profile
   const [twoFactorRequired, setTwoFactorRequired] = useState(false);
   const [twoFactorCode, setTwoFactorCode] = useState('');
   const [profileData, setProfileData] = useState({
     displayName: '', email: '', username: '', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
   });
-  const [userMdText, setUserMdText] = useState('');
-  const [soulMdText, setSoulMdText] = useState('');
   const [oauthSignupNonce, setOauthSignupNonce] = useState('');
   const [signupCompleting, setSignupCompleting] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
@@ -230,8 +228,6 @@ function Login() {
           email: profileData.email,
           username: profileData.username,
           timezone: profileData.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
-          userMd: userMdText,
-          soulMd: soulMdText,
           termsAccepted: true,
         }),
       });
@@ -240,7 +236,9 @@ function Login() {
 
       if (result?.data?.bootstrap?.masterToken) setMasterToken(result.data.bootstrap.masterToken);
       if (result?.data?.user) setUser(result.data.user);
-      window.location.href = '/dashboard/onboarding';
+      // New user — always show the onboarding modal on first landing
+      try { localStorage.removeItem('myapi_onboarding_dismissed'); } catch (_) {}
+      window.location.href = '/dashboard/';
     } catch (err) {
       setError(err.message || 'Failed to complete signup');
       setSignupCompleting(false);
@@ -261,7 +259,7 @@ function Login() {
               <>
                 <h1 className="text-3xl font-semibold">Create your account</h1>
                 <p className="mt-2 text-slate-400">
-                  {signupStep === 1 ? 'Choose a sign-up method to get started' : `Step ${signupStep} of 4`}
+                  {signupStep === 1 ? 'Choose a sign-up method to get started' : 'Confirm your account details'}
                 </p>
               </>
             ) : (
@@ -349,48 +347,7 @@ function Login() {
                         />
                       </div>
                     </div>
-                    <div className="flex gap-3 pt-2">
-                      <button onClick={() => setIsSignup(false)} className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-800">Cancel</button>
-                      <button onClick={() => setSignupStep(3)} disabled={!profileData.username.trim()} className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-60">Next</button>
-                    </div>
-                  </div>
-                )}
-
-                {signupStep === 3 && (
-                  <div className="space-y-4">
-                    <div className="rounded-xl border border-slate-700/80 bg-slate-900/60 p-4 mb-4">
-                      <p className="text-xs font-semibold text-slate-300 mb-2">About USER.md</p>
-                      <p className="text-xs text-slate-400 leading-relaxed">USER.md is a quick profile for your assistant: who you are and your context.</p>
-                      <p className="text-xs text-slate-500 mt-2 italic">Example: "I'm Omri, a full-stack developer in Austin. I prefer async communication and work best in the morning."</p>
-                    </div>
-                    <textarea
-                      value={userMdText}
-                      onChange={(e) => setUserMdText(e.target.value)}
-                      className="min-h-[140px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
-                      placeholder="Write a few lines about yourself (optional)"
-                    />
-                    <div className="flex gap-3 pt-2">
-                      <button onClick={() => setSignupStep(2)} className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-800">Back</button>
-                      <button onClick={() => setSignupStep(4)} className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500">Next</button>
-                      <button onClick={() => { setUserMdText(''); setSignupStep(4); }} className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-300 transition-colors hover:bg-slate-800">Skip</button>
-                    </div>
-                  </div>
-                )}
-
-                {signupStep === 4 && (
-                  <div className="space-y-4">
-                    <div className="rounded-xl border border-slate-700/80 bg-slate-900/60 p-4 mb-4">
-                      <p className="text-xs font-semibold text-slate-300 mb-2">About SOUL.md</p>
-                      <p className="text-xs text-slate-400 leading-relaxed">SOUL.md captures how you think and like to collaborate.</p>
-                      <p className="text-xs text-slate-500 mt-2 italic">Example: "I value clarity and direct feedback. Prefer concise written communication and autonomy."</p>
-                    </div>
-                    <textarea
-                      value={soulMdText}
-                      onChange={(e) => setSoulMdText(e.target.value)}
-                      className="min-h-[140px] w-full rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-3 text-sm text-white placeholder-slate-500 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/25"
-                      placeholder="Share values, preferences, and work style (optional)"
-                    />
-                    <label className="flex items-start gap-3 cursor-pointer select-none">
+                    <label className="flex items-start gap-3 cursor-pointer select-none pt-1">
                       <input
                         type="checkbox"
                         checked={termsAccepted}
@@ -398,19 +355,25 @@ function Login() {
                         className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-600 bg-slate-800 accent-blue-500 cursor-pointer"
                       />
                       <span className="text-sm text-slate-300">
-                        I have read and accept the{' '}
+                        I accept the{' '}
                         <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline hover:text-blue-300">Terms of Use</a>
                         {' '}and{' '}
                         <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-blue-400 underline hover:text-blue-300">Privacy Policy</a>
                       </span>
                     </label>
                     <div className="flex gap-3 pt-2">
-                      <button onClick={() => setSignupStep(3)} className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-800">Back</button>
-                      <button onClick={completeOAuthSignup} disabled={signupCompleting || !termsAccepted} className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-60">{signupCompleting ? 'Creating…' : 'Complete'}</button>
-                      <button onClick={() => { setSoulMdText(''); completeOAuthSignup(); }} disabled={signupCompleting || !termsAccepted} className="flex-1 rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-300 transition-colors hover:bg-slate-800 disabled:opacity-60">{signupCompleting ? 'Creating…' : 'Skip'}</button>
+                      <button onClick={() => setIsSignup(false)} className="rounded-xl border border-slate-600 px-4 py-3 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-800">Cancel</button>
+                      <button
+                        onClick={completeOAuthSignup}
+                        disabled={signupCompleting || !profileData.username.trim() || !termsAccepted}
+                        className="flex-1 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:opacity-60"
+                      >
+                        {signupCompleting ? 'Creating account…' : 'Create Account'}
+                      </button>
                     </div>
                   </div>
                 )}
+
               </>
             ) : (
               // LOGIN FLOW

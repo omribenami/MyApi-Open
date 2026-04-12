@@ -81,8 +81,11 @@ function App() {
   }, [isAuthenticated, fetchWorkspaces]);
 
   // Show onboarding modal for new users
+  // If the server says needsOnboarding, override the local dismissed flag
+  // (prevents a stale localStorage entry from hiding the modal after a fresh signup)
   useEffect(() => {
-    if (isAuthenticated && user?.needsOnboarding && !wasOnboardingDismissed()) {
+    if (isAuthenticated && user?.needsOnboarding) {
+      try { localStorage.removeItem('myapi_onboarding_dismissed'); } catch (_) {}
       setShowOnboarding(true);
     }
   }, [isAuthenticated, user?.needsOnboarding]);

@@ -521,6 +521,7 @@ router.get('/me', async (req, res) => {
       timezone: user.timezone,
       plan: user.plan,
       isPowerUser: !!(_pwrEmail && String(user.email || '').toLowerCase() === _pwrEmail),
+      needsOnboarding: Boolean(user?.needsOnboarding),
     };
 
     res.json({

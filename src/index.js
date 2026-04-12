@@ -140,6 +140,8 @@ const {
   getUserById,
   updateUserPlan,
   updateUserOAuthProfile,
+  setUserNeedsOnboarding,
+  clearUserOnboarding,
   updateUserSubscriptionStatus,
   getUserTotpSecret,
   setUserTotpSecret,
@@ -1271,17 +1273,13 @@ app.use((req, res, next) => {
 // This allows SPA shell to serve index.html with fresh build
 const dashboardDistPath = path.join(__dirname, 'public', 'dist');
 
-// SOC2 Phase 4.3 — Read the SPA shell once at startup so we can inject the CSP nonce per request
-let _dashboardHtmlTemplate = null;
+// SOC2 Phase 4.3 — Read the SPA shell per-request so rebuilds are reflected without restart
 function getDashboardHtml() {
-  if (!_dashboardHtmlTemplate) {
-    try {
-      _dashboardHtmlTemplate = fs.readFileSync(path.join(dashboardDistPath, 'index.html'), 'utf8');
-    } catch (_) {
-      _dashboardHtmlTemplate = '';
-    }
+  try {
+    return fs.readFileSync(path.join(dashboardDistPath, 'index.html'), 'utf8');
+  } catch (_) {
+    return '';
   }
-  return _dashboardHtmlTemplate;
 }
 
 app.use('/dashboard/assets', express.static(path.join(dashboardDistPath, 'assets')));
@@ -4300,16 +4298,20 @@ app.get('/.well-known/ai-plugin.json', (req, res) => {
 });
 
 // Build a basic identity object from the DB users record (for non-owner users who
-// don't have a USER.md-based vault entry). Fields match the USER.md parsed format.
+// don't have a USER.md-based vault entry). Keys match the USER.md / PROFILE_FIELDS
+// capitalization convention used by the Identity page so form fields pre-populate.
 function buildIdentityFromUser(user) {
   if (!user) return {};
-  return {
-    name: user.displayName || user.username || '',
-    email: user.email || '',
-    username: user.username || '',
-    avatar: user.avatarUrl || '',
-    timezone: user.timezone || 'UTC',
-  };
+  const out = {};
+  const name = user.displayName || user.username;
+  if (name) out.Name = name;
+  if (user.email) out.Email = user.email;
+  if (user.timezone) out.Timezone = user.timezone;
+  // Keep lowercase aliases so any code that reads identity.name still works
+  out.name = out.Name || '';
+  out.email = out.Email || '';
+  out.timezone = out.Timezone || 'UTC';
+  return out;
 }
 
 // Helper: resolve per-user identity doc, isolating non-owner users from the owner's vault entry
@@ -6481,6 +6483,46 @@ app.post('/api/v1/auth/oauth-signup/complete', async (req, res) => {
       t.expiresAt || null,
       t.scope || null,
     );
+  }
+
+  // Store structured identity fields in profile_metadata (persists to DB)
+  const identityPatch = {};
+  ['role', 'company', 'location', 'bio'].forEach((f) => {
+    const v = String(body[f] || '').trim();
+    if (v) identityPatch[f] = v;
+  });
+  if (Object.keys(identityPatch).length > 0) {
+    updateUserOAuthProfile(createdUser.id, { profileMetadata: identityPatch });
+    vault.identityDocs[createdUser.id] = Object.assign(
+      { name: createdUser.displayName || createdUser.username },
+      identityPatch
+    );
+  }
+
+  // Create initial persona from soul content assembled by the signup wizard
+  const signupSoulContent = String(body.soulMd || '').trim();
+  if (signupSoulContent) {
+    try {
+      const newPersona = createPersona(
+        'My Assistant',
+        signupSoulContent,
+        'Initial persona created during signup',
+        null,
+        createdUser.id,
+        null
+      );
+      if (newPersona?.id) setActivePersona(newPersona.id, createdUser.id);
+    } catch (_) {}
+  }
+
+  // Mark new user as needing onboarding (stored in DB so it survives session loss)
+  setUserNeedsOnboarding(createdUser.id, true);
+
+  // Send welcome email (fire-and-forget; never block the signup response)
+  const signupEmail = createdUser.email || body.email || null;
+  const signupDisplayName = createdUser.displayName || createdUser.display_name || createdUser.username || '';
+  if (signupEmail) {
+    emailService.sendWelcomeEmail(signupEmail, signupDisplayName).catch(() => {});
   }
 
   delete req.session.oauth_signup;

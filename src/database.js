@@ -1194,6 +1194,9 @@ function initDatabase() {
   safeMigration("ALTER TABLE users ADD COLUMN accepted_terms_at TEXT");
   safeMigration("ALTER TABLE users ADD COLUMN accepted_privacy_policy_at TEXT");
 
+  // Onboarding flag: set to 1 for new OAuth signups, cleared when onboarding completes.
+  safeMigration("ALTER TABLE users ADD COLUMN needs_onboarding INTEGER DEFAULT 0");
+
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_access_tokens_shareable ON access_tokens(is_shareable);
     CREATE INDEX IF NOT EXISTS idx_access_tokens_guest ON access_tokens(is_guest_token);
@@ -1930,14 +1933,17 @@ function getUserById(id) {
   const hasStripeCustomerId = cols.has('stripe_customer_id');
   const hasStripeSubscriptionId = cols.has('stripe_subscription_id');
   const hasTwoFactorEnabled = cols.has('two_factor_enabled');
+  const hasNeedsOnboarding = cols.has('needs_onboarding');
 
   const stripeStatusExpr = hasStripeStatus ? 'stripe_subscription_status' : 'NULL';
   const planExpr = hasPlan ? "COALESCE(plan, 'free')" : "'free'";
   const planActiveExpr = `CASE WHEN LOWER(COALESCE(${planExpr}, 'free')) IN ('free','enterprise') THEN 1 WHEN LOWER(COALESCE(${stripeStatusExpr}, '')) IN ('canceled','unpaid','past_due','incomplete_expired') THEN 0 WHEN LOWER(COALESCE(${stripeStatusExpr}, '')) IN ('active','trialing') THEN 1 ELSE 1 END`;
-  const stmt = db.prepare(`SELECT id, username, display_name as displayName, email, avatar_url as avatarUrl, timezone, ${hasTwoFactorEnabled ? 'COALESCE(two_factor_enabled, 0)' : '0'} as twoFactorEnabled, created_at as createdAt, status, ${planExpr} as plan, ${stripeStatusExpr} as stripeSubscriptionStatus, ${hasStripeCustomerId ? 'stripe_customer_id' : 'NULL'} as stripeCustomerId, ${hasStripeSubscriptionId ? 'stripe_subscription_id' : 'NULL'} as stripeSubscriptionId, ${planActiveExpr} as planActive FROM users WHERE id = ?`);
+  const needsOnboardingExpr = hasNeedsOnboarding ? 'COALESCE(needs_onboarding, 0)' : '0';
+  const hasProfileMetadata = cols.has('profile_metadata');
+  const stmt = db.prepare(`SELECT id, username, display_name as displayName, email, avatar_url as avatarUrl, timezone, ${hasTwoFactorEnabled ? 'COALESCE(two_factor_enabled, 0)' : '0'} as twoFactorEnabled, created_at as createdAt, status, ${planExpr} as plan, ${stripeStatusExpr} as stripeSubscriptionStatus, ${hasStripeCustomerId ? 'stripe_customer_id' : 'NULL'} as stripeCustomerId, ${hasStripeSubscriptionId ? 'stripe_subscription_id' : 'NULL'} as stripeSubscriptionId, ${planActiveExpr} as planActive, ${needsOnboardingExpr} as needsOnboarding${hasProfileMetadata ? ', profile_metadata' : ''} FROM users WHERE id = ?`);
   const u = stmt.get(id);
   if (!u) return null;
-  return { ...u, twoFactorEnabled: Boolean(u.twoFactorEnabled), planActive: Boolean(u.planActive) };
+  return { ...u, twoFactorEnabled: Boolean(u.twoFactorEnabled), planActive: Boolean(u.planActive), needsOnboarding: Boolean(u.needsOnboarding) };
 }
 
 function getPiiMasterKey() {
@@ -6622,6 +6628,16 @@ function logAfpCommand(deviceId, userId, requesterTokenId, op, path, cmd, status
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+function setUserNeedsOnboarding(userId, value) {
+  try {
+    db.prepare('UPDATE users SET needs_onboarding = ? WHERE id = ?').run(value ? 1 : 0, userId);
+  } catch (_) {}
+}
+
+function clearUserOnboarding(userId) {
+  setUserNeedsOnboarding(userId, false);
+}
+
 module.exports = {
   db,
   initDatabase,
@@ -6656,6 +6672,8 @@ module.exports = {
   getUserById,
   updateUserPlan,
   updateUserOAuthProfile,
+  setUserNeedsOnboarding,
+  clearUserOnboarding,
   upsertUserPiiSecure,
   getUserPiiSecure,
   updateUserSubscriptionStatus,

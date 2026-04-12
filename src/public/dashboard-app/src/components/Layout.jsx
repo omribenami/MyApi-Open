@@ -236,6 +236,19 @@ function Layout({ children, onLogout }) {
 
             {/* Right side controls */}
             <div className="flex items-center gap-1">
+              {/* Marketplace Icon */}
+              <Link
+                to="/marketplace"
+                className={`relative flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${
+                  isActive('/marketplace')
+                    ? 'text-amber-400 bg-amber-500/10 ring-1 ring-amber-500/40'
+                    : 'text-amber-500 hover:text-amber-400 hover:bg-amber-500/10'
+                }`}
+                title="Marketplace"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path></svg>
+              </Link>
+
               {/* Notification Bell */}
               <div className="relative">
                 <button

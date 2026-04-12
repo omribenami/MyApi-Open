@@ -1,6 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const { clearUserOnboarding, getUserById, updateUserOAuthProfile } = require('./database');
 
 const router = express.Router();
 
@@ -41,6 +42,40 @@ router.post('/onboard/step1', express.json(), (req, res) => {
   md = upsertField(md, 'Timezone', payload.timezone);
   md = upsertField(md, 'Email', payload.email);
   fs.writeFileSync(USER_MD_PATH, md);
+
+  // Persist identity fields to the user's DB profile so the Identity page
+  // pre-populates correctly for non-owner users.
+  // Keys use the capitalized PROFILE_FIELDS convention (Name, Occupation, Bio, …)
+  const userId = req.session?.user?.id;
+  if (userId) {
+    try {
+      const current = getUserById(String(userId));
+      if (current) {
+        let existingMeta = {};
+        try { existingMeta = current.profile_metadata ? JSON.parse(current.profile_metadata) : {}; } catch (_) {}
+
+        const profileUpdate = {};
+        if (payload.name)     profileUpdate.Name     = payload.name;
+        if (payload.role)     profileUpdate.Role     = payload.role;
+        if (payload.bio)      profileUpdate.Bio      = payload.bio;
+        if (payload.company)  profileUpdate.Company    = payload.company;
+        if (payload.location) profileUpdate.Location   = payload.location;
+
+        updateUserOAuthProfile(String(userId), {
+          displayName:     payload.name || undefined,
+          profileMetadata: { ...existingMeta, ...profileUpdate },
+        });
+      }
+    } catch (_) {}
+
+    // Clear the onboarding flag (DB + session)
+    clearUserOnboarding(String(userId));
+    if (req.session?.user) {
+      req.session.user.needsOnboarding = false;
+      req.session.save?.(() => {});
+    }
+  }
+
   res.json({ ok: true, updated: true, fields: ['Name','Role','Bio','Skills','Company','Location','Timezone','Email'] });
 });
 
