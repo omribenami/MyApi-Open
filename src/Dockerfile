@@ -4,13 +4,12 @@ FROM node:22
 
 WORKDIR /app
 
-# Copy src/ contents (the actual app)
-COPY src/ .
+# ── Static assets (rarely change — keep near top for layer caching) ────────────
 
-# Copy legal docs (Privacy Policy, Terms of Use)
+# Legal docs (Privacy Policy, Terms of Use)
 COPY docs/ /docs/
 
-# Stage AFP binaries from connectors/
+# AFP daemon + OAuth binaries
 RUN mkdir -p afp-dist afp-oauth-dist
 COPY connectors/afp-daemon/dist/ afp-dist/
 COPY connectors/afp-oauth/dist/ afp-oauth-dist/
@@ -18,16 +17,31 @@ COPY connectors/afp-oauth/dist/ afp-oauth-dist/
 # Agent Auth installer script (served at /api/v1/agent-auth/install.js)
 COPY connectors/agent-auth/ connectors/agent-auth/
 
-# Install dependencies
+# ── Dependency install (cached until package.json/lock changes) ────────────────
+# Copy manifests BEFORE the full source so these expensive steps only re-run
+# when dependencies actually change, not on every source file edit.
+
+COPY src/package*.json ./
+COPY src/public/dashboard-app/package*.json public/dashboard-app/
+
+# Backend deps
 RUN npm install --no-audit
+
 # Force-rebuild better-sqlite3 from source so it targets this container's GLIBC
-# (the prebuilt binary is compiled for GLIBC 2.38 but Debian Bookworm has 2.36)
+# (prebuilt binary targets GLIBC 2.38, Debian Bookworm has 2.36)
 RUN npm rebuild better-sqlite3 --build-from-source
 
-# Build frontend (React/Vite dashboard)
-RUN cd public/dashboard-app && npm install --no-audit && npm run build
+# Frontend deps
+RUN cd public/dashboard-app && npm install --no-audit
 
-# Ensure directories exist
+# ── Source copy (always invalidates cache — but expensive steps are above) ──────
+
+COPY src/ .
+
+# Build frontend (must run after source copy to pick up latest UI changes)
+RUN cd public/dashboard-app && npm run build
+
+# Ensure data/log directories exist
 RUN mkdir -p data logs && chmod -R 755 data logs
 
 # Expose API port

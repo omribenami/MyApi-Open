@@ -96,36 +96,32 @@ function start(cfg, logger, onStateChange) {
       handleMsg(ws, raw);
     });
 
-    ws.on('close', (code) => {
-      currentWs = null;
-      onStateChange?.('disconnected', { code });
-      if (!stopped) {
-        logger.warn(`Disconnected (${code}). Reconnecting in ${backoffMs}ms...`);
-        reconnectTimer = setTimeout(() => {
-          backoffMs = Math.min(backoffMs * 2, 30000);
-          connect(baseUrl);
-        }, backoffMs);
-      }
-    });
-
     ws.on('unexpected-response', (req, res) => {
       logger.error(`WS upgrade failed (HTTP ${res.statusCode})`);
       res.resume(); // drain response body so the socket can be reused
+      // Set flag so the close handler (which fires right after) doesn't schedule a second reconnect
+      ws._reconnectHandled = true;
       if ([301, 302, 307, 308].includes(res.statusCode) && res.headers.location) {
         const next = new URL(res.headers.location, baseUrl).origin;
         if (!stopped) {
-          reconnectTimer = setTimeout(() => {
-            backoffMs = Math.min(backoffMs * 2, 30000);
-            connect(next);
-          }, backoffMs);
+          logger.warn(`Redirect → ${next}. Retrying in ${backoffMs}ms...`);
+          reconnectTimer = setTimeout(() => { backoffMs = Math.min(backoffMs * 2, 30000); connect(next); }, backoffMs);
         }
       } else if (!stopped) {
-        // 5xx / 502 / 503 etc — server temporarily unavailable, retry with backoff
+        // 5xx / 502 / 503 — server temporarily unavailable, retry with backoff
         logger.warn(`Retrying in ${backoffMs}ms...`);
-        reconnectTimer = setTimeout(() => {
-          backoffMs = Math.min(backoffMs * 2, 30000);
-          connect(baseUrl);
-        }, backoffMs);
+        reconnectTimer = setTimeout(() => { backoffMs = Math.min(backoffMs * 2, 30000); connect(baseUrl); }, backoffMs);
+      }
+    });
+
+    ws.on('close', (code) => {
+      currentWs = null;
+      onStateChange?.('disconnected', { code });
+      // Skip if unexpected-response already scheduled a reconnect for this socket
+      if (ws._reconnectHandled) return;
+      if (!stopped) {
+        logger.warn(`Disconnected (${code}). Reconnecting in ${backoffMs}ms...`);
+        reconnectTimer = setTimeout(() => { backoffMs = Math.min(backoffMs * 2, 30000); connect(baseUrl); }, backoffMs);
       }
     });
 
