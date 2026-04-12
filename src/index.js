@@ -1689,7 +1689,7 @@ app.get('/api/v1/users/me', authenticate, (req, res) => {
   }
 
   if (isOwnerUser(userId)) {
-    // Owner: serve rich identity from USER.md
+    // Owner: read Name/Email/Timezone from USER.md, extended fields from DB
     if (fs.existsSync(USER_MD_PATH)) {
       const raw = fs.readFileSync(USER_MD_PATH, 'utf8');
       for (const line of raw.split('\n')) {
@@ -1697,16 +1697,20 @@ app.get('/api/v1/users/me', authenticate, (req, res) => {
         if (m) identity[m[1].trim()] = (m[2] || '').trim();
       }
     }
-    // Also apply any in-session overrides
-    if (vault.identityDocs[userId]) Object.assign(identity, vault.identityDocs[userId]);
-  } else {
-    // Non-owner: serve their own DB record (never the owner's USER.md)
-    identity = buildIdentityFromUser(fullUser) || {};
-    // Overlay any persisted extended fields
+    // Overlay extended fields from database profile_metadata
     if (fullUser?.profile_metadata) {
       try { Object.assign(identity, JSON.parse(fullUser.profile_metadata)); } catch (_) {}
     }
-    // Overlay any in-session updates (set by PUT /users/me in the same process run)
+    // Apply any in-session overrides
+    if (vault.identityDocs[userId]) Object.assign(identity, vault.identityDocs[userId]);
+  } else {
+    // Non-owner: serve from DB (never the owner's USER.md)
+    identity = buildIdentityFromUser(fullUser) || {};
+    // Merge persisted extended fields from profile_metadata
+    if (fullUser?.profile_metadata) {
+      try { Object.assign(identity, JSON.parse(fullUser.profile_metadata)); } catch (_) {}
+    }
+    // Apply any in-session updates
     if (vault.identityDocs[userId]) Object.assign(identity, vault.identityDocs[userId]);
   }
 
@@ -1724,11 +1728,19 @@ app.put('/api/v1/users/me', authenticate, (req, res) => {
 
   const { updateUserOAuthProfile } = require('./database');
 
+  // Fields stored in USER.md (owner only)
+  const USER_MD_FIELDS = new Set(['Name', 'Email', 'Timezone']);
+
+  // Extended fields stored in profile_metadata (unlimited length, multi-line)
+  const EXTENDED_FIELDS = new Set(['Location', 'Role', 'GitHub', 'Website', 'Bio']);
+
   if (isOwnerUser(userId)) {
-    // Owner path: update USER.md as before
+    // Owner path: store Name/Email/Timezone in USER.md only
     const lines = (fs.existsSync(USER_MD_PATH) ? fs.readFileSync(USER_MD_PATH, 'utf8') : '# USER.md\n\n').split('\n');
 
     for (const [key, rawValue] of Object.entries(fields)) {
+      if (!USER_MD_FIELDS.has(key)) continue; // Skip extended fields
+
       const value = typeof rawValue === 'string' ? rawValue.trim() : rawValue;
       const marker = `- **${key}**:`;
       const idx = lines.findIndex(l => l.trim().startsWith(marker));
@@ -1745,20 +1757,26 @@ app.put('/api/v1/users/me', authenticate, (req, res) => {
     const nextMd = `${lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()}\n`;
     fs.writeFileSync(USER_MD_PATH, nextMd);
     vault.identityDocs['owner'] = parseUserMd(nextMd);
-    vault.identityDocs[userId]  = vault.identityDocs['owner']; // keep userId-keyed entry in sync
-  } else {
-    // Non-owner path: never touch USER.md — store in per-user vault entry + DB
-    vault.identityDocs[userId] = Object.assign(vault.identityDocs[userId] || {}, fields);
+    vault.identityDocs[userId]  = vault.identityDocs['owner'];
   }
 
-  // Always sync core fields to the users table regardless of owner/non-owner
+  // Collect extended fields for profile_metadata (owner + non-owner)
+  const extendedMetadata = {};
+  for (const key of EXTENDED_FIELDS) {
+    if (key in fields) {
+      const value = typeof fields[key] === 'string' ? fields[key].trim() : fields[key];
+      if (value) extendedMetadata[key] = value;
+    }
+  }
+
+  // Sync to database
   try {
     updateUserOAuthProfile(userId, {
       displayName:     fields.Name || fields.displayName,
       email:           fields.Email || fields.email,
       avatarUrl:       fields.AvatarUrl || fields.avatarUrl,
       timezone:        fields.Timezone || fields.timezone,
-      profileMetadata: isOwnerUser(userId) ? undefined : vault.identityDocs[userId],
+      profileMetadata: Object.keys(extendedMetadata).length > 0 ? extendedMetadata : undefined,
     });
   } catch (err) {
     console.error('Failed to sync user profile to database:', err);

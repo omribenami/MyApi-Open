@@ -2,16 +2,23 @@ import { useEffect, useCallback } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useIdentityStore } from '../stores/identityStore';
 
+const TIMEZONES = [
+  'UTC', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
+  'America/Anchorage', 'Pacific/Honolulu', 'Europe/London', 'Europe/Paris', 'Europe/Berlin',
+  'Europe/Moscow', 'Asia/Dubai', 'Asia/Kolkata', 'Asia/Bangkok', 'Asia/Shanghai',
+  'Asia/Hong_Kong', 'Asia/Tokyo', 'Australia/Sydney', 'Australia/Melbourne', 'Pacific/Auckland',
+];
+
 // Fields to display/edit for the user profile
 const PROFILE_FIELDS = [
   { key: 'Name', label: 'Full Name', placeholder: 'Your full name', type: 'text' },
   { key: 'Email', label: 'Email', placeholder: 'your@email.com', type: 'email' },
   { key: 'Location', label: 'Location', placeholder: 'City, Country', type: 'text' },
-  { key: 'Timezone', label: 'Timezone', placeholder: 'e.g. UTC, America/New_York', type: 'text' },
+  { key: 'Timezone', label: 'Timezone', type: 'select', options: TIMEZONES },
   { key: 'Role', label: 'Role', placeholder: 'Your role or title', type: 'text' },
   { key: 'GitHub', label: 'GitHub', placeholder: 'github.com/username', type: 'text' },
   { key: 'Website', label: 'Website', placeholder: 'https://yoursite.com', type: 'text' },
-  { key: 'Bio', label: 'Bio', placeholder: 'A short description about yourself', type: 'textarea' },
+  { key: 'Bio', label: 'Bio', placeholder: 'Tell us about yourself (unlimited length)', type: 'textarea' },
 ];
 
 async function apiRequest(url, options = {}) {
@@ -181,9 +188,22 @@ function ProfileTab() {
                     value={profileDraft?.[field.key] || ''}
                     onChange={(e) => updateProfileDraft(field.key, e.target.value)}
                     placeholder={field.placeholder}
-                    rows={3}
+                    rows={4}
                     className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y text-sm"
                   />
+                ) : field.type === 'select' ? (
+                  <select
+                    value={profileDraft?.[field.key] || ''}
+                    onChange={(e) => updateProfileDraft(field.key, e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  >
+                    <option value="">Select timezone...</option>
+                    {field.options?.map((tz) => (
+                      <option key={tz} value={tz}>
+                        {tz}
+                      </option>
+                    ))}
+                  </select>
                 ) : (
                   <input
                     type={field.type}
