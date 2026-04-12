@@ -18,25 +18,25 @@ COPY connectors/afp-oauth/dist/ afp-oauth-dist/
 COPY connectors/agent-auth/ connectors/agent-auth/
 
 # ── Dependency install (cached until package.json/lock changes) ────────────────
-# Copy manifests BEFORE the full source so these expensive steps only re-run
-# when dependencies actually change, not on every source file edit.
+# Copy manifests BEFORE the full source so npm install is cached on code-only changes.
 
 COPY src/package*.json ./
 COPY src/public/dashboard-app/package*.json public/dashboard-app/
 
-# Backend deps
+# Backend + frontend npm install (cached until package.json changes)
 RUN npm install --no-audit
-
-# Force-rebuild better-sqlite3 from source so it targets this container's GLIBC
-# (prebuilt binary targets GLIBC 2.38, Debian Bookworm has 2.36)
-RUN npm rebuild better-sqlite3 --build-from-source
-
-# Frontend deps
 RUN cd public/dashboard-app && npm install --no-audit
 
-# ── Source copy (always invalidates cache — but expensive steps are above) ──────
+# ── Source copy ────────────────────────────────────────────────────────────────
+# NOTE: local src/node_modules/ (if present) overwrites the container's node_modules
+# so better-sqlite3 MUST be rebuilt AFTER this step to ensure it targets the
+# container's GLIBC version, not the host's.
 
 COPY src/ .
+
+# Force-rebuild better-sqlite3 from source AFTER source copy so the binary always
+# targets this container's GLIBC (prebuilt binary requires GLIBC 2.38, Bookworm has 2.36).
+RUN npm rebuild better-sqlite3 --build-from-source
 
 # Build frontend (must run after source copy to pick up latest UI changes)
 RUN cd public/dashboard-app && npm run build
