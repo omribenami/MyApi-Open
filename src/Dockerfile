@@ -15,6 +15,9 @@ RUN mkdir -p afp-dist afp-oauth-dist
 COPY connectors/afp-daemon/dist/ afp-dist/
 COPY connectors/afp-oauth/dist/ afp-oauth-dist/
 
+# Agent Auth installer script (served at /api/v1/agent-auth/install.js)
+COPY connectors/agent-auth/ connectors/agent-auth/
+
 # Install dependencies
 RUN npm install --no-audit
 # Force-rebuild better-sqlite3 from source so it targets this container's GLIBC
