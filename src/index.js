@@ -2633,7 +2633,7 @@ app.get('/api/v1/agent-guide', (req, res) => {
       layers: {
         identity: 'Who the user is: name, role, bio, timezone, location, preferences. Read from GET /api/v1/users/me. Start here.',
         memory: 'Short, durable facts the user wants every agent to know — recurring context that should survive across sessions. Read/write via GET|POST /api/v1/memory.',
-        knowledge_base: 'Long-form documents, SOPs, notes, and files the user has uploaded. Full-text searchable. Read via GET /api/v1/kb/documents. Distinct from memory: documents are rich and queryable, memory entries are concise key facts.',
+        knowledge_base: 'Long-form documents, SOPs, notes, and files the user has uploaded. Full-text searchable. Read via GET /api/v1/brain/knowledge-base. Distinct from memory: documents are rich and queryable, memory entries are concise key facts.',
         personas: 'Named behavioural overlays — each persona has a SOUL.md personality file and a scoped knowledge base. Agents can adopt a persona to shift tone, role, and context. Read via GET /api/v1/personas.',
         services: 'Connected action surfaces: GitHub, Google, Slack, Discord, Notion, Linear, and 40+ more. Agents can read data and trigger actions through these integrations after the user grants access.',
       },
@@ -2669,8 +2669,8 @@ app.get('/api/v1/agent-guide', (req, res) => {
           step: 4,
           label: 'Browse the knowledge base',
           method: 'GET',
-          path: '/api/v1/kb/documents',
-          note: 'Lists uploaded documents and SOPs. Use GET /api/v1/kb/documents/:id to read a specific file.',
+          path: '/api/v1/brain/knowledge-base',
+          note: 'Lists uploaded documents and SOPs. Use GET /api/v1/brain/knowledge-base/:id to read a specific document.',
         },
         {
           step: 5,
@@ -2678,6 +2678,13 @@ app.get('/api/v1/agent-guide', (req, res) => {
           method: 'GET',
           path: '/api/v1/personas',
           note: 'Lists named personas with their SOUL.md content. Ask the user which one to activate if multiple exist.',
+        },
+        {
+          step: 6,
+          label: 'Discover connected services (optional)',
+          method: 'GET',
+          path: '/api/v1/services',
+          note: 'Lists which external services (GitHub, Google, Slack, etc.) the user has connected. Use this to know which action surfaces are available before attempting service calls.',
         },
       ],
     },
