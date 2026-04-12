@@ -237,7 +237,7 @@ function Login() {
       if (result?.data?.bootstrap?.masterToken) setMasterToken(result.data.bootstrap.masterToken);
       if (result?.data?.user) setUser(result.data.user);
       // New user — always show the onboarding modal on first landing
-      try { localStorage.removeItem('myapi_onboarding_dismissed'); } catch (_) {}
+      try { localStorage.removeItem('myapi_onboarding_dismissed'); } catch (_) { /* localStorage unavailable */ }
       window.location.href = '/dashboard/';
     } catch (err) {
       setError(err.message || 'Failed to complete signup');

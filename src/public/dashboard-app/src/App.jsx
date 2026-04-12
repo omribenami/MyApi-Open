@@ -4,7 +4,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from './stores/authStore';
 import OnboardingModal from './components/OnboardingModal';
 import SessionExpiredOverlay from './components/SessionExpiredOverlay';
-import { wasOnboardingDismissed } from './utils/onboardingUtils';
 import Dashboard from './pages/Dashboard';
 import DashboardHome from './pages/DashboardHome';
 import ServiceConnectors from './pages/ServiceConnectors';
@@ -85,7 +84,7 @@ function App() {
   // (prevents a stale localStorage entry from hiding the modal after a fresh signup)
   useEffect(() => {
     if (isAuthenticated && user?.needsOnboarding) {
-      try { localStorage.removeItem('myapi_onboarding_dismissed'); } catch (_) {}
+      try { localStorage.removeItem('myapi_onboarding_dismissed'); } catch (_) { /* localStorage unavailable */ }
       setShowOnboarding(true);
     }
   }, [isAuthenticated, user?.needsOnboarding]);
