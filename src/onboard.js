@@ -3,6 +3,19 @@ const fs = require('fs');
 const path = require('path');
 const { clearUserOnboarding, getUserById, updateUserOAuthProfile } = require('./database');
 
+function isOwnerUser(userId) {
+  if (!userId) return false;
+  if (userId === 'owner') return true;
+  try {
+    const ownerEmail = String(
+      process.env.POWER_USER_EMAIL || process.env.OWNER_EMAIL || ''
+    ).trim().toLowerCase();
+    if (!ownerEmail) return false;
+    const user = getUserById(userId);
+    return String(user?.email || '').toLowerCase() === ownerEmail;
+  } catch (_) { return false; }
+}
+
 const router = express.Router();
 
 // USER.md location (from MyApi's perspective, project root)
@@ -29,24 +42,28 @@ function upsertField(md, key, value) {
 
 // Onboard step 1: identity/profile
 router.post('/onboard/step1', express.json(), (req, res) => {
-  ensureUserMd();
   const payload = req.body || {};
-  let md = fs.readFileSync(USER_MD_PATH, 'utf8');
-  // Map common fields to identity md fields
-  md = upsertField(md, 'Name', payload.name);
-  md = upsertField(md, 'Role', payload.role);
-  md = upsertField(md, 'Bio', payload.bio);
-  md = upsertField(md, 'Skills', payload.skills);
-  md = upsertField(md, 'Company', payload.company);
-  md = upsertField(md, 'Location', payload.location);
-  md = upsertField(md, 'Timezone', payload.timezone);
-  md = upsertField(md, 'Email', payload.email);
-  fs.writeFileSync(USER_MD_PATH, md);
+  const userId = req.session?.user?.id;
+
+  // Only write USER.md for the platform owner — non-owner users must never touch
+  // this file or they will overwrite the owner's display name / profile.
+  if (isOwnerUser(userId)) {
+    ensureUserMd();
+    let md = fs.readFileSync(USER_MD_PATH, 'utf8');
+    md = upsertField(md, 'Name', payload.name);
+    md = upsertField(md, 'Role', payload.role);
+    md = upsertField(md, 'Bio', payload.bio);
+    md = upsertField(md, 'Skills', payload.skills);
+    md = upsertField(md, 'Company', payload.company);
+    md = upsertField(md, 'Location', payload.location);
+    md = upsertField(md, 'Timezone', payload.timezone);
+    md = upsertField(md, 'Email', payload.email);
+    fs.writeFileSync(USER_MD_PATH, md);
+  }
 
   // Persist identity fields to the user's DB profile so the Identity page
-  // pre-populates correctly for non-owner users.
+  // pre-populates correctly for all users.
   // Keys use the capitalized PROFILE_FIELDS convention (Name, Occupation, Bio, …)
-  const userId = req.session?.user?.id;
   if (userId) {
     try {
       const current = getUserById(String(userId));
@@ -79,12 +96,15 @@ router.post('/onboard/step1', express.json(), (req, res) => {
   res.json({ ok: true, updated: true, fields: ['Name','Role','Bio','Skills','Company','Location','Timezone','Email'] });
 });
 
-// Onboard step 2: connectors preference (store small config)
+// Onboard step 2: connectors preference (store small config, keyed by userId)
 router.post('/onboard/step2', express.json(), (req, res) => {
-  // Persist connectors preferences in a small JSON file for MVP
   const data = req.body || {};
+  const userId = req.session?.user?.id;
   const cfgPath = path.join(__dirname, '..','..','..','onboard_connectors.json');
-  fs.writeFileSync(cfgPath, JSON.stringify(data.connectors || []), 'utf8');
+  let existing = {};
+  try { if (fs.existsSync(cfgPath)) existing = JSON.parse(fs.readFileSync(cfgPath, 'utf8')); } catch (_) {}
+  if (userId) existing[userId] = data.connectors || [];
+  fs.writeFileSync(cfgPath, JSON.stringify(existing), 'utf8');
   res.json({ ok: true, step2: true, connectors: data.connectors || [] });
 });
 

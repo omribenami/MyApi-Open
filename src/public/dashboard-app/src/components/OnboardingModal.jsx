@@ -655,55 +655,147 @@ Once you've read it:
 2. Walk me through each of the three connection methods with their pros and cons
 3. Ask me a few questions to understand my situation, then recommend the best method
 4. Guide me through the setup step by step — I'll follow your lead`;
+
+              const CONNECTION_METHODS = [
+                {
+                  id: 'device_flow',
+                  badge: 'Recommended',
+                  badgeColor: 'rgba(59,130,246,0.15)',
+                  badgeBorder: 'rgba(59,130,246,0.4)',
+                  badgeText: 'rgba(147,197,253,0.95)',
+                  title: 'OAuth Device Flow',
+                  desc: 'Your agent requests a short code, you approve it in the browser — it gets its own named, scoped token.',
+                  pros: ['Each agent gets its own token & audit trail', 'You explicitly approve every agent', 'Revoke a single agent without affecting others'],
+                  cons: ['Requires opening a browser tab once to approve'],
+                  bestFor: 'Most users',
+                },
+                {
+                  id: 'master_token',
+                  badge: 'Simplest',
+                  badgeColor: 'rgba(234,179,8,0.1)',
+                  badgeBorder: 'rgba(234,179,8,0.35)',
+                  badgeText: 'rgba(253,224,71,0.9)',
+                  title: 'Master Token',
+                  desc: 'Copy your master token from Access Tokens and paste it directly into the agent.',
+                  pros: ['Zero setup — token already exists', 'Works immediately with any HTTP client'],
+                  cons: ['One token shared by all agents', 'Cannot be scoped to read-only'],
+                  bestFor: 'Quick local experiments',
+                },
+                {
+                  id: 'asc_keypair',
+                  badge: 'Advanced',
+                  badgeColor: 'rgba(168,85,247,0.1)',
+                  badgeBorder: 'rgba(168,85,247,0.35)',
+                  badgeText: 'rgba(216,180,254,0.9)',
+                  title: 'ASC — Ed25519 Keypair',
+                  desc: 'The agent generates a cryptographic keypair and signs every request. The private key never leaves the agent.',
+                  pros: ['Strongest security — private key never transmitted', 'Cryptographic proof of origin per request', 'Replay protection built-in'],
+                  cons: ['Agent must implement Ed25519 signing', 'Requires accurate system clock'],
+                  bestFor: 'Production agents & automated pipelines',
+                },
+              ];
+
               return (
                 <div className="space-y-3">
                   <p className="text-sm leading-relaxed" style={{ color: 'rgba(148,163,184,0.9)' }}>
-                    Copy this prompt and paste it into your AI agent — Claude, ChatGPT, Gemini, or any other. It will fetch your connection guide and walk you through the setup.
+                    There are three ways to connect an AI agent to your API. Pick the one that fits your situation.
                   </p>
-                  <div style={{
-                    position: 'relative',
-                    background: 'rgba(15,23,42,0.8)',
-                    border: '1px solid rgba(71,85,105,0.5)',
-                    borderRadius: 10,
-                    padding: '14px 14px 42px 14px',
-                  }}>
-                    <pre style={{
-                      margin: 0,
-                      fontSize: 12,
-                      lineHeight: 1.65,
-                      color: 'rgba(203,213,225,0.9)',
-                      whiteSpace: 'pre-wrap',
-                      wordBreak: 'break-word',
-                      fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
-                    }}>{AGENT_PROMPT}</pre>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(AGENT_PROMPT).then(() => {
-                          setCopied(true);
-                          setTimeout(() => setCopied(false), 2000);
-                        });
-                      }}
-                      style={{
-                        position: 'absolute',
-                        bottom: 10,
-                        right: 10,
-                        padding: '5px 12px',
-                        borderRadius: 6,
-                        border: copied ? '1px solid rgba(34,197,94,0.4)' : '1px solid rgba(71,85,105,0.6)',
-                        background: copied ? 'rgba(34,197,94,0.08)' : 'rgba(30,41,59,0.8)',
-                        color: copied ? 'rgba(134,239,172,0.9)' : 'rgba(148,163,184,0.9)',
-                        fontSize: 11,
-                        fontWeight: 500,
-                        cursor: 'pointer',
-                        transition: 'all 0.15s ease',
-                      }}
-                    >
-                      {copied ? '✓ Copied' : 'Copy Prompt'}
-                    </button>
+
+                  {/* Connection method cards */}
+                  <div className="space-y-2">
+                    {CONNECTION_METHODS.map((m) => (
+                      <div key={m.id} style={{
+                        background: 'rgba(15,23,42,0.6)',
+                        border: '1px solid rgba(51,65,85,0.7)',
+                        borderRadius: 10,
+                        padding: '11px 13px',
+                      }}>
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className="text-sm font-semibold" style={{ color: 'rgba(226,232,240,0.95)' }}>{m.title}</span>
+                          <span style={{
+                            fontSize: 10,
+                            fontWeight: 600,
+                            padding: '2px 7px',
+                            borderRadius: 20,
+                            background: m.badgeColor,
+                            border: `1px solid ${m.badgeBorder}`,
+                            color: m.badgeText,
+                            letterSpacing: '0.03em',
+                          }}>{m.badge}</span>
+                        </div>
+                        <p className="text-xs mb-2" style={{ color: 'rgba(148,163,184,0.8)', lineHeight: 1.5 }}>{m.desc}</p>
+                        <div className="flex gap-4">
+                          <div style={{ flex: 1 }}>
+                            {m.pros.map((p, i) => (
+                              <div key={i} className="flex items-start gap-1.5 mb-0.5">
+                                <span style={{ color: '#4ade80', fontSize: 10, marginTop: 2, flexShrink: 0 }}>✓</span>
+                                <span className="text-xs" style={{ color: 'rgba(134,239,172,0.8)', lineHeight: 1.4 }}>{p}</span>
+                              </div>
+                            ))}
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            {m.cons.map((c, i) => (
+                              <div key={i} className="flex items-start gap-1.5 mb-0.5">
+                                <span style={{ color: '#f87171', fontSize: 10, marginTop: 2, flexShrink: 0 }}>✕</span>
+                                <span className="text-xs" style={{ color: 'rgba(252,165,165,0.75)', lineHeight: 1.4 }}>{c}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <p className="text-xs mt-1.5" style={{ color: 'rgba(100,116,139,0.9)' }}>
+                          Best for: <span style={{ color: 'rgba(148,163,184,0.85)' }}>{m.bestFor}</span>
+                        </p>
+                      </div>
+                    ))}
                   </div>
-                  <p className="text-xs" style={{ color: 'rgba(100,116,139,0.8)' }}>
-                    The guide is public — your agent fetches it without a token. Nothing connects until you explicitly approve it.
-                  </p>
+
+                  {/* AI prompt section */}
+                  <div>
+                    <p className="text-xs mb-1.5" style={{ color: 'rgba(100,116,139,0.9)' }}>
+                      Or let your AI agent walk you through it — paste this prompt:
+                    </p>
+                    <div style={{
+                      position: 'relative',
+                      background: 'rgba(15,23,42,0.8)',
+                      border: '1px solid rgba(71,85,105,0.5)',
+                      borderRadius: 10,
+                      padding: '12px 12px 38px 12px',
+                    }}>
+                      <pre style={{
+                        margin: 0,
+                        fontSize: 11,
+                        lineHeight: 1.6,
+                        color: 'rgba(203,213,225,0.85)',
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                        fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+                      }}>{AGENT_PROMPT}</pre>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(AGENT_PROMPT).then(() => {
+                            setCopied(true);
+                            setTimeout(() => setCopied(false), 2000);
+                          });
+                        }}
+                        style={{
+                          position: 'absolute',
+                          bottom: 8,
+                          right: 8,
+                          padding: '4px 10px',
+                          borderRadius: 6,
+                          border: copied ? '1px solid rgba(34,197,94,0.4)' : '1px solid rgba(71,85,105,0.6)',
+                          background: copied ? 'rgba(34,197,94,0.08)' : 'rgba(30,41,59,0.8)',
+                          color: copied ? 'rgba(134,239,172,0.9)' : 'rgba(148,163,184,0.9)',
+                          fontSize: 11,
+                          fontWeight: 500,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        {copied ? '✓ Copied' : 'Copy Prompt'}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               );
             })()}
@@ -792,15 +884,30 @@ Once you've read it:
                 </button>
               )}
               {step === 3 && !twoFaEnabled && (
-                <button
-                  onClick={handleTwoFaVerify}
-                  disabled={twoFaCode.length !== 6 || twoFaLoading || !twoFaQr}
-                  style={primaryBtnStyle(twoFaCode.length !== 6 || twoFaLoading || !twoFaQr)}
-                  onMouseEnter={e => { if (twoFaCode.length === 6 && !twoFaLoading && twoFaQr) e.currentTarget.style.opacity = '0.88'; }}
-                  onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
-                >
-                  {twoFaLoading ? 'Verifying…' : 'Enable 2FA'}
-                </button>
+                <>
+                  <button
+                    onClick={() => goTo(4)}
+                    className="px-4 py-2 text-sm font-medium rounded-xl transition-colors"
+                    style={{
+                      background: 'rgba(51,65,85,0.5)',
+                      border: '1px solid rgba(71,85,105,0.5)',
+                      color: 'rgba(148,163,184,0.9)',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(71,85,105,0.6)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(51,65,85,0.5)'; }}
+                  >
+                    Maybe Later
+                  </button>
+                  <button
+                    onClick={handleTwoFaVerify}
+                    disabled={twoFaCode.length !== 6 || twoFaLoading || !twoFaQr}
+                    style={primaryBtnStyle(twoFaCode.length !== 6 || twoFaLoading || !twoFaQr)}
+                    onMouseEnter={e => { if (twoFaCode.length === 6 && !twoFaLoading && twoFaQr) e.currentTarget.style.opacity = '0.88'; }}
+                    onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
+                  >
+                    {twoFaLoading ? 'Verifying…' : 'Enable 2FA'}
+                  </button>
+                </>
               )}
               {step === 4 && (
                 <button

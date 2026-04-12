@@ -1757,7 +1757,7 @@ app.put('/api/v1/users/me', authenticate, (req, res) => {
     const nextMd = `${lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()}\n`;
     fs.writeFileSync(USER_MD_PATH, nextMd);
     vault.identityDocs['owner'] = parseUserMd(nextMd);
-    vault.identityDocs[userId]  = vault.identityDocs['owner'];
+    vault.identityDocs[userId]  = { ...vault.identityDocs['owner'] };
   }
 
   // Collect extended fields for profile_metadata (owner + non-owner)
@@ -1862,16 +1862,29 @@ const DEFAULT_EXPOSURE = {
 
 app.get('/api/v1/api_exposure', (req, res) => {
   if (!req.session || !req.session.user) return res.status(401).json({ error: 'unauthorized' });
-  let policy = DEFAULT_EXPOSURE;
-  try { if (fs.existsSync(EXPOSURE_PATH)) policy = JSON.parse(fs.readFileSync(EXPOSURE_PATH, 'utf8')); } catch(e) {}
+  const userId = req.session.user.id;
+  let allPolicies = {};
+  try { if (fs.existsSync(EXPOSURE_PATH)) allPolicies = JSON.parse(fs.readFileSync(EXPOSURE_PATH, 'utf8')); } catch(e) {}
+  // Support both legacy flat format and new per-user keyed format
+  const policy = allPolicies[userId] ?? (allPolicies.main !== undefined ? allPolicies : DEFAULT_EXPOSURE);
   res.json({ policy });
 });
 
 app.post('/api/v1/api_exposure', (req, res) => {
   if (!req.session || !req.session.user) return res.status(401).json({ error: 'unauthorized' });
+  if (!isMaster(req)) return res.status(403).json({ error: 'Only master token can update API exposure policy' });
+  const userId = req.session.user.id;
   const policy = req.body || {};
+  let allPolicies = {};
+  try { if (fs.existsSync(EXPOSURE_PATH)) allPolicies = JSON.parse(fs.readFileSync(EXPOSURE_PATH, 'utf8')); } catch(e) {}
+  // Migrate legacy flat format on first write with per-user keying
+  if (allPolicies.main !== undefined && !allPolicies[userId]) {
+    // preserve legacy data under a special key, don't overwrite other users
+    allPolicies = {};
+  }
+  allPolicies[userId] = policy;
   fs.mkdirSync(path.dirname(EXPOSURE_PATH), { recursive: true });
-  fs.writeFileSync(EXPOSURE_PATH, JSON.stringify(policy, null, 2));
+  fs.writeFileSync(EXPOSURE_PATH, JSON.stringify(allPolicies, null, 2));
   res.json({ ok: true, policy });
 });
 
