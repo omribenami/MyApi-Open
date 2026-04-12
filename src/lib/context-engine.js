@@ -10,7 +10,8 @@ const { getConversationHistory, getCachedContext, cacheContext, getKBDocumentByI
 
 class ContextEngine {
   constructor(options = {}) {
-    this.workspaceRoot = options.workspaceRoot || path.join(__dirname, '../../../../');
+    this.workspaceRoot = options.workspaceRoot ||
+      (process.env.USER_MD_PATH ? path.dirname(process.env.USER_MD_PATH) : path.join(__dirname, '../../../../'));
     this.cacheEnabled = options.cacheEnabled !== false;
     this.cacheTTL = options.cacheTTL || 3600; // 1 hour
     this.maxHistoryMessages = options.maxHistoryMessages || 10;

@@ -298,8 +298,8 @@ const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 4500;
 const WORKSPACE_ROOT = path.join(__dirname, '..', '..', '..');
-const USER_MD_PATH = path.join(WORKSPACE_ROOT, 'USER.md');
-const SOUL_MD_PATH = path.join(WORKSPACE_ROOT, 'SOUL.md');
+const USER_MD_PATH = process.env.USER_MD_PATH || path.join(WORKSPACE_ROOT, 'USER.md');
+const SOUL_MD_PATH = process.env.SOUL_MD_PATH || path.join(WORKSPACE_ROOT, 'SOUL.md');
 const LEGAL_DOCS_DIR = path.join(__dirname, '..', 'docs', 'legal');
 
 // Import device approval middleware

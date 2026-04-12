@@ -6,7 +6,7 @@ const { clearUserOnboarding, getUserById, updateUserOAuthProfile } = require('./
 const router = express.Router();
 
 // USER.md location (from MyApi's perspective, project root)
-const USER_MD_PATH = path.join(__dirname, '..','..','..','USER.md');
+const USER_MD_PATH = process.env.USER_MD_PATH || path.join(__dirname, '..','..','..','USER.md');
 
 function ensureUserMd() {
   if (!fs.existsSync(USER_MD_PATH)) {

@@ -24,6 +24,7 @@ services:
       - DB_PATH=/app/data/myapi.db
       - SESSION_DB_PATH=/app/data/sessions.db
       - USER_MD_PATH=/app/data/USER.md
+      - SOUL_MD_PATH=/app/data/SOUL.md
 
     # Persistent volumes for SQLite and logs
     volumes:
