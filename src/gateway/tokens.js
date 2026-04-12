@@ -7,7 +7,7 @@ const logger = require('../utils/logger');
 class TokenManager {
   constructor() {
     this.db = getDatabase();
-    this.saltRounds = 10;
+    this.saltRounds = 12;
   }
 
   // Generate a secure random token
@@ -71,13 +71,10 @@ class TokenManager {
       `);
       candidates = prefixStmt.all(tokenPrefix);
     } catch (e) {
-      // Fallback: token_prefix column may not exist yet (pre-migration)
-      const fallbackStmt = this.db.prepare(`
-        SELECT id, name, type, token_hash, scope, created_at, expires_at, revoked, metadata
-        FROM tokens
-        WHERE revoked = 0
-      `);
-      candidates = fallbackStmt.all();
+      // token_prefix column missing — migration not applied. Fail closed rather than
+      // loading all tokens (O(n) bcrypt + timing leak). Run migrations to fix.
+      logger.error('Token validation aborted: token_prefix column missing — run migrations', { error: e.message });
+      return null;
     }
 
     for (const tokenRecord of candidates) {
@@ -90,14 +87,26 @@ class TokenManager {
           return null;
         }
 
+        let scope, metadata;
+        try {
+          scope = JSON.parse(tokenRecord.scope);
+        } catch {
+          logger.error('Invalid scope JSON in token record — treating as invalid', { id: tokenRecord.id });
+          return null;
+        }
+        try {
+          metadata = tokenRecord.metadata ? JSON.parse(tokenRecord.metadata) : {};
+        } catch {
+          metadata = {};
+        }
         return {
           id: tokenRecord.id,
           name: tokenRecord.name,
           type: tokenRecord.type,
-          scope: JSON.parse(tokenRecord.scope),
+          scope,
           createdAt: tokenRecord.created_at,
           expiresAt: tokenRecord.expires_at,
-          metadata: tokenRecord.metadata ? JSON.parse(tokenRecord.metadata) : {}
+          metadata
         };
       }
     }

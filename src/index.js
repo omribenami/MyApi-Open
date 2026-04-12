@@ -166,8 +166,8 @@ const {
   getOAuthStatus,
   createStateToken,
   validateStateToken,
-  cleanupExpiredStateTokens, // BUG-11
-  cleanupOldRateLimits, // BUG-10
+  cleanupExpiredStateTokens,
+  cleanupOldRateLimits,
   createConversation,
   getConversations,
   getConversation,
@@ -7579,14 +7579,8 @@ app.get("/api/v1/oauth/authorize/:service", async (req, res) => {
     : null;
   const forcePrompt = explicitForcePrompt == null ? mode === 'login' : explicitForcePrompt;
 
-  // DEBUG: Log all requests
-  console.log(`[OAuth] authorize/${service} requested`);
-  console.log(`[OAuth] Mode: ${mode}`);
-  console.log(`[OAuth] Available services: ${OAUTH_SERVICES.join(', ')}`);
-
   // Validate service parameter
   if (!service || typeof service !== 'string' || service.trim().length === 0) {
-    console.log(`[OAuth] ERROR: Invalid service parameter: "${service}"`);
     return res.status(400).json({
       error: 'Invalid service parameter',
       message: `Service parameter must be a non-empty string. Got: ${typeof service}`
@@ -7595,7 +7589,6 @@ app.get("/api/v1/oauth/authorize/:service", async (req, res) => {
 
   // Check if service is in the list of supported OAuth services
   if (!OAUTH_SERVICES.includes(service)) {
-    console.log(`[OAuth] ERROR: Service "${service}" not in supported services. Available: ${OAUTH_SERVICES.join(', ')}`);
     return res.status(400).json({
       error: `Service "${service}" not supported`,
       availableServices: OAUTH_SERVICES,
@@ -7607,7 +7600,6 @@ app.get("/api/v1/oauth/authorize/:service", async (req, res) => {
   if (!isOAuthServiceEnabled(service)) {
     const adapter = oauthAdapters[service];
     const isConfigured = adapter ? isAdapterConfigured(adapter) : false;
-    console.log(`[OAuth] ERROR: Service "${service}" is not enabled. Configured: ${isConfigured}`);
 
     return res.status(400).json({
       error: `Service "${service}" is not enabled or configured`,
@@ -7640,10 +7632,8 @@ app.get("/api/v1/oauth/authorize/:service", async (req, res) => {
   let ownerId = null;
   if (req.session?.user?.id) {
     ownerId = String(req.session.user.id);
-    console.log(`[OAuth Authorize] Got ownerId from session: ${ownerId}`);
   } else if (req.tokenMeta?.ownerId) {
     ownerId = String(req.tokenMeta.ownerId);
-    console.log(`[OAuth Authorize] Got ownerId from Bearer token: ${ownerId}`);
   } else if (req.cookies?.myapi_master_token) {
     // FALLBACK: Extract ownerId from masterToken cookie
     try {
@@ -7660,9 +7650,7 @@ app.get("/api/v1/oauth/authorize/:service", async (req, res) => {
     }
   }
 
-  // Log the resolved ownerId
-  console.log(`[OAuth Authorize] Final ownerId: ${ownerId || 'NULL'} (from session=${req.session?.user?.id || 'null'}, Bearer=${req.tokenMeta?.ownerId || 'null'}, masterToken=${req.cookies?.myapi_master_token ? 'present' : 'absent'})`);
-  console.log(`[OAuth Authorize] ${service} flow initiated: req.session.user=${req.session?.user?.id || 'UNSET'}, req.tokenMeta.ownerId=${req.tokenMeta?.ownerId || 'UNSET'} -> ownerId=${ownerId || 'NULL'}`);
+  logger.debug('[OAuth Authorize] flow initiated', { service, hasOwnerId: !!ownerId });
   req.session.oauthStateMeta[state] = {
     mode,
     forcePrompt,
@@ -7725,7 +7713,6 @@ app.get("/api/v1/oauth/authorize/:service", async (req, res) => {
   const wantsJson = String(req.query.json || '').toLowerCase() === '1';
 
   if (wantsJson) {
-    console.log(`[OAuth] Returning JSON response for ${service}`);
     // CRITICAL: Save session before responding, otherwise oauthStateMeta won't persist
     return req.session.save((err) => {
       if (err) {
@@ -7743,14 +7730,11 @@ app.get("/api/v1/oauth/authorize/:service", async (req, res) => {
 
   // Default behavior: redirect to OAuth provider
   // CRITICAL: Save session before redirect, otherwise oauthStateMeta won't persist
-  console.log(`[OAuth] Redirecting to ${service} OAuth provider at: ${authUrl.split('?')[0]}`);
-  console.log(`[OAuth Authorize] Saving session with oauthStateMeta before redirect...`);
   return req.session.save((err) => {
     if (err) {
       console.error(`[OAuth Authorize] ❌ Session save failed:`, err);
       return res.status(500).json({ error: 'Failed to save session for OAuth flow' });
     }
-    console.log(`[OAuth Authorize] ✅ Session saved, redirecting to OAuth provider`);
     res.redirect(authUrl);
   });
 });
@@ -7839,10 +7823,17 @@ app.get([
   // Clean up state token from session after validation
   if (req.session?.oauthStateMeta) delete req.session.oauthStateMeta[state];
 
-  // Prevent open redirect
-  let safeReturnTo = stateMeta.returnTo || '/dashboard/';
-  if (!safeReturnTo.startsWith('/') || safeReturnTo.startsWith('//')) {
-    safeReturnTo = '/dashboard/';
+  // Prevent open redirect — validate using URL parsing, not string prefix checks
+  let safeReturnTo = '/dashboard/';
+  if (stateMeta.returnTo) {
+    try {
+      const parsed = new URL(stateMeta.returnTo, 'http://localhost');
+      if (parsed.hostname === 'localhost') {
+        safeReturnTo = parsed.pathname + (parsed.search || '') + (parsed.hash || '');
+      }
+    } catch {
+      // malformed URL — use default
+    }
   }
 
   try {
@@ -8025,21 +8016,16 @@ app.get([
       return req.session.save((err) => {
         if (err) {
           console.error('[OAuth Callback] ❌ Session save failed before confirm_login redirect:', err);
-        } else {
-          console.log(`[OAuth Callback] ✅ Session saved. ID=${req.sessionID}`);
         }
 
         const nextUrl = encodeURIComponent(safeReturnTo);
         const confirmUrl = `/dashboard/?oauth_service=${service}&oauth_status=confirm_login&next=${nextUrl}&token=${confirmToken}`;
-        console.log(`[OAuth Callback] Redirecting to confirm_login: ${confirmUrl}`);
         res.redirect(confirmUrl);
       });
     }
 
     // Store token for authenticated owner (connect flow and non-primary login flow)
     const oauthOwnerId = req.session?.user?.id ? String(req.session.user.id) : (stateMeta?.ownerId ? String(stateMeta.ownerId) : null);
-    console.log(`[OAuth Callback] Using oauthOwnerId: ${oauthOwnerId} (from session.user: ${req.session?.user?.id || 'null'}, from stateMeta: ${stateMeta?.ownerId || 'null'})`);
-    console.log(`[OAuth Callback] Determining oauthOwnerId: req.session.user.id=${req.session?.user?.id || 'UNSET'}, stateMeta.ownerId=${stateMeta?.ownerId || 'UNSET'} -> oauthOwnerId=${oauthOwnerId || 'NULL'}`);
 
     // Never auto-login users in connect mode.
     // If user is unauthenticated, abort to prevent unexpected account restoration.
@@ -8057,21 +8043,14 @@ app.get([
         return res.redirect(`/dashboard/?oauth_service=${service}&oauth_status=error&error=${encodeURIComponent('plan_limit_reached')}`);
       }
 
-      console.log(`[OAuth Callback] Storing ${service} token for owner: ${oauthOwnerId} (mode=${stateMeta.mode || 'connect'})`);
       const storeResult = storeOAuthToken(service, oauthOwnerId, tokenData.accessToken, tokenData.refreshToken || null, expiresAt, tokenData.scope);
       tokenStoredForUser = true;
-      console.log(`[OAuth Callback] ✅ Token stored:`, { service, userId: oauthOwnerId });
+      logger.info('[OAuth Callback] token stored', { service });
 
       // CRITICAL: Ensure req.session.user is populated for subsequent API calls
       // This is absolutely essential for /api/v1/oauth/status to find the user
-      console.log(`[OAuth Callback] Setting session.user for connect flow...`);
-      console.log(`[OAuth Callback]   Before: req.session.user = ${req.session.user ? req.session.user.id : 'NULL'}`);
-      console.log(`[OAuth Callback]   oauthOwnerId = ${oauthOwnerId}`);
-
       if (!req.session.user && oauthOwnerId) {
-        console.log(`[OAuth Callback]   Calling getUserById(${oauthOwnerId})...`);
         const ownerUser = getUserById(oauthOwnerId);
-        console.log(`[OAuth Callback]   getUserById returned:`, ownerUser ? `USER FOUND: ${ownerUser.id}` : 'NULL');
 
         if (ownerUser) {
           req.session.user = {
@@ -8082,14 +8061,9 @@ app.get([
             avatarUrl: ownerUser.avatarUrl || null,
             twoFactorEnabled: Boolean(ownerUser.twoFactorEnabled),
           };
-          console.log(`[OAuth Callback] ✅ SUCCESS: Set req.session.user = ${req.session.user.id}`);
         } else {
-          console.log(`[OAuth Callback] ❌ FAILURE: getUserById returned NULL for ${oauthOwnerId}`);
+          logger.warn('[OAuth Callback] getUserById returned null', { service });
         }
-      } else if (req.session.user) {
-        console.log(`[OAuth Callback]   Already set: ${req.session.user.id}`);
-      } else {
-        console.log(`[OAuth Callback] ❌ No oauthOwnerId to use`);
       }
     }
 
@@ -8177,14 +8151,10 @@ app.get([
 
     const redirectUrl = `/dashboard/?oauth_service=${service}&oauth_status=connected&mode=${encodeURIComponent(stateMeta.mode || 'connect')}&next=${next}`;
 
-    console.log(`[OAuth Callback] Before saving session: req.session.id=${req.sessionID}, req.session.user=${req.session.user ? req.session.user.id : 'UNSET'}`);
     req.session.save((err) => {
       if (err) {
         console.error('[OAuth] Session save error:', err);
-      } else {
-        console.log(`[OAuth Callback] ✅ Session saved successfully. ID=${req.sessionID}`);
       }
-      console.log(`[OAuth Callback] Redirecting to: ${redirectUrl}`);
       res.redirect(redirectUrl);
     });
   } catch (error) {
@@ -8269,9 +8239,6 @@ app.get("/api/v1/oauth/status", async (req, res) => {
             setCachedOAuthToken(service, userId, token);
           }
         }
-        if (service === 'twitter' || service === 'discord') {
-          console.log(`[OAuth Status DEBUG] ${service}: userId=${userId}, token=${token ? 'FOUND' : 'NOT_FOUND'}`);
-        }
         // Source of truth: actual token existence, not oauth_status table (which can be stale)
         connectionStatus = token && !token.revoked_at ? "connected" : "disconnected";
       } catch (err) {
@@ -8281,7 +8248,6 @@ app.get("/api/v1/oauth/status", async (req, res) => {
         connectionStatus = "disconnected";
       }
     } else {
-      console.log(`[OAuth Status DEBUG] No userId found for ${service}`);
       connectionStatus = "disconnected";
     }
 
@@ -8316,15 +8282,9 @@ app.post("/api/v1/oauth/confirm", authRateLimit, (req, res) => {
   try {
     const { token } = req.body || {};
 
-    console.log(`[OAuth Confirm] Attempting confirmation:`);
-    console.log(`  - Session ID: ${req.sessionID}`);
-    console.log(`  - Session user: ${req.session?.user ? req.session.user.id : 'NONE'}`);
-    console.log(`  - Token provided: ${token ? token.slice(0, 20) + '...' : 'NONE'}`);
-    console.log(`  - oauth_confirm: ${req.session?.oauth_confirm ? 'exists' : 'NONE'}`);
-    console.log(`  - oauth_login_pending: ${req.session?.oauth_login_pending ? 'YES' : 'NO'}`);
+    logger.debug('[OAuth Confirm] Attempting confirmation', { sessionId: req.sessionID, hasToken: !!token });
 
     if (!token || typeof token !== 'string') {
-      console.log(`[OAuth Confirm] ❌ FAILED: Invalid or missing confirmation token`);
       return res.status(400).json({ error: 'Invalid or missing confirmation token' });
     }
 

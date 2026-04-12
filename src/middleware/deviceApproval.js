@@ -116,16 +116,8 @@ function deviceApprovalMiddleware(req, res, next) {
   const isMasterToken = req.tokenMeta?.tokenType === 'master' || req.tokenMeta?.scope === 'full';
   const tokenKind = isMasterToken ? 'master' : 'guest';
   
-  console.log('[Device Approval Middleware]', {
-    userId,
-    tokenId,
-    path: req.path,
-    authType: req.authType,
-  });
-  
   // Skip device check if not a Bearer token
   if (!userId || !tokenId) {
-    console.log('[Device Approval] Skipping - not an API token');
     return next();
   }
 
@@ -180,31 +172,43 @@ function deviceApprovalMiddleware(req, res, next) {
       // Register/track in approved_devices so the user can see and revoke from the dashboard.
       // Revocation is token-level: if the user has revoked any device for this token,
       // block ALL requests from this token (regardless of fingerprint) until re-approved.
+      // Step 1: Revocation check — fail closed
+      let anyRevoked;
       try {
-        const anyRevoked = db.db.prepare(
+        anyRevoked = db.db.prepare(
           'SELECT id FROM approved_devices WHERE token_id = ? AND user_id = ? AND revoked_at IS NOT NULL LIMIT 1'
         ).get(tokenId, userId);
-        const fingerprint = DeviceFingerprint.fromRequest(req);
-        if (anyRevoked) {
-          // Revoked — create a new pending approval so the user can re-approve from the dashboard
-          const pendingApprovals = db.getPendingApprovals(userId, tokenId);
-          const existingPending = pendingApprovals.find(p => p.device_fingerprint_hash === fingerprint.fingerprintHash);
-          if (!existingPending) {
-            db.createPendingApproval(tokenId, userId, fingerprint.fingerprintHash, fingerprint.summary, fingerprint.fingerprint.ipAddress);
-          }
-          return res.status(403).json({
-            error: 'device_not_approved',
-            code: 'DEVICE_APPROVAL_REQUIRED',
-            message: 'Access denied — waiting for the user to approve you in the dashboard.',
-          });
+      } catch (err) {
+        console.error('[Device Approval] Revocation check failed', { err: err.message, tokenId, userId });
+        return res.status(503).json({
+          error: 'device_approval_error',
+          code: 'DEVICE_APPROVAL_FAILED',
+          message: 'Access denied — device check temporarily unavailable.',
+        });
+      }
+      const fingerprint = DeviceFingerprint.fromRequest(req);
+      if (anyRevoked) {
+        // Revoked — create a new pending approval so the user can re-approve from the dashboard
+        const pendingApprovals = db.getPendingApprovals(userId, tokenId);
+        const existingPending = pendingApprovals.find(p => p.device_fingerprint_hash === fingerprint.fingerprintHash);
+        if (!existingPending) {
+          db.createPendingApproval(tokenId, userId, fingerprint.fingerprintHash, fingerprint.summary, fingerprint.fingerprint.ipAddress);
         }
+        return res.status(403).json({
+          error: 'device_not_approved',
+          code: 'DEVICE_APPROVAL_REQUIRED',
+          message: 'Access denied — waiting for the user to approve you in the dashboard.',
+        });
+      }
+      // Step 2: Device registration/tracking — fail open (non-critical)
+      try {
         const existing = db.getApprovedDeviceByHash(userId, fingerprint.fingerprintHash);
         if (!existing) {
           db.createApprovedDevice(tokenId, userId, fingerprint.fingerprintHash, tokenRow.label, fingerprint.summary, fingerprint.fingerprint.ipAddress);
         } else {
           db.updateDeviceLastUsed(existing.id);
         }
-      } catch (_) { /* never block on unexpected errors */ }
+      } catch (_) { /* registration tracking failure — non-critical */ }
       return next();
     }
     if (!isMasterToken && !tokenRow?.requires_approval) {

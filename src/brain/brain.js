@@ -69,7 +69,7 @@ class PersonalBrain {
     // Apply privacy filters based on scope
     switch (requestType) {
       case 'identity:get':
-        if (!scope.identity || !scope.identity.includes(params.key)) {
+        if (!Array.isArray(scope.identity) || !scope.identity.includes(params.key)) {
           throw new Error('Access denied: identity key not in scope');
         }
         return this.getIdentityData(params.key, true);
@@ -81,7 +81,7 @@ class PersonalBrain {
         return this.listIdentityData(params.category, true, scope.identity);
       
       case 'preferences:get':
-        if (!scope.preferences || !scope.preferences.includes(params.key)) {
+        if (!Array.isArray(scope.preferences) || !scope.preferences.includes(params.key)) {
           throw new Error('Access denied: preference key not in scope');
         }
         return this.getPreference(params.key);
@@ -187,7 +187,7 @@ class PersonalBrain {
   redactSensitiveData(data) {
     if (typeof data === 'string') {
       // Redact email addresses
-      data = data.replace(/[\w.-]+@[\w.-]+\.\w+/g, '[EMAIL REDACTED]');
+      data = data.replace(/\S+@\S+\.\S+/g, '[EMAIL REDACTED]');
       
       // Redact phone numbers (simple pattern)
       data = data.replace(/\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g, '[PHONE REDACTED]');
