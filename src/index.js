@@ -2271,6 +2271,7 @@ async function authenticate(req, res, next) {
     /^\/api\/v1\/afp\/download/,              // public: AFP daemon binary downloads
     /^\/api\/v1\/agentic\/device\/token$/,    // public: AI agent polls for token (no prior token available)
     /^\/api\/v1\/agent-auth\/install\.js$/,   // public: OAuth installer script download
+    /^\/api\/v1\/agent-guide$/,              // public: AI agent capabilities + connection guide
   ];
 
   // Allow DELETE on invitations if email query param is provided (for email-based revocation without login)
@@ -2598,6 +2599,130 @@ app.get('/api/v1/agent-auth/install.js', (req, res) => {
   res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache');
   res.send(fs.readFileSync(agentAuthScript, 'utf8'));
+});
+
+// ─── Public: Agent connection guide ──────────────────────────────────────────
+// Fetched by AI agents (via the onboarding starter prompt) to learn about
+// MyApi's capabilities and the three connection methods.
+app.get('/api/v1/agent-guide', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.json({
+    api: 'MyApi — Agent Connection Guide',
+    version: '1.0',
+    base_url: 'https://www.myapiai.com',
+    description: 'MyApi is a personal context API that gives AI agents secure, structured access to your identity, preferences, knowledge base, personas, connected services (GitHub, Google, Slack, and 40+ more), and audit log. Instead of re-explaining yourself every conversation, agents read your profile and act on your behalf with scoped tokens.',
+    capabilities: [
+      'User identity & preferences (name, role, bio, timezone, location)',
+      'Personas — named AI roles with attached SOUL.md personality files',
+      'Knowledge base — private documents, SOPs, and notes agents can query',
+      'Connected services — 45+ OAuth integrations (GitHub, Google, Slack, Discord, Notion, Linear, …)',
+      'Scoped access tokens — grant read-only or full access per agent, revoke anytime',
+      'Audit log — every agent action is logged with IP, scope, and metadata',
+      'Multi-workspace support — separate namespaces for different projects or teams',
+    ],
+    connection_methods: [
+      {
+        id: 'master_token',
+        name: 'Master Token',
+        summary: 'A single long-lived bearer token with full API access, generated automatically when the account was created.',
+        pros: [
+          'Zero setup — token already exists in the dashboard',
+          'Full read/write access to all resources',
+          'Works immediately with any HTTP client',
+        ],
+        cons: [
+          'One token for all agents — no per-agent identity in audit logs',
+          'Compromising the token compromises everything',
+          'Cannot be scoped to read-only or a subset of resources',
+        ],
+        best_for: 'Quick local experiments or personal single-agent setups where auditability is not a concern.',
+        setup: {
+          steps: [
+            '1. Log in at https://www.myapiai.com/dashboard/',
+            '2. Go to Access Tokens — the Master Token is shown at the top',
+            '3. Copy it and use the header: Authorization: Bearer <token>',
+          ],
+          dashboard_url: 'https://www.myapiai.com/dashboard/access-tokens',
+        },
+      },
+      {
+        id: 'device_flow',
+        name: 'OAuth Device Flow (Recommended)',
+        summary: 'RFC 8628 browser-approval flow. The agent requests a short user code, the user approves it in the dashboard browser tab, and the agent receives a dedicated scoped token.',
+        pros: [
+          'Each agent gets its own named token — full per-agent audit trail',
+          'User explicitly approves each agent in the browser — no blind trust',
+          'Tokens can be scoped to read-only or specific resources',
+          'Revoke a single agent token without affecting others',
+          'Zero-dependency installer: one curl command runs the full flow',
+        ],
+        cons: [
+          'Requires user to open a browser tab once to approve',
+          'Approval window is 15 minutes — agent must poll until approved',
+        ],
+        best_for: 'Most users. Secure, auditable, and straightforward — the recommended default.',
+        setup: {
+          quick_start: 'curl -sL https://www.myapiai.com/api/v1/agent-auth/install.js | node',
+          quick_start_note: 'Runs the full OAuth PKCE browser flow and prints a ready-to-use Bearer token.',
+          manual_steps: [
+            '1. POST https://www.myapiai.com/api/v1/agentic/device/authorize',
+            '   Body: { "label": "My Claude Agent", "scope": "full" }',
+            '   Response: { device_code, user_code (e.g. ABCD-1234), verification_uri_complete, expires_in: 900 }',
+            '2. Show user_code to the user and direct them to verification_uri_complete',
+            '3. User approves at: https://www.myapiai.com/dashboard/activate',
+            '4. Poll every 5 s: POST https://www.myapiai.com/api/v1/agentic/device/token',
+            '   Body: { "device_code": "..." } — returns 428 (pending), 400 (denied), or 200 with access_token',
+            '5. Use: Authorization: Bearer <access_token>',
+          ],
+          endpoints: {
+            authorize: 'POST https://www.myapiai.com/api/v1/agentic/device/authorize',
+            token_poll: 'POST https://www.myapiai.com/api/v1/agentic/device/token',
+            approval_page: 'https://www.myapiai.com/dashboard/activate',
+          },
+        },
+      },
+      {
+        id: 'asc_keypair',
+        name: 'ASC — Agentic Secure Connection (Ed25519 Keypair)',
+        summary: 'Cryptographic keypair auth. The agent generates an Ed25519 keypair, registers the public key once, then signs every request — the private key never leaves the agent.',
+        pros: [
+          'Private key never transmitted — strongest security posture',
+          'Every request is individually signed — cryptographic non-repudiation',
+          'Replay protection via timestamp (±60 s window)',
+          'Revoke a single key without affecting other agents',
+        ],
+        cons: [
+          'More complex: agent must implement Ed25519 signing per request',
+          'Initial key registration requires one-time user approval in the dashboard',
+          'Requires accurate system clock (±60 seconds)',
+        ],
+        best_for: 'Production agents or automated pipelines where cryptographic proof of origin is required.',
+        setup: {
+          steps: [
+            '1. Generate an Ed25519 keypair once (save the private key securely):',
+            '   Node.js: const { privateKey, publicKey } = crypto.generateKeyPairSync("ed25519");',
+            '   pubKeyB64 = publicKey.export({ type: "spki", format: "der" }).toString("base64");',
+            '2. Register the public key:',
+            '   POST https://www.myapiai.com/api/v1/agentic/asc/register',
+            '   Body: { "public_key": "<pubKeyB64>", "label": "My Agent" }',
+            '   Response: { status: "pending_approval", key_fingerprint }',
+            '3. User approves the fingerprint at: https://www.myapiai.com/dashboard/devices',
+            '4. For every API request, add three headers:',
+            '   X-Agent-PublicKey: <pubKeyB64>',
+            '   X-Agent-Timestamp: <unix seconds>',
+            '   X-Agent-Signature: base64( Ed25519Sign(<timestamp>:<token_id>) )',
+            '5. Server verifies signature — request succeeds if key is approved and timestamp is fresh',
+          ],
+          endpoints: {
+            register: 'POST https://www.myapiai.com/api/v1/agentic/asc/register',
+            approval_page: 'https://www.myapiai.com/dashboard/devices',
+          },
+        },
+      },
+    ],
+    api_reference: 'https://www.myapiai.com/dashboard/docs',
+    support: 'https://www.myapiai.com/dashboard/',
+  });
 });
 
 const createGoogleRoutes = require('./routes/google');

@@ -75,6 +75,10 @@ const TIPS = [
     label: 'The pattern that works',
     body: 'Create a persona for a specific role, attach relevant knowledge docs to it, then issue it a scoped token with only the permissions it needs. Revoke the token any time without affecting anything else.',
   },
+  {
+    label: 'Your agent reads, you decide',
+    body: 'Paste this prompt into any AI — Claude, ChatGPT, Gemini. It fetches the connection guide from your API and walks you through choosing and setting up a method. Nothing is sent until you approve.',
+  },
 ];
 
 // ─── Destination tiles for the Ready step ────────────────────────────────────
@@ -269,8 +273,9 @@ export default function OnboardingModal({ onClose }) {
     if (path) setTimeout(() => navigate(path), 320);
   };
 
+  const [copied, setCopied] = useState(false);
   const tip = TIPS[step - 1];
-  const TOTAL = 5;
+  const TOTAL = 6;
 
   return (
     <>
@@ -323,6 +328,7 @@ export default function OnboardingModal({ onClose }) {
                   {step === 3 && 'Secure your account'}
                   {step === 4 && 'Connect a service'}
                   {step === 5 && 'You\'re all set'}
+                  {step === 6 && 'Connect your AI agent'}
                 </h2>
               </div>
               <button
@@ -616,7 +622,7 @@ export default function OnboardingModal({ onClose }) {
             {step === 5 && (
               <div className="space-y-3">
                 <p className="text-sm leading-relaxed" style={{ color: 'rgba(148,163,184,0.9)' }}>
-                  Your workspace is configured and ready. Here's where to go next — or head straight to the dashboard.
+                  Your workspace is configured and ready. Here's where to go next — or continue to connect your AI agent.
                 </p>
                 <div className="grid grid-cols-2 gap-2">
                   {NEXT_STEPS.map((item) => (
@@ -636,6 +642,71 @@ export default function OnboardingModal({ onClose }) {
                 </div>
               </div>
             )}
+
+            {/* Step 6 — Connect Your AI Agent */}
+            {step === 6 && (() => {
+              const AGENT_PROMPT = `I'd like you to connect to my personal AI context API — MyApi.
+
+Start by reading the connection guide (no auth needed):
+  curl -s https://www.myapiai.com/api/v1/agent-guide
+
+Once you've read it:
+1. Summarize what MyApi can do and how it will improve our conversations
+2. Walk me through each of the three connection methods with their pros and cons
+3. Ask me a few questions to understand my situation, then recommend the best method
+4. Guide me through the setup step by step — I'll follow your lead`;
+              return (
+                <div className="space-y-3">
+                  <p className="text-sm leading-relaxed" style={{ color: 'rgba(148,163,184,0.9)' }}>
+                    Copy this prompt and paste it into your AI agent — Claude, ChatGPT, Gemini, or any other. It will fetch your connection guide and walk you through the setup.
+                  </p>
+                  <div style={{
+                    position: 'relative',
+                    background: 'rgba(15,23,42,0.8)',
+                    border: '1px solid rgba(71,85,105,0.5)',
+                    borderRadius: 10,
+                    padding: '14px 14px 42px 14px',
+                  }}>
+                    <pre style={{
+                      margin: 0,
+                      fontSize: 12,
+                      lineHeight: 1.65,
+                      color: 'rgba(203,213,225,0.9)',
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                      fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+                    }}>{AGENT_PROMPT}</pre>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(AGENT_PROMPT).then(() => {
+                          setCopied(true);
+                          setTimeout(() => setCopied(false), 2000);
+                        });
+                      }}
+                      style={{
+                        position: 'absolute',
+                        bottom: 10,
+                        right: 10,
+                        padding: '5px 12px',
+                        borderRadius: 6,
+                        border: copied ? '1px solid rgba(34,197,94,0.4)' : '1px solid rgba(71,85,105,0.6)',
+                        background: copied ? 'rgba(34,197,94,0.08)' : 'rgba(30,41,59,0.8)',
+                        color: copied ? 'rgba(134,239,172,0.9)' : 'rgba(148,163,184,0.9)',
+                        fontSize: 11,
+                        fontWeight: 500,
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      {copied ? '✓ Copied' : 'Copy Prompt'}
+                    </button>
+                  </div>
+                  <p className="text-xs" style={{ color: 'rgba(100,116,139,0.8)' }}>
+                    The guide is public — your agent fetches it without a token. Nothing connects until you explicitly approve it.
+                  </p>
+                </div>
+              );
+            })()}
           </div>
 
           {/* ── Tip block ── */}
@@ -743,6 +814,16 @@ export default function OnboardingModal({ onClose }) {
                 </button>
               )}
               {step === 5 && (
+                <button
+                  onClick={() => setStep(6)}
+                  style={primaryBtnStyle(false)}
+                  onMouseEnter={e => { e.currentTarget.style.opacity = '0.88'; }}
+                  onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
+                >
+                  Next →
+                </button>
+              )}
+              {step === 6 && (
                 <button
                   onClick={() => handleFinish('/')}
                   style={primaryBtnStyle(false)}
