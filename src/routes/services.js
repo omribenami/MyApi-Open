@@ -2,6 +2,7 @@ const logger = require('../utils/logger');
 const express = require('express');
 const https = require('https');
 const bcrypt = require('bcrypt');
+const SERVICE_METHODS = require('./service-methods');
 const {
   getServicePreference,
   getServicePreferences,
