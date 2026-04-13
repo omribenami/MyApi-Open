@@ -347,18 +347,21 @@ router.get('/me', async (req, res) => {
     const bcrypt = require('bcrypt');
     
     // Check session auth FIRST (OAuth login via browser)
+    // Track auth method so we know whether bootstrap is safe to return.
     let userId = null;
+    let authViaSession = false;
     if (req.session && req.session.user && req.session.user.id) {
       userId = String(req.session.user.id);
+      authViaSession = true;
       logger.info(`[Auth/Me] Authenticated via session: ${userId}`);
     }
-    
+
     // Fallback to tokenMeta (set by authenticate middleware if this route is wrapped)
     if (!userId && req.tokenMeta?.ownerId) {
       userId = String(req.tokenMeta.ownerId);
       logger.info(`[Auth/Me] Authenticated via req.tokenMeta: ${userId}`);
     }
-    
+
     // Fallback to req.user (in case this route is later wrapped in authenticate())
     if (!userId && req.user?.id) {
       userId = String(req.user.id);
@@ -524,11 +527,19 @@ router.get('/me', async (req, res) => {
       needsOnboarding: Boolean(user?.needsOnboarding),
     };
 
+    // SECURITY: only return the master token bootstrap to session-authenticated
+    // requests (browser dashboard). Bearer-token callers (including scoped guest
+    // tokens) must NOT receive the master token — doing so would allow any guest
+    // token holder to escalate to full account control.
+    const bootstrapPayload = (authViaSession && masterTokenRaw)
+      ? { masterToken: masterTokenRaw, tokenId: masterTokenId }
+      : null;
+
     res.json({
       success: true,
       user: userPayload,
       isFirstLogin,
-      bootstrap: masterTokenRaw ? { masterToken: masterTokenRaw, tokenId: masterTokenId } : null,
+      bootstrap: bootstrapPayload,
     });
   } catch (error) {
     logger.error('Get user error:', error);
