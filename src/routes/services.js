@@ -92,6 +92,40 @@ function createServicesRoutes() {
         if (t.hash && await bcrypt.compare(rawToken, t.hash).catch(() => false)) {
           req.tokenMeta = t;
           req.user = req.user || { id: t.ownerId };
+
+// Service methods registry — documents what operations available for each service
+const SERVICE_METHODS = {
+  google: [
+    {
+      name: 'gmail.messages.list',
+      description: 'List Gmail messages from inbox',
+      method: 'GET',
+      endpoint: '/services/google/gmail/messages',
+      scope: 'services:read or services:google:read or master',
+      parameters: {
+        maxResults: { type: 'number', description: 'Max messages to return (default: 10)', optional: true },
+        pageToken: { type: 'string', description: 'Pagination token from previous response', optional: true }
+      },
+      returns: 'messages array with id, subject, from, to, date, snippet, threadId'
+    },
+    {
+      name: 'gmail.messages.get',
+      description: 'Get full Gmail message by ID',
+      method: 'GET',
+      endpoint: '/services/google/gmail/messages/:messageId',
+      scope: 'services:read or services:google:read or master',
+      parameters: {
+        messageId: { type: 'string', description: 'Message ID from messages.list', optional: false }
+      },
+      returns: 'full message object with body, headers, attachments, labels'
+    }
+  ],
+  github: [],
+  slack: [],
+  discord: [],
+  notion: [],
+  microsoft365: [],
+};
           return next();
         }
       }
@@ -262,6 +296,26 @@ function createServicesRoutes() {
   });
 
   // GET /api/v1/services/available - List available services
+
+
+  // GET /api/v1/services/:serviceId/methods - List available methods for a service
+  router.get('/:serviceId/methods', requireAuth, requireServiceScope(':serviceId', 'read'), async (req, res) => {
+    try {
+      const { serviceId } = req.params;
+      const methods = SERVICE_METHODS[serviceId] || [];
+      
+      res.json({
+        success: true,
+        serviceId,
+        data: methods,
+        count: methods.length,
+        note: methods.length === 0 ? 'No methods documented yet for this service' : `Use these methods under /api/v1/services/`
+      });
+    } catch (error) {
+      logger.error(`[Services] Error fetching methods for ${req.params.serviceId}:`, error);
+      res.status(500).json({ error: 'Failed to fetch service methods' });
+    }
+  });
   router.get('/available', (req, res) => {
     try {
       res.json({
