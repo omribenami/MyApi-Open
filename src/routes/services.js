@@ -106,6 +106,39 @@ function createServicesRoutes() {
     return String(req.session?.user?.id || req.user?.id || req.tokenMeta?.ownerId || req.tokenMeta?.userId || 'owner');
   }
 
+  // Returns true if the caller has sufficient scope to access a service endpoint.
+  // Session users always pass; master tokens always pass; guest tokens need services:* scope.
+  function hasServiceScope(req, serviceName, operation = 'read') {
+    if (req.session?.user) return true;
+    const meta = req.tokenMeta;
+    if (!meta) return false;
+    if (meta.scope === 'full' || meta.tokenType === 'master') return true;
+
+    let scopes = [];
+    try {
+      const parsed = JSON.parse(meta.scope);
+      scopes = Array.isArray(parsed) ? parsed : [];
+    } catch { return false; }
+
+    return scopes.some(s =>
+      s === `services:${operation}` ||
+      s === 'services:write' ||                                    // write implies read
+      (serviceName && s === `services:${serviceName}:${operation}`) ||
+      (serviceName && s === `services:${serviceName}:*`) ||
+      s === 'services:*'
+    );
+  }
+
+  function requireServiceScope(serviceName, operation = 'read') {
+    return (req, res, next) => {
+      if (hasServiceScope(req, serviceName, operation)) return next();
+      const needed = serviceName
+        ? `services:${operation}' or 'services:${serviceName}:${operation}`
+        : `services:${operation}`;
+      return res.status(403).json({ error: `Requires '${needed}' scope` });
+    };
+  }
+
   async function getConnectionMetadata(serviceId, userId) {
     if (serviceId === 'fal') {
       const prefs = getServicePreference(userId, 'fal');
@@ -149,7 +182,7 @@ function createServicesRoutes() {
   }
 
   // GET /api/v1/services - List all services with their connection status
-  router.get('/', requireAuth, async (req, res) => {
+  router.get('/', requireAuth, requireServiceScope(null, 'read'), async (req, res) => {
     try {
       const userId = resolveUserId(req);
 
@@ -196,7 +229,7 @@ function createServicesRoutes() {
   });
 
   // GET /api/v1/services/:serviceName - Service detail
-  router.get('/:serviceName', async (req, res, next) => {
+  router.get('/:serviceName', requireAuth, requireServiceScope(null, 'read'), async (req, res, next) => {
     const blocked = new Set(['available', 'preferences', 'categories']);
     if (blocked.has(String(req.params.serviceName || '').toLowerCase())) {
       return next();
@@ -397,7 +430,7 @@ function createServicesRoutes() {
 
   // GET /api/v1/services/google/gmail/messages
   // Query params: maxResults (default 5, max 20), q (Gmail search query), pageToken
-  router.get('/google/gmail/messages', requireAuth, async (req, res) => {
+  router.get('/google/gmail/messages', requireAuth, requireServiceScope('google', 'read'), async (req, res) => {
     try {
       const userId = resolveUserId(req);
       const accessToken = await getGoogleAccessToken(userId);
@@ -466,7 +499,7 @@ function createServicesRoutes() {
 
   // GET /api/v1/services/google/gmail/messages/:messageId
   // Returns the full email (plain text body extracted)
-  router.get('/google/gmail/messages/:messageId', requireAuth, async (req, res) => {
+  router.get('/google/gmail/messages/:messageId', requireAuth, requireServiceScope('google', 'read'), async (req, res) => {
     try {
       const userId = resolveUserId(req);
       const accessToken = await getGoogleAccessToken(userId);
@@ -562,7 +595,7 @@ function createServicesRoutes() {
   }
 
   // GET /api/v1/services/google/drive/files?q=&pageSize=
-  router.get('/google/drive/files', requireAuth, async (req, res) => {
+  router.get('/google/drive/files', requireAuth, requireServiceScope('google', 'read'), async (req, res) => {
     try {
       const userId = resolveUserId(req);
       const accessToken = await getGoogleAccessToken(userId);
@@ -584,7 +617,7 @@ function createServicesRoutes() {
   });
 
   // POST /api/v1/services/google/drive/upload  body: { name, content, mimeType?, folderId? }
-  router.post('/google/drive/upload', requireAuth, async (req, res) => {
+  router.post('/google/drive/upload', requireAuth, requireServiceScope('google', 'write'), async (req, res) => {
     try {
       const userId = resolveUserId(req);
       const accessToken = await getGoogleAccessToken(userId);
@@ -637,7 +670,7 @@ function createServicesRoutes() {
   });
 
   // DELETE /api/v1/services/google/drive/files/:fileId
-  router.delete('/google/drive/files/:fileId', requireAuth, async (req, res) => {
+  router.delete('/google/drive/files/:fileId', requireAuth, requireServiceScope('google', 'write'), async (req, res) => {
     try {
       const userId = resolveUserId(req);
       const accessToken = await getGoogleAccessToken(userId);

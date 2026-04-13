@@ -8505,8 +8505,22 @@ app.get("/api/v1/oauth/status", async (req, res) => {
     userId = String(req.session.user.id);
   } else if (req.tokenMeta?.ownerId) {
     userId = String(req.tokenMeta.ownerId);
+
+    // Bearer token caller: enforce services:read or master scope
+    const meta = req.tokenMeta;
+    const isMasterToken = meta.scope === 'full' || meta.tokenType === 'master';
+    if (!isMasterToken) {
+      let scopes = [];
+      try { const p = JSON.parse(meta.scope); scopes = Array.isArray(p) ? p : []; } catch { /* ignore */ }
+      const hasAccess = scopes.some(s =>
+        s === 'services:read' || s === 'services:write' || s.startsWith('services:')
+      );
+      if (!hasAccess) {
+        return res.status(403).json({ error: "Requires 'services:read' scope" });
+      }
+    }
   }
-  
+
   // If no user identified, return empty/all-disconnected status (public access)
   if (!userId) {
     const services = OAUTH_SERVICES.map(service => ({
