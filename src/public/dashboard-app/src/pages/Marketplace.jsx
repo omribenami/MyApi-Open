@@ -842,7 +842,7 @@ export default function Marketplace() {
     total: (listings || []).length,
     skills: (listings || []).filter(l => l?.type === 'skill').length,
     personas: (listings || []).filter(l => l?.type === 'persona').length,
-    apis: (listings || []).filter(l => l?.type === 'api').length,
+    tokens: (listings || []).filter(l => l?.type === 'token' || l?.type === 'api').length,
   };
 
   useEffect(() => {
@@ -921,7 +921,7 @@ export default function Marketplace() {
         {/* Header */}
         <div>
           <h1 className="text-3xl font-bold text-white">Marketplace</h1>
-          <p className="text-slate-400 mt-1">Discover and share personas, APIs, and skills with the community</p>
+          <p className="text-slate-400 mt-1">Discover and share personas, tokens, and skills with the community</p>
         </div>
 
         {/* Top Summary Counters */}
@@ -939,8 +939,8 @@ export default function Marketplace() {
             <p className="text-2xl font-bold text-purple-400 mt-1">{currentCounts.personas}</p>
           </div>
           <div className="bg-slate-800 border border-slate-700 rounded-lg p-3">
-            <p className="text-slate-400 text-xs font-medium">APIs</p>
-            <p className="text-2xl font-bold text-indigo-400 mt-1">{currentCounts.apis}</p>
+            <p className="text-slate-400 text-xs font-medium">Tokens</p>
+            <p className="text-2xl font-bold text-cyan-400 mt-1">{currentCounts.tokens}</p>
           </div>
         </div>
 
@@ -1193,8 +1193,8 @@ export default function Marketplace() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {(listings || []).filter(l => {
               if (typeFilter === 'all') return true;
-              // Map 'token' tab to show 'api' type listings
-              if (typeFilter === 'token') return l?.type === 'api';
+              // 'token' tab shows both 'token' and legacy 'api' type listings
+              if (typeFilter === 'token') return l?.type === 'token' || l?.type === 'api';
               return l?.type === typeFilter;
             }).map(listing => {
               if (!listing || !listing.id) {

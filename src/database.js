@@ -3841,10 +3841,14 @@ function getMarketplaceListings({ type, sort, search, tags, provider, price, rat
   `;
   const params = [status];
 
-  // Type filter
+  // Type filter — 'token' matches both 'token' and legacy 'api' listings
   if (type && type !== 'all') {
-    query += ' AND ml.type = ?';
-    params.push(type);
+    if (type === 'token') {
+      query += " AND ml.type IN ('token', 'api')";
+    } else {
+      query += ' AND ml.type = ?';
+      params.push(type);
+    }
   }
 
   // Search filter
