@@ -9959,8 +9959,18 @@ app.put('/api/v1/brain/knowledge-base/:id', authenticate, async (req, res) => {
 // POST /api/v1/brain/knowledge-base/upsert - Create or update a document by title
 // Useful for agents that want to maintain a named document (e.g. "memory.md")
 app.post('/api/v1/brain/knowledge-base/upsert', authenticate, async (req, res) => {
-  if (!isMaster(req) && !hasScope(req, 'knowledge')) {
-    return res.status(403).json({ error: "Requires 'knowledge' scope or master token" });
+  // SECURITY FIX: KB write access restricted to master tokens only
+  // Non-master tokens with 'knowledge' scope can only READ, not modify/create
+  if (!isMaster(req)) {
+    createAuditLog({
+      requesterId: req.tokenMeta?.tokenId || 'unknown',
+      action: 'kb_document_upsert_denied',
+      resource: '/api/v1/brain/knowledge-base/upsert',
+      scope: req.tokenMeta?.scope || 'unknown',
+      ip: req.ip,
+      details: { reason: 'insufficient_scope_for_write' }
+    });
+    return res.status(403).json({ error: "Only master token can create or update knowledge base documents" });
   }
   try {
     const { title, content, source } = req.body;
