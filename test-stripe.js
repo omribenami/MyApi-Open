@@ -13,9 +13,10 @@ const red = (s) => `\x1b[31m${s}\x1b[0m`;
 const yellow = (s) => `\x1b[33m${s}\x1b[0m`;
 const blue = (s) => `\x1b[34m${s}\x1b[0m`;
 
-console.log(blue('\n🧪 STRIPE DRY TEST — Test Mode (No Real Charges)\n'));
+console.log(blue('🧪 STRIPE DRY TEST — Test Mode (No Real Charges)\n'));
 
 // Check configuration
+// SECURITY FIX (HIGH - CVSS 7.1 + 4.3): Stripe Key Validation and Test/Live Fallback Prevention
 const testKey = process.env.STRIPE_SECRET_KEY_TEST;
 const liveKey = process.env.STRIPE_SECRET_KEY_LIVE;
 const webhookSecretTest = process.env.STRIPE_WEBHOOK_SECRET_TEST;
@@ -27,18 +28,27 @@ console.log(`  Live Secret Key: ${liveKey ? green('✓ Found') : red('✗ Missin
 console.log(`  Test Webhook Secret: ${webhookSecretTest ? green('✓ Found') : red('✗ Missing')}`);
 console.log(`  Live Webhook Secret: ${webhookSecretLive ? green('✓ Found') : red('✗ Missing')}`);
 
-// Use test key if available, fall back to live (read-only operations only)
-const useKey = testKey || liveKey;
-const useLive = !testKey && liveKey;
-const webhookSecret = testKey ? webhookSecretTest : webhookSecretLive;
-
-if (!useKey) {
-  console.log(red('\n❌ Cannot proceed: No Stripe API key found!\n'));
+// SECURITY FIX: Require test key in test mode - no fallback to live mode
+// This prevents accidental usage of live keys and credentials exposure
+if (!testKey) {
+  console.log(red('\n❌ STRIPE_SECRET_KEY_TEST is required for test mode!'));
+  console.log(red('    For safety, this tool requires explicit test key configuration.'));
+  console.log(red('    Do not fall back to live keys in test environments.\n'));
   process.exit(1);
 }
 
-if (useLive) {
-  console.log(yellow('\n⚠️  Test key missing, using LIVE key (read-only operations only)'));
+// Validate key format
+if (!testKey.startsWith('sk_test_')) {
+  console.log(red('\n❌ STRIPE_SECRET_KEY_TEST has invalid format (must start with sk_test_)\n'));
+  process.exit(1);
+}
+
+const useKey = testKey;
+const webhookSecret = webhookSecretTest;
+
+if (!useKey) {
+  console.log(red('\n❌ Cannot proceed: No Stripe TEST API key configured!\n'));
+  process.exit(1);
 }
 
 // Initialize Stripe
@@ -46,7 +56,7 @@ const stripe = new Stripe(useKey, {
   apiVersion: '2023-10-16',
 });
 
-console.log(yellow(`\n🔌 Using ${useLive ? 'LIVE' : 'TEST'} mode (${useKey.substring(0, 15)}...)`))
+console.log(yellow(`\n🔌 Using TEST mode (key validated - ${useKey.substring(0, 15)}...)\n`))
 
 async function runTests() {
   const results = [];

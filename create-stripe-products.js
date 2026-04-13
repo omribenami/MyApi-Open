@@ -16,13 +16,20 @@ const yellow = (s) => `\x1b[33m${s}\x1b[0m`;
 const blue = (s) => `\x1b[34m${s}\x1b[0m`;
 const cyan = (s) => `\x1b[36m${s}\x1b[0m`;
 
-console.log(blue('\n💳 STRIPE PRODUCT CREATOR — MyApi Subscription Tiers\n'));
+console.log(blue('💳 STRIPE PRODUCT CREATOR — MyApi Subscription Tiers\n'));
 
-// Use LIVE mode for production products
+// SECURITY FIX (HIGH - CVSS 7.1): Stripe API Key Validation
+// Only allow explicit LIVE key - no fallback from test or implicit use
 const liveKey = process.env.STRIPE_SECRET_KEY_LIVE;
 
+// Validate the key format (should start with sk_live_)
 if (!liveKey) {
   console.log(red('❌ STRIPE_SECRET_KEY_LIVE not found in .env\n'));
+  process.exit(1);
+}
+
+if (!liveKey.startsWith('sk_live_')) {
+  console.log(red('❌ STRIPE_SECRET_KEY_LIVE has invalid format (must start with sk_live_)\n'));
   process.exit(1);
 }
 
@@ -30,7 +37,7 @@ const stripe = new Stripe(liveKey, {
   apiVersion: '2023-10-16',
 });
 
-console.log(yellow('🔌 Using LIVE mode — Creating production products\n'));
+console.log(yellow('🔌 Using LIVE mode — Creating production products (STRIPE_SECRET_KEY_LIVE validated)\n'));
 
 // Product definitions
 const PRODUCTS = [
