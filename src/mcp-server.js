@@ -40,7 +40,26 @@ const server = new Server({
 });
 
 // User context - passed in via environment or extracted from request
-let currentUserId = process.env.MYAPI_USER_ID || null;
+// SECURITY FIX (HIGH - CVSS 8.2): MCP Server Authentication
+// The environment variable must be properly validated; we no longer blindly trust it
+// In production, proper token validation should be added
+let currentUserId = null;
+
+// Initialize user context from environment with validation
+function initializeUserContext() {
+  const userIdEnv = process.env.MYAPI_USER_ID || null;
+  if (userIdEnv) {
+    // Validate user ID format - should be UUID or alphanumeric
+    if (!/^[a-zA-Z0-9_\-]{1,36}$/.test(userIdEnv)) {
+      console.error('[MCP] Invalid MYAPI_USER_ID format, ignoring');
+      return null;
+    }
+    return userIdEnv;
+  }
+  return null;
+}
+
+currentUserId = initializeUserContext();
 
 /**
  * List available tools
@@ -238,11 +257,31 @@ async function handleListServices(args) {
 }
 
 async function handleGetServiceData(args) {
+  // SECURITY FIX (HIGH - CVSS 7.3): Prompt Injection - Input Validation
   const { service, query, limit = 10 } = args;
 
   if (!currentUserId) {
     return errorResponse('No user context.');
   }
+
+  // Validate service name - only allow whitelisted services
+  const allowedServices = ['gmail', 'calendar', 'drive', 'contacts', 'github', 'linkedin', 'discord', 'notion', 'slack'];
+  if (!service || !allowedServices.includes(String(service).toLowerCase())) {
+    return errorResponse(`Invalid service: ${service}. Allowed services: ${allowedServices.join(', ')}`);
+  }
+
+  // Validate query string - prevent injection of control characters and SQL-like patterns
+  if (query && typeof query !== 'string') {
+    return errorResponse('Query must be a string');
+  }
+  if (query && query.length > 1000) {
+    return errorResponse('Query exceeds maximum length of 1000 characters');
+  }
+  // Sanitize query to prevent prompt/injection attacks
+  const sanitizedQuery = query ? String(query).replace(/[<>\"'`;]/g, '') : '';
+
+  // Validate limit parameter
+  const validatedLimit = Math.min(Math.max(parseInt(limit) || 10, 1), 100);
 
   // Check if service is connected
   const token = db.prepare(
@@ -256,14 +295,14 @@ async function handleGetServiceData(args) {
   // Placeholder for actual service data fetching
   // In production, this would call the service's actual API
   const mockData = {
-    gmail: () => `Found ${Math.floor(Math.random() * 20)} emails matching "${query}"`,
-    calendar: () => `Found ${Math.floor(Math.random() * 5)} events matching "${query}"`,
-    drive: () => `Found ${Math.floor(Math.random() * 15)} files matching "${query}"`,
-    github: () => `Found ${Math.floor(Math.random() * 10)} repositories matching "${query}"`,
-    linkedin: () => `Found ${Math.floor(Math.random() * 8)} posts matching "${query}"`,
+    gmail: () => `Found ${Math.floor(Math.random() * 20)} emails matching "${sanitizedQuery}"`,
+    calendar: () => `Found ${Math.floor(Math.random() * 5)} events matching "${sanitizedQuery}"`,
+    drive: () => `Found ${Math.floor(Math.random() * 15)} files matching "${sanitizedQuery}"`,
+    github: () => `Found ${Math.floor(Math.random() * 10)} repositories matching "${sanitizedQuery}"`,
+    linkedin: () => `Found ${Math.floor(Math.random() * 8)} posts matching "${sanitizedQuery}"`,
   };
 
-  const result = mockData[service]?.() || `Data from ${service}: ${query}`;
+  const result = mockData[service]?.() || `Data from ${service}: ${sanitizedQuery}`;
 
   return {
     content: [
@@ -276,10 +315,27 @@ async function handleGetServiceData(args) {
 }
 
 async function handleExecuteServiceMethod(args) {
+  // SECURITY FIX (HIGH - CVSS 7.3): Prompt Injection - Method Validation
   const { service, method, params = {} } = args;
 
   if (!currentUserId) {
     return errorResponse('No user context.');
+  }
+
+  // Validate service name
+  const allowedServices = ['gmail', 'calendar', 'drive', 'contacts', 'github', 'linkedin', 'discord', 'notion', 'slack'];
+  if (!service || !allowedServices.includes(String(service).toLowerCase())) {
+    return errorResponse(`Invalid service: ${service}`);
+  }
+
+  // Validate method name - only allow safe alphanumeric and underscore
+  if (!method || !/^[a-zA-Z0-9_]{1,50}$/.test(String(method))) {
+    return errorResponse('Invalid method name. Only alphanumeric characters and underscores allowed.');
+  }
+
+  // Validate params is an object
+  if (typeof params !== 'object' || Array.isArray(params)) {
+    return errorResponse('Params must be an object');
   }
 
   // Check if service is connected
@@ -291,7 +347,7 @@ async function handleExecuteServiceMethod(args) {
     return errorResponse(`Service '${service}' is not connected.`);
   }
 
-  // Simulate method execution
+  // Simulate method execution with validated inputs
   const result = `[${service.toUpperCase()}] Executed ${method} with params: ${JSON.stringify(params)}`;
 
   return {
