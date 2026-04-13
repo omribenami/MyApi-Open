@@ -765,7 +765,7 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "https://static.cloudflareinsights.com", (req, res) => `'nonce-${res.locals.cspNonce}'`],
+      scriptSrc: ["'self'", "https://unpkg.com", "https://static.cloudflareinsights.com", (req, res) => `'nonce-${res.locals.cspNonce}'`],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://unpkg.com"],
       imgSrc: ["'self'", "data:", "https:", "blob:"],
       fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
@@ -4485,7 +4485,7 @@ app.get('/api-docs-ui', (req, res) => {
   <body>
     <div id="swagger-ui"></div>
     <script src="https://unpkg.com/swagger-ui-dist/swagger-ui-bundle.js"></script>
-    <script>
+    <script nonce="${res.locals.cspNonce}">
       window.ui = SwaggerUIBundle({
         url: ${JSON.stringify(specUrl)},
         dom_id: '#swagger-ui',
