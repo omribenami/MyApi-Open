@@ -45,6 +45,17 @@ router.post('/onboard/step1', express.json(), (req, res) => {
   const payload = req.body || {};
   const userId = req.session?.user?.id;
 
+  // SECURITY FIX (HIGH - CVSS 7.3): Authorization check
+  // Ensure the session user ID matches and is valid
+  if (!userId || typeof userId !== 'string') {
+    return res.status(401).json({ error: 'Unauthorized: No valid user session' });
+  }
+
+  // Only allow users to update their own profile, except owner updating general USER.md
+  if (req.session?.user?.id !== userId) {
+    return res.status(403).json({ error: 'Forbidden: Cannot update another user profile' });
+  }
+
   // Only write USER.md for the platform owner — non-owner users must never touch
   // this file or they will overwrite the owner's display name / profile.
   if (isOwnerUser(userId)) {

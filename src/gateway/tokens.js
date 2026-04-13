@@ -90,8 +90,19 @@ class TokenManager {
         let scope, metadata;
         try {
           scope = JSON.parse(tokenRecord.scope);
-        } catch {
-          logger.error('Invalid scope JSON in token record — treating as invalid', { id: tokenRecord.id });
+          // SECURITY FIX (HIGH - CVSS 7.3): Validate scope structure
+          // Ensure scope is an array to prevent privilege escalation via malformed scope claims
+          if (!Array.isArray(scope)) {
+            logger.error('Invalid scope type in token record — treating as invalid', { id: tokenRecord.id, scopeType: typeof scope });
+            return null;
+          }
+          // Validate each scope string
+          if (!scope.every(s => typeof s === 'string' && /^[a-zA-Z0-9_:*\-]+$/.test(s))) {
+            logger.error('Invalid scope format in token record — treating as invalid', { id: tokenRecord.id });
+            return null;
+          }
+        } catch (e) {
+          logger.error('Invalid scope JSON in token record — treating as invalid', { id: tokenRecord.id, error: e.message });
           return null;
         }
         try {
