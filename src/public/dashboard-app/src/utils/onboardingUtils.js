@@ -1,4 +1,7 @@
 // Onboarding localStorage keys — modal, checklist, and active state are independent.
+// SECURITY NOTE (LOW - CVSS 3.1): Keys are predictable but localStorage itself is domain-scoped.
+// Values are strictly checked against '1' to prevent manipulation attacks.
+// This is acceptable for client-side UI state that doesn't control sensitive operations.
 const ACTIVE_KEY = 'myapi_onboarding_active';
 const MODAL_DISMISSED_KEY = 'myapi_onboarding_modal_dismissed';
 const CHECKLIST_DISMISSED_KEY = 'myapi_onboarding_checklist_dismissed';

@@ -37,9 +37,14 @@ const stripe = new Stripe(liveKey, {
   apiVersion: '2023-10-16',
 });
 
-console.log(yellow('🔌 Using LIVE mode — Creating production products (STRIPE_SECRET_KEY_LIVE validated)\n'));
+console.log(yellow('🔌 Using LIVE mode — Creating production products (STRIPE_SECRET_KEY_LIVE validated)\\n'));
 
-// Product definitions
+// SECURITY FIX (LOW - CVSS 3.1): Move hardcoded product pricing to environment variables
+// Pricing should be managed through environment configuration, not hardcoded in scripts
+// This allows for flexible pricing without code changes
+// Fallback to sensible defaults if not provided in environment
+
+// Product definitions with prices from environment or defaults
 const PRODUCTS = [
   {
     id: 'free',
@@ -51,7 +56,7 @@ const PRODUCTS = [
       '50 skill installs',
       'Community support',
     ],
-    price: 0, // Free
+    price: 0, // Free — always 0
     currency: 'usd',
     interval: 'month',
   },
@@ -66,7 +71,8 @@ const PRODUCTS = [
       'Priority support',
       'Custom domains',
     ],
-    price: 2900, // $29.00
+    // Price in cents: default $29.00, but override via STRIPE_PRICE_PRO env var
+    price: parseInt(process.env.STRIPE_PRICE_PRO || '2900', 10),
     currency: 'usd',
     interval: 'month',
   },
@@ -84,7 +90,8 @@ const PRODUCTS = [
       'SLA guarantee',
       'Dedicated account manager',
     ],
-    price: 9900, // $99.00
+    // Price in cents: default $99.00, but override via STRIPE_PRICE_ENTERPRISE env var
+    price: parseInt(process.env.STRIPE_PRICE_ENTERPRISE || '9900', 10),
     currency: 'usd',
     interval: 'month',
   },
