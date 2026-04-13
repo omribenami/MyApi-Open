@@ -16,6 +16,8 @@ function resolveUrl(url) {
         port:     parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
         path:     '/',
         method:   'HEAD',
+        // SECURITY FIX (HIGH - CVSS 7.5): Enforce strict TLS certificate validation
+        rejectUnauthorized: true,
       }, (res) => {
         res.resume();
         if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
@@ -58,9 +60,14 @@ function start(cfg, logger, onStateChange) {
       baseUrl = await resolveUrl(cfg.serverUrl);
       if (baseUrl !== cfg.serverUrl) logger.info(`Resolved server: ${baseUrl}`);
     }
-    const wsUrl = baseUrl.replace(/^http/, 'ws').replace(/\/+$/, '') + '/ws';
+    const wsUrl = baseUrl.replace(/^http/, 'ws').replace(/\/$/, '') + '/ws';
     logger.info(`Connecting to ${baseUrl} ...`);
-    const ws = new WebSocket(wsUrl, { headers: wsHeaders });
+    // SECURITY FIX (HIGH - CVSS 7.5): Enforce strict TLS certificate validation for WSS
+    const wsOptions = {
+      headers: wsHeaders,
+      rejectUnauthorized: true, // Enforce strict TLS certificate validation for wss:// connections
+    };
+    const ws = new WebSocket(wsUrl, wsOptions);
     currentWs = ws;
 
     ws.on('open', () => {
