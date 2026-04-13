@@ -34,11 +34,11 @@ echo ""
 
 # Step 2: Connect to VPS and deploy
 echo "2️⃣  Deploying to VPS..."
-# Escape VPS credentials for safe SSH command execution
-SSH_COMMAND=$(cat <<'ENDSSH'
-set -e
 
-# Navigate to app directory
+# SECURITY FIX (HIGH - CVSS 8.8): Command Injection Prevention
+# Pass command via stdin to prevent shell metacharacter injection in bash -c
+# This ensures the SSH_COMMAND variable is not interpreted as shell code
+ssh "${VPS_USER}@${VPS_IP}" bash << 'REMOTE_SCRIPT'
 cd /root/MyApi || { echo "❌ App directory not found"; exit 1; }
 
 # Pull latest changes
@@ -81,7 +81,7 @@ SESSION_COOKIE_DOMAIN=.myapiai.com
 CORS_ORIGIN=https://www.myapiai.com
 
 # Email (Resend)
-RESEND_API_KEY=re_...
+RESEND_API_KEY=***
 EMAIL_FROM=noreply@myapiai.com
 EMAIL_FROM_NAME=MyApi
 
@@ -90,39 +90,39 @@ POWER_USER_EMAIL=admin@your.domain.com
 
 # OAuth Credentials (from TOOLS.md)
 GITHUB_CLIENT_ID=YOUR_GITHUB_CLIENT_ID
-GITHUB_CLIENT_SECRET=YOUR_GITHUB_CLIENT_SECRET
+GITHUB_CLIENT_SECRET=YOUR_G...CRET
 GITHUB_REDIRECT_URI=https://www.myapiai.com/api/v1/oauth/callback/github
 
 SLACK_CLIENT_ID=YOUR_SLACK_CLIENT_ID
-SLACK_CLIENT_SECRET=YOUR_SLACK_CLIENT_SECRET
+SLACK_CLIENT_SECRET=YOUR_S...CRET
 SLACK_REDIRECT_URI=https://www.myapiai.com/api/v1/oauth/callback/slack
 
 DISCORD_CLIENT_ID=YOUR_DISCORD_CLIENT_ID
-DISCORD_CLIENT_SECRET=YOUR_DISCORD_CLIENT_SECRET
+DISCORD_CLIENT_SECRET=YOUR_D...CRET
 DISCORD_REDIRECT_URI=https://www.myapiai.com/api/v1/oauth/callback/discord
 
 LINKEDIN_CLIENT_ID=YOUR_LINKEDIN_CLIENT_ID
-LINKEDIN_CLIENT_SECRET=YOUR_LINKEDIN_CLIENT_SECRET
+LINKEDIN_CLIENT_SECRET=YOUR_L...CRET
 LINKEDIN_REDIRECT_URI=https://www.myapiai.com/api/v1/oauth/callback/linkedin
 
 NOTION_CLIENT_ID=YOUR_NOTION_CLIENT_ID
-NOTION_CLIENT_SECRET=YOUR_NOTION_CLIENT_SECRET
+NOTION_CLIENT_SECRET=YOUR_N...CRET
 NOTION_REDIRECT_URI=https://www.myapiai.com/api/v1/oauth/callback/notion
 
 FACEBOOK_CLIENT_ID=YOUR_FACEBOOK_CLIENT_ID
-FACEBOOK_CLIENT_SECRET=YOUR_FACEBOOK_CLIENT_SECRET
+FACEBOOK_CLIENT_SECRET=YOUR_F...CRET
 FACEBOOK_REDIRECT_URI=https://www.myapiai.com/api/v1/oauth/callback/facebook
 
 # Stripe (PostQuee account)
-STRIPE_SECRET_KEY=sk_live_...BtuA
+STRIPE_SECRET_KEY=***
 STRIPE_PUBLISHABLE_KEY=YOUR_STRIPE_PUBLISHABLE_KEY
-STRIPE_WEBHOOK_SECRET=YOUR_STRIPE_WEBHOOK_SECRET
+STRIPE_WEBHOOK_SECRET=YOUR_S...CRET
 
 # Google Maps
-GOOGLE_MAPS_API_KEY=YOUR_GOOGLE_MAPS_API_KEY
+GOOGLE_MAPS_API_KEY=YOUR_G..._KEY
 
 # OpenAI (optional)
-# OPENAI_API_KEY=sk-...
+# OPENAI_API_KEY=***
 EOF
     echo "⚠️  WARNING: Update secrets in .env file!"
 fi
@@ -148,11 +148,7 @@ echo "✅ Deployment complete!"
 echo ""
 echo "📊 Service Status:"
 pm2 info myapi
-ENDSSH
-)
-
-# Execute SSH command safely using quoted variables
-ssh "${VPS_USER}@${VPS_IP}" bash -c "$SSH_COMMAND"
+REMOTE_SCRIPT
 
 echo ""
 echo "✅ Deployment successful!"
