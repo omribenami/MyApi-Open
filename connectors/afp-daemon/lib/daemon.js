@@ -106,13 +106,35 @@ function makeOps(afpRoot) {
     };
   }
 
-  function opExec({ cmd, cwd, timeout = 30000, shell = true }) {
+  function opExec({ cmd, cwd, timeout = 30000, shell = false }) {
     if (!cmd || typeof cmd !== 'string') return Promise.reject(new Error('cmd is required'));
+    // SECURITY FIX (CRITICAL - CVSS 9.8): Command Injection Mitigation
+    // - Disable shell=true by default to prevent command injection via shell metacharacters
+    // - When shell is absolutely required, caller must explicitly opt-in
+    // - Parse command into argv array to prevent interpretation of special characters
+    // - Validate cmd matches safe patterns (alphanumeric, spaces, common operators only)
+    const UNSAFE_SHELL_CHARS = /[;&|`$()<>\\'"]/g;
+    if (UNSAFE_SHELL_CHARS.test(cmd) && !shell) {
+      return Promise.reject(new Error('Command contains potentially dangerous shell characters. Use shell:true explicitly if required and safe.'));
+    }
+    
     const hardLimit = Math.min(Number(timeout) || 30000, 60000);
     const workDir   = cwd ? safe(cwd) : undefined;
 
     return new Promise((resolve, reject) => {
-      const proc = spawn(cmd, [], { shell: !!shell, cwd: workDir });
+      // Parse command string into argv array for safer execution
+      // When shell=false, spawn interprets first arg as executable, rest as arguments (no shell interpretation)
+      let args = [];
+      let executable = cmd;
+      
+      if (!shell && cmd.includes(' ')) {
+        // Simple parsing: split on spaces but be aware of quoted strings
+        const parts = cmd.match(/[^\s"']+|"([^"]*)"|'([^']*)'/g) || [cmd];
+        executable = parts[0];
+        args = parts.slice(1).map(arg => arg.replace(/^['"]|['"]$/g, ''));
+      }
+      
+      const proc = spawn(executable, args, { shell: !!shell, cwd: workDir });
       let stdout = '', stderr = '', killed = false;
 
       const killTimer = setTimeout(() => {

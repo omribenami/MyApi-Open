@@ -26,10 +26,40 @@ function requireScopes(requiredScopes = []) {
       // Get token scopes from database
       const tokenScopes = getTokenScopes(tokenId);
 
-      // admin:* grants all permissions
+      // SECURITY FIX (CRITICAL - CVSS 9.8): Privilege Escalation via Wildcard Scope
+      // Removed support for 'admin:*' wildcard scope. All scopes must be explicitly granted.
+      // Wildcard scopes are deprecated and dangerous as they can grant unintended permissions.
+      // Use explicit scope lists like ['admin:read', 'admin:write'] instead.
       if (tokenScopes.includes('admin:*')) {
-        req.tokenScopes = tokenScopes;
-        return next();
+        // Log wildcard scope usage for security audit
+        if (typeof createAuditLog === 'function') {
+          createAuditLog({
+            requesterId: tokenId,
+            action: 'wildcard_scope_detected',
+            resource: req.path,
+            scope: tokenScopes.join(','),
+            ip: req.ip,
+            severity: 'CRITICAL',
+            details: {
+              message: 'Token uses deprecated admin:* wildcard scope',
+              method: req.method,
+              timestamp: new Date().toISOString()
+            }
+          });
+        }
+        try {
+          createComplianceAuditLog(
+            req.headers?.['x-workspace-id'] || 'system', null,
+            'wildcard_scope_violation', 'token', tokenId,
+            JSON.stringify({ path: req.path, method: req.method, message: 'admin:* wildcard detected' }),
+            req.ip, req.get('user-agent')
+          );
+        } catch (_) {}
+        alerting.trackScopeViolation(req.ip);
+        return res.status(403).json({
+          error: 'Forbidden',
+          message: 'Wildcard scopes are not permitted. Use explicit scope grants.'
+        });
       }
 
       // Check if token has required scopes
@@ -113,14 +143,16 @@ function requireScopes(requiredScopes = []) {
 
 /**
  * Check scopes in-line (for use in route handlers)
+ * SECURITY: Wildcard scopes (admin:*) are NOT permitted
  */
 function checkScopes(tokenScopes, requiredScopes) {
   if (!requiredScopes || requiredScopes.length === 0) {
     return true;
   }
 
+  // SECURITY FIX (CRITICAL): Reject tokens with wildcard scopes
   if (tokenScopes.includes('admin:*')) {
-    return true;
+    return false; // Wildcard scopes must be explicitly rejected
   }
 
   if (Array.isArray(requiredScopes)) {
