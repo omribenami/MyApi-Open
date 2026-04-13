@@ -16,6 +16,8 @@ module.exports = {
     },
   },
   testTimeout: 10000,
+  forceExit: true,
+  detectOpenHandles: true,
   setupFiles: ['<rootDir>/src/tests/setup-env.js'],
   setupFilesAfterEnv: ['<rootDir>/src/tests/setup.js'],
 };
