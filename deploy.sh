@@ -46,7 +46,7 @@ build_connectors() {
     cd "$AFP_OAUTH_DIR"
     npm install --silent
     npm run build:linux
-    echo "[deploy]   afp-oauth-linux built: $(du -sh dist/afp-oauth-linux 2>/dev/null | cut -f1)"
+    echo "[deploy]   afp-oauth-linux built: $(du -sh "$AFP_OAUTH_DIR/dist/afp-oauth-linux" 2>/dev/null | cut -f1)"
     cd "$REPO_DIR"
   else
     echo "[deploy]   WARNING: $AFP_OAUTH_DIR not found, skipping."
@@ -76,7 +76,7 @@ build_connectors() {
     for f in afp-oauth-mac-arm afp-oauth-mac-x64 afp-oauth-win.exe; do
       [ -f "$AFP_OAUTH_DIR/dist/$f" ] && cp "$AFP_OAUTH_DIR/dist/$f" "$SRC_DIR/afp-oauth-dist/$f"
     done
-    echo "[deploy]   Staged: $(ls -1 $SRC_DIR/afp-oauth-dist/)"
+    echo "[deploy]   Staged: $(ls -1 "$SRC_DIR/afp-oauth-dist/")"
   fi
 
   echo "[deploy] Connectors built."

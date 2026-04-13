@@ -34,7 +34,8 @@ echo ""
 
 # Step 2: Connect to VPS and deploy
 echo "2️⃣  Deploying to VPS..."
-ssh ${VPS_USER}@${VPS_IP} << 'ENDSSH'
+# Escape VPS credentials for safe SSH command execution
+SSH_COMMAND=$(cat <<'ENDSSH'
 set -e
 
 # Navigate to app directory
@@ -148,6 +149,10 @@ echo ""
 echo "📊 Service Status:"
 pm2 info myapi
 ENDSSH
+)
+
+# Execute SSH command safely using quoted variables
+ssh "${VPS_USER}@${VPS_IP}" bash -c "$SSH_COMMAND"
 
 echo ""
 echo "✅ Deployment successful!"
