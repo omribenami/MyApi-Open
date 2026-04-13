@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { isLogoutInProgress } from '../utils/authRuntime';
 import { useAuthStore } from '../stores/authStore';
 import { useTokenStore } from '../stores/tokenStore';
@@ -81,7 +81,7 @@ function ScopeRow({ icon, title, description, summary, summaryColor = 'text-slat
 }
 
 // Checkbox row for a resource item
-function ResourceItem({ id, label, sublabel, checked, onChange, accent = false }) {
+function ResourceItem({ label, sublabel, checked, onChange, accent = false }) {
   return (
     <label className={`flex items-center gap-3 px-2 py-2 rounded-lg cursor-pointer transition-colors hover:bg-slate-800/60 ${checked ? (accent ? 'bg-purple-900/10' : 'bg-blue-900/10') : ''}`}>
       <input
@@ -174,7 +174,7 @@ function AccessTokens() {
   const [newlyCreated, setNewlyCreated] = useState(null);
   const [revealedTokens, setRevealedTokens] = useState({});
   const [visibleTokenIds, setVisibleTokenIds] = useState({});
-  const [copiedTokenId, setCopiedTokenId] = useState(null);
+  const [_copiedTokenId, setCopiedTokenId] = useState(null);
   const [regeneratingTokenId, setRegeneratingTokenId] = useState(null);
   const [publishingTokenId, setPublishingTokenId] = useState(null);
 
@@ -250,7 +250,7 @@ function AccessTokens() {
     if (!text) return false;
     try {
       if (navigator?.clipboard?.writeText && window.isSecureContext) { await navigator.clipboard.writeText(text); return true; }
-    } catch {}
+    } catch { /* clipboard API unavailable */ }
     try {
       const ta = document.createElement('textarea');
       ta.value = text; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;top:-1000px';
@@ -406,7 +406,7 @@ function AccessTokens() {
     try {
       const res = await fetch('/api/v1/vault/my-tokens', { headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) { const d = await res.json(); setInstalledTokens(d.data?.guestTokens || []); }
-    } catch {} finally { setVaultLoading(false); }
+    } catch { /* silently ignore */ } finally { setVaultLoading(false); }
   };
 
   const handleRevokeInstalled = async (tokenId) => {
@@ -532,7 +532,7 @@ function AccessTokens() {
             headers: { Authorization: `Bearer ${masterToken}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({ description: form.description }),
           });
-        } catch {}
+        } catch { /* silently ignore audit log failure */ }
       }
       resetForm();
       setShowCreateForm(false);

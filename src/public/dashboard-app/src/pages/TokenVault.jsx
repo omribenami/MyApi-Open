@@ -226,10 +226,6 @@ function TokenVault() {
     }
   };
 
-  const maskToken = (preview) => {
-    if (!preview) return '••••••••';
-    return preview;
-  };
 
   const getServiceIcon = (serviceId) => {
     const service = services.find(s => s.id === serviceId);
