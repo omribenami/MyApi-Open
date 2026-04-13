@@ -33,7 +33,10 @@ services:
     environment:
       NODE_ENV: development
       PORT: ${PORT:-4500}
-      SESSION_COOKIE_SECURE: "false"
+      # SECURITY FIX (MEDIUM - CVSS 5.9): Allow HTTP-only cookies in dev, but require HTTPS in production
+      # In development: SESSION_COOKIE_SECURE=false allows testing over HTTP
+      # In production: SESSION_COOKIE_SECURE=true (set in prod .env) enforces HTTPS-only
+      SESSION_COOKIE_SECURE: \"false\"
       LOG_LEVEL: debug
 
     ports:

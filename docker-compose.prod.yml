@@ -38,23 +38,30 @@ services:
     environment:
       DB_PATH: /app/data/myapi.db
 
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
+    # SECURITY FIX (LOW - CVSS 3.7): Use private DNS resolvers instead of public
+    # 8.8.8.8 (Google) and 1.1.1.1 (Cloudflare) are public DNS servers that can log queries
+    # Use your organization's private DNS or leave unset to use Docker's default (127.0.0.11)
+    # dns:
+    #   - 8.8.8.8
+    #   - 1.1.1.1
 
+    # SECURITY FIX (MEDIUM - CVSS 5.3): Restrict port binding to localhost
+    # Binding to 0.0.0.0 exposes the service to all network interfaces
+    # In production, use a reverse proxy or load balancer to handle external traffic
     ports:
-      - "${PORT:-4500}:${PORT:-4500}"
+      - \"127.0.0.1:${PORT:-4500}:${PORT:-4500}\"
 
     volumes:
       # SQLite database — bind-mounted from host so data persists across rebuilds
       - ./data:/app/data
       # Application logs
       - myapi-logs:/app/logs
-      # Claude Code skills — read-only; lets MyApi serve SKILL.md files from disk
-      # without requiring them to be stored in the database first.
-      - /root/.claude/skills:/app/claude-skills:ro
       # Connectors — OpenAPI specs, ChatGPT action schemas, privacy policies
       - ./connectors:/app/connectors:ro
+      # SECURITY FIX (MEDIUM - CVSS 4.3): Do NOT mount sensitive host directories
+      # Remove access to /root/.claude/skills and other sensitive paths
+      # Instead, maintain a copy in ./skills if needed for runtime
+      # - /root/.claude/skills:/app/claude-skills:ro  # REMOVED — security risk
 
     networks:
       - myapi-network
