@@ -5261,7 +5261,7 @@ const BILLING_PLANS = {
     priceMonthly: 0, // deprecated, kept for backwards compat
     description: 'Perfect for individuals getting started',
     features: [
-      '1 AI Persona',
+      '2 AI Personas',
       '3 Service Connections',
       '10 MB Knowledge Base',
       '5 Token Vault entries',
@@ -5337,7 +5337,7 @@ const PLAN_ENFORCEMENT_ENABLED = process.env.NODE_ENV === 'test'
 
 const PLAN_LIMITS = {
   free: {
-    personas: 1,
+    personas: 2,
     serviceConnections: 3,
     knowledgeBytes: 10 * 1024 * 1024, // 10 MB
     vaultTokens: 5,
@@ -5454,9 +5454,9 @@ app.post('/api/v1/billing/downgrade-preview', authenticate, (req, res) => {
     // Calculate what would be deleted
     const preview = { isDowngrade: true, toDelete: {} };
 
-    // Check personas (Free: 1, Pro: 5, Enterprise: 20)
+    // Check personas (Free: 2, Pro: 5, Enterprise: 20)
     const personas = db.prepare('SELECT id, created_at FROM personas WHERE owner_id = ? ORDER BY created_at DESC').all(ownerId);
-    const maxPersonas = newPlanId === 'free' ? 1 : (newPlanId === 'pro' ? 5 : -1);
+    const maxPersonas = newPlanId === 'free' ? 2 : (newPlanId === 'pro' ? 5 : -1);
     if (maxPersonas > 0 && personas.length > maxPersonas) {
       const toDelete = personas.length - maxPersonas;
       preview.toDelete.personas = {
@@ -5514,7 +5514,7 @@ app.post('/api/v1/billing/downgrade-confirm', authenticate, async (req, res) => 
     const downgradeRawDb = db.getRawDB ? db.getRawDB() : db;
     downgradeRawDb.transaction(() => {
       // Delete excess personas (keep oldest)
-      const maxPersonas = newPlanId === 'free' ? 1 : (newPlanId === 'pro' ? 5 : -1);
+      const maxPersonas = newPlanId === 'free' ? 2 : (newPlanId === 'pro' ? 5 : -1);
       if (maxPersonas > 0) {
         const personas = downgradeRawDb.prepare('SELECT id FROM personas WHERE owner_id = ? ORDER BY created_at DESC').all(ownerId);
         if (personas.length > maxPersonas) {

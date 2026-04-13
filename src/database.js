@@ -5709,11 +5709,6 @@ function getUsageDaily(workspaceId, fromDate, toDate) {
 function seedDefaultPricingPlans() {
   try {
     // Check if plans already exist
-    const existing = db.prepare('SELECT COUNT(*) as count FROM pricing_plans').get();
-    if (existing && existing.count > 0) {
-      return; // Plans already seeded
-    }
-
     const now = new Date().toISOString();
     const plans = [
       {
@@ -5722,7 +5717,7 @@ function seedDefaultPricingPlans() {
         price_cents: 0,
         description: 'Perfect for individuals getting started',
         features: [
-          '1 AI Persona',
+          '2 AI Personas',
           '3 Service Connections',
           '10 MB Knowledge Base',
           '5 Token Vault entries',
@@ -5788,7 +5783,9 @@ function seedDefaultPricingPlans() {
       }
     ];
 
-    const stmt = db.prepare(`
+    const existingPlans = db.prepare('SELECT id FROM pricing_plans').all().map((row) => row.id);
+
+    const insertStmt = db.prepare(`
       INSERT INTO pricing_plans (
         id, name, price_cents, description, features,
         monthly_api_call_limit, max_services, max_team_members, max_skills_per_persona,
@@ -5797,26 +5794,62 @@ function seedDefaultPricingPlans() {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
+    const updateStmt = db.prepare(`
+      UPDATE pricing_plans
+      SET name = ?,
+          price_cents = ?,
+          description = ?,
+          features = ?,
+          monthly_api_call_limit = ?,
+          max_services = ?,
+          max_team_members = ?,
+          max_skills_per_persona = ?,
+          stripe_product_id = ?,
+          active = ?,
+          display_order = ?,
+          updated_at = ?
+      WHERE id = ?
+    `);
+
     for (const plan of plans) {
-      stmt.run(
-        plan.id,
-        plan.name,
-        plan.price_cents,
-        plan.description,
-        JSON.stringify(plan.features),
-        plan.monthly_api_call_limit,
-        plan.max_services,
-        plan.max_team_members,
-        plan.max_skills_per_persona,
-        plan.stripe_product_id,
-        plan.active,
-        plan.display_order,
-        now,
-        now
-      );
+      const serializedFeatures = JSON.stringify(plan.features);
+      if (existingPlans.includes(plan.id)) {
+        updateStmt.run(
+          plan.name,
+          plan.price_cents,
+          plan.description,
+          serializedFeatures,
+          plan.monthly_api_call_limit,
+          plan.max_services,
+          plan.max_team_members,
+          plan.max_skills_per_persona,
+          plan.stripe_product_id,
+          plan.active,
+          plan.display_order,
+          now,
+          plan.id
+        );
+      } else {
+        insertStmt.run(
+          plan.id,
+          plan.name,
+          plan.price_cents,
+          plan.description,
+          serializedFeatures,
+          plan.monthly_api_call_limit,
+          plan.max_services,
+          plan.max_team_members,
+          plan.max_skills_per_persona,
+          plan.stripe_product_id,
+          plan.active,
+          plan.display_order,
+          now,
+          now
+        );
+      }
     }
 
-    console.log('[Pricing] Seeded 3 default pricing plans (Free, Pro, Enterprise)');
+    console.log('[Pricing] Synced default pricing plans (Free, Pro, Enterprise)');
   } catch (err) {
     if (!err.message?.includes('already exists')) {
       console.warn('[Pricing] Error seeding default plans:', err.message);

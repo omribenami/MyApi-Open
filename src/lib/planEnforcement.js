@@ -11,7 +11,7 @@ const PLAN_ENFORCEMENT_ENABLED = process.env.NODE_ENV === 'test'
   : process.env.ENFORCE_PLAN_LIMITS !== 'false';
 
 const PLAN_LIMITS = {
-  free:       { personas: 1,  serviceConnections: 3,        knowledgeBytes: 10 * 1024 * 1024,  vaultTokens: 5,        skillsPerPersona: 4,        monthlyApiCalls: 1000,     teamMembers: 2        },
+  free:       { personas: 2,  serviceConnections: 3,        knowledgeBytes: 10 * 1024 * 1024,  vaultTokens: 5,        skillsPerPersona: 4,        monthlyApiCalls: 1000,     teamMembers: 2        },
   pro:        { personas: 5,  serviceConnections: Infinity, knowledgeBytes: 50 * 1024 * 1024,  vaultTokens: Infinity, skillsPerPersona: Infinity, monthlyApiCalls: 100000,   teamMembers: 10       },
   enterprise: { personas: 20, serviceConnections: Infinity, knowledgeBytes: 200 * 1024 * 1024, vaultTokens: Infinity, skillsPerPersona: Infinity, monthlyApiCalls: Infinity, teamMembers: Infinity },
 };

@@ -33,6 +33,7 @@ describe('Phase 2 Billing & Usage', () => {
     expect(res.body.data.workspaceId).toBe(workspace.id);
     expect(res.body.data.plan).toBeDefined();
     expect(typeof res.body.data.billingConfigured).toBe('boolean');
+    expect(res.body.data.limits.personas).toBe(2);
   });
 
   test('GET /api/v1/billing/usage returns expected shape', async () => {
@@ -47,6 +48,16 @@ describe('Phase 2 Billing & Usage', () => {
     expect(res.body.data.range).toBe('7d');
     expect(res.body.data.totals).toBeDefined();
     expect(res.body.data.limits).toBeDefined();
+    expect(res.body.data.resources.personas.limit).toBe(2);
     expect(Array.isArray(res.body.data.daily)).toBe(true);
+  });
+
+  test('GET /api/v1/billing/plans exposes free plan with 2 personas', async () => {
+    const res = await request(app).get('/api/v1/billing/plans');
+
+    expect(res.status).toBe(200);
+    const freePlan = res.body.data.find((plan) => plan.id === 'free');
+    expect(freePlan).toBeDefined();
+    expect(freePlan.features).toContain('2 AI Personas');
   });
 });
