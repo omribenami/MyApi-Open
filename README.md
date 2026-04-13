@@ -1,26 +1,74 @@
-# MyApi
+# MyApi-Open
 
-MyApi is a privacy-first personal API platform and dashboard for consolidating identity, service integrations, memory, knowledge, and autonomous agent capabilities behind a single secure interface.
+<p align="center">
+  <img src="src/public/dashboard-app/public/myapi-logo-1024.png" alt="MyApi logo" width="140" />
+</p>
 
-This repository is the sanitized open-source distribution of MyApi.
+<p align="center">
+  <strong>Your personal API layer for AI agents.</strong>
+</p>
+
+<p align="center">
+  MyApi-Open is the open-source foundation of MyApi: a control plane that gives AI agents secure, structured access to identity, memory, knowledge, personas, skills, and connected services.
+</p>
+
+<p align="center">
+  <a href="#quick-start">Quick Start</a> •
+  <a href="#screenshots">Screenshots</a> •
+  <a href="#core-features">Features</a> •
+  <a href="#architecture">Architecture</a> •
+  <a href="#documentation">Docs</a>
+</p>
+
+## Why MyApi-Open
+
+Most AI workflows break down in the same place:
+- context is scattered across chats, docs, and personal notes
+- credentials get pasted into too many tools
+- agent access is too broad or impossible to audit
+- every new assistant has to be re-taught the same things from scratch
+
+MyApi-Open solves that by giving agents a single, structured surface for:
+- identity and profile context
+- durable memory
+- long-form knowledge
+- personas and behavioral overlays
+- reusable skills
+- connected services and scoped execution
+- audit-friendly access control
+
+## Screenshots
+
+### Landing page
+
+![MyApi-Open landing page](docs/screenshots/landing-page.png)
+
+A focused landing page built around secure agent workflows, connected services, and unified control.
+
+### Login panel
+
+![MyApi-Open login panel](docs/screenshots/login-panel.png)
+
+OAuth-first sign-in flow with a clean public entry point for workspace access.
 
 ## Core Features
 
-- **Services & Connectors**: Connect and manage OAuth integrations and API keys for 35+ services including Google, GitHub, Slack, Discord, and more.
-- **Tokens Vault**: Manage master tokens and create fine-grained scoped guest tokens for agents and third-party applications.
-- **Persona Management**: Create, edit, and activate AI personas with tailored system prompts and behaviour.
-- **Identity Docs**: Manage `USER.md`-style profile and identity metadata.
-- **Knowledge Base**: Store long-term memory and Markdown knowledge attached to specific personas.
-- **Skills Marketplace**: Discover, install, and publish reusable skills that extend local agents.
-- **Audit & Security Controls**: Token scoping, device approval flows, encryption, and audit logging.
+- **Identity and profile context**: Give agents grounded user context without repeating the same details every session.
+- **Memory**: Store durable facts and preferences that should persist across conversations.
+- **Knowledge base**: Attach long-form documents, runbooks, and notes that agents can use for deeper retrieval.
+- **Personas**: Create role-specific modes with different tone, behavior, and attached context.
+- **Skills**: Install and compose reusable capabilities for common tasks and workflows.
+- **Services and connectors**: Connect external tools once and let agents operate through a unified API layer.
+- **Scoped access**: Control what each token or agent is allowed to read or do.
+- **Auditability**: Keep agent actions observable and easier to review.
 
 ## Architecture
 
-The project follows a decoupled architecture focused on security and extensibility:
+MyApi-Open follows a decoupled architecture focused on security, portability, and extensibility:
 
-- **Backend** (`/src/`): Node.js/Express gateway, OAuth proxy, API server, and SQLite-backed application layer.
-- **Frontend Dashboard** (`/src/public/dashboard-app/`): React + Vite single-page app styled with Tailwind CSS and powered by Zustand stores.
-- **Documentation** (`/docs/`): Design, architecture, deployment, services, and operational references.
+- **Backend** (`/src/`): Node.js / Express gateway, OAuth proxy, API server, and SQLite-backed application layer.
+- **Frontend dashboard** (`/src/public/dashboard-app/`): React + Vite single-page app styled with Tailwind CSS and powered by Zustand stores.
+- **Documentation** (`/docs/`): Public docs, guides, manuals, and architecture references.
 
 ## Quick Start
 
@@ -93,7 +141,7 @@ GITHUB_CLIENT_ID=<your-github-client-id>
 GITHUB_CLIENT_SECRET=<your-github-client-secret>
 ```
 
-Note: This open repository does not ship live credentials. Configure provider secrets in your own environment before use.
+This repository does not ship live credentials. Configure provider secrets in your own environment before use.
 
 ## Docker
 
@@ -111,13 +159,15 @@ docker-compose -f docker-compose.prod.yml up -d --build
 
 ## Key API Areas
 
+- `GET /api/v1/auth/me`
 - `GET /api/v1/capabilities`
 - `GET /openapi.json`
-- `GET /.well-known/ai-plugin.json`
-- `GET /api/v1/email/status`
-- `POST /api/v1/email/send-test`
-- `GET /api/v1/export`
-- `GET /api/v1/dashboard/stats`
+- `GET /api/v1/personas`
+- `GET /api/v1/services`
+- `GET /api/v1/memory`
+- `GET /api/v1/brain/knowledge-base`
+- `GET /api/v1/skills`
+- `GET /api/v1/vault/tokens`
 
 ## Data Export
 
@@ -126,14 +176,14 @@ MyApi supports JSON and ZIP export flows for portable user data packaging.
 Example JSON export:
 
 ```bash
-curl -H "Authorization: Bearer <token>" \
+curl -H "Authorization: Bearer ***" \
   "http://localhost:4500/api/v1/export?mode=portable&tokens=true"
 ```
 
 Example ZIP export:
 
 ```bash
-curl -L -H "Authorization: Bearer <token>" \
+curl -L -H "Authorization: Bearer ***" \
   "http://localhost:4500/api/v1/export?format=zip&mode=portable&includeFiles=false" \
   -o myapi-export.zip
 ```
@@ -151,16 +201,20 @@ Useful starting points in `/docs`:
 
 ## Repository Policy
 
-This repository is intended to contain only the MyApi codebase and sanitized documentation.
+This open repository is intended to contain only:
+- source code
+- public-safe documentation
+- setup guides
+- examples and manuals
 
 Never commit:
-
 - live `.env` files
 - database files and WAL/SHM files
 - uploaded user content
 - export archives
 - local agent/tooling state
 - real API keys, OAuth secrets, tokens, or certificates
+- internal planning, roadmap, status, or launch-tracking documents
 
 ## License
 
