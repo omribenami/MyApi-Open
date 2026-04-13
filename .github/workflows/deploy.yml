@@ -65,6 +65,9 @@ jobs:
           npm ci
           npm run build
 
+      - name: Create placeholder connector dist dirs
+        run: mkdir -p connectors/afp-daemon/dist connectors/afp-oauth/dist
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
