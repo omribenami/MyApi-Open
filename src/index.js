@@ -120,6 +120,7 @@ const {
   getExistingMasterToken,
   revokeAccessToken,
   // Scope functions
+  seedDefaultScopes,
   validateScope,
   getAllScopes,
   grantScopes,
@@ -382,6 +383,9 @@ function renderLegalPage({ title, markdownContent }) {
 
 // Initialize database
 initDatabase();
+
+// Seed scope definitions (idempotent upsert — safe to run every startup)
+seedDefaultScopes();
 
 // Run database migrations
 runMigrations();
@@ -4744,7 +4748,7 @@ app.delete("/api/v1/vault/tokens/:id", authenticate, (req, res) => {
 app.post("/api/v1/tokens", authenticate, (req, res) => {
   if (!isMaster(req)) return res.status(403).json({ error: "Only master token can create tokens" });
 
-  const { label = "Guest Token", scopes, expiresInHours, description, allowedPersonas, requiresApproval, scopeBundle } = req.body;
+  const { label = "Guest Token", scopes, expiresInHours, description, allowedPersonas, requiresApproval, scopeBundle, allowedResources } = req.body;
 
   // Parse scopes - support both template names and individual scopes
   let finalScopes = [];
@@ -4802,11 +4806,10 @@ app.post("/api/v1/tokens", authenticate, (req, res) => {
 
   // Set additional fields that aren't in the base createAccessToken signature
   const bundleJson = scopeBundle && typeof scopeBundle === 'object' ? JSON.stringify(scopeBundle) : null;
+  const resourcesJson = allowedResources && typeof allowedResources === 'object' ? JSON.stringify(allowedResources) : null;
   const needsApproval = requiresApproval ? 1 : 0;
-  if (bundleJson || needsApproval) {
-    db.prepare('UPDATE access_tokens SET scope_bundle = ?, requires_approval = ? WHERE id = ?')
-      .run(bundleJson, needsApproval, tokenId);
-  }
+  db.prepare('UPDATE access_tokens SET scope_bundle = ?, requires_approval = ?, allowed_resources = ? WHERE id = ?')
+    .run(bundleJson, needsApproval, resourcesJson, tokenId);
 
   // Grant the scopes to the token
   grantScopes(tokenId, finalScopes);
@@ -4892,6 +4895,15 @@ app.put("/api/v1/tokens/:id", authenticate, (req, res) => {
   const token = tokens.find(t => t.tokenId === req.params.id);
   if (!token) return res.status(404).json({ error: "Token not found" });
 
+  // Block adding service scopes to a published token
+  if (token.isShareable) {
+    const incomingScopes = Array.isArray(scopes) ? scopes : [scopes];
+    const hasServiceScopeIncoming = incomingScopes.some(s => s === 'services:read' || s === 'services:write' || s.startsWith('services:'));
+    if (hasServiceScopeIncoming) {
+      return res.status(400).json({ error: 'Cannot add service scopes to a published token. Unpublish it first.' });
+    }
+  }
+
   // Parse new scopes
   let finalScopes = [];
   if (typeof scopes === 'string') {
@@ -4926,12 +4938,29 @@ app.put("/api/v1/tokens/:id", authenticate, (req, res) => {
   }
 
   // Update token scopes: revoke old, grant new
-  revokeScopes(req.params.id);
-  grantScopes(req.params.id, finalScopes);
+  try {
+    revokeScopes(req.params.id);
 
-  // Update the scope field in access_tokens
-  const updateStmt = db.prepare('UPDATE access_tokens SET scope = ? WHERE id = ?');
-  updateStmt.run(JSON.stringify(finalScopes), req.params.id);
+    // grantScopes only inserts into access_token_scopes (FK-constrained table).
+    // Per-service scopes (services:google:read) pass validateScope but are not
+    // in scope_definitions, so INSERT OR IGNORE skips them there.
+    // We still need them persisted — store the full list in access_tokens.scope.
+    const insertableScopes = finalScopes.filter(s => {
+      // Only insert scopes that exist in scope_definitions (avoids FK violation)
+      if (/^services:[a-z0-9_-]+:(read|write|\*)$/.test(s)) return false;
+      return true;
+    });
+    if (insertableScopes.length > 0) {
+      grantScopes(req.params.id, insertableScopes);
+    }
+
+    // Always update the JSON scope field with the full scope list (including per-service)
+    db.prepare('UPDATE access_tokens SET scope = ? WHERE id = ?')
+      .run(JSON.stringify(finalScopes), req.params.id);
+  } catch (dbErr) {
+    console.error('[PUT /tokens/:id] DB error:', dbErr);
+    return res.status(500).json({ error: 'Failed to update token scopes', detail: dbErr.message });
+  }
 
   createAuditLog({
     requesterId: req.tokenMeta.tokenId,
@@ -5190,11 +5219,24 @@ app.get("/api/v1/tokens", authenticate, (req, res) => {
 
   const userId = getOAuthUserId(req);
   const tokens = getAccessTokens(userId, workspaceId);
-  const tokensWithScopes = tokens.map(t => ({
-    ...t,
-    scopes: getTokenScopes(t.tokenId),
-    allowedPersonas: t.allowedPersonas || null
-  }));
+  const tokensWithScopes = tokens.map(t => {
+    // Merge junction-table scopes (FK-safe) with JSON scope field (includes per-service scopes)
+    const junctionScopes = getTokenScopes(t.tokenId);
+    let jsonScopes = [];
+    try {
+      const raw = t.scope;
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        jsonScopes = Array.isArray(parsed) ? parsed : (typeof parsed === 'string' ? [parsed] : []);
+      }
+    } catch {}
+    const allScopes = [...new Set([...junctionScopes, ...jsonScopes])];
+    return {
+      ...t,
+      scopes: allScopes,
+      allowedPersonas: t.allowedPersonas || null,
+    };
+  });
 
   createAuditLog({
     requesterId: req.tokenMeta.tokenId,
@@ -6026,6 +6068,11 @@ app.post('/api/v1/tokens/:id/make-shareable', authenticate, (req, res) => {
     if (token.revoked_at) return res.status(400).json({ error: 'Cannot share a revoked token' });
     if (token.is_shareable) return res.status(400).json({ error: 'Token is already being shared' });
 
+    // Block master tokens from being published
+    if (token.token_type === 'master') {
+      return res.status(400).json({ error: 'Master tokens cannot be published to the marketplace' });
+    }
+
     // Block publishing tokens that include service scopes (they proxy real OAuth credentials)
     let tokenScopes = [];
     try { tokenScopes = JSON.parse(token.scope) || []; } catch { tokenScopes = token.scope ? token.scope.split(',') : []; }
@@ -6034,34 +6081,71 @@ app.post('/api/v1/tokens/:id/make-shareable', authenticate, (req, res) => {
       return res.status(400).json({ error: 'Tokens with service scopes cannot be published to the marketplace' });
     }
 
-    // Create marketplace listing for this token
+    // Create marketplace listing for this token — enrich with resolved metadata
     const now = new Date().toISOString();
-    const scopeBundle = scopePersonaId ? JSON.stringify({ persona_id: scopePersonaId }) : null;
-    const listingTitle = `Guest Token: ${token.label}`;
-    const listingDescription = description || `Private access token shared by ${ownerId}`;
 
-    const listingResult = db.prepare(`
-      INSERT INTO marketplace_listings (owner_id, type, title, description, content, status, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      ownerId,
-      'token',
-      listingTitle,
-      listingDescription,
-      JSON.stringify({ token_id: tokenId, scope_persona_id: scopePersonaId }),
-      'active',
-      now,
-      now
-    );
+    // Resolve owner display name
+    const ownerUser = getUserById(ownerId);
+    const ownerDisplayName = ownerUser?.displayName || ownerUser?.username || ownerUser?.name || null;
 
-    const listingId = listingResult.lastInsertRowid;
+    // Parse scope_bundle to detect persona/bundle
+    let parsedBundle = null;
+    try { parsedBundle = token.scope_bundle ? JSON.parse(token.scope_bundle) : null; } catch {}
+
+    // Resolve persona info if bundle
+    let personaInfo = null;
+    if (parsedBundle?.persona_id) {
+      try {
+        const p = db.prepare('SELECT id, name, description FROM personas WHERE id = ?').get(parsedBundle.persona_id);
+        if (p) personaInfo = { id: p.id, name: p.name, description: p.description };
+      } catch {}
+    }
+
+    // Resolve allowed_resources info
+    let allowedResources = null;
+    try { allowedResources = token.allowed_resources ? JSON.parse(token.allowed_resources) : null; } catch {}
+
+    const isBundle = !!(parsedBundle?.persona_id && (tokenScopes.includes('knowledge') || tokenScopes.includes('skills:read')));
+
+    const listingTitle = token.label;
+    const listingDescription = description || token.description || '';
+
+    const contentPayload = {
+      token_id: tokenId,
+      token_label: token.label,
+      token_description: token.description || null,
+      scopes: tokenScopes,
+      scope_bundle: parsedBundle,
+      is_bundle: isBundle,
+      persona: personaInfo,
+      allowed_resources: allowedResources,
+      expires_at: token.expires_at,
+      requires_approval: !!token.requires_approval,
+      owner_display_name: ownerDisplayName,
+    };
+
+    // Reactivate existing listing if one exists from a previous publish cycle
+    let listingId = token.marketplace_listing_id;
+    const existingListing = listingId
+      ? db.prepare('SELECT id FROM marketplace_listings WHERE id = ?').get(listingId)
+      : null;
+
+    if (existingListing) {
+      db.prepare(`
+        UPDATE marketplace_listings SET status = 'active', title = ?, description = ?, content = ?, updated_at = ?
+        WHERE id = ?
+      `).run(listingTitle, listingDescription, JSON.stringify(contentPayload), now, listingId);
+    } else {
+      const listingResult = db.prepare(`
+        INSERT INTO marketplace_listings (owner_id, type, title, description, content, status, created_at, updated_at)
+        VALUES (?, 'token', ?, ?, ?, 'active', ?, ?)
+      `).run(ownerId, listingTitle, listingDescription, JSON.stringify(contentPayload), now, now);
+      listingId = listingResult.lastInsertRowid;
+    }
 
     // Update token to mark as shareable
-    db.prepare(`
-      UPDATE access_tokens 
-      SET is_shareable = 1, marketplace_listing_id = ?, scope_bundle = ?
-      WHERE id = ?
-    `).run(listingId, scopeBundle, tokenId);
+    db.prepare('UPDATE access_tokens SET is_shareable = 1, marketplace_listing_id = ? WHERE id = ?')
+      .run(listingId, tokenId);
 
     createAuditLog({
       requesterId: ownerId,
@@ -6106,12 +6190,8 @@ app.post('/api/v1/tokens/:id/unpublish', authenticate, (req, res) => {
       db.prepare('UPDATE marketplace_listings SET status = ? WHERE id = ?').run('inactive', listingId);
     }
 
-    // Update token
-    db.prepare(`
-      UPDATE access_tokens 
-      SET is_shareable = 0, marketplace_listing_id = NULL
-      WHERE id = ?
-    `).run(tokenId);
+    // Update token — keep marketplace_listing_id so republishing reactivates the same listing
+    db.prepare('UPDATE access_tokens SET is_shareable = 0 WHERE id = ?').run(tokenId);
 
     createAuditLog({
       requesterId: ownerId,
@@ -10111,6 +10191,7 @@ app.delete('/api/v1/brain/knowledge-base/:id', authenticate, (req, res) => {
 
 // GET /api/v1/memory - list all memories
 app.get('/api/v1/memory', authenticate, (req, res) => {
+  if (!hasScope(req, 'memory') && !isMaster(req)) return res.status(403).json({ error: "Insufficient scope — 'memory' scope required" });
   try {
     const ownerId = getRequestOwnerId(req);
     const memories = getMemories(ownerId, req.workspaceId || null);
@@ -10122,6 +10203,7 @@ app.get('/api/v1/memory', authenticate, (req, res) => {
 
 // POST /api/v1/memory - store a new memory
 app.post('/api/v1/memory', authenticate, (req, res) => {
+  if (!hasScope(req, 'memory') && !isMaster(req)) return res.status(403).json({ error: "Insufficient scope — 'memory' scope required" });
   try {
     const { content, source } = req.body;
     if (!content || typeof content !== 'string' || !content.trim()) {
@@ -10146,6 +10228,7 @@ app.post('/api/v1/memory', authenticate, (req, res) => {
 
 // PATCH /api/v1/memory/:id - update a memory
 app.patch('/api/v1/memory/:id', authenticate, (req, res) => {
+  if (!hasScope(req, 'memory') && !isMaster(req)) return res.status(403).json({ error: "Insufficient scope — 'memory' scope required" });
   try {
     const { content, source } = req.body;
     if (!content || typeof content !== 'string' || !content.trim()) {
@@ -10183,6 +10266,7 @@ app.delete('/api/v1/memory', authenticate, (req, res) => {
 
 // DELETE /api/v1/memory/:id - delete one memory
 app.delete('/api/v1/memory/:id', authenticate, (req, res) => {
+  if (!hasScope(req, 'memory') && !isMaster(req)) return res.status(403).json({ error: "Insufficient scope — 'memory' scope required" });
   try {
     const ownerId = getRequestOwnerId(req);
     const deleted = deleteMemory(req.params.id, ownerId);
@@ -11062,9 +11146,9 @@ app.post('/api/v1/marketplace/:id/install', authenticate, (req, res) => {
             : null)
         );
 
-        // Add guest scope to the token's scopes
+        // Add guest scope to the token's scopes (column is granted_at, not created_at)
         db.prepare(`
-          INSERT INTO access_token_scopes (token_id, scope_name, created_at)
+          INSERT OR IGNORE INTO access_token_scopes (token_id, scope_name, granted_at)
           VALUES (?, 'guest', ?)
         `).run(guestTokenId, now);
 

@@ -1629,6 +1629,7 @@ function seedDefaultScopes() {
     { name: 'personas',       category: 'personas',  description: 'Public persona profiles' },
     { name: 'knowledge',      category: 'brain',     description: 'Knowledge/context read access' },
     { name: 'chat',           category: 'brain',     description: 'Conversation and messaging' },
+    { name: 'memory',         category: 'brain',     description: 'Read and write memory entries' },
     { name: 'skills:read',    category: 'skills',    description: 'Read skills and metadata' },
     { name: 'skills:write',   category: 'skills',    description: 'Create and manage skills' },
     { name: 'services:read',  category: 'services',  description: 'Proxy GET requests to connected OAuth services' },
@@ -1655,6 +1656,10 @@ function seedDefaultScopes() {
 }
 
 function validateScope(scopeName) {
+  // Accept per-service granular scopes: services:<name>:(read|write|*)
+  // These are sub-scopes of services:read/services:write, not in scope_definitions
+  if (/^services:[a-z0-9_-]+:(read|write|\*)$/.test(scopeName)) return true;
+
   const stmt = db.prepare('SELECT * FROM scope_definitions WHERE scope_name = ?');
   const row = stmt.get(scopeName);
   return row !== undefined;
@@ -1677,10 +1682,11 @@ function getAllScopes() {
 
 function grantScopes(tokenId, scopeNames) {
   const now = new Date().toISOString();
+  // INSERT OR IGNORE handles UNIQUE conflicts only — NOT FK violations.
+  // Callers must pre-filter scopes to those that exist in scope_definitions.
   const insertStmt = db.prepare(`
-    INSERT INTO access_token_scopes (token_id, scope_name, granted_at)
+    INSERT OR IGNORE INTO access_token_scopes (token_id, scope_name, granted_at)
     VALUES (?, ?, ?)
-    ON CONFLICT DO NOTHING
   `);
 
   for (const scopeName of scopeNames) {

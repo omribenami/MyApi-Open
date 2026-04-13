@@ -164,6 +164,7 @@ function ServiceScopeSelector({ isOpen, currentToken, onClose, onSuccess, master
 
   const currentScopeString = buildScopeString();
   const enabledServiceCount = Object.values(services).filter((s) => s.enabled).length;
+  const isPublished = currentToken?.isShareable || currentToken?.is_shareable;
 
   if (!isOpen || !currentToken) return null;
 
@@ -188,6 +189,15 @@ function ServiceScopeSelector({ isOpen, currentToken, onClose, onSuccess, master
 
         {/* Form */}
         <form onSubmit={handleSave} className="p-6 space-y-6">
+          {isPublished && (
+            <div className="rounded-lg bg-amber-900/30 border border-amber-700/60 p-4 flex items-start gap-3">
+              <svg className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd"/></svg>
+              <p className="text-sm text-amber-300">
+                <strong className="font-semibold">This token is published to the marketplace.</strong> Service scopes cannot be added to published tokens — unpublish it first.
+              </p>
+            </div>
+          )}
+
           {error && (
             <div className="rounded-lg bg-red-900 bg-opacity-30 border border-red-700 p-4">
               <p className="text-sm text-red-200">{error}</p>
@@ -233,12 +243,13 @@ function ServiceScopeSelector({ isOpen, currentToken, onClose, onSuccess, master
                     }`}
                   >
                     {/* Service toggle */}
-                    <label className="flex items-center gap-3 mb-3 cursor-pointer">
+                    <label className={`flex items-center gap-3 mb-3 ${isPublished ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
                       <input
                         type="checkbox"
                         checked={config.enabled}
-                        onChange={() => handleServiceToggle(serviceName)}
-                        className="h-4 w-4 text-blue-600 bg-slate-800 border-slate-600 rounded"
+                        onChange={() => !isPublished && handleServiceToggle(serviceName)}
+                        disabled={isPublished}
+                        className="h-4 w-4 text-blue-600 bg-slate-800 border-slate-600 rounded disabled:opacity-50"
                       />
                       <span className="font-medium text-white capitalize">{serviceName}</span>
                     </label>
@@ -303,7 +314,8 @@ function ServiceScopeSelector({ isOpen, currentToken, onClose, onSuccess, master
             </button>
             <button
               type="submit"
-              disabled={isSaving}
+              disabled={isSaving || isPublished}
+              title={isPublished ? 'Unpublish this token before editing service scopes' : undefined}
               className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSaving ? 'Saving...' : 'Save Scopes'}

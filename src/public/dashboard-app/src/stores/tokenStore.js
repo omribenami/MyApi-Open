@@ -90,7 +90,7 @@ export const useTokenStore = create((set, get) => ({
   },
 
   // Create a new token
-  createToken: async (masterToken, { label, description, scopes, expiresInHours, requiresApproval, scopeBundle }) => {
+  createToken: async (masterToken, { label, description, scopes, expiresInHours, requiresApproval, scopeBundle, allowedPersonas, allowedResources }) => {
     if (!masterToken) {
       set({ error: 'No master token available' });
       return null;
@@ -109,6 +109,8 @@ export const useTokenStore = create((set, get) => ({
           expiresInHours,
           requiresApproval,
           scopeBundle,
+          allowedPersonas: allowedPersonas && allowedPersonas.length > 0 ? allowedPersonas : undefined,
+          allowedResources: allowedResources && Object.keys(allowedResources).length > 0 ? allowedResources : undefined,
         }),
       });
 

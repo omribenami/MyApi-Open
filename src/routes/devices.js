@@ -64,6 +64,7 @@ router.get('/approved', requireAuth, (req, res) => {
       tokenId: device.token_id,
       approvedAt: device.approved_at,
       lastUsedAt: device.last_used_at,
+      scope: device.scope || 'full',
       info: device.device_info_json ? JSON.parse(device.device_info_json) : null,
     }));
     
@@ -145,6 +146,45 @@ router.post('/:device_id/rename', requireAuth, (req, res) => {
   } catch (error) {
     logger.error('Error renaming device:', error);
     res.status(500).json({ error: 'Failed to rename device' });
+  }
+});
+
+/**
+ * PATCH /api/v1/devices/:device_id/scope
+ * Update the access scope of an approved device (read | full)
+ */
+router.patch('/:device_id/scope', requireAuth, (req, res) => {
+  try {
+    const { scope } = req.body;
+    if (!scope || !['read', 'full'].includes(scope)) {
+      return res.status(400).json({ error: "scope must be 'read' or 'full'" });
+    }
+
+    const device = db.db.prepare(
+      'SELECT id, device_name FROM approved_devices WHERE id = ? AND user_id = ? AND revoked_at IS NULL'
+    ).get(req.params.device_id, req.userId);
+
+    if (!device) {
+      return res.status(404).json({ error: 'Device not found' });
+    }
+
+    db.db.prepare(
+      'UPDATE approved_devices SET scope = ? WHERE id = ?'
+    ).run(scope, req.params.device_id);
+
+    db.createAuditLog({
+      requesterId: req.userId,
+      action: 'device_scope_updated',
+      resource: 'device',
+      scope: req.params.device_id,
+      ip: req.ip,
+      details: { device_name: device.device_name, new_scope: scope }
+    });
+
+    res.json({ success: true, scope });
+  } catch (error) {
+    logger.error('Error updating device scope:', error);
+    res.status(500).json({ error: 'Failed to update device scope' });
   }
 });
 

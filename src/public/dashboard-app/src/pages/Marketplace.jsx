@@ -11,7 +11,7 @@ const TYPE_CONFIG = {
 function extractScanner(content) {
   // Defensive: handle undefined/null content
   if (!content) return null;
-  
+
   let parsed;
   if (typeof content === 'string') {
     try {
@@ -25,9 +25,112 @@ function extractScanner(content) {
   }
 
   if (!parsed || typeof parsed !== 'object') return null;
-  
+
   const scanner = parsed?.scanner || parsed?.config_json?.scanner;
   return scanner && typeof scanner === 'object' ? scanner : null;
+}
+
+function parseContent(raw) {
+  if (!raw) return null;
+  if (typeof raw === 'string') {
+    try { return JSON.parse(raw); } catch { return null; }
+  }
+  return typeof raw === 'object' ? raw : null;
+}
+
+// Resolve a display name — hide raw user IDs (usr_…)
+function resolveOwnerName(listing, content) {
+  const fromListing = listing?.ownerName;
+  const fromContent = content?.owner_display_name;
+  if (fromListing && !String(fromListing).startsWith('usr_')) return fromListing;
+  return fromContent || fromListing || 'Unknown';
+}
+
+const SCOPE_LABELS = {
+  basic: 'Basic Profile',
+  professional: 'Professional Info',
+  availability: 'Availability',
+  personas: 'Personas',
+  knowledge: 'Knowledge Base',
+  chat: 'Chat',
+  memory: 'Memory',
+  'skills:read': 'Skills (Read)',
+  'skills:write': 'Skills (Write)',
+  'services:read': 'Services (Read)',
+  'services:write': 'Services (Write)',
+};
+
+const SCOPE_COLORS = {
+  basic: 'bg-slate-700 text-slate-200',
+  professional: 'bg-slate-700 text-slate-200',
+  availability: 'bg-slate-700 text-slate-200',
+  personas: 'bg-purple-900/60 text-purple-300',
+  knowledge: 'bg-blue-900/60 text-blue-300',
+  chat: 'bg-blue-900/60 text-blue-300',
+  memory: 'bg-blue-900/60 text-blue-300',
+  'skills:read': 'bg-green-900/60 text-green-300',
+  'skills:write': 'bg-green-900/60 text-green-300',
+  'services:read': 'bg-orange-900/60 text-orange-300',
+  'services:write': 'bg-orange-900/60 text-orange-300',
+};
+
+function scopeLabel(scope) {
+  if (SCOPE_LABELS[scope]) return SCOPE_LABELS[scope];
+  // per-service: services:google:read → Google (Read)
+  const m = scope.match(/^services:([^:]+):(read|write|\*)$/);
+  if (m) return `${m[1].charAt(0).toUpperCase() + m[1].slice(1)} (${m[2] === '*' ? 'All' : m[2].charAt(0).toUpperCase() + m[2].slice(1)})`;
+  return scope;
+}
+
+function scopeColor(scope) {
+  if (SCOPE_COLORS[scope]) return SCOPE_COLORS[scope];
+  if (scope.startsWith('services:')) return 'bg-orange-900/60 text-orange-300';
+  return 'bg-slate-700 text-slate-300';
+}
+
+function ScopeBadges({ scopes, limit }) {
+  if (!Array.isArray(scopes) || scopes.length === 0) return null;
+  const shown = limit ? scopes.slice(0, limit) : scopes;
+  const remaining = limit ? scopes.length - shown.length : 0;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {shown.map(s => (
+        <span key={s} className={`px-2 py-0.5 rounded text-[10px] font-medium ${scopeColor(s)}`}>
+          {scopeLabel(s)}
+        </span>
+      ))}
+      {remaining > 0 && (
+        <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-700 text-slate-400">
+          +{remaining} more
+        </span>
+      )}
+    </div>
+  );
+}
+
+function Collapsible({ title, children, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="border border-slate-700 rounded-lg overflow-hidden">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-4 py-3 bg-slate-800 hover:bg-slate-750 text-sm font-medium text-slate-200 transition-colors"
+      >
+        <span>{title}</span>
+        <svg
+          className={`w-4 h-4 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`}
+          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <div className="px-4 py-3 bg-slate-900 text-sm text-slate-300 space-y-2">
+          {children}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function StarRating({ value = 0, count = 0, size = 'sm' }) {
@@ -226,16 +329,31 @@ function ListingModal({ listing, onClose, onInstall, onRated, masterToken, initi
 
   // Safe detail reading with defaults
   const detailType = detail?.type || 'unknown';
-  const detailTitle = detail?.title || '(Untitled)';
-  const detailOwnerName = detail?.ownerName || 'Unknown';
+  const isTokenType = detailType === 'api' || detailType === 'token';
+  const detailContent = parseContent(detail?.content);
+  const detailTitle = isTokenType
+    ? (detailContent?.token_label || detail?.title || '(Untitled)')
+    : (detail?.title || '(Untitled)');
+  const detailOwnerName = resolveOwnerName(detail, detailContent);
   const detailAvgRating = detail?.avgRating || 0;
   const detailRatingCount = detail?.ratingCount || 0;
   const detailInstallCount = detail?.installCount || 0;
-  const detailPrice = detail?.price || 'price unknown';
-  const detailDescription = detail?.description || 'No description provided.';
-  const detailContent = detail?.content;
+  const detailPrice = detail?.price || 'free';
+  const detailDescription = isTokenType
+    ? (detailContent?.token_description || detail?.description || '')
+    : (detail?.description || 'No description provided.');
   const detailTags = Array.isArray(detail?.tags) ? detail.tags : [];
   const detailRatings = Array.isArray(detail?.ratings) ? detail.ratings : [];
+
+  // Token-specific content fields
+  const tokenScopes = isTokenType && Array.isArray(detailContent?.scopes) ? detailContent.scopes : [];
+  const isBundle = isTokenType && !!(detailContent?.is_bundle);
+  const tokenPersona = isTokenType ? detailContent?.persona : null;
+  const allowedResources = isTokenType ? detailContent?.allowed_resources : null;
+  const kbDocs = allowedResources?.knowledge_docs || allowedResources?.kb_docs || null;
+  const allowedSkillIds = allowedResources?.skills || null;
+  const tokenExpiresAt = isTokenType ? detailContent?.expires_at : null;
+  const tokenRequiresApproval = isTokenType ? !!(detailContent?.requires_approval) : false;
 
   // Defensive: validate listing object (after hooks to comply with rules-of-hooks)
   if (!listing || typeof listing !== 'object') {
@@ -247,8 +365,13 @@ function ListingModal({ listing, onClose, onInstall, onRated, masterToken, initi
       <div className="absolute inset-0 bg-black bg-opacity-70" onClick={onClose} />
       <div className="relative bg-slate-900 border border-slate-700 rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
         <div className="sticky top-0 bg-slate-900 border-b border-slate-800 px-6 py-4 flex items-start justify-between">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <TypeBadge type={detailType} />
+            {isBundle && (
+              <span className="text-xs font-semibold text-purple-300 border border-purple-600 rounded-full px-2 py-0.5 bg-purple-900/40">
+                Bundle
+              </span>
+            )}
             <h2 className="text-xl font-bold text-white">{detailTitle}</h2>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-white text-2xl leading-none ml-4">×</button>
@@ -262,6 +385,9 @@ function ListingModal({ listing, onClose, onInstall, onRated, masterToken, initi
             <span>{detailInstallCount} installs</span>
             <span className="text-green-400">{detailPrice === 'free' ? 'Free' : detailPrice}</span>
             {isInstalled && <span className="text-emerald-300 text-xs border border-emerald-700 rounded-full px-2 py-0.5">Installed</span>}
+            {tokenRequiresApproval && (
+              <span className="text-amber-300 text-xs border border-amber-700 rounded-full px-2 py-0.5">Requires Approval</span>
+            )}
             {detailType === 'skill' && scanner && (
               <span
                 className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs border ${scanner.safe_to_use ? 'bg-emerald-900/40 text-emerald-300 border-emerald-700' : 'bg-amber-900/40 text-amber-300 border-amber-700'}`}
@@ -270,10 +396,13 @@ function ListingModal({ listing, onClose, onInstall, onRated, masterToken, initi
                 {scanner.safe_to_use ? 'Safe' : 'Review'} · score {scanner.score}
               </span>
             )}
+            {tokenExpiresAt && (
+              <span className="text-slate-400 text-xs">Expires: {new Date(tokenExpiresAt).toLocaleDateString()}</span>
+            )}
           </div>
 
-          {/* Tags */}
-          {detailTags && detailTags.length > 0 && (
+          {/* Tags (non-token) */}
+          {!isTokenType && detailTags && detailTags.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {detailTags.map(tag => (
                 <span key={tag} className="px-2 py-0.5 bg-slate-800 text-slate-300 text-xs rounded-full border border-slate-700">{tag}</span>
@@ -282,13 +411,74 @@ function ListingModal({ listing, onClose, onInstall, onRated, masterToken, initi
           )}
 
           {/* Description */}
-          <div>
-            <h3 className="text-sm font-semibold text-slate-300 mb-2">Description</h3>
-            <p className="text-slate-400 text-sm leading-relaxed">{detailDescription}</p>
-          </div>
+          {detailDescription && (
+            <div>
+              <h3 className="text-sm font-semibold text-slate-300 mb-2">Description</h3>
+              <p className="text-slate-400 text-sm leading-relaxed">{detailDescription}</p>
+            </div>
+          )}
 
-          {/* Content preview */}
-          {detailContent && (
+          {/* TOKEN-SPECIFIC SECTIONS */}
+          {isTokenType && (
+            <div className="space-y-3">
+              {/* Access Scopes */}
+              {tokenScopes.length > 0 && (
+                <Collapsible title={`Access Scopes (${tokenScopes.length})`} defaultOpen={true}>
+                  <ScopeBadges scopes={tokenScopes} />
+                  <p className="text-xs text-slate-500 mt-1">
+                    These scopes define what data this token can access on the owner's API.
+                  </p>
+                </Collapsible>
+              )}
+
+              {/* Persona */}
+              {tokenPersona && (
+                <Collapsible title={`Persona: ${tokenPersona.name || 'Unnamed'}`}>
+                  {tokenPersona.description && (
+                    <p className="text-slate-300 leading-relaxed">{tokenPersona.description}</p>
+                  )}
+                  {!tokenPersona.description && (
+                    <p className="text-slate-500 italic">No description provided for this persona.</p>
+                  )}
+                </Collapsible>
+              )}
+
+              {/* Knowledge Base files */}
+              {kbDocs && Array.isArray(kbDocs) && kbDocs.length > 0 && (
+                <Collapsible title={`Knowledge Base (${kbDocs.length} file${kbDocs.length !== 1 ? 's' : ''})`}>
+                  <ul className="space-y-1">
+                    {kbDocs.map((doc, i) => (
+                      <li key={doc.id || doc || i} className="flex items-center gap-2">
+                        <svg className="w-3 h-3 text-blue-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <span className="text-slate-300 text-xs">{doc.title || doc.name || doc.id || doc}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </Collapsible>
+              )}
+
+              {/* Skills */}
+              {allowedSkillIds && Array.isArray(allowedSkillIds) && allowedSkillIds.length > 0 && (
+                <Collapsible title={`Skills (${allowedSkillIds.length})`}>
+                  <ul className="space-y-1">
+                    {allowedSkillIds.map((skill, i) => (
+                      <li key={skill.id || skill || i} className="flex items-center gap-2">
+                        <svg className="w-3 h-3 text-green-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                        </svg>
+                        <span className="text-slate-300 text-xs">{skill.name || skill.id || skill}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </Collapsible>
+              )}
+            </div>
+          )}
+
+          {/* NON-TOKEN CONTENT PREVIEW */}
+          {!isTokenType && detailContent && (
             <div>
               <h3 className="text-sm font-semibold text-slate-300 mb-2">Details</h3>
               <div className="bg-slate-800 rounded-lg p-4 text-sm">
@@ -296,18 +486,6 @@ function ListingModal({ listing, onClose, onInstall, onRated, masterToken, initi
                   <p className="text-slate-300 whitespace-pre-wrap">{
                     typeof detailContent === 'object' ? (detailContent?.soul_content || JSON.stringify(detailContent, null, 2)) : String(detailContent)
                   }</p>
-                )}
-                {detailType === 'api' && (
-                  <div className="space-y-2 text-slate-300">
-                    {typeof detailContent === 'object' ? (
-                      <>
-                        {detailContent?.endpoint && <div><span className="text-slate-500">Endpoint: </span>{detailContent.endpoint}</div>}
-                        {detailContent?.method && <div><span className="text-slate-500">Method: </span><span className="text-blue-300">{detailContent.method}</span></div>}
-                        {detailContent?.auth_type && <div><span className="text-slate-500">Auth: </span>{detailContent.auth_type}</div>}
-                        {detailContent?.api_description && <div><span className="text-slate-500">About: </span>{detailContent.api_description}</div>}
-                      </>
-                    ) : <p>{String(detailContent)}</p>}
-                  </div>
                 )}
                 {detailType === 'skill' && (
                   <div className="space-y-2 text-slate-300">
@@ -415,14 +593,26 @@ function ListingCard({
 }) {
   const listingId = listing?.id;
   const listingType = listing?.type || 'unknown';
-  const listingTitle = listing?.title || '(Untitled)';
-  const listingDescription = listing?.description || 'No description.';
-  const listingPrice = listing?.price || 'price unknown';
-  const listingOwnerName = listing?.ownerName || 'Unknown';
+  const isTokenType = listingType === 'api' || listingType === 'token';
+  const content = parseContent(listing?.content);
+
+  // For token listings, prefer content fields; fall back to top-level listing fields
+  const listingTitle = isTokenType
+    ? (content?.token_label || listing?.title || '(Untitled)')
+    : (listing?.title || '(Untitled)');
+  const listingDescription = isTokenType
+    ? (content?.token_description || listing?.description || '')
+    : (listing?.description || 'No description.');
+  const listingPrice = listing?.price || 'free';
+  const listingOwnerName = resolveOwnerName(listing, content);
   const listingInstallCount = listing?.installCount || 0;
   const listingAvgRating = listing?.avgRating || 0;
   const listingRatingCount = listing?.ratingCount || 0;
   const listingTags = listing?.tags || [];
+
+  const contentScopes = isTokenType && Array.isArray(content?.scopes) ? content.scopes : [];
+  const isBundle = isTokenType && !!(content?.is_bundle);
+  const persona = isTokenType ? content?.persona : null;
 
   const scanner = listingType === 'skill' ? extractScanner(listing?.content) : null;
   const [quickError, setQuickError] = useState('');
@@ -459,9 +649,15 @@ function ListingCard({
       onClick={() => onClick && onClick(listing)}
       className="bg-white bg-opacity-5 border border-white border-opacity-10 rounded-xl p-5 cursor-pointer hover:border-blue-500 hover:border-opacity-50 hover:bg-opacity-10 transition-all group"
     >
+      {/* Header row: type badge + badges */}
       <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <TypeBadge type={listingType} />
+          {isBundle && (
+            <span className="text-[10px] font-semibold text-purple-300 border border-purple-600 rounded-full px-2 py-0.5 bg-purple-900/40">
+              Bundle
+            </span>
+          )}
           {listing?.official && (
             <span className="text-[10px] text-emerald-300 border border-emerald-700 rounded-full px-2 py-0.5 bg-emerald-900 bg-opacity-30" title="Official / Verified">✓ Official</span>
           )}
@@ -473,8 +669,30 @@ function ListingCard({
           <span className="text-xs text-green-400">{listingPrice === 'free' ? 'Free' : listingPrice}</span>
         </div>
       </div>
-      <h3 className="font-semibold text-white group-hover:text-blue-300 transition-colors line-clamp-1 mb-1">{listingTitle}</h3>
-      <p className="text-slate-400 text-sm line-clamp-2 mb-3">{listingDescription}</p>
+
+      {/* Title */}
+      <h3 className="font-semibold text-white group-hover:text-blue-300 transition-colors line-clamp-1 mb-1">
+        {listingTitle}
+      </h3>
+
+      {/* Persona sub-label for token listings */}
+      {isTokenType && persona?.name && (
+        <p className="text-xs text-purple-400 mb-1">Persona: {persona.name}</p>
+      )}
+
+      {/* Description */}
+      {listingDescription && (
+        <p className="text-slate-400 text-sm line-clamp-2 mb-3">{listingDescription}</p>
+      )}
+
+      {/* Scope badges for token listings */}
+      {isTokenType && contentScopes.length > 0 && (
+        <div className="mb-3">
+          <ScopeBadges scopes={contentScopes} limit={4} />
+        </div>
+      )}
+
+      {/* Skill scanner badge */}
       {scanner && (
         <div
           className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs border mb-3 ${scanner.safe_to_use ? 'bg-emerald-900/40 text-emerald-300 border-emerald-700' : 'bg-amber-900/40 text-amber-300 border-amber-700'}`}
@@ -483,24 +701,27 @@ function ListingCard({
           {scanner.safe_to_use ? 'Safe' : 'Review'} · score {scanner.score}
         </div>
       )}
+
+      {/* Meta row */}
       <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
-        <span>by {listingOwnerName}</span>
+        <span>by <span className="text-slate-300">{listingOwnerName}</span></span>
         <span>{listingInstallCount} installs</span>
       </div>
-      {listing?.provider && (
-        <div className="text-xs text-slate-500 mb-2">Provider: {listing.provider}</div>
-      )}
-      <div className="mt-2">
-        <StarRating value={listingAvgRating} count={listingRatingCount} />
-      </div>
-      {listingTags && Array.isArray(listingTags) && listingTags.length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-3">
+
+      {/* Tags (non-token types) */}
+      {!isTokenType && listingTags && Array.isArray(listingTags) && listingTags.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-2 mb-2">
           {listingTags.slice(0, 3).map(tag => (
             <span key={tag} className="px-2 py-0.5 bg-slate-800 text-slate-400 text-xs rounded-full">{tag}</span>
           ))}
           {listingTags.length > 3 && <span className="text-slate-500 text-xs">+{listingTags.length - 3}</span>}
         </div>
       )}
+
+      <div className="mt-2">
+        <StarRating value={listingAvgRating} count={listingRatingCount} />
+      </div>
+
       <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-2">
         <span className="text-xs font-medium text-blue-400 group-hover:text-blue-300 transition-colors hidden sm:block">View Details →</span>
         {masterToken && (
@@ -557,6 +778,7 @@ export default function Marketplace() {
   const currentWorkspace = useAuthStore(s => s.currentWorkspace);
   const [listings, setListings] = useState([]);
   const [installedSkillListingIds, setInstalledSkillListingIds] = useState(() => new Set());
+  const [installedListingIds, setInstalledListingIds] = useState(() => new Set()); // all types
   const [quickInstallingIds, setQuickInstallingIds] = useState(() => new Set());
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -667,11 +889,12 @@ export default function Marketplace() {
   const handleQuickInstall = async ({ listingId, type }) => {
     setQuickInstallingIds(prev => new Set([...prev, String(listingId)]));
     try {
+      setInstalledListingIds(prev => new Set([...prev, String(listingId)]));
       if (type === 'skill') {
         setInstalledSkillListingIds(prev => new Set([...prev, String(listingId)]));
       }
       await fetchListings();
-      await fetchInstalledSkills();
+      if (type === 'skill') await fetchInstalledSkills();
     } finally {
       setQuickInstallingIds(prev => {
         const next = new Set(prev);
@@ -986,7 +1209,7 @@ export default function Marketplace() {
                   masterToken={masterToken}
                   onQuickInstall={handleQuickInstall}
                   quickInstalling={quickInstallingIds.has(String(listing.id))}
-                  isInstalled={listing.type === 'skill' && installedSkillListingIds.has(String(listing.id))}
+                  isInstalled={installedListingIds.has(String(listing.id)) || (listing.type === 'skill' && installedSkillListingIds.has(String(listing.id)))}
                 />
               );
             })}
@@ -998,14 +1221,15 @@ export default function Marketplace() {
           <ListingModal
             listing={selected}
             masterToken={masterToken}
-            initiallyInstalled={selected?.type === 'skill' && installedSkillListingIds.has(String(selected?.id))}
+            initiallyInstalled={installedListingIds.has(String(selected?.id)) || (selected?.type === 'skill' && installedSkillListingIds.has(String(selected?.id)))}
             onClose={() => setSelected(null)}
             onInstall={({ listingId, type }) => {
+              setInstalledListingIds(prev => new Set([...prev, String(listingId)]));
               if (type === 'skill') {
                 setInstalledSkillListingIds(prev => new Set([...prev, String(listingId)]));
               }
               fetchListings();
-              fetchInstalledSkills();
+              if (type === 'skill') fetchInstalledSkills();
             }}
             onRated={() => {
               fetchListings();

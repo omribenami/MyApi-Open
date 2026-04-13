@@ -5,6 +5,7 @@ import apiRequest from '../utils/apiRequest';
 import DeleteAccountModal from '../components/DeleteAccountModal';
 import NotificationSettings from '../components/NotificationSettings';
 import ImportExport from '../components/ImportExport';
+import { restartOnboarding, requestOnboardingModal } from '../utils/onboardingUtils';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared UI helpers
@@ -2020,9 +2021,44 @@ const SECTIONS = [
   { id: 'danger', label: 'Danger Zone' },
 ];
 
+function OnboardingSection() {
+  const [message, setMessage] = useState('');
+
+  const handleRerunOnboarding = () => {
+    restartOnboarding();
+    requestOnboardingModal();
+    setMessage('Onboarding restarted. The setup modal is open again.');
+  };
+
+  return (
+    <SectionCard title="Onboarding" description="Replay the first-run setup whenever you want to refresh your profile, security, or integrations flow">
+      <div className="space-y-4">
+        {message && <SuccessBanner message={message} onClose={() => setMessage('')} />}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <p className="text-sm text-slate-300">
+              Re-run onboarding to walk through profile setup, persona creation, 2FA, and first integrations again.
+            </p>
+            <p className="text-xs text-slate-500 mt-1">
+              This also restores the getting-started checklist until you finish or dismiss it again.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleRerunOnboarding}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors text-sm whitespace-nowrap"
+          >
+            Run onboarding again
+          </button>
+        </div>
+      </div>
+    </SectionCard>
+  );
+}
+
 function Settings() {
   const { activeSection, setActiveSection } = useSettingsStore();
-  const { logout } = useAuthStore();
+  const forceUnauthenticated = useAuthStore((state) => state.forceUnauthenticated);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -2037,8 +2073,14 @@ function Settings() {
       if (!res.ok) {
         throw new Error(payload?.error || 'Failed to delete account');
       }
+
+      // The backend already destroys the session and clears auth cookies as part of
+      // account deletion. Only clear client-side auth state here; do not run the
+      // normal logout flow, which performs a second /auth/logout request and can
+      // surface a false failure after the account is already gone.
       setShowDeleteModal(false);
-      logout();
+      forceUnauthenticated();
+      window.location.replace('/');
     } catch (err) {
       alert(err?.message || 'Failed to delete account');
     } finally {
@@ -2074,7 +2116,12 @@ function Settings() {
       </div>
 
       {/* Section content */}
-      {activeSection === 'profile' && <ProfileSection />}
+      {activeSection === 'profile' && (
+        <>
+          <ProfileSection />
+          <OnboardingSection />
+        </>
+      )}
       {activeSection === 'billing' && <BillingSection />}
       {activeSection === 'security' && <SecuritySection />}
       {activeSection === 'audit' && <AuditLogsSection />}

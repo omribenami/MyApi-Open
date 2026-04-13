@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from './stores/authStore';
 import OnboardingModal from './components/OnboardingModal';
 import SessionExpiredOverlay from './components/SessionExpiredOverlay';
+import { isOnboardingActive, wasModalDismissed, restartOnboarding } from './utils/onboardingUtils';
 import Dashboard from './pages/Dashboard';
 import DashboardHome from './pages/DashboardHome';
 import ServiceConnectors from './pages/ServiceConnectors';
@@ -79,15 +80,30 @@ function App() {
     }
   }, [isAuthenticated, fetchWorkspaces]);
 
-  // Show onboarding modal for new users
-  // If the server says needsOnboarding, override the local dismissed flag
-  // (prevents a stale localStorage entry from hiding the modal after a fresh signup)
+  // New users enter onboarding mode immediately.
   useEffect(() => {
     if (isAuthenticated && user?.needsOnboarding) {
-      try { localStorage.removeItem('myapi_onboarding_dismissed'); } catch (_) { /* localStorage unavailable */ }
+      restartOnboarding();
       setShowOnboarding(true);
     }
   }, [isAuthenticated, user?.needsOnboarding]);
+
+  // If onboarding mode is still active and the modal was not dismissed, reopen it.
+  useEffect(() => {
+    if (isAuthenticated && isOnboardingActive() && !wasModalDismissed()) {
+      setShowOnboarding(true);
+    }
+  }, [isAuthenticated]);
+
+  // Allow other components (e.g. Settings) to reopen the onboarding modal
+  useEffect(() => {
+    const onOpen = () => {
+      restartOnboarding();
+      setShowOnboarding(true);
+    };
+    window.addEventListener('myapi:open-onboarding', onOpen);
+    return () => window.removeEventListener('myapi:open-onboarding', onOpen);
+  }, []);
 
   // Handle OAuth callbacks at app level (runs before router decides which component to show)
   useEffect(() => {
