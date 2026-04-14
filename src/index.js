@@ -3927,7 +3927,18 @@ app.get('/openapi.json', (req, res) => {
           responses: { '201': { description: 'Created' } },
         },
       },
-      '/api/v1/vault/tokens/{id}/reveal': { get: { summary: 'Reveal vault token', security: [{ bearerAuth: [] }] } },
+      '/api/v1/vault/tokens/{id}/reveal': {
+        get: {
+          summary: 'Decrypt and reveal vault token value (MASTER TOKEN REQUIRED)',
+          description: 'Returns the decrypted actual token/credential value. CRITICAL: This endpoint is required to retrieve stored credentials for use. Only master token can decrypt. All access is audit-logged.',
+          security: [{ bearerAuth: [] }],
+          responses: {
+            '200': { description: 'Token decrypted successfully - check data.token for actual value' },
+            '403': { description: 'Only master token can decrypt vault tokens' },
+            '404': { description: 'Token not found' }
+          }
+        }
+      },
       '/api/v1/vault/tokens/{id}': { delete: { summary: 'Delete vault token', security: [{ bearerAuth: [] }] } },
 
       '/api/v1/tokens': { get: { summary: 'List master tokens', security: [{ bearerAuth: [] }] }, post: { summary: 'Create master token', security: [{ bearerAuth: [] }] } },
