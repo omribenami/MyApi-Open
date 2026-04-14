@@ -1687,6 +1687,10 @@ app.get('/.well-known/ai-plugin.json', (req, res) => {
 
 // User profile routes
 app.get('/api/v1/users/me', authenticate, (req, res) => {
+  // SECURITY FIX: Require 'identity' scope to access personal identity data
+  if (!hasScope(req, 'identity')) {
+    return res.status(403).json({ error: "Requires 'identity' scope to access user identity" });
+  }
   const userId = req.user?.id;
   let user = req.user || { id: 'owner', username: 'owner' };
   let identity = {};
@@ -3951,6 +3955,7 @@ app.get('/openapi.json', (req, res) => {
       '/api/v1/gateway/context': { get: { summary: 'Gateway context', security: [{ bearerAuth: [] }] } },
       '/api/v1/audit/log': { get: { summary: 'Audit logs', security: [{ bearerAuth: [] }] } },
 
+      '/api/v1/users/me': { get: { summary: 'Get authenticated user identity', scope: 'identity' } },
       '/api/v1/users': { get: { summary: 'List users', security: [{ bearerAuth: [] }] }, post: { summary: 'Create user', security: [{ bearerAuth: [] }] } },
       '/api/v1/users/{id}/plan': { put: { summary: 'Update user plan', security: [{ bearerAuth: [] }] } },
 
