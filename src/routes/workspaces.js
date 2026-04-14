@@ -622,7 +622,7 @@ router.post('/:id/invitations', (req, res) => {
       // Don't fail the API call if email queueing fails
     }
 
-    // Trigger notification for the invitee
+    // Trigger notifications for the invitee and the inviter
     const NotificationDispatcher = require('../lib/notificationDispatcher');
     try {
       const inviteeUser = getUserByEmail(email);
@@ -638,6 +638,9 @@ router.post('/:id/invitations', (req, res) => {
           invitation.id
         );
       }
+      // Confirm to the sender that their invitation was sent
+      NotificationDispatcher.onTeamMemberInvited(workspace.id, req.user.id, email, role)
+        .catch(() => {});
     } catch (err) {
       logger.error('Failed to send invitation notification:', err.message);
       // Don't fail the API call if notification fails

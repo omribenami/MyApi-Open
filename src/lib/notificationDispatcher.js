@@ -7,7 +7,7 @@
 
 // NOTE: Database is handled by database.js which detects MongoDB or SQLite
 // No need to create a separate instance here
-const { db, createNotification, queueNotificationForDelivery } = require('../database');
+const { db, createNotification, queueNotificationForDelivery, queueEmail } = require('../database');
 
 class NotificationDispatcher {
   /**
@@ -95,6 +95,22 @@ class NotificationDispatcher {
 
       // Queue for delivery on enabled channels
       queueNotificationForDelivery(notificationId, channelsToUse);
+
+      // Queue actual email when email channel is enabled
+      // (queueNotificationForDelivery only tracks delivery status; emails must go into email_queue)
+      if (channelsToUse.includes('email')) {
+        try {
+          const user = db.prepare('SELECT email, display_name FROM users WHERE id = ?').get(userId);
+          if (user?.email) {
+            const NotificationService = require('../services/notificationService');
+            const subject = NotificationService.getEmailSubject(notificationType, title);
+            const htmlBody = NotificationService.generateEmailTemplate(notificationType, title, message, data);
+            queueEmail(userId, user.email, subject, message, { notificationId, htmlBody });
+          }
+        } catch (emailErr) {
+          console.error('[NotificationDispatcher] Failed to queue email:', emailErr);
+        }
+      }
 
       console.log(`[NotificationDispatcher] ${notificationType} → user ${userId} on [${channelsToUse.join(', ')}]`);
       return notificationId;

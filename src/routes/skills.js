@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const GitHubRepoMetadata = require('../services/github-repo-metadata');
+const NotificationDispatcher = require('../lib/notificationDispatcher');
 
 // Where Claude Code skills live when mounted into the container
 const CLAUDE_SKILLS_DIR = process.env.CLAUDE_SKILLS_DIR || '/app/claude-skills';
@@ -278,6 +279,13 @@ function createSkillsRoutes(
       }
 
       const updatedSkill = getSkillById(skill.id, ownerId);
+
+      // Notify user of new skill
+      const skillCreateWs = db.prepare('SELECT id FROM workspaces WHERE owner_id = ? LIMIT 1').get(ownerId);
+      if (skillCreateWs) {
+        NotificationDispatcher.onSkillInstalled(skillCreateWs.id, ownerId, skillData.name, skill.id)
+          .catch(() => {});
+      }
 
       res.status(201).json({
         skill: {

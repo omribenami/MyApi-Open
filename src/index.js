@@ -871,14 +871,23 @@ app.post('/api/v1/billing/webhook', express.raw({ type: 'application/json' }), a
 
   if (type === 'customer.subscription.created' || type === 'customer.subscription.updated') {
     if (metadataWorkspaceId) {
+      const newPlanId = (obj.items?.data?.[0]?.price?.nickname || obj.items?.data?.[0]?.price?.lookup_key || 'free').toLowerCase();
       upsertBillingSubscription(metadataWorkspaceId, {
         stripe_subscription_id: obj.id,
-        plan_id: (obj.items?.data?.[0]?.price?.nickname || obj.items?.data?.[0]?.price?.lookup_key || 'free').toLowerCase(),
+        plan_id: newPlanId,
         status: obj.status || 'active',
         period_start: obj.current_period_start ? new Date(obj.current_period_start * 1000).toISOString() : null,
         period_end: obj.current_period_end ? new Date(obj.current_period_end * 1000).toISOString() : null,
         cancel_at_period_end: !!obj.cancel_at_period_end,
       });
+      // Notify workspace owner on active subscription (upgrade)
+      if (type === 'customer.subscription.updated' && obj.status === 'active' && newPlanId !== 'free') {
+        const billingWs = getWorkspaces(null, metadataWorkspaceId);
+        if (billingWs?.ownerId) {
+          NotificationDispatcher.onSubscriptionUpgraded(metadataWorkspaceId, billingWs.ownerId, newPlanId)
+            .catch(err => console.error('[Billing] Subscription upgrade notification error:', err));
+        }
+      }
     }
   }
 
@@ -918,6 +927,15 @@ app.post('/api/v1/billing/webhook', express.raw({ type: 'application/json' }), a
         invoice_url: obj.hosted_invoice_url || null,
         created_at: obj.created ? new Date(obj.created * 1000).toISOString() : new Date().toISOString(),
       });
+      // Notify workspace owner on payment failure
+      if (type === 'invoice.payment_failed') {
+        const failWs = getWorkspaces(null, metadataWorkspaceId);
+        if (failWs?.ownerId) {
+          const failReason = obj.last_payment_error?.message || 'Payment was declined';
+          NotificationDispatcher.onBillingFailure(metadataWorkspaceId, failWs.ownerId, failReason)
+            .catch(err => console.error('[Billing] Payment failure notification error:', err));
+        }
+      }
     }
   }
 
@@ -8748,6 +8766,13 @@ app.post("/api/v1/oauth/disconnect/:service", authenticate, async (req, res) => 
     // Update OAuth status
     updateOAuthStatus(service, "disconnected");
 
+    // Notify user of disconnection
+    const disconnectWs = getWorkspaces(userId);
+    if (disconnectWs?.length) {
+      NotificationDispatcher.onServiceDisconnected(disconnectWs[0].id, userId, service)
+        .catch(err => console.error('[OAuth Disconnect] Notification error:', err));
+    }
+
     // Log disconnection (with safety check for tokenMeta)
     const requesterId = req.tokenMeta?.tokenId || req.session?.user?.id || 'unknown';
     const scope = req.tokenMeta?.scope || 'session';
@@ -10659,8 +10684,16 @@ app.delete('/api/v1/skills/:id', authenticate, (req, res) => {
   if (!hasScope(req, 'skills:write')) return res.status(403).json({ error: "Requires 'skills:write' scope" });
   try {
     const ownerId = getRequestOwnerId(req);
+    const skillToDelete = getSkillById(req.params.id, ownerId);
     const result = deleteSkill(req.params.id, ownerId);
     if (!result) return res.status(404).json({ error: 'Skill not found' });
+    if (skillToDelete) {
+      const skillDelWs = getWorkspaces(ownerId);
+      if (skillDelWs?.length) {
+        NotificationDispatcher.onSkillRemoved(skillDelWs[0].id, ownerId, skillToDelete.name, req.params.id)
+          .catch(() => {});
+      }
+    }
     res.json({ success: true });
   } catch (err) {
     console.error('Skill delete error:', err);
@@ -11089,6 +11122,13 @@ app.post('/api/v1/marketplace/:id/install', authenticate, (req, res) => {
           skillVersion: newSkill.version,
           skillCategory: newSkill.category,
         };
+
+        // Notify user of skill installation
+        const skillWsId = workspaceId || (getWorkspaces(ownerId)?.[0]?.id);
+        if (skillWsId) {
+          NotificationDispatcher.onSkillInstalled(skillWsId, ownerId, newSkill.name, newSkill.id)
+            .catch(() => {});
+        }
       }
     } else if (listing.type === 'token') {
       // Handle guest token installation

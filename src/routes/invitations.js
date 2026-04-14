@@ -14,6 +14,7 @@ const {
   getWorkspaces,
   getWorkspaceMember,
 } = require('../database');
+const NotificationDispatcher = require('../lib/notificationDispatcher');
 
 /**
  * GET /api/v1/invitations/:id
@@ -76,6 +77,13 @@ router.post('/:id/accept', (req, res) => {
     }
 
     const workspace = getWorkspaces(null, invitation.workspaceId);
+
+    // Notify workspace owner that their invitation was accepted
+    if (workspace?.ownerId && workspace.ownerId !== req.user.id) {
+      const memberName = req.user.display_name || req.user.displayName || req.user.username || req.user.email;
+      NotificationDispatcher.onTeamInvitationAccepted(workspace.id, workspace.ownerId, memberName)
+        .catch(() => {});
+    }
 
     res.json({
       success: true,
