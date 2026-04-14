@@ -30,6 +30,25 @@ const { CallToolRequestSchema, ListToolsRequestSchema, TextContent } = require('
 const Database = require('better-sqlite3');
 const crypto = require('crypto');
 
+// Immutable allowlist — prevents runtime mutation of the allowed service set
+const ALLOWED_SERVICES = Object.freeze(['gmail', 'calendar', 'drive', 'contacts', 'github', 'linkedin', 'discord', 'notion', 'slack']);
+
+// Simple in-process rate limiter: max 30 tool calls per minute per user
+const _rateBuckets = new Map();
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX = 30;
+
+function checkRateLimit(userId) {
+  const now = Date.now();
+  let bucket = _rateBuckets.get(userId);
+  if (!bucket || now - bucket.windowStart > RATE_LIMIT_WINDOW_MS) {
+    bucket = { windowStart: now, count: 0 };
+    _rateBuckets.set(userId, bucket);
+  }
+  bucket.count++;
+  return bucket.count <= RATE_LIMIT_MAX;
+}
+
 // Initialize database
 const db = new Database('./src/data/myapi.db');
 
@@ -175,6 +194,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
+  // Rate limit per user
+  if (currentUserId && !checkRateLimit(currentUserId)) {
+    return errorResponse('Rate limit exceeded. Maximum 30 tool calls per minute.');
+  }
+
   try {
     switch (name) {
       case 'list_services':
@@ -265,9 +289,8 @@ async function handleGetServiceData(args) {
   }
 
   // Validate service name - only allow whitelisted services
-  const allowedServices = ['gmail', 'calendar', 'drive', 'contacts', 'github', 'linkedin', 'discord', 'notion', 'slack'];
-  if (!service || !allowedServices.includes(String(service).toLowerCase())) {
-    return errorResponse(`Invalid service: ${service}. Allowed services: ${allowedServices.join(', ')}`);
+  if (!service || !ALLOWED_SERVICES.includes(String(service).toLowerCase())) {
+    return errorResponse(`Invalid service: ${service}. Allowed services: ${ALLOWED_SERVICES.join(', ')}`);
   }
 
   // Validate query string - prevent injection of control characters and SQL-like patterns
@@ -323,8 +346,7 @@ async function handleExecuteServiceMethod(args) {
   }
 
   // Validate service name
-  const allowedServices = ['gmail', 'calendar', 'drive', 'contacts', 'github', 'linkedin', 'discord', 'notion', 'slack'];
-  if (!service || !allowedServices.includes(String(service).toLowerCase())) {
+  if (!service || !ALLOWED_SERVICES.includes(String(service).toLowerCase())) {
     return errorResponse(`Invalid service: ${service}`);
   }
 

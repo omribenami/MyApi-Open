@@ -14,6 +14,25 @@ const logger = require('../utils/logger');
  * @param {Object} codeReviewGate - Code review gating middleware handlers
  * @returns {Function} Express router
  */
+/**
+ * Middleware: require admin or owner role for destructive migration operations.
+ * Checks both session-based and token-based auth.
+ */
+function requireAdminRole(req, res, next) {
+  const role = req.tokenData?.role || req.session?.user?.role;
+  const isAdmin = role === 'admin' || role === 'owner';
+  // Also allow master token (full scope)
+  const isMasterToken = req.tokenMeta?.scope === 'full' || req.tokenMeta?.tokenType === 'master';
+
+  if (!isAdmin && !isMasterToken) {
+    return res.status(403).json({
+      error: 'Forbidden',
+      message: 'Admin or owner role required to perform migration operations'
+    });
+  }
+  next();
+}
+
 function createMigrationsRoutes(db, codeReviewGate) {
   /**
    * POST /migrations/deploy
@@ -26,7 +45,7 @@ function createMigrationsRoutes(db, codeReviewGate) {
    * Requires: admin role
    * Returns: 202 ACCEPTED with review_request_id
    */
-  router.post('/deploy', async (req, res) => {
+  router.post('/deploy', requireAdminRole, async (req, res) => {
     try {
       const { name, migration, description } = req.body;
       const userId = req.tokenData?.userId || req.session?.userId;
@@ -320,7 +339,7 @@ function createMigrationsRoutes(db, codeReviewGate) {
    * Rollback the last batch of file-based migrations
    * Requires: admin role
    */
-  router.post('/rollback', async (req, res) => {
+  router.post('/rollback', requireAdminRole, async (req, res) => {
     try {
       const MigrationRunner = require('../lib/migrationRunner');
 

@@ -60,14 +60,39 @@ class SSLManager {
    * Get certificate file path
    */
   getCertPath() {
-    return path.join(this.certDir, 'live', `${this.domain}-fullchain.pem`);
+    // Validate domain to prevent path traversal via crafted domain strings
+    const safeDomain = this._safeDomain(this.domain);
+    const certPath = path.resolve(path.join(this.certDir, 'live', `${safeDomain}-fullchain.pem`));
+    const certDir = path.resolve(this.certDir);
+    if (!certPath.startsWith(certDir + path.sep)) {
+      throw new Error(`Invalid domain for cert path: ${this.domain}`);
+    }
+    return certPath;
+  }
+
+  /**
+   * Validate domain string for use in file paths.
+   * Only allows characters valid in a hostname.
+   */
+  _safeDomain(domain) {
+    if (typeof domain !== 'string') throw new Error('Domain must be a string');
+    if (!/^[a-z0-9][a-z0-9\-\.]{0,251}[a-z0-9]$/i.test(domain)) {
+      throw new Error(`Invalid domain format: ${domain}`);
+    }
+    return domain;
   }
 
   /**
    * Get private key file path
    */
   getKeyPath() {
-    return path.join(this.certDir, 'live', `${this.domain}-privkey.pem`);
+    const safeDomain = this._safeDomain(this.domain);
+    const keyPath = path.resolve(path.join(this.certDir, 'live', `${safeDomain}-privkey.pem`));
+    const certDir = path.resolve(this.certDir);
+    if (!keyPath.startsWith(certDir + path.sep)) {
+      throw new Error(`Invalid domain for key path: ${this.domain}`);
+    }
+    return keyPath;
   }
 
   /**

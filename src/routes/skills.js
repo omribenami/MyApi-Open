@@ -205,10 +205,19 @@ function createSkillsRoutes(
         githubUsername
       } = req.body;
 
+      // Sanitize name and description to prevent prompt injection when used in LLM prompts
+      const sanitizeSkillText = (s, maxLen) => {
+        if (!s || typeof s !== 'string') return s;
+        return s
+          .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+          .replace(/ignore\s+(all\s+)?(previous|prior)\s+instructions?/gi, '')
+          .slice(0, maxLen);
+      };
+
       // If GitHub URL provided, fetch metadata
       let skillData = {
-        name,
-        description,
+        name: sanitizeSkillText(name, 100),
+        description: sanitizeSkillText(description, 1000),
         category,
         scriptContent,
         configJson,

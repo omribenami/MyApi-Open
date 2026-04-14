@@ -142,8 +142,10 @@ const SERVICE_METHODS = {
   }
 
   // Returns true if the caller has sufficient scope to access a service endpoint.
-  // Session users always pass; master tokens always pass; guest tokens need services:* scope.
+  // Session users always pass (they are the account owner); master tokens always pass;
+  // guest/scoped bearer tokens need services:* scope.
   function hasServiceScope(req, serviceName, operation = 'read') {
+    // Session users own their data — always allow.
     if (req.session?.user) return true;
     const meta = req.tokenMeta;
     if (!meta) return false;

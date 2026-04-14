@@ -4,6 +4,10 @@ const JSDELIVR_SIMPLE_ICONS_BASE = 'https://cdn.jsdelivr.net/npm/simple-icons@v1
 // Inline SVG data URIs for brands not available in simple-icons
 const LINKEDIN_SVG = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%230A66C2"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.064 2.064 0 1 1 0-4.128 2.064 2.064 0 0 1 0 4.128zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>')}`;
 const FAL_SVG = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%237C3AED"><rect width="24" height="24" rx="4"/><text x="12" y="17" text-anchor="middle" font-family="system-ui,sans-serif" font-size="14" font-weight="700" fill="white">fal</text></svg>')}`;
+// Microsoft 365: 4-color grid (official Microsoft brand colors — not in simple-icons)
+const MICROSOFT365_SVG = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect x="1" y="1" width="10" height="10" fill="%23F25022"/><rect x="13" y="1" width="10" height="10" fill="%237FBA00"/><rect x="1" y="13" width="10" height="10" fill="%2300A4EF"/><rect x="13" y="13" width="10" height="10" fill="%23FFB900"/></svg>')}`;
+// Monday.com: 3-dot logo (not in simple-icons)
+const MONDAY_SVG = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="4" cy="12" r="3.5" fill="%23FFCB00"/><circle cx="12" cy="12" r="3.5" fill="%23FF3D57"/><circle cx="20" cy="12" r="3.5" fill="%23FF7C00"/></svg>')}`;
 
 const BRAND_ALIASES = {
   x: 'twitter',
@@ -50,12 +54,12 @@ const BRAND_LOGOS = {
   linear: `${SIMPLE_ICONS_BASE}/linear/5E6AD2`,
   box: `${SIMPLE_ICONS_BASE}/box/0061D5`,
   figma: `${SIMPLE_ICONS_BASE}/figma/F24E1E`,
-  canva: `${SIMPLE_ICONS_BASE}/canva/00C4CC`,
+  canva: `${SIMPLE_ICONS_BASE}/canva`,
   zendesk: `${SIMPLE_ICONS_BASE}/zendesk/03363D`,
   intercom: `${SIMPLE_ICONS_BASE}/intercom/1F8FED`,
   clickup: `${SIMPLE_ICONS_BASE}/clickup/7B68EE`,
-  monday: `${SIMPLE_ICONS_BASE}/mondaydotcom/FF3D57`,
-  microsoft365: `${SIMPLE_ICONS_BASE}/microsoft365/D83B01`,
+  monday: MONDAY_SVG,
+  microsoft365: MICROSOFT365_SVG,
   dropbox: `${SIMPLE_ICONS_BASE}/dropbox/0061FF`,
   zoom: `${SIMPLE_ICONS_BASE}/zoom/0B5CFF`,
   hubspot: `${SIMPLE_ICONS_BASE}/hubspot/FF7A59`,
@@ -80,7 +84,7 @@ const BRAND_LOGO_FALLBACKS = {
   bitbucket: `${JSDELIVR_SIMPLE_ICONS_BASE}/bitbucket.svg`,
   azuredevops: `${JSDELIVR_SIMPLE_ICONS_BASE}/azuredevops.svg`,
   notion: `${JSDELIVR_SIMPLE_ICONS_BASE}/notion.svg`,
-  microsoft365: `${JSDELIVR_SIMPLE_ICONS_BASE}/microsoft365.svg`,
+  microsoft365: MICROSOFT365_SVG,
   dropbox: `${JSDELIVR_SIMPLE_ICONS_BASE}/dropbox.svg`,
   zoom: `${JSDELIVR_SIMPLE_ICONS_BASE}/zoom.svg`,
   hubspot: `${JSDELIVR_SIMPLE_ICONS_BASE}/hubspot.svg`,
@@ -91,11 +95,11 @@ const BRAND_LOGO_FALLBACKS = {
   box: `${JSDELIVR_SIMPLE_ICONS_BASE}/box.svg`,
   airtable: `${JSDELIVR_SIMPLE_ICONS_BASE}/airtable.svg`,
   figma: `${JSDELIVR_SIMPLE_ICONS_BASE}/figma.svg`,
-  canva: `${JSDELIVR_SIMPLE_ICONS_BASE}/canva.svg`,
+  canva: `${SIMPLE_ICONS_BASE}/canva`,
   zendesk: `${JSDELIVR_SIMPLE_ICONS_BASE}/zendesk.svg`,
   intercom: `${JSDELIVR_SIMPLE_ICONS_BASE}/intercom.svg`,
   clickup: `${JSDELIVR_SIMPLE_ICONS_BASE}/clickup.svg`,
-  monday: `${JSDELIVR_SIMPLE_ICONS_BASE}/mondaydotcom.svg`,
+  monday: MONDAY_SVG,
   fal: FAL_SVG,
 };
 

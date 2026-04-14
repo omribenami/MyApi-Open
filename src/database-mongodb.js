@@ -234,6 +234,34 @@ const mockDb = {
   }
 };
 
+/**
+ * Sanitize a MongoDB query object to prevent NoSQL injection.
+ * Recursively removes any keys starting with '$' (MongoDB operators).
+ * Also rejects non-plain-object values that could contain operators.
+ * @param {Object} query - The query object to sanitize
+ * @returns {Object} Sanitized query
+ * @throws {Error} If the query contains injection operators
+ */
+function sanitizeMongoQuery(query, depth = 0) {
+  if (depth > 10) throw new Error('Query nesting too deep');
+  if (query === null || query === undefined) return query;
+  if (typeof query !== 'object' || Array.isArray(query)) return query;
+
+  const sanitized = {};
+  for (const [key, value] of Object.entries(query)) {
+    if (key.startsWith('$')) {
+      throw new Error(`NoSQL injection attempt detected: operator key "${key}" not allowed in user-supplied queries`);
+    }
+    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+      // Recursively check nested objects for operators
+      sanitized[key] = sanitizeMongoQuery(value, depth + 1);
+    } else {
+      sanitized[key] = value;
+    }
+  }
+  return sanitized;
+}
+
 // Export both the real MongoDB client and mock SQLite interface
 module.exports = {
   db: mockDb, // For code compatibility
@@ -241,41 +269,42 @@ module.exports = {
   connectMongoDB,
   initDatabase,
   checkDatabaseHealth,
-  
+  sanitizeMongoQuery,
+
   // Helper functions for common operations
   async insertOne(collection, document) {
     if (!db) await connectMongoDB();
     return db.collection(collection).insertOne(document);
   },
-  
+
   async findOne(collection, query) {
     if (!db) await connectMongoDB();
-    return db.collection(collection).findOne(query);
+    return db.collection(collection).findOne(sanitizeMongoQuery(query));
   },
-  
+
   async find(collection, query = {}) {
     if (!db) await connectMongoDB();
-    return db.collection(collection).find(query).toArray();
+    return db.collection(collection).find(sanitizeMongoQuery(query)).toArray();
   },
-  
+
   async updateOne(collection, filter, update) {
     if (!db) await connectMongoDB();
-    return db.collection(collection).updateOne(filter, { $set: update });
+    return db.collection(collection).updateOne(sanitizeMongoQuery(filter), { $set: update });
   },
-  
+
   async deleteOne(collection, query) {
     if (!db) await connectMongoDB();
-    return db.collection(collection).deleteOne(query);
+    return db.collection(collection).deleteOne(sanitizeMongoQuery(query));
   },
-  
+
   async deleteMany(collection, query) {
     if (!db) await connectMongoDB();
-    return db.collection(collection).deleteMany(query);
+    return db.collection(collection).deleteMany(sanitizeMongoQuery(query));
   },
 
   async count(collection, query = {}) {
     if (!db) await connectMongoDB();
-    return db.collection(collection).countDocuments(query);
+    return db.collection(collection).countDocuments(sanitizeMongoQuery(query));
   },
 
   ObjectId

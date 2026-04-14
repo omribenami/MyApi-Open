@@ -214,7 +214,13 @@ function isPublicHttpsUrl(urlStr) {
   }
   if (parsed.protocol !== 'https:') return false;
   const h = parsed.hostname.toLowerCase();
-  // Reject loopback, link-local, RFC-1918, and cloud metadata addresses.
+
+  // Use the SSRF prevention library's isPrivateIP for IP literal checking
+  const { isPrivateIP } = require('../lib/ssrf-prevention');
+  const net = require('net');
+  if (net.isIP(h) !== 0 && isPrivateIP(h)) return false;
+
+  // Reject known private/reserved hostnames
   const privatePatterns = [
     /^localhost$/,
     /^127\./,
@@ -225,6 +231,10 @@ function isPublicHttpsUrl(urlStr) {
     /^0\./,
     /^\[?::1\]?$/,
     /^fd[0-9a-f]{2}:/i,
+    /^fc[0-9a-f]{2}:/i,
+    /^fe80:/i,
+    /^metadata\.google\.internal$/i,
+    /^instance-data$/i,
   ];
   return !privatePatterns.some(p => p.test(h));
 }

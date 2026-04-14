@@ -103,13 +103,18 @@ function createVaultInstructionsRoutes(db, tokenManager, auditLog) {
    * Get just the instructions for a token
    * Lightweight endpoint for AI agents to fetch instructions
    */
-  router.get('/tokens/:id/instructions', (req, res) => {
+  router.get('/tokens/:id/instructions', requireAuth, (req, res) => {
     try {
       const { id } = req.params;
+      const userId = resolveUserId(req);
 
-      // Check if token exists (no auth required for reading public instructions)
-      const tokenStmt = db.prepare('SELECT id FROM access_tokens WHERE id = ?');
+      // Require ownership: user can only read instructions for their own tokens
+      const tokenStmt = db.prepare('SELECT id, owner_id FROM access_tokens WHERE id = ?');
       const token = tokenStmt.get(id);
+      if (token && String(token.owner_id) !== String(userId) && userId !== 'owner') {
+        logInstructionAction(req, 'vault:get_instructions', id, 403);
+        return res.status(403).json({ error: 'Access denied' });
+      }
 
       if (!token) {
         logInstructionAction(req, 'vault:get_instructions', id, 404);

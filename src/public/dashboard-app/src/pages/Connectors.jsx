@@ -597,6 +597,12 @@ const sig = crypto.sign(null, msg, privateKey).toString('base64');
 }
 
 // ─── CompareMethodsPanel ───────────────────────────────────────────────────────
+function CellValue({ value }) {
+  if (value === '✓ Yes') return <span className="font-semibold text-emerald-400">✓ Yes</span>;
+  if (value === '✗ No')  return <span className="font-semibold text-red-400">✗ No</span>;
+  return <span className="text-slate-400">{value}</span>;
+}
+
 function CompareMethodsPanel() {
   const rows = [
     ['Pre-existing token needed', '✓ Yes', '✗ No',  '✗ No' ],
@@ -622,9 +628,9 @@ function CompareMethodsPanel() {
           {rows.map(([label, master, oauth, asc]) => (
             <tr key={label} className="border-b border-slate-800/50 hover:bg-slate-800/20 transition-colors last:border-0">
               <td className="px-4 py-3 text-slate-400">{label}</td>
-              <td className="px-4 py-3 text-center text-slate-500">{master}</td>
-              <td className="px-4 py-3 text-center text-slate-300">{oauth}</td>
-              <td className="px-4 py-3 text-center text-slate-300">{asc}</td>
+              <td className="px-4 py-3 text-center"><CellValue value={master} /></td>
+              <td className="px-4 py-3 text-center"><CellValue value={oauth} /></td>
+              <td className="px-4 py-3 text-center"><CellValue value={asc} /></td>
             </tr>
           ))}
         </tbody>
@@ -639,7 +645,7 @@ export default function Connectors() {
   const [howOpen, setHowOpen]   = useState(false);
 
   const AGENT_TABS = [
-    { id: 'oauth',   label: 'OAuth Installer', sub: 'Recommended · browser flow', accent: 'blue'   },
+    { id: 'oauth',   label: 'OAuth PKCE',      sub: 'Recommended · browser flow', accent: 'blue'   },
     { id: 'asc',     label: 'ASC Keypair',     sub: 'Advanced · fully headless',  accent: 'violet' },
     { id: 'compare', label: 'Compare',         sub: 'Method comparison',          accent: 'slate'  },
   ];

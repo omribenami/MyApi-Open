@@ -4,6 +4,11 @@ const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const logger = require('../utils/logger');
 
+// Dummy hash used to equalize timing when no token candidates are found.
+// Pre-computed at module load so it doesn't add latency on first request.
+// This prevents timing attacks from distinguishing "prefix not found" from "prefix found but hash mismatch".
+const DUMMY_HASH = '$2b$12$invalidhashvaluethatnevermatchesanyrealtoken00000000000';
+
 class TokenManager {
   constructor() {
     this.db = getDatabase();
@@ -74,6 +79,13 @@ class TokenManager {
       // token_prefix column missing — migration not applied. Fail closed rather than
       // loading all tokens (O(n) bcrypt + timing leak). Run migrations to fix.
       logger.error('Token validation aborted: token_prefix column missing — run migrations', { error: e.message });
+      return null;
+    }
+
+    // Timing equalization: always run at least one bcrypt.compare to prevent
+    // timing-based prefix enumeration (distinguishing "not found" from "found, wrong hash").
+    if (candidates.length === 0) {
+      await bcrypt.compare(token, DUMMY_HASH); // result always false, but equalizes timing
       return null;
     }
 

@@ -24,14 +24,31 @@ class LLMAdapter {
    * Create a chat completion
    */
   async createCompletion(systemPrompt, userMessage, conversationHistory = []) {
+    // Input validation and sanitization
+    const MAX_USER_MESSAGE_LENGTH = 32000;
+    const ALLOWED_HISTORY_ROLES = new Set(['user', 'assistant']); // system role must not come from history
+
+    // Sanitize: strip control characters that confuse tokenizers
+    const stripControlChars = (s) =>
+      typeof s === 'string' ? s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') : '';
+
+    const safeUserMessage = stripControlChars(userMessage).slice(0, MAX_USER_MESSAGE_LENGTH);
+
+    // Validate conversation history: only allow user/assistant roles, reject system injection
+    const safeHistory = Array.isArray(conversationHistory)
+      ? conversationHistory
+          .filter(msg => msg && typeof msg === 'object' && ALLOWED_HISTORY_ROLES.has(msg.role))
+          .map(msg => ({
+            role: msg.role,
+            content: stripControlChars(String(msg.content || '')).slice(0, MAX_USER_MESSAGE_LENGTH)
+          }))
+      : [];
+
     // Build messages array
     const messages = [
-      { role: 'system', content: systemPrompt },
-      ...conversationHistory.map(msg => ({
-        role: msg.role,
-        content: msg.content
-      })),
-      { role: 'user', content: userMessage }
+      { role: 'system', content: stripControlChars(systemPrompt) },
+      ...safeHistory,
+      { role: 'user', content: safeUserMessage }
     ];
 
     // Route to appropriate provider

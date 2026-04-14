@@ -83,11 +83,14 @@ router.post('/onboard/step1', express.json(), (req, res) => {
         try { existingMeta = current.profile_metadata ? JSON.parse(current.profile_metadata) : {}; } catch (_) {}
 
         const profileUpdate = {};
-        if (payload.name)     profileUpdate.Name     = payload.name;
-        if (payload.role)     profileUpdate.Role     = payload.role;
-        if (payload.bio)      profileUpdate.Bio      = payload.bio;
-        if (payload.company)  profileUpdate.Company    = payload.company;
-        if (payload.location) profileUpdate.Location   = payload.location;
+        // Note: 'role' here is a display/job-title field stored in profile_metadata.
+        // It does NOT affect the user's system authorization role (users.roles).
+        // Limit length to prevent injection of oversized strings.
+        if (payload.name)     profileUpdate.Name     = String(payload.name).slice(0, 100);
+        if (payload.role)     profileUpdate.Role     = String(payload.role).slice(0, 100);
+        if (payload.bio)      profileUpdate.Bio      = String(payload.bio).slice(0, 500);
+        if (payload.company)  profileUpdate.Company    = String(payload.company).slice(0, 100);
+        if (payload.location) profileUpdate.Location   = String(payload.location).slice(0, 100);
 
         updateUserOAuthProfile(String(userId), {
           displayName:     payload.name || undefined,

@@ -44,8 +44,21 @@ function isSuppressed(suppressKey) {
   return last && (Date.now() - last) < SUPPRESSION_WINDOW_MS;
 }
 
+/**
+ * Sanitize IP address for safe inclusion in email headers/body.
+ * Strips anything that isn't a valid IPv4/IPv6/bracket character.
+ * Prevents email header injection via crafted IP strings containing \r\n.
+ */
+function sanitizeAlertIP(rawIp) {
+  if (!rawIp || typeof rawIp !== 'string') return 'unknown';
+  // Allow: digits, dots, colons, hex a-f, brackets (IPv6), hyphen
+  const safe = rawIp.replace(/[^0-9a-fA-F:.\[\]-]/g, '');
+  return safe.slice(0, 45) || 'unknown'; // max IPv6 addr length
+}
+
 function sendAlert(type, ip, count) {
-  const suppressKey = `${type}:${ip}`;
+  const safeIp = sanitizeAlertIP(ip);
+  const suppressKey = `${type}:${safeIp}`;
   if (isSuppressed(suppressKey)) return;
   suppressionMap.set(suppressKey, Date.now());
 
@@ -53,12 +66,12 @@ function sendAlert(type, ip, count) {
   if (!alertEmail) return;
 
   const cfg = THRESHOLDS[type];
-  const subject = `[SECURITY ALERT] ${count} ${cfg.label} from ${ip}`;
+  const subject = `[SECURITY ALERT] ${count} ${cfg.label} from ${safeIp}`;
   const body = [
     `Security threshold exceeded on MyApi.`,
     ``,
     `Event:    ${type.replace(/_/g, ' ')}`,
-    `IP:       ${ip}`,
+    `IP:       ${safeIp}`,
     `Count:    ${count} in the last ${cfg.windowLabel}`,
     `Time:     ${new Date().toISOString()}`,
     ``,

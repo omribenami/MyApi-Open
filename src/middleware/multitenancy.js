@@ -229,6 +229,24 @@ function extractTenantContext(tenantManager) {
       try {
         const tenant = tenantManager.getTenant(tenantId);
         if (tenant && tenant.status === 'active') {
+          // Prevent tenant context spoofing: verify the requesting user belongs to this tenant.
+          // Silently ignore invalid headers (no 403) to prevent tenant ID enumeration.
+          const requestingUserId = req.user?.id || req.tokenMeta?.ownerId;
+          if (requestingUserId) {
+            let isMember = false;
+            try {
+              isMember = tenantManager.isTenantMember
+                ? tenantManager.isTenantMember(tenant.id, requestingUserId)
+                : false;
+            } catch {
+              isMember = false;
+            }
+            if (!isMember) {
+              // Requesting user does not belong to this tenant — ignore the header
+              return next();
+            }
+          }
+
           req.tenantId = tenant.id;
           req.tenantContext = {
             tenantId: tenant.id,

@@ -113,13 +113,22 @@ function createAdminRoutes(db, rbacMiddleware) {
 
       // Verify role exists in workspace
       const role = await db.get(
-        `SELECT id FROM roles WHERE id = ? AND workspace_id = ?`,
+        `SELECT id, name FROM roles WHERE id = ? AND workspace_id = ?`,
         [roleId, workspaceId]
       );
       if (!role) {
         return res.status(404).json({
           error: 'Not Found',
           message: 'Role not found in workspace'
+        });
+      }
+
+      // Prevent assignment of protected system-level roles via this endpoint
+      const PROTECTED_ROLES = ['owner', 'superadmin', 'system', 'platform_admin'];
+      if (role.name && PROTECTED_ROLES.includes(role.name.toLowerCase())) {
+        return res.status(403).json({
+          error: 'Forbidden',
+          message: 'Cannot assign system-level roles via this endpoint'
         });
       }
 

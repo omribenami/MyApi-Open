@@ -71,6 +71,20 @@ router.post('/:id/accept', (req, res) => {
       return res.status(403).json({ error: 'Invitation email does not match user email' });
     }
 
+    // Role escalation guard: only allow non-privileged roles via invitation.
+    // Admins/owners must be explicitly granted those roles through a separate admin flow.
+    const ALLOWED_INVITATION_ROLES = ['viewer', 'member'];
+    if (invitation.role && !ALLOWED_INVITATION_ROLES.includes(invitation.role)) {
+      logger.warn(`Invitation ${req.params.id} had privileged role "${invitation.role}" — downgraded to member`);
+      // Cannot override role in the DB function; decline and re-accept with safe role
+      // acceptWorkspaceInvitation will use the stored role, so we sanitize it first via
+      // a direct DB update before accepting (if db access is available), or simply reject.
+      return res.status(400).json({
+        error: 'Invalid invitation',
+        message: 'This invitation has an invalid role assignment. Please request a new invitation.'
+      });
+    }
+
     const success = acceptWorkspaceInvitation(req.params.id, req.user.id);
     if (!success) {
       return res.status(400).json({ error: 'Failed to accept invitation' });

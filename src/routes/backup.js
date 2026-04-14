@@ -163,7 +163,19 @@ function createBackupRoutes(db) {
         });
       }
 
-      const result = manager.restoreBackup(backup.path, {
+      // Path traversal prevention: ensure backup.path is within expected backup directory
+      const backupDir = path.resolve(
+        process.env.BACKUP_DIR || path.join(__dirname, '../data/backups')
+      );
+      const resolvedBackupPath = path.resolve(backup.path);
+      if (!resolvedBackupPath.startsWith(backupDir + path.sep) && resolvedBackupPath !== backupDir) {
+        return res.status(400).json({
+          error: 'Bad Request',
+          message: 'Invalid backup path'
+        });
+      }
+
+      const result = manager.restoreBackup(resolvedBackupPath, {
         createPreRestoreBackup: true,
         verify: true
       });

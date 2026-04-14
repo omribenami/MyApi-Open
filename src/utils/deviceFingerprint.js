@@ -35,11 +35,19 @@ class DeviceFingerprint {
       macAddress: this._hashComponent(macAddress),
     };
 
+    // Hash IP before storing to reduce PII retention while preserving abuse detection.
+    // Using a server-side salt (from env or a fixed salt) to prevent rainbow table attacks.
+    const ipSalt = process.env.IP_HASH_SALT || 'myapi-ip-salt-v1';
+    const hashedIP = ipAddress !== 'unknown'
+      ? crypto.createHmac('sha256', ipSalt).update(ipAddress).digest('hex').slice(0, 16)
+      : 'unknown';
+
     // Create comprehensive fingerprint (raw format)
+    // Note: ipAddress is hashed (HMAC-SHA256) before storage to reduce PII exposure.
     const rawFingerprint = {
       userAgent,
       acceptLanguage,
-      ipAddress,
+      ipAddressHash: hashedIP,  // hashed, not raw IP
       platform,
       hostname,
       macAddress,

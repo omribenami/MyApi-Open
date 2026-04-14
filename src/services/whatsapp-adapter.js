@@ -1,10 +1,44 @@
 const https = require('https');
+const crypto = require('crypto');
 
 class WhatsAppAdapter {
   constructor(config) {
     this.businessAccountId = config.businessAccountId || process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
     this.apiToken = config.apiToken || process.env.WHATSAPP_API_TOKEN;
     this.webhookToken = config.webhookToken || process.env.WHATSAPP_WEBHOOK_TOKEN;
+    this.appSecret = config.appSecret || process.env.WHATSAPP_APP_SECRET;
+  }
+
+  /**
+   * Verify the X-Hub-Signature-256 header on incoming webhook events.
+   * Prevents spoofed webhook requests from being processed.
+   *
+   * @param {Buffer|string} rawBody - The raw (unparsed) request body
+   * @param {string} signatureHeader - Value of the X-Hub-Signature-256 header
+   * @returns {boolean} true if valid
+   */
+  verifyWebhookSignature(rawBody, signatureHeader) {
+    if (!this.appSecret) {
+      // App secret not configured — reject all webhooks to fail safely
+      return false;
+    }
+    if (!signatureHeader || !signatureHeader.startsWith('sha256=')) {
+      return false;
+    }
+    const expectedSignature = crypto
+      .createHmac('sha256', this.appSecret)
+      .update(rawBody)
+      .digest('hex');
+    const provided = signatureHeader.slice('sha256='.length);
+    // Timing-safe comparison
+    try {
+      return crypto.timingSafeEqual(
+        Buffer.from(expectedSignature, 'hex'),
+        Buffer.from(provided, 'hex')
+      );
+    } catch {
+      return false;
+    }
   }
 
   // WhatsApp uses token-based auth, not OAuth2, so we provide a different flow

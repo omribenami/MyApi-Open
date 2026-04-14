@@ -10,7 +10,48 @@ const crypto = require('crypto');
 const { getAccessTokens, getExistingMasterToken, createAccessToken, db } = require('../database');
 const emailService = require('../services/emailService');
 
+const { generateCSRFToken, validateCSRFToken } = require('../lib/csrf-protection');
+
 const router = express.Router();
+
+/**
+ * GET /api/v1/auth/csrf-token
+ * Returns a CSRF token for the current session.
+ * Frontend must call this before submitting any state-changing form with a session cookie.
+ */
+router.get('/csrf-token', (req, res) => {
+  if (!req.session) return res.status(400).json({ error: 'Session not available' });
+  if (!req.session.csrfToken) {
+    req.session.csrfToken = generateCSRFToken();
+  }
+  res.json({ csrfToken: req.session.csrfToken });
+});
+
+/**
+ * Middleware: validate CSRF token for cookie-session-based POST requests.
+ * Bearer-token authenticated requests skip CSRF (inherently CSRF-safe).
+ */
+function requireCsrfForSession(req, res, next) {
+  // Skip CSRF check if using Bearer token auth (not cookie-based)
+  if (req.headers.authorization?.startsWith('Bearer ')) return next();
+  // Skip if no session is established yet (GET csrf-token first)
+  if (!req.session?.csrfToken) return next();
+
+  const provided = req.body?._csrf || req.headers['x-csrf-token'];
+  if (!provided) {
+    return res.status(403).json({ error: 'CSRF token required', code: 'CSRF_MISSING' });
+  }
+  try {
+    if (!validateCSRFToken(provided, req.session.csrfToken)) {
+      return res.status(403).json({ error: 'Invalid CSRF token', code: 'CSRF_INVALID' });
+    }
+  } catch {
+    return res.status(403).json({ error: 'CSRF validation error', code: 'CSRF_ERROR' });
+  }
+  // Rotate token after successful validation (defense in depth)
+  req.session.csrfToken = generateCSRFToken();
+  next();
+}
 
 function buildCookieDomainCandidates(req) {
   const candidates = new Set();
@@ -66,7 +107,7 @@ function regenerateSession(req) {
  * POST /api/v1/auth/token-login
  * Login with master token (for cross-device access)
  */
-router.post('/token-login', async (req, res) => {
+router.post('/token-login', requireCsrfForSession, async (req, res) => {
   try {
     const token = req.body?.token;
     if (!token || typeof token !== 'string' || token.length < 16) {
@@ -108,7 +149,7 @@ router.post('/token-login', async (req, res) => {
  * POST /api/v1/auth/login
  * Login with email and password, returns master token
  */
-router.post('/login', async (req, res) => {
+router.post('/login', requireCsrfForSession, async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email || !password) {
@@ -183,7 +224,7 @@ router.post('/login', async (req, res) => {
  * Body: { username, password, email, timezone, display_name }
  * Response: { success: true, data: { token, user: {...}, needsOnboarding: true } }
  */
-router.post('/register', async (req, res) => {
+router.post('/register', requireCsrfForSession, async (req, res) => {
   const { username, password, display_name, email, timezone } = req.body || {};
   if (!username || !password) return res.status(400).json({ error: 'username and password required' });
   const { isStrongPassword } = require('../utils/passwordUtils');
@@ -239,7 +280,7 @@ router.post('/register', async (req, res) => {
  * - Clears session cookies
  * - Returns no-cache headers to prevent auto-login on refresh
  */
-router.post('/logout', (req, res) => {
+router.post('/logout', requireCsrfForSession, (req, res) => {
   try {
     const userId = req.session?.user?.id;
 

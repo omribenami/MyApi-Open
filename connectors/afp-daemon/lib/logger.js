@@ -20,7 +20,8 @@ function getLogPath() {
 
 function ensureLogDir(logPath) {
   const dir = path.dirname(logPath);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  // 0o700: owner read/write/execute only — prevents other local users from reading logs
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
 }
 
 function rotatIfNeeded(logPath) {
@@ -48,7 +49,8 @@ function write(level, args) {
     const logPath = getLogPath();
     ensureLogDir(logPath);
     rotatIfNeeded(logPath);
-    fs.appendFileSync(logPath, line);
+    // 0o640: owner read/write, group read, others none
+    fs.appendFileSync(logPath, line, { mode: 0o640 });
   } catch (_) {}
 }
 

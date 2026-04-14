@@ -25,12 +25,26 @@ router.get('/', (req, res) => {
     };
     
     const activity = db.getActivityLog(userId, filters);
-    
-    // Parse JSON fields
-    const parsed = activity.map(a => ({
-      ...a,
-      details: a.details ? JSON.parse(a.details) : null,
-    }));
+    const isAdmin = req.tokenMeta?.scope === 'full' || req.tokenMeta?.tokenType === 'master' ||
+                    req.session?.user?.roles?.includes('admin');
+
+    // Parse JSON fields; restrict sensitive metadata to admin users only
+    const parsed = activity.map(a => {
+      const base = {
+        id: a.id,
+        action_type: a.action_type,
+        resource_type: a.resource_type,
+        resource_id: a.resource_id,
+        result: a.result,
+        created_at: a.created_at,
+      };
+      if (isAdmin) {
+        base.details = a.details ? JSON.parse(a.details) : null;
+        base.ip_address = a.ip_address;
+        base.user_agent = a.user_agent;
+      }
+      return base;
+    });
     
     res.json({
       success: true,

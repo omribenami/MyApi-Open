@@ -210,7 +210,11 @@ async function runOAuthFlow() {
         return;
       }
 
-      if (!receivedCode || receivedState !== state) {
+      // Timing-safe state comparison to prevent oracle attacks
+      const stateMatch = receivedState
+        && receivedState.length === state.length
+        && crypto.timingSafeEqual(Buffer.from(receivedState, 'utf8'), Buffer.from(state, 'utf8'));
+      if (!receivedCode || !stateMatch) {
         res.writeHead(400, { 'Content-Type': 'text/html' });
         res.end('<html><body><h2>Invalid callback.</h2></body></html>');
         return;

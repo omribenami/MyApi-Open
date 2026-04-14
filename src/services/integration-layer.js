@@ -262,13 +262,45 @@ async function executeServiceMethod({ serviceDef, method, params = {}, token = n
   // so callers can hit concrete provider routes like /me.
   const effectiveParams = (params && typeof params === 'object' && !Array.isArray(params)) ? { ...params } : {};
   const endpointOverrideRaw = effectiveParams.endpoint || effectiveParams.path;
-  const endpointOverride = (typeof endpointOverrideRaw === 'string' && endpointOverrideRaw.trim())
-    ? endpointOverrideRaw.trim()
-    : null;
+
+  // SSRF prevention: endpoint override must be a relative path only (no absolute URLs).
+  let endpointOverride = null;
+  if (typeof endpointOverrideRaw === 'string' && endpointOverrideRaw.trim()) {
+    const trimmed = endpointOverrideRaw.trim();
+    if (trimmed.includes('://')) {
+      // Absolute URL in override — reject to prevent SSRF
+      return {
+        ok: false,
+        service: serviceDef.name,
+        method: method.methodName,
+        statusCode: 400,
+        data: null,
+        error: { code: 'INVALID_ENDPOINT_OVERRIDE', message: 'Absolute URLs not allowed in endpoint override' },
+        meta: { timestamp: new Date().toISOString() },
+      };
+    }
+    endpointOverride = trimmed;
+  }
+
+  // HTTP method allowlist — prevent arbitrary verb injection
+  const ALLOWED_HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
   const methodOverrideRaw = effectiveParams.method;
-  const methodOverride = (typeof methodOverrideRaw === 'string' && methodOverrideRaw.trim())
-    ? methodOverrideRaw.trim().toUpperCase()
-    : null;
+  let methodOverride = null;
+  if (typeof methodOverrideRaw === 'string' && methodOverrideRaw.trim()) {
+    const upper = methodOverrideRaw.trim().toUpperCase();
+    if (!ALLOWED_HTTP_METHODS.includes(upper)) {
+      return {
+        ok: false,
+        service: serviceDef.name,
+        method: method.methodName,
+        statusCode: 400,
+        data: null,
+        error: { code: 'INVALID_HTTP_METHOD', message: `HTTP method not allowed: ${methodOverrideRaw}` },
+        meta: { timestamp: new Date().toISOString() },
+      };
+    }
+    methodOverride = upper;
+  }
   delete effectiveParams.endpoint;
   delete effectiveParams.path;
   delete effectiveParams.method;
@@ -338,6 +370,14 @@ async function executeServiceMethod({ serviceDef, method, params = {}, token = n
           error: urlError.message
         });
         throw new Error(`Invalid URL construction: ${urlError.message}`);
+      }
+
+      // SSRF prevention: block private/reserved IP addresses in constructed URL
+      const { isPrivateIP } = require('../lib/ssrf-prevention');
+      const targetHostname = targetUrl.hostname;
+      const net = require('net');
+      if (net.isIP(targetHostname) !== 0 && isPrivateIP(targetHostname)) {
+        throw Object.assign(new Error(`SSRF blocked: private IP in target URL`), { statusCode: 400 });
       }
 
       // For GET requests, add non-path params as query params

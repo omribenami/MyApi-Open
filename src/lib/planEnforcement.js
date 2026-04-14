@@ -17,10 +17,13 @@ const PLAN_LIMITS = {
 };
 
 function getRequestWorkspaceId(req) {
+  // Only trust workspace IDs set by server-side middleware (not raw user input).
+  // req.workspaceId is set by validateWorkspaceMembership middleware.
+  // req.session.currentWorkspace is set server-side on workspace switch.
+  // Do NOT trust req.body.workspace_id or req.query.workspace — these are
+  // user-controlled and could be used to escalate to a higher-plan workspace.
   if (req?.workspaceId) return req.workspaceId;
   if (req?.session?.currentWorkspace) return req.session.currentWorkspace;
-  const explicit = req?.body?.workspace_id || req?.query?.workspace || req?.headers?.['x-workspace-id'];
-  if (explicit) return String(explicit);
   const userId = req?.user?.id || req?.session?.user?.id;
   if (userId) {
     const workspaces = getWorkspaces(String(userId));
@@ -73,7 +76,10 @@ function enforcePlanLimit(req, key, currentValue, increment = 0) {
   const plan = resolveRequesterPlan(req);
   const limit = PLAN_LIMITS?.[plan]?.[key];
   if (limit === undefined || limit === null || limit === Infinity) return null;
-  if ((currentValue + increment) > limit) {
+  // Clamp to safe integer range to prevent overflow bypassing the limit check
+  const safeCurrentValue = Number.isFinite(currentValue) ? Math.min(currentValue, Number.MAX_SAFE_INTEGER) : 0;
+  const safeIncrement = Number.isFinite(increment) ? Math.min(increment, Number.MAX_SAFE_INTEGER) : 0;
+  if ((safeCurrentValue + safeIncrement) > limit) {
     return planLimitError(plan, key, limit);
   }
   return null;

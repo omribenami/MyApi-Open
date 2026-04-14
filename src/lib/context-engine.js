@@ -176,28 +176,59 @@ class ContextEngine {
   }
 
   /**
+   * Sanitize a string for safe inclusion in an LLM system prompt.
+   * Strips control characters and injection patterns that attempt to override
+   * the system prompt or inject new roles (prompt injection mitigation).
+   */
+  _sanitizeForPrompt(value, maxLength = 500) {
+    if (typeof value !== 'string') return '';
+    // Strip control characters (keep tab and newline which are valid in prompts)
+    let safe = value.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+    // Strip common prompt injection patterns
+    const injectionPatterns = [
+      /\n\n---+/g,
+      /\nSystem\s*:/gi,
+      /\nUser\s*:/gi,
+      /\nAssistant\s*:/gi,
+      /\nHuman\s*:/gi,
+      /ignore\s+(all\s+)?(previous|prior|above)\s+instructions?/gi,
+      /disregard\s+(all\s+)?(previous|prior|above)\s+instructions?/gi,
+      /you\s+are\s+now\s+/gi,
+      /act\s+as\s+/gi,
+    ];
+    for (const pattern of injectionPatterns) {
+      safe = safe.replace(pattern, ' ');
+    }
+    return safe.slice(0, maxLength);
+  }
+
+  /**
    * Build system prompt from components
    */
   _buildSystemPrompt(userProfile, persona, memory) {
     const parts = [];
 
     // Identity
-    parts.push(`You are ${persona.name}, an AI assistant.`);
-    
+    const personaName = this._sanitizeForPrompt(persona.name, 100);
+    parts.push(`You are ${personaName}, an AI assistant.`);
+
     if (persona.persona && persona.persona.purpose) {
-      parts.push(`Your purpose: ${persona.persona.purpose}`);
+      const purpose = this._sanitizeForPrompt(persona.persona.purpose, 500);
+      parts.push(`Your purpose: ${purpose}`);
     }
 
     // User context
     if (userProfile.profile && userProfile.profile.name) {
-      parts.push(`You are assisting ${userProfile.profile.name}.`);
+      const userName = this._sanitizeForPrompt(userProfile.profile.name, 100);
+      parts.push(`You are assisting ${userName}.`);
     }
 
     // Memories
     if (memory.memories && memory.memories.length > 0) {
       parts.push('\nKey memories:');
       memory.memories.slice(0, 5).forEach(mem => {
-        parts.push(`- ${mem}`);
+        const safeMem = this._sanitizeForPrompt(String(mem), 200);
+        parts.push(`- ${safeMem}`);
       });
     }
 
@@ -224,8 +255,9 @@ class ContextEngine {
       // Match patterns like "- **Key**: Value" or "Key: Value"
       const match = line.match(/^\s*[-*]?\s*\*?\*?([^:*]+)\*?\*?:\s*(.+)/);
       if (match) {
-        const key = match[1].trim().toLowerCase().replace(/\s+/g, '_');
-        const value = match[2].trim();
+        const key = match[1].trim().toLowerCase().replace(/\s+/g, '_').slice(0, 100);
+        // Limit value length to prevent oversized injection via markdown keys
+        const value = match[2].trim().slice(0, 500);
         result[key] = value;
       }
     }

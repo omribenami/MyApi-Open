@@ -30,10 +30,11 @@ router.post('/auth/register', (req, res) => {
   // Auto-login after registration
   req.session.user = { id, username, display_name: display_name || username, roles: 'user', needsOnboarding: true };
 
-  // Generate session token
+  // Generate session token with expiry (24 hours)
   const sessionToken = crypto.randomBytes(32).toString('hex');
   if (!global.sessions) global.sessions = {};
-  global.sessions[sessionToken] = { userId: id, username, createdAt: Date.now() };
+  const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+  global.sessions[sessionToken] = { userId: id, username, createdAt: Date.now(), expiresAt: Date.now() + SESSION_TTL_MS };
 
   res.status(201).json({ data: { token: sessionToken, user: { id, username, displayName: display_name || username, email: email || '', timezone: timezone || 'UTC' }, needsOnboarding: true } });
 });
@@ -59,10 +60,17 @@ router.post('/auth/login', (req, res) => {
     roles: row.roles || 'user'
   };
 
-  // Generate a session token for client-side auth
+  // Generate session token with expiry (24 hours)
   const sessionToken = crypto.randomBytes(32).toString('hex');
   if (!global.sessions) global.sessions = {};
-  global.sessions[sessionToken] = { userId: row.id, username: row.username, createdAt: Date.now() };
+  const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+  // Prune expired sessions on login to prevent unbounded growth
+  for (const tok of Object.keys(global.sessions)) {
+    if (global.sessions[tok].expiresAt && Date.now() > global.sessions[tok].expiresAt) {
+      delete global.sessions[tok];
+    }
+  }
+  global.sessions[sessionToken] = { userId: row.id, username: row.username, createdAt: Date.now(), expiresAt: Date.now() + SESSION_TTL_MS };
 
   res.json({ data: { token: sessionToken, user: { id: row.id, username: row.username, displayName: row.display_name, email: row.email, timezone: row.timezone } } });
 });

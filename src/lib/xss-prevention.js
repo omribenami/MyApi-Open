@@ -10,15 +10,44 @@ const DOMPurify = require('isomorphic-dompurify');
  * Sanitize HTML content - for rich text, markdown editors
  * CVSS 6.1: XSS via dangerouslySetInnerHTML in KnowledgeBase.jsx
  */
+// Explicitly forbid all event handler attributes (defense in depth — DOMPurify
+// strips these by default, but explicit denylisting makes the intent clear).
+const FORBIDDEN_ATTRS = [
+  'onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onblur',
+  'onchange', 'onsubmit', 'onkeydown', 'onkeyup', 'onkeypress',
+  'onmouseenter', 'onmouseleave', 'ondblclick', 'oncontextmenu',
+  'ondragstart', 'ondrop', 'onscroll', 'onwheel', 'onpaste',
+  'oncopy', 'oncut', 'oninput', 'onreset', 'onsearch', 'onselect',
+  'onabort', 'oncanplay', 'oncanplaythrough', 'oncuechange',
+  'ondurationchange', 'onemptied', 'onended', 'onerror',
+  'onloadeddata', 'onloadedmetadata', 'onloadstart', 'onpause',
+  'onplay', 'onplaying', 'onprogress', 'onratechange', 'onseeked',
+  'onseeking', 'onstalled', 'onsuspend', 'ontimeupdate', 'onvolumechange',
+  'onwaiting', 'onanimationstart', 'onanimationend', 'onanimationiteration',
+  'ontransitionend', 'onformdata', 'onpointerdown', 'onpointerup',
+  'onpointermove', 'onpointercancel', 'onpointerenter', 'onpointerleave',
+  'onpointerover', 'onpointerout', 'ontouchstart', 'ontouchmove',
+  'ontouchend', 'ontouchcancel'
+];
+
+// DOMPurify hook: add rel="noopener noreferrer" to all target="_blank" links
+DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+  if (node.tagName === 'A' && node.getAttribute('target') === '_blank') {
+    node.setAttribute('rel', 'noopener noreferrer');
+  }
+});
+
 function sanitizeHTML(dirty, allowedTags = ['p', 'br', 'strong', 'em', 'u', 'a']) {
   if (!dirty) return '';
-  
+
   const config = {
     ALLOWED_TAGS: allowedTags,
-    ALLOWED_ATTR: ['href', 'title', 'target'],
-    KEEP_CONTENT: true
+    ALLOWED_ATTR: ['href', 'title', 'target', 'rel'],
+    FORBID_ATTR: FORBIDDEN_ATTRS,
+    KEEP_CONTENT: true,
+    FORCE_BODY: true
   };
-  
+
   return DOMPurify.sanitize(dirty, config);
 }
 
@@ -80,13 +109,15 @@ function sanitizeURL(url) {
 const cspHeaders = {
   'Content-Security-Policy': [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline'", // Consider removing unsafe-inline
-    "style-src 'self' 'unsafe-inline'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'", // unsafe-inline required for Tailwind/CSS-in-JS; scope further if feasible
     "img-src 'self' data: https:",
     "font-src 'self'",
     "connect-src 'self'",
+    "object-src 'none'",
     "frame-ancestors 'none'",
-    "base-uri 'self'"
+    "base-uri 'self'",
+    "upgrade-insecure-requests"
   ].join('; ')
 };
 

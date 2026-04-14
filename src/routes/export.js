@@ -203,12 +203,25 @@ async function buildZipExport({ ownerId, workspaceId, exportMode, includeFiles }
     if (includeFiles) {
       const metadata = sanitizePortableObject(full.metadata || doc.metadata || {});
       const candidatePath = metadata.filePath || metadata.path || metadata.originalPath || metadata.storagePath;
-      if (candidatePath && fs.existsSync(candidatePath) && fs.statSync(candidatePath).isFile()) {
-        const baseName = path.basename(candidatePath);
-        const zippedPath = `knowledge/files/${doc.id}-${baseName}`;
-        files.set(zippedPath, fs.readFileSync(candidatePath));
-        docsIndex[docsIndex.length - 1].hasFile = true;
-        docsIndex[docsIndex.length - 1].filePath = zippedPath;
+      if (candidatePath && typeof candidatePath === 'string') {
+        // Path traversal prevention: restrict to allowed upload directory
+        const ALLOWED_UPLOAD_DIR = path.resolve(
+          process.env.UPLOAD_DIR || path.join(__dirname, '../data/uploads')
+        );
+        const resolvedCandidate = path.resolve(candidatePath);
+        const isUnderAllowedDir = resolvedCandidate.startsWith(ALLOWED_UPLOAD_DIR + path.sep) ||
+                                  resolvedCandidate === ALLOWED_UPLOAD_DIR;
+        if (
+          isUnderAllowedDir &&
+          fs.existsSync(resolvedCandidate) &&
+          fs.statSync(resolvedCandidate).isFile()
+        ) {
+          const baseName = path.basename(resolvedCandidate);
+          const zippedPath = `knowledge/files/${doc.id}-${baseName}`;
+          files.set(zippedPath, fs.readFileSync(resolvedCandidate));
+          docsIndex[docsIndex.length - 1].hasFile = true;
+          docsIndex[docsIndex.length - 1].filePath = zippedPath;
+        }
       }
     }
   }

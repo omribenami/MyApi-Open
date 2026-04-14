@@ -226,6 +226,14 @@ function createCodeReviewGateMiddleware(db, codeReviewService) {
         });
       }
 
+      // Four-eyes: prevent self-approval
+      if (String(review.user_id) === String(userId)) {
+        return res.status(403).json({
+          error: 'Forbidden',
+          message: 'Self-approval not permitted. A different user must approve your submission.'
+        });
+      }
+
       // Approve the review
       const approvedAt = new Date().toISOString();
       await db.run(
@@ -331,12 +339,20 @@ function createCodeReviewGateMiddleware(db, codeReviewService) {
         });
       }
 
-      // Update review as executed
+      // TOCTOU-safe: atomically transition approved → executed.
+      // Only updates when status is still 'approved', preventing double-execution.
       const executedAt = new Date().toISOString();
-      await db.run(
-        `UPDATE code_reviews SET status = ?, executed_at = ? WHERE id = ?`,
-        ['executed', executedAt, reviewId]
+      const result = await db.run(
+        `UPDATE code_reviews SET status = 'executed', executed_at = ? WHERE id = ? AND status = 'approved'`,
+        [executedAt, reviewId]
       );
+
+      if (result.changes === 0) {
+        return res.status(409).json({
+          error: 'Conflict',
+          message: 'Review was already executed or status changed concurrently'
+        });
+      }
 
       res.json({
         status: 'success',

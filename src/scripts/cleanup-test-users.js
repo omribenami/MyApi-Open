@@ -1,8 +1,19 @@
 #!/usr/bin/env node
+require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
+
 const path = require('path');
 const Database = require('better-sqlite3');
 
-const dbPath = path.join(__dirname, '..', 'db.sqlite');
+// Production safeguard: refuse to run in production unless explicitly overridden
+if (process.env.NODE_ENV === 'production' && process.env.ALLOW_CLEANUP_IN_PRODUCTION !== '1') {
+  console.error('ERROR: Refusing to run test user cleanup in production.');
+  console.error('Set ALLOW_CLEANUP_IN_PRODUCTION=1 to override (use with extreme caution).');
+  process.exit(1);
+}
+
+const dbPath = process.env.DB_PATH
+  ? path.resolve(__dirname, '..', process.env.DB_PATH)
+  : path.join(__dirname, '../data/myapi.db');
 const db = new Database(dbPath);
 
 const prefix = process.env.TEST_USER_PREFIX || 'phase12a_';

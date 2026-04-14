@@ -246,24 +246,10 @@ function deviceApprovalMiddleware(req, res, next) {
       return next();
     }
 
-    // Token-level approval: if ANY non-revoked approved device exists for this token,
-    // the user has already approved this token — allow access and silently register
-    // the new fingerprint (AI agents can rotate IPs or use different infra).
-    const anyApprovedForToken = db.db.prepare(
-      'SELECT id, device_name FROM approved_devices WHERE token_id = ? AND user_id = ? AND revoked_at IS NULL LIMIT 1'
-    ).get(tokenId, userId);
-
-    if (anyApprovedForToken) {
-      // Silently register this new fingerprint under the same token
-      try {
-        db.createApprovedDevice(tokenId, userId, fingerprintHash,
-          anyApprovedForToken.device_name, currentFingerprint.summary, currentFingerprint.fingerprint.ipAddress);
-      } catch (_) { /* ignore duplicate key race */ }
-      res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-      res.set('Pragma', 'no-cache');
-      res.set('Expires', '0');
-      return next();
-    }
+    // SECURITY: Do NOT silently auto-approve new device fingerprints because an older
+    // device on the same token was approved. This was a bypass allowing any new device
+    // to access a token without explicit user confirmation.
+    // Each new fingerprint must go through the explicit approval flow below.
 
     // Device not approved - return 403 immediately
     // (Do NOT rate limit the rejection itself, only the approval request creation)

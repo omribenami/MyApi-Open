@@ -86,19 +86,23 @@ class RateLimiter {
   
   isLimited(identifier) {
     const now = Date.now();
-    const attempts = this.attempts.get(identifier) || [];
-    
-    // Remove old attempts outside the window
-    const recentAttempts = attempts.filter(time => now - time < this.windowMs);
-    
+    // Atomic read-modify-write: read current state, compute new state, write atomically.
+    // Node.js is single-threaded so this is safe without a mutex for in-process use.
+    const current = this.attempts.get(identifier) || [];
+
+    // Remove attempts outside the sliding window
+    const recentAttempts = current.filter(time => now - time < this.windowMs);
+
     if (recentAttempts.length >= this.maxAttempts) {
-      return true; // Rate limited
+      // Write back the pruned list (don't add this attempt — already limited)
+      this.attempts.set(identifier, recentAttempts);
+      return true;
     }
-    
-    // Record this attempt
+
+    // Record this attempt and write back atomically
     recentAttempts.push(now);
     this.attempts.set(identifier, recentAttempts);
-    
+
     return false;
   }
   
@@ -180,9 +184,15 @@ const SECURE_DEFAULTS = {
     maxRequests: 100
   },
   
-  // CORS
+  // CORS — credentials:true requires an explicit origin allowlist (never '*')
   cors: {
-    origin: process.env.ALLOWED_ORIGINS?.split(',') || ['https://example.com'],
+    origin: (origin, callback) => {
+      const allowed = process.env.ALLOWED_ORIGINS?.split(',').map(o => o.trim()).filter(Boolean) || [];
+      // Allow requests with no origin (same-origin, server-to-server)
+      if (!origin) return callback(null, true);
+      if (allowed.includes(origin)) return callback(null, true);
+      return callback(new Error(`CORS: origin not allowed: ${origin}`));
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE']
   }

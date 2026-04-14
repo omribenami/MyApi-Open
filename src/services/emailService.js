@@ -165,10 +165,19 @@ class EmailService {
           throw new Error('Email service not configured');
         }
 
+        // Sanitize email headers to prevent injection via \r\n sequences
+        const sanitizeHeader = (v) => typeof v === 'string' ? v.replace(/[\r\n\0]/g, '') : '';
+        const safeEmail = sanitizeHeader(emailData.email_address);
+        const safeSubject = sanitizeHeader(emailData.subject);
+        // Basic email address validation
+        if (!safeEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(safeEmail)) {
+          throw new Error(`Invalid email address: ${safeEmail}`);
+        }
+
         const mailOptions = {
           from: `${this.fromName} <${this.fromAddress}>`,
-          to: emailData.email_address,
-          subject: emailData.subject,
+          to: safeEmail,
+          subject: safeSubject,
           html: emailData.html_body || emailData.body,
           text: emailData.body,
         };

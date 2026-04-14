@@ -31,7 +31,10 @@ function createTenantRoutes(db) {
    */
   router.post('/', (req, res) => {
     try {
-      const { name, slug, plan, domain } = req.body || {};
+      // Note: 'plan' intentionally excluded from body destructuring.
+      // New tenants always start on 'free'. Plan changes must go through a separate
+      // admin-only billing/plan endpoint.
+      const { name, slug, domain } = req.body || {};
       const ownerId = req.tokenData?.userId || req.session?.userId;
 
       if (!name || !slug) {
@@ -44,7 +47,7 @@ function createTenantRoutes(db) {
       const tenant = manager.createTenant({
         name,
         slug,
-        plan: plan || 'free',
+        plan: 'free',
         domain: domain || null,
         ownerId
       });

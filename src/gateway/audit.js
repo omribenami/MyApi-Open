@@ -2,6 +2,36 @@ const { getDatabase } = require('../config/database');
 const logger = require('../utils/logger');
 const crypto = require('crypto');
 
+// Sensitive field names — values are redacted in audit log details to prevent
+// logging passwords, tokens, secrets, etc.
+const SENSITIVE_FIELDS = new Set([
+  'password', 'password_hash', 'token', 'secret', 'hash', 'authorization',
+  'access_token', 'refresh_token', 'api_key', 'private_key', 'client_secret',
+  'session_token', 'cookie', 'credential', 'credentials'
+]);
+
+/**
+ * Strip newline characters to prevent log injection attacks.
+ */
+function sanitizeLogValue(v) {
+  if (v == null) return v;
+  if (typeof v === 'string') return v.replace(/[\r\n]/g, ' ').substring(0, 500);
+  return v;
+}
+
+/**
+ * Recursively redact sensitive keys from an object before logging.
+ */
+function redactSensitive(obj, depth = 0) {
+  if (depth > 5 || obj == null || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(item => redactSensitive(item, depth + 1));
+  const result = {};
+  for (const [k, v] of Object.entries(obj)) {
+    result[k] = SENSITIVE_FIELDS.has(k.toLowerCase()) ? '[REDACTED]' : redactSensitive(v, depth + 1);
+  }
+  return result;
+}
+
 class AuditLog {
   constructor() {
     this.db = getDatabase();
@@ -33,19 +63,22 @@ class AuditLog {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
+    // Sanitize string inputs to prevent log injection
+    const safeDetails = details ? JSON.stringify(redactSensitive(details)).substring(0, 10000) : null;
+
     stmt.run(
       timestamp,
       tokenId,
       tokenType,
-      requester,
-      action,
-      endpoint,
-      method,
+      sanitizeLogValue(requester),
+      sanitizeLogValue(action),
+      sanitizeLogValue(endpoint),
+      sanitizeLogValue(method),
       scope ? JSON.stringify(scope) : null,
       status,
-      ipAddress,
-      userAgent,
-      details ? JSON.stringify(details).substring(0, 10000) : null
+      sanitizeLogValue(ipAddress),
+      sanitizeLogValue(userAgent),
+      safeDetails
     );
 
     logger.info('Audit log entry created', {

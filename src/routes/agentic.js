@@ -213,8 +213,12 @@ router.post('/device/deny/:id', requireAuth, (req, res) => {
  */
 router.post('/asc/register', requireAuth, (req, res) => {
   try {
-    const { public_key, label } = req.body || {};
+    const { public_key, label: rawLabel } = req.body || {};
     if (!public_key) return res.status(400).json({ error: 'public_key is required' });
+    // Sanitize label — strip control chars, limit length, prevent URL injection
+    const label = typeof rawLabel === 'string'
+      ? rawLabel.replace(/[\x00-\x1F\x7F]/g, '').slice(0, 100)
+      : undefined;
 
     // Accept Ed25519 public key in raw (32 bytes) or SPKI DER (44 bytes) format
     let keyBuf;

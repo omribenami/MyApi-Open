@@ -90,17 +90,20 @@ class TokenRefreshHandler {
       throw new Error('Invalid refresh token format');
     }
     
-    // Make HTTPS request only
+    // Make HTTPS request only.
+    // Per RFC 6749 §2.3.1, client credentials should be sent via HTTP Basic Auth,
+    // not in the request body, to prevent credential exposure in server logs.
+    const basicAuth = Buffer.from(`${encodeURIComponent(clientId)}:${encodeURIComponent(clientSecret)}`).toString('base64');
     const response = await fetch('https://oauth-provider.example.com/token', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Authorization': `Basic ${basicAuth}`
       },
       body: new URLSearchParams({
         grant_type: 'refresh_token',
-        refresh_token: refreshToken,
-        client_id: clientId,
-        client_secret: clientSecret // Should be in Authorization header in production
+        refresh_token: refreshToken
+        // client_id and client_secret moved to Authorization header (RFC 6749 §2.3.1)
       })
     });
     
