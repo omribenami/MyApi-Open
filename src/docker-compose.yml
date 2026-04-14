@@ -11,7 +11,7 @@ services:
     # SECURITY FIX (MEDIUM - CVSS 5.3): Restrict port binding to localhost in production
     # Only expose to internal network; use reverse proxy/load balancer for external access
     ports:
-      - \"127.0.0.1:${PORT:-4500}:${PORT:-4500}\"
+      - "127.0.0.1:${PORT:-4500}:${PORT:-4500}"
 
     # SECURITY FIX (MEDIUM - CVSS 6.5): Load environment variables securely
     # Only load from .env file (filtered for secrets), not raw environment
