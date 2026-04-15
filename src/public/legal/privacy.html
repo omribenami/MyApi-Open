@@ -159,8 +159,8 @@
         <header>
             <h1>Privacy Policy</h1>
             <div class="meta">
-                <p><strong>Last Updated:</strong> March 27, 2026</p>
-                <p><strong>Effective Date:</strong> March 27, 2026</p>
+                <p><strong>Last Updated:</strong> April 14, 2026</p>
+                <p><strong>Effective Date:</strong> April 14, 2026</p>
             </div>
         </header>
         
@@ -224,6 +224,10 @@
             </tr>
         </table>
         <p>You can configure cookie preferences (essential only, all, or none) through the cookie consent banner or Settings page. We also use browser <code>localStorage</code> to store your authentication token and workspace selection for a seamless experience.</p>
+        <div class="warning-box">
+            <strong>Master Token Security Notice</strong>
+            <p style="margin-top: 10px;">The <code>myapi_master_token</code> cookie grants complete API access to your account. Unlike the session cookie (<code>myapi.sid</code>), this cookie is accessible to JavaScript on the page to enable programmatic API access. If you access the Service on a shared or untrusted device, clear this cookie after use or revoke the master token from Settings → Token Vault. You can revoke any master token at any time.</p>
+        </div>
         
         <div class="highlight">
             <strong>No Third-Party Tracking or Analytics</strong>
@@ -233,7 +237,7 @@
         <h2>2. How We Use Your Data</h2>
         <ul>
             <li><strong>Provide the Service:</strong> Authenticate your identity, manage your sessions, and deliver Service features</li>
-            <li><strong>AI Processing:</strong> Send your prompts and persona configurations to AI providers (e.g., Google Gemini) to generate responses</li>
+            <li><strong>AI Processing:</strong> Route your prompts, persona configurations, and relevant knowledge base context to one or more AI model providers (including Anthropic, OpenAI, Google Gemini, xAI/Grok, GitHub Copilot, OpenRouter, and/or local self-hosted models) via the OpenClaw proxy infrastructure or direct API connections, to generate AI responses. The specific provider depends on the AI model configured for your persona or selected in your request.</li>
             <li><strong>OAuth Integration:</strong> Use encrypted tokens to connect and interact with your authorized third-party services</li>
             <li><strong>Security and Fraud Prevention:</strong> Detect unauthorized access, enforce rate limits, manage device approvals, and maintain audit logs</li>
             <li><strong>Billing:</strong> Process subscription payments through Stripe, track usage against plan limits, and manage invoices</li>
@@ -268,9 +272,44 @@
                 <td>Recipient email address, email subject and body content</td>
             </tr>
             <tr>
-                <td><strong>AI Model Providers</strong> (e.g., Google Gemini)</td>
-                <td>AI response generation</td>
-                <td>Conversation prompts, persona context, and knowledge base excerpts sent for processing</td>
+                <td><strong>Anthropic</strong></td>
+                <td>Claude model inference (direct API and via OpenClaw proxy)</td>
+                <td>Conversation prompts, system prompts, persona context, knowledge base excerpts. <a href="https://www.anthropic.com/legal/privacy" target="_blank" rel="noopener">Anthropic Privacy Policy</a></td>
+            </tr>
+            <tr>
+                <td><strong>OpenAI</strong> (via OpenClaw proxy)</td>
+                <td>GPT model inference</td>
+                <td>Conversation prompts, system prompts, persona context. <a href="https://openai.com/privacy" target="_blank" rel="noopener">OpenAI Privacy Policy</a></td>
+            </tr>
+            <tr>
+                <td><strong>Google (Gemini)</strong></td>
+                <td>Gemini model inference (direct API and via proxy)</td>
+                <td>Conversation prompts, system prompts, persona context. <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google Privacy Policy</a></td>
+            </tr>
+            <tr>
+                <td><strong>xAI</strong> (via OpenClaw proxy)</td>
+                <td>Grok model inference</td>
+                <td>Conversation prompts routed through OpenClaw proxy. <a href="https://x.ai/legal/privacy-policy" target="_blank" rel="noopener">xAI Privacy Policy</a></td>
+            </tr>
+            <tr>
+                <td><strong>GitHub</strong> (Copilot)</td>
+                <td>Code generation</td>
+                <td>Code context and prompts you authorize. <a href="https://docs.github.com/en/site-policy/privacy-policies/github-privacy-statement" target="_blank" rel="noopener">GitHub Privacy Statement</a></td>
+            </tr>
+            <tr>
+                <td><strong>OpenRouter</strong> (fallback)</td>
+                <td>Fallback AI routing</td>
+                <td>Conversation prompts routed to underlying providers. <a href="https://openrouter.ai/privacy" target="_blank" rel="noopener">OpenRouter Privacy Policy</a></td>
+            </tr>
+            <tr>
+                <td><strong>OpenClaw Proxy</strong></td>
+                <td>AI routing and orchestration intermediary</td>
+                <td>All prompts and responses to cloud AI providers pass through this layer. OpenClaw may log request metadata per its own policies.</td>
+            </tr>
+            <tr>
+                <td><strong>Local / Self-Hosted Models</strong> (Ollama: Gemma, Qwen, StarCoder, Llama, etc.)</td>
+                <td>Local AI inference (privacy-preserving)</td>
+                <td><strong>No data transmitted externally.</strong> All inference occurs on the server where the Service is installed.</td>
             </tr>
             <tr>
                 <td><strong>OAuth Providers</strong> (Google, GitHub, Slack, etc.)</td>
@@ -391,13 +430,47 @@
             <p style="margin-top: 10px;">When you use AI conversation features, your prompts, persona configurations, and relevant knowledge base content are sent to third-party AI providers for processing.</p>
         </div>
         <ul>
-            <li>Conversation prompts and context are transmitted to AI model providers (e.g., Google Gemini) to generate responses</li>
+            <li>Conversation prompts and context are transmitted to AI model providers (Anthropic, OpenAI, Google Gemini, xAI, GitHub Copilot, OpenRouter, or local models — see Section 3.1 for the full list) to generate responses</li>
+            <li>Requests to cloud AI providers are routed through the OpenClaw proxy layer before reaching the external provider</li>
             <li>AI providers may process your data according to their own privacy policies and terms</li>
             <li>We store conversation history (prompts and AI responses) locally in your account for your reference</li>
             <li>Token usage (the number of tokens processed per message) is tracked for billing and usage reporting</li>
             <li>You can delete individual conversations or all conversation data at any time</li>
             <li>Messages flagged as "private" are excluded from data exports</li>
         </ul>
+
+        <h3>6.1 Data Flow Architecture</h3>
+        <p>When you use AI features, your data flows through the following layers (in order):</p>
+        <ol>
+            <li><strong>Your Client</strong> (browser, API client, or agent) sends a request to the Service API</li>
+            <li><strong>MyApi Service</strong> processes the request, retrieves relevant persona context and knowledge base excerpts, and constructs an AI prompt</li>
+            <li><strong>OpenClaw Proxy</strong> (if applicable): The constructed prompt is routed through an AI routing proxy, which may add system-level context, apply routing logic, and log request metadata before forwarding to the external AI provider</li>
+            <li><strong>External AI Provider</strong> (Anthropic, OpenAI, Google, etc.) receives and processes the prompt, returning a response</li>
+            <li>The response travels back through the same layers, and MyApi stores the conversation in your account</li>
+        </ol>
+        <p>For <strong>local models</strong> (Ollama), steps 3 and 4 occur on the same server as the Service — your prompt data does not leave the server.</p>
+
+        <h3>6.2 Agent and Third-Party Platform Access</h3>
+        <p>When you access the Service via a third-party AI agent or platform (such as a ChatGPT GPT, an MCP client, an OpenAPI-based automation, or the Hermes platform), the following applies:</p>
+        <ul>
+            <li>The third-party platform hosting the agent will receive the OAuth or API token used to authenticate to the Service and will transmit your requests on your behalf</li>
+            <li>The third-party platform processes your conversational content according to its own privacy policy before forwarding actions to the Service API</li>
+            <li>Data you share with the agent may be stored by the third-party platform per their policies, in addition to being stored in your MyApi account</li>
+            <li>We recommend reviewing the privacy policy of any third-party agent platform before using it to access the Service</li>
+        </ul>
+
+        <h3>6.3 AI Provider Training Practices</h3>
+        <div class="warning-box">
+            <strong>AI Provider Training Disclosure</strong>
+            <p style="margin-top: 10px;"><strong>We do not train AI models on your private content or conversations.</strong> However, when your data is transmitted to third-party AI providers, those providers may use that data for purposes including model safety improvements or fine-tuning, subject to their own terms and your API tier with them:</p>
+            <ul style="margin-top: 10px;">
+                <li><strong>Anthropic:</strong> API customers are not used for training by default — see <a href="https://www.anthropic.com/legal/privacy" target="_blank" rel="noopener">Anthropic's privacy policy</a></li>
+                <li><strong>OpenAI:</strong> API customers are not used for training by default — see <a href="https://openai.com/privacy" target="_blank" rel="noopener">OpenAI's privacy policy</a></li>
+                <li><strong>Google:</strong> See <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google's privacy policy</a> for current practices</li>
+                <li><strong>Local models (Ollama):</strong> Data never leaves your server — no third-party training possible</li>
+            </ul>
+            <p style="margin-top: 10px;">We recommend reviewing each provider's current privacy policy for the most up-to-date information on their training practices.</p>
+        </div>
         
         <h2>7. Device Fingerprinting</h2>
         <p>To protect your account security, we generate a SHA-256 hash of your device characteristics (such as browser type, screen attributes, and IP address) to create a unique device fingerprint. This fingerprint is used to:</p>
@@ -408,6 +481,7 @@
             <li>Maintain a list of your approved devices for ongoing authentication</li>
         </ul>
         <p>Device fingerprints are stored as irreversible hashes and cannot be used to reconstruct your device information. You can view and revoke approved devices at any time through your account settings.</p>
+        <p>The device fingerprint hash incorporates your IP address as one input factor. Because IP addresses can indicate approximate geographic location, the device approval system implicitly processes location data as part of this security function. We do not use this data for tracking, profiling, or any purpose beyond device approval authentication.</p>
         
         <h2>8. Privacy Controls</h2>
         <p>You have control over your privacy settings through the Service dashboard:</p>
@@ -449,6 +523,14 @@
         
         <h2>11. International Data Transfers</h2>
         <p>MyApi is a self-hosted platform. Your data is stored on the server where the Service is deployed. If you access the Service from outside the jurisdiction where the server is located, your data may be transferred across borders. We implement appropriate safeguards (including encryption in transit and at rest) to protect your data during any such transfer in accordance with applicable data protection laws.</p>
+        <p>When AI features are used, your data is additionally subject to international transfer to the extent that the AI provider receiving your request is located in a different jurisdiction. Requests routed to Anthropic, OpenAI, or Google are processed on servers in the United States. Requests to xAI and other providers are processed per those providers' infrastructure policies.</p>
+        <p>For EU/EEA users, we rely on the following transfer mechanisms for personal data transferred to AI providers:</p>
+        <ul>
+            <li>Where the AI provider has executed Standard Contractual Clauses (SCCs) with its API customers, those SCCs govern the transfer</li>
+            <li>Where the provider operates under an EU adequacy decision or equivalent framework, that framework governs</li>
+            <li>For all other cases, transfer is based on your informed consent given when you configured and use the AI provider features of the Service</li>
+        </ul>
+        <p>We recommend reviewing each AI provider's data transfer mechanisms, which are disclosed in their respective privacy policies linked in Section 3.1.</p>
         
         <h2>12. Data Breach Notification</h2>
         <p>In the event of a personal data breach that poses a risk to your rights and freedoms:</p>

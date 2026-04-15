@@ -151,8 +151,8 @@
         <header>
             <h1>Terms of Service</h1>
             <div class="meta">
-                <p><strong>Last Updated:</strong> March 27, 2026</p>
-                <p><strong>Effective Date:</strong> March 27, 2026</p>
+                <p><strong>Last Updated:</strong> April 14, 2026</p>
+                <p><strong>Effective Date:</strong> April 14, 2026</p>
             </div>
         </header>
         
@@ -172,6 +172,8 @@
             <li><strong>Workspaces:</strong> Multi-tenant team environments with role-based access control</li>
             <li><strong>Device Management:</strong> Device fingerprinting and approval workflows for secure access</li>
             <li><strong>Data Export/Import:</strong> Portable data export in ZIP format with integrity verification</li>
+            <li><strong>Agent and Agentic Access:</strong> Access via third-party AI platforms and agents including ChatGPT GPTs, MCP (Model Context Protocol) clients, OpenAPI-defined agents, Hermes-compatible platforms, and other automated orchestration systems, through the Service's API</li>
+            <li><strong>AI Routing Infrastructure:</strong> Requests to cloud AI providers are intermediated through an AI routing proxy (OpenClaw) that adds processing, logging, and routing logic between your request and the final AI provider</li>
         </ul>
         
         <h2>3. Eligibility</h2>
@@ -194,6 +196,16 @@
         
         <h3>4.3 Master Tokens</h3>
         <p>Master tokens provide persistent, full-scope API access across devices and sessions. You acknowledge that master tokens grant complete access to your account data and must be stored securely. We are not responsible for unauthorized access resulting from compromised master tokens.</p>
+
+        <h3>4.4 Workspace Administrator Responsibility</h3>
+        <p>If you are a workspace administrator, you are responsible for:</p>
+        <ul>
+            <li>All actions taken by workspace members under your administration</li>
+            <li>Ensuring workspace members comply with these Terms and the acceptable use policies of all AI providers</li>
+            <li>Configuring appropriate access controls, permissions, and data retention policies for your workspace</li>
+            <li>Revoking access promptly when workspace members leave or violate these Terms</li>
+        </ul>
+        <p>By accepting a workspace administrator role, you agree to be jointly and severally liable for violations of these Terms committed by workspace members to the extent such violations were facilitated by or occurred within the scope of your workspace administration.</p>
         
         <h2>5. License and Permitted Use</h2>
         <h3>5.1 License Grant</h3>
@@ -214,6 +226,10 @@
             <li>Upload malicious code, viruses, or harmful content to the Service</li>
             <li>Use the Service to generate, store, or distribute content that violates applicable law</li>
         </ul>
+        <div class="info-box">
+            <strong>Security Research Exception</strong>
+            <p style="margin-top: 10px;">Notwithstanding the restrictions above, we welcome good-faith security research. You may conduct limited testing strictly necessary to identify and document a potential vulnerability, provided that: (a) you do not access, modify, or exfiltrate user data; (b) you do not disrupt the Service or conduct denial-of-service attacks; (c) you report the vulnerability to <strong>security@myapiai.com</strong> before any public disclosure; and (d) you allow us at least 90 days to investigate and remediate before any public disclosure. We will not pursue legal action against researchers who act in good faith and comply with these conditions. This exception does not authorize any access to other users' data or systems.</p>
+        </div>
         
         <h2>6. API Usage and Rate Limits</h2>
         <p>Access to the API is subject to rate limits and usage quotas based on your subscription plan. Current limits include:</p>
@@ -262,7 +278,8 @@
         <h2>8. User Content and Intellectual Property</h2>
         <h3>8.1 Your Content</h3>
         <p>You retain all ownership rights to content you create, upload, or store on the Service, including but not limited to: persona configurations, knowledge base documents, skill code, conversation data, and exported data packages. By using the Service, you grant us a limited license to host, store, process, and transmit your content solely to provide the Service to you.</p>
-        
+        <p><strong>No AI Training on Your Data:</strong> We do not use your private content, conversations, or persona configurations to train, fine-tune, or develop any AI or machine learning model. However, when your data is transmitted to third-party AI providers (as described in Section 9 and the Privacy Policy), those providers process your data according to their own terms and policies, which may include use for model safety and improvement purposes depending on the applicable API tier. We have no control over and make no representations about third-party AI providers' data use practices beyond our own systems.</p>
+
         <h3>8.2 Marketplace Content</h3>
         <p>When you publish skills, personas, or other content to the Marketplace, you grant other users a license to install and use that content according to the license you specify (e.g., MIT, Apache 2.0). You represent that you have the right to publish such content and that it does not infringe any third-party rights. Marketplace ratings and reviews are visible to all users.</p>
         
@@ -272,19 +289,92 @@
         <h3>8.4 Our Intellectual Property</h3>
         <p>The Service, including its software, design, logos, documentation, and all underlying technology, is owned by MyApi and protected by intellectual property laws. Nothing in these Terms grants you any right to use our trademarks, trade names, or branding without prior written consent.</p>
         
-        <h2>9. AI-Generated Content</h2>
+        <h2>8A. Copyright Policy (DMCA)</h2>
+        <h3>8A.1 DMCA Safe Harbor</h3>
+        <p>MyApi complies with the Digital Millennium Copyright Act (17 U.S.C. § 512) and responds promptly to valid notices of alleged copyright infringement. We have adopted a policy of terminating accounts of users who are determined to be repeat infringers in appropriate circumstances.</p>
+
+        <h3>8A.2 Reporting Infringement</h3>
+        <p>If you believe content on or generated through the Service infringes your copyright, send a written DMCA notice to our Designated Agent containing:</p>
+        <ol>
+            <li>Your physical or electronic signature (or that of your authorized representative)</li>
+            <li>Identification of the copyrighted work you claim has been infringed</li>
+            <li>Identification of the allegedly infringing material with sufficient detail for us to locate it</li>
+            <li>Your contact information (name, address, telephone number, email address)</li>
+            <li>A statement that you have a good-faith belief that the use is not authorized by the copyright owner, its agent, or law</li>
+            <li>A statement that the information in your notice is accurate and, under penalty of perjury, that you are the copyright owner or authorized to act on their behalf</li>
+        </ol>
+        <p><strong>DMCA Designated Agent:</strong> legal@myapiai.com (subject line: "DMCA Notice")</p>
+
+        <h3>8A.3 Counter-Notification</h3>
+        <p>If you believe material was removed due to a mistaken or misidentified DMCA takedown, you may send a counter-notification to legal@myapiai.com. Valid counter-notifications must include: your signature, identification of the removed content, a statement under penalty of perjury that removal was a mistake or misidentification, and your consent to jurisdiction of the federal court for your district.</p>
+
+        <h3>8A.4 Repeat Infringer Policy</h3>
+        <p>We will terminate accounts of users who receive three or more valid DMCA takedown notices within any rolling 12-month period. We maintain records of DMCA notices for this purpose.</p>
+
+        <h2>9. AI-Generated Content and Providers</h2>
         <div class="highlight">
             <strong>AI outputs are not guaranteed to be accurate, complete, or suitable for any particular purpose.</strong>
             <p style="margin-top: 10px;">You are solely responsible for reviewing, validating, and using any AI-generated content. We disclaim all liability for decisions made or actions taken based on AI outputs.</p>
         </div>
-        <p>The Service integrates with third-party AI models (such as Google Gemini) to generate responses. You acknowledge that:</p>
+        <p>The Service routes AI requests through multiple third-party AI model providers and infrastructure layers. Currently active providers include:</p>
+        <ul>
+            <li><strong>Anthropic</strong> — Claude Opus, Sonnet, and Haiku models (direct API and via OpenClaw proxy). <a href="https://www.anthropic.com/legal/aup" target="_blank" rel="noopener">Anthropic Usage Policy</a> applies.</li>
+            <li><strong>OpenAI</strong> — GPT-class models (accessed via OpenClaw proxy). <a href="https://openai.com/policies/usage-policies" target="_blank" rel="noopener">OpenAI Usage Policies</a> apply.</li>
+            <li><strong>Google</strong> — Gemini models (direct API and via OpenClaw proxy). Google's Generative AI Prohibited Use Policy applies.</li>
+            <li><strong>xAI</strong> — Grok models (accessed via OpenClaw proxy). xAI's terms of service apply.</li>
+            <li><strong>GitHub Copilot</strong> — Code generation and completion (accessed via token). <a href="https://docs.github.com/en/site-policy/acceptable-use-policies/github-acceptable-use-policies" target="_blank" rel="noopener">GitHub Acceptable Use Policies</a> apply.</li>
+            <li><strong>OpenRouter</strong> — Fallback routing to multiple model providers. OpenRouter's terms of service apply.</li>
+            <li><strong>Local / Self-Hosted Models</strong> — Including Ollama-served models (Gemma, Qwen, StarCoder, Llama, and others). Local models process data on the server where the Service is installed; no data is transmitted to external parties for local model inference.</li>
+            <li><strong>OpenClaw Proxy</strong> — An AI routing and orchestration layer that intermediates requests to cloud AI providers listed above. Your prompts and context pass through this layer en route to external providers.</li>
+        </ul>
+        <p>The list of AI providers may change without notice as we add, remove, or substitute providers. Continued use of the Service after provider changes constitutes acceptance. You acknowledge that:</p>
         <ul>
             <li>AI-generated content may contain errors, inaccuracies, biases, or hallucinations</li>
-            <li>AI outputs should not be relied upon as professional, legal, medical, or financial advice</li>
             <li>Conversation data and prompts may be processed by third-party AI providers according to their own terms and policies</li>
             <li>We do not control and are not responsible for the behavior, output quality, or availability of third-party AI models</li>
             <li>You are responsible for ensuring AI-generated content complies with applicable laws before use</li>
         </ul>
+
+        <h2>9A. AI Platform Compliance and Acceptable Use Flow-Down</h2>
+        <p>By using AI features of the Service, you agree to comply with the acceptable use policies of all AI providers integrated into the Service. The following restrictions are <strong>binding on you</strong> as a condition of use:</p>
+
+        <h3>9A.1 Universal AI Use Restrictions</h3>
+        <p>Regardless of which AI provider processes your request, you agree NOT to use AI features to:</p>
+        <ul>
+            <li>Generate or assist in creating illegal content, including child sexual abuse material (CSAM), content facilitating violence against specific individuals, or any content prohibited by applicable law</li>
+            <li>Engage in deception or fraud, including creating fake personas, fake news, synthetic disinformation, or impersonating real individuals or organizations without consent</li>
+            <li>Harass, threaten, or abuse other individuals</li>
+            <li>Circumvent, undermine, or attempt to disable the safety systems, content filters, or guardrails of any AI provider</li>
+            <li>Generate content designed to spread disinformation, interfere with elections, or conduct coordinated inauthentic influence operations</li>
+            <li>Produce detailed instructions for creating weapons of mass destruction, synthesizing controlled substances, or developing biological, chemical, nuclear, or radiological weapons</li>
+            <li>Develop competing AI models, systems, or services using AI outputs generated through the Service</li>
+            <li>Use AI outputs to train, fine-tune, or evaluate any AI or machine learning model without the explicit written consent of MyApi and the relevant AI provider</li>
+            <li>Represent AI-generated content as human-authored in contexts where the distinction is material (e.g., in legal filings, academic submissions, or journalism purporting to be human-written)</li>
+        </ul>
+
+        <h3>9A.2 GitHub Copilot Specific Notice</h3>
+        <p>When using GitHub Copilot features through the Service, code suggestions may contain third-party intellectual property, open-source code fragments, or patterns derived from publicly available code. <strong>You are solely responsible</strong> for reviewing all generated code for license compliance before use in any commercial or distributed project. GitHub Copilot is subject to GitHub's Acceptable Use Policies; use through the Service does not exempt you from those policies.</p>
+
+        <h3>9A.3 Agentic and Automated AI Access</h3>
+        <p>The Service supports access via agentic platforms including ChatGPT GPTs, MCP (Model Context Protocol) clients, OpenAPI-based agents, Hermes-compatible platforms, and other automated orchestration systems. When AI agents access the Service on your behalf:</p>
+        <ul>
+            <li>You remain fully responsible for all actions taken by agents operating under your account credentials or tokens</li>
+            <li>You must ensure any agent you authorize to access the Service complies with these Terms and the acceptable use policies of all AI providers</li>
+            <li>You may not use the Service's API to build an agent whose purpose is to violate these Terms or the terms of any integrated AI provider</li>
+            <li>Actions taken by AI agents are treated as your own actions for purposes of indemnification, liability, and account enforcement</li>
+            <li>OpenClaw, Hermes, and similar orchestration platforms that route through the Service's API are access channels, and your agreements with those platforms do not modify or supersede these Terms</li>
+        </ul>
+
+        <h3>9A.4 No Reliance on AI for Professional Advice</h3>
+        <p>AI outputs generated through the Service are <strong>not a substitute for professional advice</strong>. You must not rely on AI-generated content as a substitute for:</p>
+        <ul>
+            <li>Legal advice from a licensed attorney</li>
+            <li>Medical or clinical advice from a licensed healthcare provider</li>
+            <li>Financial, investment, or tax advice from a licensed financial professional</li>
+            <li>Engineering, architectural, or safety-critical technical decisions</li>
+            <li>Any other professional service where licensing or expertise is legally required</li>
+        </ul>
+        <p>We expressly disclaim any liability arising from your reliance on AI-generated content as professional advice, regardless of whether the AI output resembles advice a licensed professional might give.</p>
         
         <h2>10. Third-Party Services and OAuth</h2>
         <p>The Service allows you to connect third-party accounts via OAuth, including but not limited to: Google, GitHub, Slack, Discord, Facebook, Instagram, TikTok, Twitter/X, Reddit, LinkedIn, and WhatsApp. When you connect a third-party service:</p>
@@ -315,6 +405,21 @@
         
         <h3>14.3 Beta and Experimental Features</h3>
         <p>Certain features may be designated as beta, experimental, or preview. Such features are provided "as-is" without warranty, may be unstable, and may be modified or removed without notice. Use of beta features is at your own risk.</p>
+
+        <h3>14.4 Force Majeure and AI Provider Dependency</h3>
+        <p>We shall not be liable for any delay or failure to perform our obligations under these Terms to the extent such delay or failure is caused by circumstances beyond our reasonable control, including but not limited to:</p>
+        <ul>
+            <li>Acts of God, natural disasters, earthquakes, floods, fires, pandemics, or epidemics</li>
+            <li>Acts of war, terrorism, civil unrest, government actions, embargoes, or sanctions</li>
+            <li>Internet or telecommunications infrastructure failures, including failures of third-party providers</li>
+            <li>Outages, API changes, rate limit reductions, policy changes, account suspensions, or terminations by third-party AI providers (including Anthropic, OpenAI, Google, xAI, GitHub, OpenRouter, or any AI model provider accessed through the Service)</li>
+            <li>Outages or failures of the OpenClaw proxy infrastructure or any AI routing intermediary</li>
+            <li>Changes to third-party AI providers' terms of service, acceptable use policies, or safety systems that require us to modify, suspend, or disable Service features</li>
+            <li>Power failures, data center outages, or infrastructure failures outside our direct control</li>
+            <li>Cyberattacks, DDoS attacks, or other hostile security events directed at the Service or its infrastructure</li>
+            <li>Regulatory or legal changes requiring us to alter or discontinue features</li>
+        </ul>
+        <p>In such circumstances, our obligations are suspended for the duration of the force majeure event. We will use commercially reasonable efforts to resume performance as soon as practicable and will provide notice when reasonably possible. A force majeure event does not suspend your payment obligations for periods preceding the event.</p>
         
         <h2>15. Disclaimer of Warranties</h2>
         <div class="highlight">
@@ -326,7 +431,10 @@
         <p><strong>TO THE MAXIMUM EXTENT PERMITTED BY LAW, OUR TOTAL AGGREGATE LIABILITY FOR ALL CLAIMS ARISING FROM OR RELATED TO THESE TERMS OR THE SERVICE IS LIMITED TO THE GREATER OF: (A) $100 USD, OR (B) THE TOTAL AMOUNT YOU PAID US IN THE 12 MONTHS PRECEDING THE CLAIM.</strong></p>
         <p>IN NO EVENT SHALL WE BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, INCLUDING BUT NOT LIMITED TO LOSS OF PROFITS, DATA, BUSINESS OPPORTUNITIES, OR GOODWILL, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES. THIS APPLIES REGARDLESS OF THE THEORY OF LIABILITY (CONTRACT, TORT, STRICT LIABILITY, OR OTHERWISE).</p>
         <p>Some jurisdictions do not allow the exclusion or limitation of certain damages. In such jurisdictions, our liability is limited to the maximum extent permitted by law.</p>
-        
+
+        <h3>16.3 Sole and Exclusive Remedy</h3>
+        <p>IF YOU ARE DISSATISFIED WITH THE SERVICE, OR BELIEVE THE SERVICE HAS FAILED TO MEET ANY OBLIGATION UNDER THESE TERMS, YOUR SOLE AND EXCLUSIVE REMEDY IS TO DISCONTINUE USE OF THE SERVICE AND, IF APPLICABLE, CANCEL YOUR SUBSCRIPTION. WE SHALL HAVE NO OTHER OBLIGATION, LIABILITY, OR RESPONSIBILITY TO YOU BEYOND WHAT IS EXPRESSLY SET FORTH IN THESE TERMS. WE WILL NOT PROVIDE REFUNDS, REPLACEMENT SERVICES, COMPENSATION, OR DAMAGES OF ANY KIND EXCEPT AS REQUIRED BY APPLICABLE LAW.</p>
+
         <h2>17. Indemnification</h2>
         <p>You agree to indemnify, defend, and hold harmless MyApi, its officers, directors, employees, and agents from and against any and all claims, liabilities, damages, losses, costs, and expenses (including reasonable attorney's fees) arising from or related to:</p>
         <ul>
@@ -336,7 +444,12 @@
             <li>Content you upload, publish, or share through the Service or Marketplace</li>
             <li>Your use of AI-generated content</li>
             <li>Your violation of any applicable law or regulation</li>
+            <li>Any third-party claim arising from your connected services, OAuth integrations, or API token usage, whether or not such usage was authorized by you</li>
+            <li>Your violation of the acceptable use policies of any third-party AI provider accessed through the Service (including but not limited to Anthropic, OpenAI, Google, xAI, and GitHub)</li>
+            <li>Any actions taken by AI agents or automated systems operating under your account credentials or tokens</li>
+            <li>Any claim that your use of AI-generated content caused harm to a third party</li>
         </ul>
+        <p>This indemnification obligation applies <strong>even if MyApi's own negligence contributed to the claim</strong>, except in cases of MyApi's gross negligence or willful misconduct. You agree to cooperate fully with us in the defense of any indemnified claim. We reserve the right to assume exclusive control of the defense of any matter subject to indemnification by you, at your expense, and you agree not to settle any such matter without our prior written consent.</p>
         
         <h2>18. Termination</h2>
         <h3>18.1 Termination by Us</h3>
@@ -361,13 +474,26 @@
         <p>Before filing any formal dispute, you agree to contact us at <strong>legal@myapiai.com</strong> and attempt to resolve the dispute informally for at least 30 days.</p>
         
         <h3>19.2 Binding Arbitration</h3>
-        <p>If informal resolution fails, any dispute arising from or relating to these Terms or the Service shall be resolved through binding arbitration, rather than in court, except that either party may seek injunctive relief in court for intellectual property violations or security breaches.</p>
+        <p>If informal resolution fails, any dispute, claim, or controversy arising out of or relating to these Terms, the Privacy Policy, or the Service (including questions about the existence, validity, scope, or enforceability of this arbitration agreement) shall be resolved by binding individual arbitration administered by the <strong>American Arbitration Association ("AAA")</strong> under its then-current Consumer Arbitration Rules (for individual users) or Commercial Arbitration Rules (for business users), which are incorporated herein by reference. The arbitration shall be conducted in <strong>Austin, Texas, USA</strong>, or by telephonic or video conference if both parties agree.</p>
+        <p>The arbitrator shall have exclusive authority to resolve all threshold issues of arbitrability, including the scope and validity of this arbitration agreement. The arbitrator's award shall be final and binding, and judgment may be entered upon it in any court of competent jurisdiction.</p>
+        <p><strong>Emergency Relief:</strong> Either party may seek emergency injunctive or other equitable relief from a court of competent jurisdiction solely to prevent irreparable harm (e.g., for intellectual property violations or imminent security threats), pending resolution of the underlying dispute in arbitration. Filing for such relief does not waive the right to arbitrate the underlying claim.</p>
+        <p><strong>Arbitration Costs:</strong> Each party shall bear its own attorneys' fees and costs in arbitration, except that the arbitrator may award fees to the prevailing party as permitted by applicable law or the applicable AAA rules.</p>
         
+        <h3>19.4 Attorneys' Fees</h3>
+        <p>In any arbitration or legal proceeding arising from these Terms, the prevailing party shall be entitled to recover its reasonable attorneys' fees and costs from the non-prevailing party, in addition to any other relief awarded, to the extent permitted by applicable law and the rules of the arbitration provider. This provision applies symmetrically — we can recover fees from you if you lose, and you can recover fees from us if you prevail. This provision is intended to deter frivolous claims by either party.</p>
+
         <h3>19.3 Class Action Waiver</h3>
         <p><strong>You agree that any dispute resolution proceedings will be conducted on an individual basis only, and not as a class, consolidated, or representative action.</strong> You waive any right to participate in a class action lawsuit or class-wide arbitration.</p>
         
-        <h2>20. Governing Law</h2>
-        <p>These Terms are governed by and construed in accordance with the laws of the jurisdiction where MyApi operates, without regard to conflict of law principles. Any legal action not subject to arbitration shall be brought exclusively in the courts of that jurisdiction.</p>
+        <h2>19A. Export Control and Sanctions Compliance</h2>
+        <p>You represent and warrant that you are not located in, incorporated under the laws of, or acting on behalf of any person or entity in a country subject to a United States government embargo (including Cuba, Iran, North Korea, Syria, Russia, Belarus, and the Crimea, Donetsk, and Luhansk regions of Ukraine), or that has been designated as a "terrorist supporting" country by the US government. You further represent that you are not named on any US government list of prohibited or restricted parties, including the OFAC Specially Designated Nationals list or the BIS Entity List.</p>
+        <p>AI-generated outputs from the Service may constitute "technology" or "technical data" subject to US export control laws (EAR/ITAR). You are solely responsible for ensuring your use of AI outputs complies with all applicable export control and trade compliance laws in your jurisdiction.</p>
+        <p>Violation of this provision results in immediate account termination and may be reported to applicable US government authorities.</p>
+
+        <h2>20. Governing Law and Jurisdiction</h2>
+        <p>These Terms are governed by and construed in accordance with the laws of the State of Texas, United States of America, without regard to its conflict of law principles and excluding the United Nations Convention on Contracts for the International Sale of Goods, which is expressly excluded.</p>
+        <p>For any dispute not subject to binding arbitration under Section 19, each party irrevocably submits to the exclusive personal jurisdiction and venue of the federal and state courts located in Austin, Travis County, Texas, USA, and waives any objection to such jurisdiction on grounds of venue, inconvenient forum, or otherwise.</p>
+        <p>Notwithstanding anything to the contrary in these Terms, nothing herein limits your rights under the Texas Deceptive Trade Practices Act (Tex. Bus. &amp; Com. Code §17.41 et seq.) to the extent such rights may not be waived by contract under applicable Texas law.</p>
         
         <h2>21. General Provisions</h2>
         <h3>21.1 Entire Agreement</h3>

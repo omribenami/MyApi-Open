@@ -1,8 +1,8 @@
 # Terms of Service (Legal Version)
 
-**Last Updated:** March 26, 2026  
-**Effective Date:** March 26, 2026  
-**Version:** 2.0 (Comprehensive Legal Protection)
+**Last Updated:** April 14, 2026  
+**Effective Date:** April 14, 2026  
+**Version:** 2.1 (AI Platform Compliance + Texas LLC Jurisdiction)
 
 ---
 
@@ -260,6 +260,57 @@ We may:
 
 ---
 
+## 5A. AI PLATFORM COMPLIANCE AND FLOW-DOWN OBLIGATIONS
+
+### 5A.1 AI Provider Terms Flow-Down
+By using AI features of the Service, you agree to comply with the acceptable use policies of all AI providers integrated into the Service. The Company has contractual obligations to the following AI providers, and your use of the Service creates derivative obligations applicable to you:
+
+**Anthropic (Claude):**
+- You must comply with Anthropic's Usage Policy (https://www.anthropic.com/legal/aup)
+- You may not use Claude to circumvent Anthropic's safety systems
+- You may not use Claude outputs to train competing AI models
+- You may not misrepresent Claude outputs as human-generated in contexts where the distinction is material
+
+**OpenAI (GPT models via OpenClaw proxy):**
+- You must comply with OpenAI's Usage Policies (https://openai.com/policies/usage-policies)
+- You may not use GPT outputs to develop competing AI systems
+- You may not use the Service to access OpenAI in violation of OpenAI's API terms
+
+**Google (Gemini / Vertex AI):**
+- You must comply with Google's Generative AI Prohibited Use Policy
+- Data handling and retention provisions of Google's API terms apply to your use
+
+**GitHub (Copilot):**
+- Code suggestions may include third-party IP fragments; you are responsible for license compliance review before commercial use
+- GitHub's Acceptable Use Policies apply to all Copilot usage through the Service
+
+**OpenClaw and Hermes:**
+- The Company routes AI traffic through OpenClaw, a proprietary AI orchestration proxy
+- By using AI features, you acknowledge that your prompts pass through the OpenClaw layer before reaching external providers
+- You may not use the Service in a manner that would cause the Company to violate its agreement with OpenClaw
+
+**xAI (Grok via OpenClaw proxy):**
+- xAI's Terms of Service and acceptable use policies apply to your use of Grok models through the Service
+
+### 5A.2 No Circumvention of AI Safety Systems
+You may NOT:
+- Prompt-inject, jailbreak, or otherwise attempt to cause any AI model to violate its safety guidelines
+- Use prompt engineering techniques specifically designed to extract content that AI models would otherwise refuse
+- Use the Service's multi-provider routing to attempt the same harmful query across multiple models
+- Use agentic access features to automate attempts to circumvent any AI safety system
+
+### 5A.3 Indemnification for AI Policy Violations
+You indemnify the Company for any claims, costs, penalties, API access revocations, or losses suffered by the Company as a result of your violation of any AI provider's acceptable use policy or terms of service. This includes costs incurred if the Company's API access is suspended or terminated due to your misuse.
+
+### 5A.4 Agentic and Automated Access
+When you access the Service via an AI agent, orchestration platform (including OpenClaw, Hermes, MCP clients, or ChatGPT GPTs), or automated system:
+- All actions are attributed to and the responsibility of you
+- Agents operating under your credentials are treated as your own actions for all legal purposes
+- You must ensure agents comply with all Terms, including this Section 5A
+- You may not use agents to circumvent rate limits, access controls, or safety systems
+
+---
+
 ## 6. INTELLECTUAL PROPERTY RIGHTS
 
 ### 6.1 Our IP Ownership
@@ -365,6 +416,29 @@ If the Service fails to meet your needs, **your exclusive remedy is to stop usin
 - Replacement services
 - Compensation
 - Damages of any kind
+
+---
+
+## 7A. FORCE MAJEURE
+
+### 7A.1 Force Majeure Events
+The Company shall not be liable for any delay or failure to perform its obligations under these Terms if such delay or failure is caused by a Force Majeure Event. "Force Majeure Event" means any event beyond the Company's reasonable control, including:
+
+- Acts of God, natural disasters, earthquakes, floods, fires, or pandemics
+- Acts of war, terrorism, civil unrest, embargoes, or government orders
+- Internet, telecommunications, or power infrastructure failures
+- **Outages, API changes, rate limit reductions, policy changes, or account terminations by any third-party AI provider** (including Anthropic, OpenAI, Google, xAI/Grok, GitHub, OpenRouter, or OpenClaw)
+- Changes to AI providers' acceptable use policies requiring Service feature modifications or disablement
+- Cyberattacks, DDoS attacks, or other malicious security incidents directed at the Service or its infrastructure
+- Regulatory or legal changes affecting AI service operation
+- Outages or failures of the OpenClaw proxy infrastructure or any AI routing intermediary
+
+### 7A.2 Obligations During Force Majeure
+During a Force Majeure Event:
+- The Company's performance obligations are suspended for the duration of the event
+- The Company will use commercially reasonable efforts to restore service as soon as practicable
+- The Company will provide notice of the event and estimated duration when reasonably possible
+- Payment obligations for periods preceding the event are not affected
 
 ---
 
@@ -485,13 +559,14 @@ Upon termination:
 
 ### 11.1 Governing Law
 **These Terms are governed by and construed according to:**
-- **Laws of [Your Jurisdiction]**
+- **Laws of the State of Texas, United States of America**
 - **Excluding conflicts of law principles**
 - **NOT the United Nations Convention on Contracts for International Sale of Goods**
+- **Note:** Nothing herein waives rights under the Texas Deceptive Trade Practices Act (Tex. Bus. & Com. Code §17.41 et seq.) to the extent such rights may not be waived by contract under Texas law.
 
 ### 11.2 Exclusive Jurisdiction
 **Both parties consent to exclusive jurisdiction in:**
-- **Federal and state courts in [Your Location]**
+- **Federal and state courts in Austin, Travis County, Texas, USA**
 - **For any disputes arising from these Terms**
 
 **This is an exclusive forum selection clause.**
@@ -505,8 +580,8 @@ Before pursuing legal action, both parties agree to:
 
 ### 11.4 Arbitration (Alternative)
 Either party may elect binding arbitration instead of litigation:
-- **Administered by:** [Arbitration Provider]
-- **Location:** [Your Location]
+- **Administered by:** American Arbitration Association ("AAA") under AAA Consumer Arbitration Rules (individuals) or AAA Commercial Arbitration Rules (businesses)
+- **Location:** Austin, Texas, USA
 - **Binding on both parties**
 - **Limited appeal rights**
 - **Conducted by neutral arbitrator**
@@ -581,7 +656,7 @@ Section headings are for convenience only and do not affect interpretation.
 ### 13.7 Notices
 **Legal notices to us must be sent to:**
 - MyApi Legal Department
-- [Your Legal Address]
+- 1744 Martin Wells, Leander, TX 78641
 - Certified mail, return receipt requested
 - Effective upon receipt
 
@@ -628,9 +703,9 @@ Organizations with 500+ employees may request a Data Processing Agreement.
 ---
 
 **Prepared by:** MyApi Legal Team  
-**Effective Date:** March 26, 2026  
-**Jurisdiction:** [Your Jurisdiction]  
-**Last Updated:** March 26, 2026
+**Effective Date:** April 14, 2026  
+**Jurisdiction:** State of Texas, United States of America  
+**Last Updated:** April 14, 2026
 
 ---
 
