@@ -3385,7 +3385,7 @@ function createSkill(name, description, version, author, category, scriptContent
   return getSkillById(row?.id ?? null, owner);
 }
 
-function getSkills(ownerId = 'owner', workspaceId = null) {
+function getSkills(ownerId = 'owner', workspaceId = null, filters = {}) {
   const owner = normalizeOwnerId(ownerId);
   let query = 'SELECT * FROM skills WHERE owner_id = ?';
   const params = [owner];
@@ -3396,12 +3396,75 @@ function getSkills(ownerId = 'owner', workspaceId = null) {
     params.push(workspaceId);
   }
 
+  if (filters.category) {
+    query += ' AND lower(category) = lower(?)';
+    params.push(filters.category);
+  }
+
+  if (filters.slug) {
+    query += ' AND lower(name) = lower(?)';
+    params.push(filters.slug);
+  }
+
+  if (filters.q) {
+    const like = `%${filters.q}%`;
+    query += ' AND (name LIKE ? OR description LIKE ? OR category LIKE ?)';
+    params.push(like, like, like);
+  }
+
   query += ' ORDER BY created_at DESC';
-  
+
+  if (filters.limit && Number.isInteger(filters.limit) && filters.limit > 0) {
+    query += ' LIMIT ?';
+    params.push(filters.limit);
+  }
+
   return db.prepare(query).all(...params).map(row => ({
     ...row, active: Boolean(row.active),
     config_json: row.config_json ? (() => { try { return JSON.parse(row.config_json); } catch { return row.config_json; } })() : null,
   }));
+}
+
+function getSkillBySlug(slug, ownerId = 'owner') {
+  const owner = normalizeOwnerId(ownerId);
+  const row = db.prepare('SELECT * FROM skills WHERE lower(name) = lower(?) AND owner_id = ?').get(slug, owner);
+  if (!row) return null;
+  return {
+    ...row, active: Boolean(row.active),
+    config_json: row.config_json ? (() => { try { return JSON.parse(row.config_json); } catch { return row.config_json; } })() : null,
+  };
+}
+
+function getSkillsByIds(ids, ownerId = 'owner') {
+  if (!ids || ids.length === 0) return [];
+  const owner = normalizeOwnerId(ownerId);
+  const placeholders = ids.map(() => '?').join(',');
+  return db.prepare(`SELECT * FROM skills WHERE id IN (${placeholders}) AND owner_id = ?`)
+    .all(...ids, owner)
+    .map(row => ({
+      ...row, active: Boolean(row.active),
+      config_json: row.config_json ? (() => { try { return JSON.parse(row.config_json); } catch { return row.config_json; } })() : null,
+    }));
+}
+
+function getSkillsBySlugList(slugs, ownerId = 'owner') {
+  if (!slugs || slugs.length === 0) return [];
+  const owner = normalizeOwnerId(ownerId);
+  const placeholders = slugs.map(() => 'lower(?)').join(',');
+  return db.prepare(`SELECT * FROM skills WHERE lower(name) IN (${placeholders}) AND owner_id = ?`)
+    .all(...slugs.map(s => s.toLowerCase()), owner)
+    .map(row => ({
+      ...row, active: Boolean(row.active),
+      config_json: row.config_json ? (() => { try { return JSON.parse(row.config_json); } catch { return row.config_json; } })() : null,
+    }));
+}
+
+function suggestSkills(q, ownerId = 'owner', limit = 10) {
+  const owner = normalizeOwnerId(ownerId);
+  const like = `%${q}%`;
+  return db.prepare(
+    `SELECT id, name, description, category FROM skills WHERE owner_id = ? AND (name LIKE ? OR description LIKE ? OR category LIKE ?) ORDER BY created_at DESC LIMIT ?`
+  ).all(owner, like, like, like, limit);
 }
 
 function getSkillById(id, ownerId = 'owner') {
@@ -6781,6 +6844,10 @@ module.exports = {
   createSkill,
   getSkills,
   getSkillById,
+  getSkillBySlug,
+  getSkillsByIds,
+  getSkillsBySlugList,
+  suggestSkills,
   updateSkill,
   deleteSkill,
   setActiveSkill,

@@ -207,6 +207,10 @@ const {
   createSkill,
   getSkills,
   getSkillById,
+  getSkillBySlug,
+  getSkillsByIds,
+  getSkillsBySlugList,
+  suggestSkills,
   updateSkill,
   deleteSkill,
   setActiveSkill,
@@ -2228,6 +2232,10 @@ app.use('/api/v1/skills', authenticate, createSkillsRoutes(
   createSkill,
   getSkills,
   getSkillById,
+  getSkillBySlug,
+  getSkillsByIds,
+  getSkillsBySlugList,
+  suggestSkills,
   updateSkill,
   deleteSkill,
   updateSkillOrigin,
@@ -3780,11 +3788,17 @@ All paths are relative to https://${host} — do NOT add /api/v1 to the base URL
 - GET    /api/v1/brain/knowledge-base/:id         → Get full content of a KB document
 
 ### Skills
-- GET  /api/v1/skills                             → List available skills (scope: skills:read)
-- GET  /api/v1/skills/:id                         → Get skill details
-- POST /api/v1/skills                             → Create a skill (scope: skills:write)
-- PUT  /api/v1/skills/:id                         → Update a skill (scope: skills:write)
-- DELETE /api/v1/skills/:id                       → Delete a skill (scope: skills:write)
+- GET  /api/v1/skills                             → List skills (scope: skills:read). Filter: ?slug=&category=&q=&limit=
+- GET  /api/v1/skills/suggestions?q=              → Fuzzy skill suggestions for AI discovery (no ID needed)
+- GET  /api/v1/skills/_by_slug/:slug              → Fetch skill by name/slug (preferred for AI agents)
+- GET  /api/v1/skills/_batch?slug=&id=            → Fetch multiple skills in one request (repeatable params)
+- GET  /api/v1/skills/:id                         → Get skill details + versions + forks
+- GET  /api/v1/skills/:id/content                 → Get raw SKILL.md content (JSON or Accept: text/markdown)
+- GET  /api/v1/skills/:id/skill.md                → Get SKILL.md as raw text/markdown
+- PUT  /api/v1/skills/:id/skill.md                → Set SKILL.md content (YAML frontmatter auto-sanitized)
+- POST /api/v1/skills                             → Create skill (scope: skills:write)
+- PUT  /api/v1/skills/:id                         → Update skill (scope: skills:write)
+- DELETE /api/v1/skills/:id                       → Delete skill (scope: skills:write)
 
 ### Personas
 - GET  /api/v1/personas                           → List AI personas
@@ -4078,8 +4092,65 @@ app.get('/openapi.json', (req, res) => {
       '/api/v1/personas/{id}/skills': { get: { summary: 'List persona skills', security: [{ bearerAuth: [] }] }, post: { summary: 'Attach skill to persona', security: [{ bearerAuth: [] }] } },
       '/api/v1/personas/{id}/skills/{skillId}': { delete: { summary: 'Detach skill from persona', security: [{ bearerAuth: [] }] } },
 
-      '/api/v1/skills': { get: { summary: 'List skills', security: [{ bearerAuth: [] }] }, post: { summary: 'Create skill', security: [{ bearerAuth: [] }] } },
+      '/api/v1/skills': {
+        get: {
+          summary: 'List skills',
+          description: 'Returns all skills for the authenticated owner. Supports filtering via query params to avoid fetching large payloads.',
+          security: [{ bearerAuth: [] }],
+          parameters: [
+            { name: 'slug', in: 'query', description: 'Filter by slug (skill name, case-insensitive)', schema: { type: 'string' } },
+            { name: 'category', in: 'query', description: 'Filter by category (case-insensitive)', schema: { type: 'string' } },
+            { name: 'q', in: 'query', description: 'Full-text search across name, description, category', schema: { type: 'string' } },
+            { name: 'limit', in: 'query', description: 'Maximum number of results (1-200)', schema: { type: 'integer', minimum: 1, maximum: 200 } }
+          ],
+          responses: { '200': { description: 'Array of skills with origin metadata and slug field' } }
+        },
+        post: { summary: 'Create skill', description: 'Creates a skill. YAML frontmatter in scriptContent is automatically sanitized.', security: [{ bearerAuth: [] }] }
+      },
+      '/api/v1/skills/suggestions': {
+        get: {
+          summary: 'Skill name suggestions (AI discovery)',
+          description: 'Returns up to 10 matching skills by name/description/category. Useful for AI agents that don\'t know the exact slug.',
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'q', in: 'query', required: true, description: 'Search query', schema: { type: 'string' } }],
+          responses: { '200': { description: 'List of {id, slug, name, description, category} suggestions' } }
+        }
+      },
+      '/api/v1/skills/_by_slug/{slug}': {
+        get: {
+          summary: 'Get skill by slug/name',
+          description: 'Retrieve a skill directly by its name (slug) without needing the numeric ID. Preferred for AI agent access.',
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'slug', in: 'path', required: true, description: 'Skill name (case-insensitive)', schema: { type: 'string' } }],
+          responses: { '200': { description: 'Skill object' }, '404': { description: 'Not found' } }
+        }
+      },
+      '/api/v1/skills/_batch': {
+        get: {
+          summary: 'Batch fetch multiple skills',
+          description: 'Fetch multiple skills by numeric id or slug in a single request. Pass ?id=1&id=2 or ?slug=homeassistant&slug=tts.',
+          security: [{ bearerAuth: [] }],
+          parameters: [
+            { name: 'id', in: 'query', description: 'Skill numeric ID (repeatable)', schema: { type: 'array', items: { type: 'integer' } } },
+            { name: 'slug', in: 'query', description: 'Skill name/slug (repeatable)', schema: { type: 'array', items: { type: 'string' } } }
+          ],
+          responses: { '200': { description: 'Array of matching skills' } }
+        }
+      },
       '/api/v1/skills/{id}': { get: { summary: 'Get skill', security: [{ bearerAuth: [] }] }, put: { summary: 'Update skill', security: [{ bearerAuth: [] }] }, delete: { summary: 'Delete skill', security: [{ bearerAuth: [] }] } },
+      '/api/v1/skills/{id}/content': {
+        get: {
+          summary: 'Get skill SKILL.md content',
+          description: 'Returns the raw SKILL.md content. Accept: text/markdown returns plain text; default JSON wraps it with metadata.',
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer' } }],
+          responses: { '200': { description: 'Skill content as JSON {id, slug, name, content} or text/markdown' } }
+        }
+      },
+      '/api/v1/skills/{id}/skill.md': {
+        get: { summary: 'Get SKILL.md raw markdown', description: 'Returns raw text/markdown of the skill content (alias for /:id/content with Accept: text/markdown).', security: [{ bearerAuth: [] }] },
+        put: { summary: 'Set SKILL.md content (YAML frontmatter auto-sanitized)', security: [{ bearerAuth: [] }] }
+      },
       '/api/v1/skills/{id}/activate': { post: { summary: 'Activate skill', security: [{ bearerAuth: [] }] } },
       '/api/v1/skills/{id}/documents': { get: { summary: 'List skill docs', security: [{ bearerAuth: [] }] }, post: { summary: 'Attach doc to skill', security: [{ bearerAuth: [] }] } },
       '/api/v1/skills/{id}/documents/{docId}': { delete: { summary: 'Detach doc from skill', security: [{ bearerAuth: [] }] } },
@@ -11856,9 +11927,40 @@ if (WebSocketServer) {
   console.log('WebSocket server enabled');
 }
 
+// --- AI Discovery Hints ---
+// Intercept all 4xx JSON responses and append _hint so AI agents always know
+// where to look next, even when they land on the wrong endpoint.
+app.use((req, res, next) => {
+  const host = req.headers.host || 'www.myapiai.com';
+  const scheme = req.protocol || 'https';
+  const base = `${scheme}://${host}`;
+
+  const _hint = {
+    docs: `${base}/openapi.json`,
+    capabilities: `${base}/api/v1/tokens/me/capabilities`,
+    quickStart: `${base}/api/v1/quick-start`,
+    scopeHelp: `${base}/api/v1/scopes`
+  };
+
+  const originalJson = res.json.bind(res);
+  res.json = function (body) {
+    const status = res.statusCode;
+    if (status >= 400 && status < 500 && body && typeof body === 'object' && !Array.isArray(body)) {
+      // 403 → also point at capabilities so agent can see what scopes it has
+      const hint = status === 403
+        ? { ..._hint, message: 'Check capabilities to see what your token can access.' }
+        : _hint;
+      body = { ...body, _hint: hint };
+    }
+    return originalJson(body);
+  };
+
+  next();
+});
+
 // --- Error Handlers (must be last) ---
 
-// 404 handler - return JSON
+// 404 handler - return JSON (hint injected by middleware above)
 app.use((req, res) => {
   res.status(404).json({
     error: 'Not Found',
