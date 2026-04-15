@@ -1447,7 +1447,7 @@ app.get('/api/v1/quick-start', (req, res) => {
     important: AI_APPROVAL_MESSAGE,
     authenticated: hasAuth,
     canonicalBaseUrl: canonicalBase,
-    urlWarning: 'Always use this exact base URL for all API calls. Do NOT follow redirects — HTTP redirects strip Authorization headers and will result in auth failures.',
+    urlWarning: 'Always use this exact base URL for all API calls. Do NOT follow redirects — HTTP redirects strip Authorization headers and will result in auth failures. IMPORTANT: Do NOT append /api/v1 to this base URL — all endpoint paths in this guide already include /api/v1. A common mistake is setting a base URL of https://www.myapiai.com/api/v1 and then calling /api/v1/skills — that produces a double-prefix (https://www.myapiai.com/api/v1/api/v1/skills) which returns ROUTE_NOT_FOUND.',
     prerequisite: {
       action: 'Ask the human for approval before every action',
       detail: 'You MUST describe what you plan to do and wait for the human user to explicitly approve before calling any endpoint. Never proceed without confirmation. This is mandatory for all actions.',
@@ -2649,6 +2649,7 @@ app.get('/api/v1/agent-guide', (req, res) => {
     api: 'MyApi — Agent Connection Guide',
     version: '1.1',
     base_url: 'https://www.myapiai.com',
+    base_url_warning: 'Use https://www.myapiai.com as the base URL — do NOT append /api/v1. All paths in this guide already include /api/v1. Example: correct = https://www.myapiai.com/api/v1/skills, wrong = https://www.myapiai.com/api/v1/api/v1/skills.',
 
     headline: 'MyApi gives AI agents secure, scoped access to a user\'s identity, memory, documents, tools, and action history.',
 
@@ -2711,6 +2712,13 @@ app.get('/api/v1/agent-guide', (req, res) => {
           method: 'GET',
           path: '/api/v1/services',
           note: 'Lists which external services (GitHub, Google, Slack, etc.) the user has connected. Use this to know which action surfaces are available before attempting service calls.',
+        },
+        {
+          step: 7,
+          label: 'List available skills (optional)',
+          method: 'GET',
+          path: '/api/v1/skills',
+          note: 'Lists all skills configured for this account. Each skill has a name, description, and optional script. Requires skills:read scope.',
         },
       ],
     },
@@ -3386,6 +3394,65 @@ function buildCapabilitiesForRequest(req) {
     });
   }
 
+  const canReadSkills = isMaster(req) || hasPermission(scopes, ['skills:read']) || hasPermission(scopes, ['skills:write']) || hasPermission(scopes, ['admin:*']);
+  const canWriteSkills = isMaster(req) || hasPermission(scopes, ['skills:write']) || hasPermission(scopes, ['admin:*']);
+
+  if (canReadSkills) {
+    endpoints.push({
+      purpose: 'List all skills for this account',
+      method: 'GET',
+      url: '/api/v1/skills',
+      params: [{ in: 'query', name: 'include_archived', required: false, type: 'boolean' }],
+      sampleRequest: { method: 'GET', headers: [...auth.requiredHeaders] },
+      sampleResponse: { skills: [{ id: 'skill_x', name: 'My Skill', description: '...', active: true }] },
+      commonErrors: [{ status: 403, error: "Requires 'skills:read' scope" }],
+    });
+    endpoints.push({
+      purpose: 'Get details of a specific skill',
+      method: 'GET',
+      url: '/api/v1/skills/:id',
+      params: [],
+      sampleRequest: { method: 'GET', headers: [...auth.requiredHeaders] },
+      sampleResponse: { skill: { id: 'skill_x', name: 'My Skill', description: '...' } },
+      commonErrors: [{ status: 404, error: 'Skill not found' }],
+    });
+  }
+
+  if (canWriteSkills) {
+    endpoints.push({
+      purpose: 'Create a new skill',
+      method: 'POST',
+      url: '/api/v1/skills',
+      params: [
+        { in: 'body', name: 'name', required: true, type: 'string' },
+        { in: 'body', name: 'description', required: false, type: 'string' },
+        { in: 'body', name: 'script_content', required: false, type: 'string' },
+        { in: 'body', name: 'category', required: false, type: 'string' },
+      ],
+      sampleRequest: { method: 'POST', headers: [...auth.requiredHeaders, 'Content-Type: application/json'], body: { name: 'My Skill', description: 'Does something useful' } },
+      sampleResponse: { skill: { id: 'skill_x', name: 'My Skill' } },
+      commonErrors: [{ status: 400, error: 'Name is required' }],
+    });
+    endpoints.push({
+      purpose: 'Update an existing skill',
+      method: 'PUT',
+      url: '/api/v1/skills/:id',
+      params: [{ in: 'body', name: 'name', required: false, type: 'string' }, { in: 'body', name: 'description', required: false, type: 'string' }],
+      sampleRequest: { method: 'PUT', headers: [...auth.requiredHeaders, 'Content-Type: application/json'], body: { description: 'Updated description' } },
+      sampleResponse: { skill: { id: 'skill_x', name: 'My Skill', description: 'Updated description' } },
+      commonErrors: [{ status: 404, error: 'Skill not found' }],
+    });
+    endpoints.push({
+      purpose: 'Delete a skill',
+      method: 'DELETE',
+      url: '/api/v1/skills/:id',
+      params: [],
+      sampleRequest: { method: 'DELETE', headers: [...auth.requiredHeaders] },
+      sampleResponse: { success: true },
+      commonErrors: [{ status: 404, error: 'Skill not found' }],
+    });
+  }
+
   const filtered = endpoints.filter((e) => {
     if (e.url.startsWith('/api/v1/brain') && !canReadBrain) return false;
     if (e.url.startsWith('/api/v1/vault') && !canReadVault) return false;
@@ -3650,6 +3717,10 @@ connected services, vault tokens, personas, and identity — but only with their
 
 ## Canonical Base URL
 Always use: https://${host}
+⚠️ IMPORTANT: Do NOT append /api/v1 to this base URL.
+   All endpoint paths listed below already include /api/v1.
+   Correct: https://${host}/api/v1/skills
+   Wrong:   https://${host}/api/v1/api/v1/skills  ← double-prefix bug
 Do NOT follow HTTP redirects — redirects from the bare domain strip the Authorization header
 and will cause all authenticated requests to fail with "Invalid or revoked token".
 
@@ -3685,19 +3756,54 @@ No username or extra info needed. Just two steps:
 - Never chain multiple actions without checking in with the user between each one.
 
 ## Key Endpoints
-- GET  /api/v1/                                  → API root and endpoint discovery
+All paths are relative to https://${host} — do NOT add /api/v1 to the base URL.
+
+### Start Here
+- GET  /api/v1/gateway/context                    → Full AI context in one call (persona, identity, memory, endpoints)
 - GET  /api/v1/quick-start                        → Step-by-step guide (includes handshake flow)
+- GET  /api/v1/auth/me                            → Verify token and see your token metadata
+- GET  /api/v1/users/me                           → Owner identity (name, role, bio, timezone)
+
+### Discovery
+- GET  /api/v1/                                  → API root and endpoint discovery
 - GET  /api/v1/capabilities                       → Scope-aware capability list
 - GET  /api/v1/tokens/me/capabilities             → Your token's permissions
-- GET  /api/v1/brain/knowledge-base               → Knowledge base documents
-- GET  /api/v1/vault/tokens                       → Connected service tokens
+- GET  /openapi.json                              → Full OpenAPI specification
+
+### Memory & Knowledge
+- GET    /api/v1/memory                           → List persistent memory entries
+- POST   /api/v1/memory                           → Store a memory entry  { content: "..." }
+- PATCH  /api/v1/memory/:id                       → Update a memory entry
+- DELETE /api/v1/memory/:id                       → Delete one memory entry
+- GET    /api/v1/brain/knowledge-base             → List knowledge base documents
+- POST   /api/v1/brain/knowledge-base/upsert      → Create or update a KB doc by title
+- GET    /api/v1/brain/knowledge-base/:id         → Get full content of a KB document
+
+### Skills
+- GET  /api/v1/skills                             → List available skills (scope: skills:read)
+- GET  /api/v1/skills/:id                         → Get skill details
+- POST /api/v1/skills                             → Create a skill (scope: skills:write)
+- PUT  /api/v1/skills/:id                         → Update a skill (scope: skills:write)
+- DELETE /api/v1/skills/:id                       → Delete a skill (scope: skills:write)
+
+### Personas
+- GET  /api/v1/personas                           → List AI personas
+- GET  /api/v1/personas/:id                       → Get a specific persona
+
+### Identity & Preferences
+- GET  /api/v1/identity                           → Owner basic identity
+- GET  /api/v1/identity/professional              → Professional identity
+- GET  /api/v1/identity/availability              → Availability and timezone
+
+### Services & Vault
+- GET  /api/v1/vault/tokens                       → Connected service tokens (vault)
+- GET  /api/v1/services                           → List connected OAuth services
 - POST /api/v1/services/:name/proxy               → Proxy raw API request to a service
 - GET  /api/v1/services/google/gmail/messages     → List Gmail messages
 - GET  /api/v1/services/google/drive/files        → List Google Drive files
 - POST /api/v1/services/google/drive/upload       → Upload file to Google Drive
-- GET  /api/v1/personas                           → AI personas
-- GET  /api/v1/identity                           → Owner identity
-- GET  /openapi.json                              → Full OpenAPI specification
+
+### Access Requests (no auth required)
 - POST /api/v1/handshakes                         → Request access (no auth)
 - GET  /api/v1/handshakes/:id/status              → Poll handshake status (no auth)
 
@@ -5997,6 +6103,9 @@ app.get("/api/v1/gateway/context", authenticate, (req, res) => {
     }));
 
     // Endpoint manifest — every endpoint this token can call, so the AI knows immediately
+    // ⚠️ IMPORTANT: All paths below include /api/v1. The base URL is https://www.myapiai.com (NO /api/v1 suffix).
+    // Correct: https://www.myapiai.com + /api/v1/skills = https://www.myapiai.com/api/v1/skills
+    // Wrong:   https://www.myapiai.com/api/v1 + /api/v1/skills = double-prefix → ROUTE_NOT_FOUND
     const ENDPOINT_MANIFEST = [
       { method: 'GET',    path: '/api/v1/gateway/context',               description: 'Full AI context: persona, identity, memory, endpoints (this endpoint)' },
       { method: 'GET',    path: '/api/v1/brain/context',                 description: 'Assembled LLM system prompt + conversation context', scope: 'knowledge' },
@@ -6031,6 +6140,8 @@ app.get("/api/v1/gateway/context", authenticate, (req, res) => {
     const context = {
       timestamp: new Date().toISOString(),
       version: "2.0",
+      base_url: `${req.protocol}://${req.get('host')}`,
+      base_url_warning: 'All endpoint paths in this response include /api/v1. Do NOT append /api/v1 to base_url when constructing request URLs. Correct: base_url + /api/v1/skills. Wrong: base_url + /api/v1 + /api/v1/skills (double-prefix causes ROUTE_NOT_FOUND).',
       // Who this AI is — full soul_content so it can set its own instructions
       persona,
       // Who the AI is serving — full identity from the database
