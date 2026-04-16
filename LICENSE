@@ -1,3 +1,25 @@
+COMMONS CLAUSE LICENSE CONDITION v1.0
+
+The Software (as defined below) is provided to you by the Licensor under the
+License, as defined below, subject to the following condition.
+
+Without limiting other conditions in the License, the grant of rights under the
+License will not include, and the License does not grant to you, the right to
+Sell the Software.
+
+For purposes of the foregoing, "Sell" means practicing any or all of the rights
+granted to you under the License to provide to third parties, whether as a
+hosted or non-hosted service or product, for direct or indirect commercial
+advantage or private financial gain. This excludes granting a license to the
+Software where the sole consideration is the receipt of a distribution of the
+Software itself.
+
+If you breach this restriction, your rights under the License will terminate
+automatically. The Licensor will provide thirty (30) days' written notice before
+pursuing any remedies.
+
+---
+
                     GNU AFFERO GENERAL PUBLIC LICENSE
                        Version 3, 19 November 2007
 
@@ -50,7 +72,7 @@ for making modifications to it.
 
   For the full license text, see: https://www.gnu.org/licenses/agpl-3.0.txt
 
-  Copyright (C) 2026 MyApi (omribenami)
+  Copyright (C) 2026 Agentic Integrations LLC
 
   This program is free software: you can redistribute it and/or modify
   it under the terms of the GNU Affero General Public License as published
