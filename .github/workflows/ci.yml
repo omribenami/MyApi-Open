@@ -17,7 +17,7 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   # ===========================================================================
@@ -27,9 +27,9 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: 'npm'
@@ -54,9 +54,9 @@ jobs:
         node-version: ['20', '22']
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
@@ -65,7 +65,7 @@ jobs:
         run: npm ci
 
       - name: Run tests
-        run: npm test
+        run: npm test ${{ matrix.node-version == '22' && '--coverage' || '' }}
         env:
           NODE_ENV: test
           JWT_SECRET: test-jwt-secret-ci
@@ -75,8 +75,8 @@ jobs:
           DB_PATH: ':memory:'
 
       - name: Upload coverage
-        if: matrix.node-version == '22'
-        uses: actions/upload-artifact@v4
+        if: matrix.node-version == '22' && always()
+        uses: actions/upload-artifact@v5
         with:
           name: coverage-report
           path: coverage/
@@ -89,9 +89,9 @@ jobs:
     name: Security Audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: 'npm'
