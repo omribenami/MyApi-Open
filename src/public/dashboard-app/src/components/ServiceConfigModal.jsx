@@ -9,11 +9,11 @@ function ServiceConfigModal({ isOpen, service, onClose, onSave }) {
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (isOpen && service) {
       fetchPreferences();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, service]);
 
   const fetchPreferences = async () => {

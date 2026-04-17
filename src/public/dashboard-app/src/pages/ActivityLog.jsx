@@ -105,6 +105,7 @@ function ActivityLog() {
     if (isAuthenticated) {
       fetchActivityLog(true);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, actionType, resourceType, result, dateRange, currentWorkspace?.id]);
 
   // WebSocket for real-time updates

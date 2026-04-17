@@ -123,8 +123,7 @@ export default function Activate() {
       .finally(() => setFetchingPending(false));
   };
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { loadPending(); }, [isAuthenticated]);
+  useEffect(() => { loadPending(); }, [isAuthenticated]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = async (e) => {
     e.preventDefault();
