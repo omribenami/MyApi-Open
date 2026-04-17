@@ -68,6 +68,77 @@ MyApi follows a coordinated vulnerability disclosure model:
 - Device approval workflow for API access
 - Scope-based access control hierarchy
 
+## Security Scan Findings & Fixes
+
+### Fixed Issues
+
+#### [HIGH] Sensitive API paths exposed (swagger.json, openapi.json)
+**Status:** ✅ RESOLVED (intentional)
+
+**What:** Paths like `/api/swagger.json`, `/openapi.json` return HTTP 200 with full API spec.
+
+**Why it's safe:** 
+- Spec revelation is standard practice for public APIs — it doesn't expose secrets or credentials
+- All mutating endpoints (POST/PUT/DELETE) require Bearer token authentication
+- The schema alone cannot be exploited without valid API credentials
+- Keeping it public is necessary for AI agents to discover and bootstrap API integration
+
+**Implementation:** See src/index.js line 3715-3723 for public discovery paths with detailed security notes.
+
+#### [LOW] Content Security Policy: upgrade-insecure-requests missing
+**Status:** ✅ FIXED
+
+**What:** CSP header wasn't auto-upgrading HTTP resources to HTTPS.
+
+**Fix:** 
+- Set `upgradeInsecureRequests: []` in Helmet CSP configuration (src/index.js:782)
+- All HTTP requests to this domain now auto-upgrade to HTTPS
+- Prevents mixed-content attacks and man-in-the-middle interception
+
+#### [LOW] Content Security Policy: report-uri/report-to missing
+**Status:** ✅ FIXED
+
+**What:** CSP violations weren't being reported for analysis and debugging.
+
+**Fix:**
+- Added `reportUri: ['/api/v1/security/csp-report']` to CSP directives
+- Created `POST /api/v1/security/csp-report` endpoint (src/index.js:1966-1980)
+- All CSP violations now logged with:
+  - Violated directive (e.g., script-src, style-src)
+  - Blocked resource URI
+  - Source file and line number where violation occurred
+  - User agent and IP for debugging
+- Logs appear in server console for monitoring
+
+#### [INFO] No cookie consent mechanism detected
+**Status:** ✅ IMPLEMENTED
+
+**What:** No cookie consent banner on first visit.
+
+**Implementation:**
+- Cookie consent banner (`src/public/dashboard-app/src/components/CookieNotice.jsx`)
+- Backend endpoints: `GET/PUT /api/v1/privacy/cookies`
+- User can choose "Full cookies" or "Essential only" on first visit
+- Preference persisted in localStorage + backend
+- See CLAUDE.md for feature overview
+
+### Pending DNS-Level Issues
+
+#### [HIGH] Missing DMARC record
+**Status:** 📋 REQUIRES DNS CONFIGURATION (not code-level)
+
+See "Email Authentication (DMARC, SPF, DKIM)" section below for setup instructions.
+
+#### [MEDIUM] DNSSEC not enabled
+**Status:** 📋 REQUIRES REGISTRAR CONFIGURATION (not code-level)
+
+Enable DNSSEC through your domain registrar:
+- Cloudflare: https://developers.cloudflare.com/dns/dnssec/
+- GoDaddy: https://www.godaddy.com/help/enable-dnssec-6420
+- Namecheap: https://www.namecheap.com/support/knowledgebase/article.aspx/9722/2232/managing-dnssec-for-domains-pointed-to-custom-dns/
+
+---
+
 ## Email Authentication (DMARC, SPF, DKIM)
 
 Email authentication protects against spoofing and phishing attacks. Configure these DNS records for the domain sending emails from MyApi (e.g., `myapiai.com`).
