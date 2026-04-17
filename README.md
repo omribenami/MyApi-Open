@@ -12,7 +12,7 @@
 
 ## 🚀 Managed Cloud Version: [myapiai.com](https://www.myapiai.com)
 
-**Don't want to self-host?** The official managed version at **[myapiai.com](https://www.myapiai.com)** offers cloud hosting with automatic backups, SSL, email, and always-up-to-date features. Paid plans only.
+**Don't want to self-host?** The official managed version at **[myapiai.com](https://www.myapiai.com)** offers cloud hosting with automatic backups, SSL, email, and always-up-to-date features.
 
 👉 **[Visit myapiai.com](https://www.myapiai.com)** to get started instantly.
 
