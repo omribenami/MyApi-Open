@@ -1,3 +1,7 @@
+<p align="center">
+  <img width="256" alt="MyApi Logo" src="src/public/dashboard-app/public/myapi-logo-1024.png">
+</p>
+
 # MyApi — The Privacy-First Personal API Platform & AI Agent Gateway
 
 [![CI](https://github.com/omribenami/MyApi-Open/actions/workflows/ci.yml/badge.svg)](https://github.com/omribenami/MyApi-Open/actions/workflows/ci.yml)
