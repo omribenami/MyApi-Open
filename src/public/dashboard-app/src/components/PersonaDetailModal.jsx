@@ -40,11 +40,11 @@ function PersonaDetailModal({ persona, onClose, onEdit, onSetActive, onDelete })
   const [showFullPrompt, setShowFullPrompt] = useState(false);
   const [promptCopied, setPromptCopied] = useState(false);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (persona?.id) {
       fetchResources();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [persona?.id]);
 
   const fetchResources = async () => {

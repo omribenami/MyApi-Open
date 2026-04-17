@@ -16,11 +16,11 @@ function PendingInvitations() {
   const [error, setError] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (masterToken) {
       fetchPendingInvitations();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [masterToken]);
 
   const fetchPendingInvitations = async () => {

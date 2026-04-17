@@ -19,12 +19,12 @@ function DocumentsSection({ skillId }) {
   const [showPicker, setShowPicker] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (skillId && masterToken) {
       fetchDocs();
       fetchAllDocs();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [skillId, masterToken]);
 
   const fetchDocs = async () => {
