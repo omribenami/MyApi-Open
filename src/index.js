@@ -1666,7 +1666,7 @@ Rules:
   }
 });
 
-// /.well-known/openapi - standard discovery path
+// /.well-known/openapi - standard discovery path (public for AI agent bootstrap)
 app.get('/.well-known/openapi.json', (req, res) => {
   res.redirect('/openapi.json');
 });

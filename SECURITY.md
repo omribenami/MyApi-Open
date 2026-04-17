@@ -68,6 +68,69 @@ MyApi follows a coordinated vulnerability disclosure model:
 - Device approval workflow for API access
 - Scope-based access control hierarchy
 
+## Email Authentication (DMARC, SPF, DKIM)
+
+Email authentication protects against spoofing and phishing attacks. Configure these DNS records for the domain sending emails from MyApi (e.g., `myapiai.com`).
+
+### SPF (Sender Policy Framework)
+
+Authorizes which mail servers can send emails on behalf of your domain.
+
+**Add to DNS as a TXT record:**
+```
+Host: myapiai.com
+Type: TXT
+Value: v=spf1 include:sendgrid.net ~all
+```
+
+**Alternative formats (adjust based on your email provider):**
+- **Sendgrid**: `v=spf1 include:sendgrid.net ~all`
+- **AWS SES**: `v=spf1 include:amazonses.com ~all`
+- **Mailgun**: `v=spf1 include:mailgun.org ~all`
+- **Generic SMTP**: `v=spf1 ip4:<your-server-ip> ~all`
+
+### DKIM (DomainKeys Identified Mail)
+
+Cryptographically signs outgoing emails. Get the public key from your email provider.
+
+**Steps:**
+1. Log into your email provider dashboard (Sendgrid, AWS SES, etc.)
+2. Find "DKIM Setup" or "Domain Signing"
+3. Copy the CNAME or TXT record provided
+4. Add to your DNS:
+
+**Example (Sendgrid):**
+```
+Host: s1._domainkey.myapiai.com
+Type: CNAME
+Value: s1.domainkey.sendgrid.net
+```
+
+### DMARC (Domain-based Message Authentication, Reporting and Conformance)
+
+Tells mail providers what to do with unsigned/unauthenticated emails.
+
+**Add to DNS as a TXT record:**
+```
+Host: _dmarc.myapiai.com
+Type: TXT
+Value: v=DMARC1; p=reject; rua=mailto:dmarc-reports@myapiai.com; ruf=mailto:dmarc-forensics@myapiai.com
+```
+
+**Policy options:**
+- `p=reject` - Reject emails that fail authentication (most secure)
+- `p=quarantine` - Quarantine suspicious emails (recommended for initial rollout)
+- `p=none` - Don't enforce, just monitor (monitoring only)
+
+### DNS Verification
+
+Verify records with online tools:
+- [MXToolbox SPF Check](https://mxtoolbox.com/spf.aspx)
+- [MXToolbox DKIM Check](https://mxtoolbox.com/dkim.aspx)
+- [MXToolbox DMARC Check](https://mxtoolbox.com/dmarc.aspx)
+
+**Note:** DNS changes can take up to 48 hours to propagate.
+
 ## Contact
 
 - Security reports: security@myapiai.com
