@@ -2478,18 +2478,21 @@ async function authenticate(req, res, next) {
   // For Bearer tokens (agents/APIs), enforce device approval.
   // This adds a layer of security: even if a master token is leaked, the attacker
   // still needs to approve the device fingerprint before accessing protected APIs.
-  // Exceptions: auth setup routes, device management, OAuth flows, user management (already protected by requirePowerUser),
-  // and read-only activity don't require approval.
+  // Exceptions (below) are routes that can't use device approval (OAuth bootstrap,
+  // device-management itself, etc.) or that only return non-sensitive metadata.
+  // NOTE: Session-authenticated requests are already bypassed by deviceApprovalMiddleware
+  // itself, so we only need to skip here for Bearer-token paths that legitimately can't
+  // be gated. DO NOT add identity-returning endpoints (/users, /identity) to this list —
+  // that was the source of a past security issue where scoped tokens reached user
+  // identity data from unapproved devices.
   // Use req.baseUrl to get the full path (req.path is relative to mount point)
   const routePath = req.baseUrl + req.path;
   const skipDeviceApproval = (routePath.startsWith('/api/v1/auth/') && routePath !== '/api/v1/auth/me') ||
                              routePath.startsWith('/api/v1/devices') ||
                              routePath.startsWith('/api/v1/oauth/') ||
-                             routePath.startsWith('/api/v1/users') ||
-                             routePath.startsWith('/api/v1/billing') ||
-                             routePath.startsWith('/api/v1/afp') ||
-                             routePath.startsWith('/api/v1/dashboard') ||
-                             routePath.startsWith('/api/v1/agentic/') || // Device Flow + ASC bootstrap (have own auth)
+                             routePath.startsWith('/api/v1/billing') ||      // workspace plan/usage metadata only
+                             routePath.startsWith('/api/v1/dashboard') ||    // dashboard metrics, session-authed in practice
+                             routePath.startsWith('/api/v1/agentic/') ||     // Device Flow + ASC bootstrap (have own auth)
                              (routePath.startsWith('/api/v1/activity') && req.method === 'GET');
 
   if (skipDeviceApproval) {
@@ -5100,6 +5103,12 @@ app.get("/api/v1/tokens/:id", authenticate, (req, res) => {
     ip: req.ip
   });
 
+  let allowedResources = null;
+  try {
+    const row = db.prepare('SELECT allowed_resources FROM access_tokens WHERE id = ?').get(req.params.id);
+    if (row?.allowed_resources) allowedResources = JSON.parse(row.allowed_resources);
+  } catch (_) {}
+
   res.json({
     data: {
       id: token.tokenId,
@@ -5107,6 +5116,11 @@ app.get("/api/v1/tokens/:id", authenticate, (req, res) => {
       description: null,
       scopes: scopes,
       allowedPersonas: token.allowedPersonas || null,
+      requiresApproval: !!token.requiresApproval,
+      scopeBundle: token.scopeBundle || null,
+      allowedResources,
+      tokenType: token.tokenType || 'guest',
+      isShareable: !!token.isShareable,
       createdAt: token.createdAt,
       expiresAt: token.expiresAt,
       revokedAt: token.revokedAt,
@@ -5115,99 +5129,173 @@ app.get("/api/v1/tokens/:id", authenticate, (req, res) => {
   });
 });
 
-// Update token scopes
+// Update a token: scopes, requiresApproval, scopeBundle, allowedResources, allowedPersonas.
+// Partial updates supported — only fields present in the body are modified.
 app.put("/api/v1/tokens/:id", authenticate, (req, res) => {
   if (!isMaster(req)) return res.status(403).json({ error: "Only master token can update tokens" });
 
-  const { scopes } = req.body;
-  if (!scopes || (!Array.isArray(scopes) && typeof scopes !== 'string')) {
-    return res.status(400).json({ error: "scopes must be provided as a string or array" });
+  const { scopes, requiresApproval, scopeBundle, allowedResources, allowedPersonas, label } = req.body;
+
+  // At least one updatable field must be provided
+  const hasScopes = scopes !== undefined;
+  const hasApproval = requiresApproval !== undefined;
+  const hasBundle = scopeBundle !== undefined;
+  const hasResources = allowedResources !== undefined;
+  const hasPersonas = allowedPersonas !== undefined;
+  const hasLabel = typeof label === 'string' && label.length > 0;
+
+  if (!hasScopes && !hasApproval && !hasBundle && !hasResources && !hasPersonas && !hasLabel) {
+    return res.status(400).json({ error: "At least one updatable field must be provided" });
+  }
+
+  if (hasScopes && !Array.isArray(scopes) && typeof scopes !== 'string') {
+    return res.status(400).json({ error: "scopes must be a string or array" });
   }
 
   const tokens = getAccessTokens();
   const token = tokens.find(t => t.tokenId === req.params.id);
   if (!token) return res.status(404).json({ error: "Token not found" });
 
-  // Block adding service scopes to a published token
-  if (token.isShareable) {
-    const incomingScopes = Array.isArray(scopes) ? scopes : [scopes];
-    const hasServiceScopeIncoming = incomingScopes.some(s => s === 'services:read' || s === 'services:write' || s.startsWith('services:'));
-    if (hasServiceScopeIncoming) {
-      return res.status(400).json({ error: 'Cannot add service scopes to a published token. Unpublish it first.' });
-    }
+  // Security: master tokens cannot have their scope downgraded or require_approval toggled
+  // via this endpoint. Use dedicated master-token endpoints for that.
+  if (token.tokenType === 'master' || token.scope === 'full') {
+    return res.status(400).json({ error: "Master tokens cannot be modified via this endpoint" });
   }
 
-  // Parse new scopes
-  let finalScopes = [];
-  if (typeof scopes === 'string') {
-    const expanded = expandScopeTemplate(scopes);
-    if (expanded) {
-      finalScopes = expanded;
-    } else if (validateScope(scopes)) {
-      finalScopes = [scopes];
-    } else {
-      return res.status(400).json({ error: `Invalid scope: ${scopes}` });
-    }
-  } else if (Array.isArray(scopes)) {
-    for (const scope of scopes) {
-      if (typeof scope === 'string') {
-        const expanded = expandScopeTemplate(scope);
-        if (expanded) {
-          finalScopes.push(...expanded);
-        } else if (validateScope(scope)) {
-          finalScopes.push(scope);
-        } else {
-          return res.status(400).json({ error: `Invalid scope: ${scope}` });
-        }
+  // Parse scopes only if provided
+  let finalScopes = null;
+  if (hasScopes) {
+    // Block adding service scopes to a published token
+    if (token.isShareable) {
+      const incomingScopes = Array.isArray(scopes) ? scopes : [scopes];
+      const hasServiceScopeIncoming = incomingScopes.some(s => typeof s === 'string' && s.startsWith('services:'));
+      if (hasServiceScopeIncoming) {
+        return res.status(400).json({ error: 'Cannot add service scopes to a published token. Unpublish it first.' });
       }
     }
-  }
 
-  // Remove duplicates
-  finalScopes = [...new Set(finalScopes)];
-
-  if (finalScopes.length === 0) {
-    return res.status(400).json({ error: "No valid scopes provided" });
-  }
-
-  // Update token scopes: revoke old, grant new
-  try {
-    revokeScopes(req.params.id);
-
-    // grantScopes only inserts into access_token_scopes (FK-constrained table).
-    // Per-service scopes (services:google:read) pass validateScope but are not
-    // in scope_definitions, so INSERT OR IGNORE skips them there.
-    // We still need them persisted — store the full list in access_tokens.scope.
-    const insertableScopes = finalScopes.filter(s => {
-      // Only insert scopes that exist in scope_definitions (avoids FK violation)
-      if (/^services:[a-z0-9_-]+:(read|write|\*)$/.test(s)) return false;
-      return true;
-    });
-    if (insertableScopes.length > 0) {
-      grantScopes(req.params.id, insertableScopes);
+    const parsed = [];
+    const raw = typeof scopes === 'string' ? [scopes] : scopes;
+    for (const scope of raw) {
+      if (typeof scope !== 'string') continue;
+      const expanded = expandScopeTemplate(scope);
+      if (expanded) {
+        parsed.push(...expanded);
+      } else if (validateScope(scope)) {
+        parsed.push(scope);
+      } else {
+        return res.status(400).json({ error: `Invalid scope: ${scope}` });
+      }
     }
+    finalScopes = [...new Set(parsed)];
+    if (finalScopes.length === 0) {
+      return res.status(400).json({ error: "No valid scopes provided" });
+    }
+  }
 
-    // Always update the JSON scope field with the full scope list (including per-service)
-    db.prepare('UPDATE access_tokens SET scope = ? WHERE id = ?')
-      .run(JSON.stringify(finalScopes), req.params.id);
+  // Validate personas if provided (null clears)
+  let personaIds = undefined;
+  if (hasPersonas) {
+    if (allowedPersonas === null) {
+      personaIds = null;
+    } else if (Array.isArray(allowedPersonas)) {
+      personaIds = allowedPersonas.map(Number).filter(n => !isNaN(n));
+      if (personaIds.length === 0) personaIds = null;
+    } else {
+      return res.status(400).json({ error: "allowedPersonas must be an array or null" });
+    }
+  }
+
+  // Apply updates. Use the raw better-sqlite3 handle so we can wrap the whole
+  // change in a single transaction for atomicity (scope revoke/grant must not
+  // be observable partially with the flag-only UPDATE).
+  try {
+    const rawDb = typeof db.getRawDB === 'function' ? db.getRawDB() : db;
+    const applyUpdates = () => {
+      if (hasScopes) {
+        revokeScopes(req.params.id);
+        const insertableScopes = finalScopes.filter(s => !/^services:[a-z0-9_-]+:(read|write|\*)$/.test(s));
+        if (insertableScopes.length > 0) {
+          grantScopes(req.params.id, insertableScopes);
+        }
+        db.prepare('UPDATE access_tokens SET scope = ? WHERE id = ?')
+          .run(JSON.stringify(finalScopes), req.params.id);
+      }
+
+      const sets = [];
+      const params = [];
+      if (hasApproval) {
+        sets.push('requires_approval = ?');
+        params.push(requiresApproval ? 1 : 0);
+      }
+      if (hasBundle) {
+        sets.push('scope_bundle = ?');
+        params.push(scopeBundle && typeof scopeBundle === 'object' ? JSON.stringify(scopeBundle) : null);
+      }
+      if (hasResources) {
+        sets.push('allowed_resources = ?');
+        params.push(allowedResources && typeof allowedResources === 'object' ? JSON.stringify(allowedResources) : null);
+      }
+      if (hasPersonas) {
+        sets.push('allowed_personas = ?');
+        params.push(personaIds ? JSON.stringify(personaIds) : null);
+      }
+      if (hasLabel) {
+        sets.push('label = ?');
+        params.push(label);
+      }
+      if (sets.length > 0) {
+        params.push(req.params.id);
+        db.prepare(`UPDATE access_tokens SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+      }
+    };
+
+    if (rawDb && typeof rawDb.transaction === 'function') {
+      rawDb.transaction(applyUpdates)();
+    } else {
+      applyUpdates();
+    }
   } catch (dbErr) {
     console.error('[PUT /tokens/:id] DB error:', dbErr);
-    return res.status(500).json({ error: 'Failed to update token scopes', detail: dbErr.message });
+    return res.status(500).json({ error: 'Failed to update token', detail: dbErr.message });
   }
+
+  // If approval was just enabled on a scoped token, invalidate existing approved devices
+  // so a freshly-required approval actually gates the next request. Without this,
+  // previously-approved fingerprints continue to pass the gate even after the flag flips.
+  if (hasApproval && requiresApproval) {
+    try {
+      db.prepare(
+        'UPDATE approved_devices SET revoked_at = ? WHERE token_id = ? AND revoked_at IS NULL'
+      ).run(new Date().toISOString(), req.params.id);
+    } catch (e) {
+      console.error('[PUT /tokens/:id] Failed to revoke approved devices:', e);
+    }
+  }
+
+  const changed = {};
+  if (hasScopes) changed.scopes = finalScopes;
+  if (hasApproval) changed.requiresApproval = !!requiresApproval;
+  if (hasBundle) changed.scopeBundle = scopeBundle || null;
+  if (hasResources) changed.allowedResources = allowedResources || null;
+  if (hasPersonas) changed.allowedPersonas = personaIds;
+  if (hasLabel) changed.label = label;
 
   createAuditLog({
     requesterId: req.tokenMeta.tokenId,
-    action: "update_token_scopes",
+    action: "update_token",
     resource: `/tokens/${req.params.id}`,
     scope: req.tokenMeta.scope,
     ip: req.ip,
-    details: { newScopes: finalScopes }
+    details: changed
   });
+
+  console.warn(`🔑 SECURITY: Token updated id=${req.params.id} by=${req.tokenMeta.tokenId} fields=${Object.keys(changed).join(',')} ip=${req.ip}`);
 
   res.json({
     data: {
       id: req.params.id,
-      scopes: finalScopes,
+      ...changed,
       updatedAt: new Date().toISOString()
     }
   });
@@ -5464,10 +5552,13 @@ app.get("/api/v1/tokens", authenticate, (req, res) => {
       }
     } catch {}
     const allScopes = [...new Set([...junctionScopes, ...jsonScopes])];
+    // Security: never return the bcrypt hash to clients.
+    const { hash: _hash, ...safe } = t;
     return {
-      ...t,
+      ...safe,
       scopes: allScopes,
       allowedPersonas: t.allowedPersonas || null,
+      requiresApproval: !!t.requiresApproval,
     };
   });
 

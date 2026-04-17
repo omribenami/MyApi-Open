@@ -18,13 +18,18 @@ function EditTokenModal({ isOpen, token, onClose, onSuccess }) {
   const { updateToken, isSaving } = useTokenStore();
 
   const [selectedScopes, setSelectedScopes] = useState([]);
+  const [requiresApproval, setRequiresApproval] = useState(false);
+  const [initialRequiresApproval, setInitialRequiresApproval] = useState(false);
 
-  // Initialize selected scopes when token changes
+  // Initialize form state when the token changes
   useEffect(() => {
     if (token) {
       const tokenScopes = Array.isArray(token.scopes) ? token.scopes
         : token.scope ? [token.scope] : [];
       setSelectedScopes(tokenScopes);
+      const initApproval = !!(token.requiresApproval ?? token.requires_approval);
+      setRequiresApproval(initApproval);
+      setInitialRequiresApproval(initApproval);
     }
   }, [token]);
 
@@ -44,9 +49,25 @@ function EditTokenModal({ isOpen, token, onClose, onSuccess }) {
       return;
     }
 
-    const success = await updateToken(masterToken, token.id, {
-      scopes: selectedScopes,
-    });
+    // Build partial update — only include fields that actually changed
+    const originalScopes = Array.isArray(token?.scopes) ? token.scopes
+      : token?.scope ? [token.scope] : [];
+    const scopesChanged =
+      originalScopes.length !== selectedScopes.length ||
+      originalScopes.some((s) => !selectedScopes.includes(s)) ||
+      selectedScopes.some((s) => !originalScopes.includes(s));
+    const approvalChanged = requiresApproval !== initialRequiresApproval;
+
+    if (!scopesChanged && !approvalChanged) {
+      handleClose();
+      return;
+    }
+
+    const updates = {};
+    if (scopesChanged) updates.scopes = selectedScopes;
+    if (approvalChanged) updates.requiresApproval = requiresApproval;
+
+    const success = await updateToken(masterToken, token.id, updates);
 
     if (success) {
       onSuccess?.();
@@ -56,6 +77,7 @@ function EditTokenModal({ isOpen, token, onClose, onSuccess }) {
 
   const handleClose = () => {
     setSelectedScopes(token?.scopes || []);
+    setRequiresApproval(initialRequiresApproval);
     onClose();
   };
 
@@ -127,6 +149,35 @@ function EditTokenModal({ isOpen, token, onClose, onSuccess }) {
                 </label>
               ))}
             </div>
+          </div>
+
+          {/* Requires Approval */}
+          <div>
+            <label
+              className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer border transition-colors ${
+                requiresApproval
+                  ? 'bg-amber-900/20 border-amber-700/50'
+                  : 'bg-slate-900 border-slate-700 hover:border-slate-600'
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={requiresApproval}
+                onChange={(e) => setRequiresApproval(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded text-amber-500 bg-slate-700 border-slate-600"
+              />
+              <div>
+                <p className="text-sm font-medium text-white">Requires Device Approval</p>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Every new device using this token must be approved from the dashboard before it can access the API.
+                </p>
+                {requiresApproval !== initialRequiresApproval && requiresApproval && (
+                  <p className="text-xs text-amber-300 mt-2">
+                    Enabling this will revoke all currently approved devices for this token. They will need to be re-approved.
+                  </p>
+                )}
+              </div>
+            </label>
           </div>
 
           {/* Buttons */}
