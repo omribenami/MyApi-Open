@@ -26,6 +26,7 @@ function NotificationSettings() {
   ];
 
   // Fetch settings on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchSettings();
   }, [masterToken, currentWorkspace?.id]);

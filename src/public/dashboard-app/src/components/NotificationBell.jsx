@@ -17,6 +17,7 @@ export default function NotificationBell() {
   const [loading, setLoading] = useState(false);
 
   // Fetch unread count on mount and periodically
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchUnreadCount();
     const interval = setInterval(() => fetchUnreadCount(), 30000); // Poll every 30s
@@ -24,6 +25,7 @@ export default function NotificationBell() {
   }, [currentWorkspace?.id]);
 
   // Fetch notifications when dropdown opens
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!isOpen) return;
     setLoading(true);

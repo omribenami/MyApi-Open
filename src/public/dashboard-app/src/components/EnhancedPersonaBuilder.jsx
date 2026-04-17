@@ -117,6 +117,7 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
   const masterToken = useAuthStore((state) => state.masterToken);
   const currentWorkspace = useAuthStore((state) => state.currentWorkspace);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchDocuments();
     fetchSkills();

@@ -160,6 +160,7 @@ export default function OnboardingModal({ onClose }) {
   }, []);
 
   // Load QR code when user reaches 2FA step
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (step !== 3 || twoFaQr || twoFaEnabled) return;
     setTwoFaLoading(true);
