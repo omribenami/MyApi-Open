@@ -13,7 +13,7 @@ echo ""
 VPS_IP="65.21.156.211"
 VPS_USER="root"
 APP_DIR="/root/MyApi"
-REPO_URL="https://github.com/your-org/MyApi.git"
+REPO_URL="https://github.com/omribenami/MyApi-Open.git"
 BRANCH="main"
 
 echo "📋 Deployment Configuration:"
@@ -25,7 +25,7 @@ echo ""
 
 # Step 1: Push local changes to GitHub
 echo "1️⃣  Pushing changes to GitHub..."
-cd /home/jarvis/.openclaw/workspace/projects/MyApi
+cd "${PROJECT_DIR:-.}"
 git add -A
 git commit -m "Production deployment: SQLite database, all features tested" || echo "No changes to commit"
 git push origin main

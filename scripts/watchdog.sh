@@ -5,7 +5,7 @@
 
 set -e
 
-PROJECT_DIR="/home/jarvis/.openclaw/workspace/projects/MyApi"
+PROJECT_DIR="${PROJECT_DIR:-/opt/MyApi-Open}"
 LOG_FILE="/tmp/myapi-watchdog.log"
 API_PORT=4500
 TUNNEL_PID_FILE="/tmp/myapi-tunnel.pid"
@@ -54,7 +54,7 @@ function restart_tunnel() {
   log "RESTARTING TUNNEL..."
   pkill -f "cloudflared tunnel.*myapi-prod" || true
   sleep 2
-  /home/jarvis/bin/cloudflared tunnel --config /home/jarvis/.cloudflared/config-myapi.yml run myapi-prod > /tmp/cloudflare-myapi.log 2>&1 &
+  ${CLOUDFLARED_BIN:-cloudflared} tunnel --config ${CLOUDFLARED_CONFIG:-/etc/cloudflared/config.yml} run myapi-prod > /tmp/cloudflare-myapi.log 2>&1 &
   TUNNEL_PID=$!
   echo $TUNNEL_PID > "$TUNNEL_PID_FILE"
   sleep 3

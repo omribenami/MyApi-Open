@@ -36,7 +36,7 @@ async function initialize() {
   console.log('Copy this token and use it to access the dashboard and API.\n');
 
   // Try to ingest USER.md if it exists
-  const userMdPath = process.env.USER_MD_PATH || '/home/jarvis/.openclaw/workspace/USER.md';
+  const userMdPath = process.env.USER_MD_PATH || './USER.md';
   console.log(`📄 Attempting to ingest USER.md from: ${userMdPath}`);
   
   const ingestResult = vault.ingestUserMd(userMdPath);

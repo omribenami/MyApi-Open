@@ -1,35 +1,5 @@
 # CLAUDE.md
 
-## Open Source Publication TODO
-
-These tasks must be completed before this repo is ready for public release.
-Work from /opt/MyApi-Open (this is the public repo — NOT the private source at /home/jarvis/.openclaw/workspace/projects/MyApi).
-
-### Remaining Tasks
-
-- [x] **LICENSE** — Added Commons Clause non-commercial addendum header before AGPL-3.0 body.
-  Copyright: `Agentic Integrations LLC`. Personal use only, no monetization allowed.
-
-- [x] **README.md** — Updated license section with clear commercial restrictions and non-commercial addendum notice.
-  Self-hosting instructions already complete (Docker + manual setup in Quick Start).
-
-- [x] **.gitignore** — Verified covers: `.env*` (except `*.example`), `*.db`, `*.sqlite`, `*.sqlite-wal`, `*.sqlite-shm`, `src/data/`, `data/`, `src/uploads/`.
-
-- [x] **Commit & push** — Committed and pushed `feat: complete open source release — AGPL-3.0 + Commons Clause`
-
-### Already Completed
-- [x] Cloned omribenami/MyApi-Open to /opt/MyApi-Open
-- [x] Rsynced current MyApi source (excluded .env files, .db files, node_modules, qa-tests/phase1-results.json)
-- [x] Removed SQLite WAL/SHM leftover files from src/tests/ and src/
-- [x] Replaced all `omribenami/MyApi` repo URLs → `omribenami/MyApi-Open`
-- [x] Removed personal email/name references (benami, omri.ba@) from all source files
-- [x] Updated docs/SKILL.md author → Agentic Integrations LLC
-- [x] Updated tests/rbac.test.js.skip username → generic test user
-- [x] Updated LICENSE copyright line → Agentic Integrations LLC
-- [x] Added `"author": "Agentic Integrations LLC"` and `"license": "AGPL-3.0-only"` to package.json
-
----
-
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Commands

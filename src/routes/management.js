@@ -218,7 +218,7 @@ function createManagementRoutes(tokenManager, vault, auditLog) {
   // POST /manage/ingest-user-md - Ingest USER.md file
   router.post('/ingest-user-md', async (req, res) => {
     try {
-      const userMdPath = process.env.USER_MD_PATH || '/home/jarvis/.openclaw/workspace/USER.md';
+      const userMdPath = process.env.USER_MD_PATH || './USER.md';
       
       const result = vault.ingestUserMd(userMdPath);
 
@@ -257,12 +257,12 @@ function createManagementRoutes(tokenManager, vault, auditLog) {
         if (!log.userAgent) return;
         
         // Extract agent name from user-agent string
-        // Patterns: "Jarvis/1.0", "OpenClaw/...", "Mozilla/5.0 ..."
+        // Patterns: "MyApi/1.0", "OpenClaw/...", "Mozilla/5.0 ..."
         let agentName = 'Unknown';
         let agentType = 'browser';
         
-        if (log.userAgent.includes('Jarvis')) {
-          agentName = 'Jarvis';
+        if (log.userAgent.includes('Jarvis') || log.userAgent.includes('MyApi')) {
+          agentName = 'MyApi Assistant';
           agentType = 'ai';
         } else if (log.userAgent.includes('OpenClaw')) {
           agentName = 'OpenClaw';

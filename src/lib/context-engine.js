@@ -47,20 +47,20 @@ class ContextEngine {
     try {
       const soulMdPath = path.join(this.workspaceRoot, 'SOUL.md');
       if (!fs.existsSync(soulMdPath)) {
-        return { name: 'Jarvis', persona: {} };
+        return { name: 'MyApi Assistant', persona: {} };
       }
 
       const content = fs.readFileSync(soulMdPath, 'utf8');
       const persona = this._parseMarkdown(content);
 
       return {
-        name: persona.name || 'Jarvis',
+        name: persona.name || 'MyApi Assistant',
         persona,
         source: 'SOUL.md'
       };
     } catch (error) {
       console.error('Error loading persona:', error);
-      return { name: 'Jarvis', persona: {} };
+      return { name: 'MyApi Assistant', persona: {} };
     }
   }
 

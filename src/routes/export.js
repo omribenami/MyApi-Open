@@ -84,8 +84,8 @@ async function buildZipExport({ ownerId, workspaceId, exportMode, includeFiles }
   };
 
   const user = getUserById(ownerId);
-  const userMdPath = process.env.USER_MD_PATH || '/home/jarvis/.openclaw/workspace/USER.md';
-  const soulMdPath = process.env.SOUL_MD_PATH || '/home/jarvis/.openclaw/workspace/SOUL.md';
+  const userMdPath = process.env.USER_MD_PATH || './USER.md';
+  const soulMdPath = process.env.SOUL_MD_PATH || './SOUL.md';
 
   const personas = withLegacyOwnerFallback(getPersonas) || [];
   const skills = withLegacyOwnerFallback(getSkills) || [];
@@ -381,7 +381,7 @@ router.get('/', async (req, res) => {
     if (sections.profile) {
       try {
         const user = getUserById(ownerId);
-        const userMdPath = process.env.USER_MD_PATH || '/home/jarvis/.openclaw/workspace/USER.md';
+        const userMdPath = process.env.USER_MD_PATH || './USER.md';
 
         const profileData = {};
 
@@ -478,7 +478,7 @@ router.get('/', async (req, res) => {
           updatedAt: persona.updated_at || persona.updatedAt,
         }));
 
-        const soulMdPath = process.env.SOUL_MD_PATH || '/home/jarvis/.openclaw/workspace/SOUL.md';
+        const soulMdPath = process.env.SOUL_MD_PATH || './SOUL.md';
         let soulMdContent = null;
         if (fs.existsSync(soulMdPath)) {
           try {

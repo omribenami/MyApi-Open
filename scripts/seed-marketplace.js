@@ -11,7 +11,7 @@ const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 const Database = require('better-sqlite3');
-const DB_PATH = process.env.DB_PATH || '/opt/MyApi/data/myapi.db';
+const DB_PATH = process.env.DB_PATH || './src/data/myapi.db';
 
 const db = new Database(DB_PATH);
 const now = new Date().toISOString();

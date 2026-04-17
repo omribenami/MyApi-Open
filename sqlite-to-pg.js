@@ -1,7 +1,7 @@
 const Database = require('better-sqlite3');
 const { Pool } = require('pg');
 
-const SQLITE_PATH = '/opt/MyApi/myapi-full-backup.db';
+const SQLITE_PATH = process.env.SQLITE_PATH || './myapi-backup.db';
 const PG_URL = process.env.DATABASE_URL;
 if (!PG_URL) { console.error('DATABASE_URL env var required'); process.exit(1); }
 const BATCH_SIZE = 100;

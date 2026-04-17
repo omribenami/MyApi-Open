@@ -501,7 +501,7 @@ router.post('/', upload.single('file'), async (req, res) => {
         // Store USER.md and SOUL.md if provided
         if (userMdContent || soulMdContent) {
           try {
-            const workspaceDir = process.env.WORKSPACE_DIR || '/home/jarvis/.openclaw/workspace';
+            const workspaceDir = process.env.WORKSPACE_DIR || './workspace';
             const userMdPath = process.env.USER_MD_PATH || path.join(workspaceDir, 'USER.md');
             const soulMdPath = process.env.SOUL_MD_PATH || path.join(workspaceDir, 'SOUL.md');
 

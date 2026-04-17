@@ -9,7 +9,7 @@ const Database = require('better-sqlite3');
 const fs = require('fs');
 const path = require('path');
 
-const dbPath = process.env.DB_PATH || '/home/jarvis/.openclaw/workspace/projects/MyApi/src/data/myapi.db';
+const dbPath = process.env.DB_PATH || './src/data/myapi.db';
 const outputDir = process.argv[2] || './csv-export';
 
 if (!fs.existsSync(dbPath)) {

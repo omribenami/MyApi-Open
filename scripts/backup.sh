@@ -7,10 +7,10 @@
 set -euo pipefail
 
 # Load env vars (picks up SUPABASE_SERVICE_KEY)
-set -a; source /opt/MyApi/.env; set +a
+set -a; source ${APP_DIR:-/opt/MyApi-Open}/.env; set +a
 
 DB_VOLUME_PATH="/var/lib/docker/volumes/myapi_myapi-data/_data/myapi.db"
-BACKUP_DIR="/opt/MyApi/backups"
+BACKUP_DIR="${APP_DIR:-/opt/MyApi-Open}/backups"
 DATE=$(date +%Y%m%d-%H%M%S)
 BACKUP_FILE="$BACKUP_DIR/myapi-$DATE.db"
 

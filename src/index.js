@@ -2193,8 +2193,8 @@ app.get('/api/v1/manage/audit/agents', authenticate, (req, res) => {
       let agentName = 'Unknown';
       let agentType = 'browser';
 
-      if (userAgent.includes('Jarvis')) {
-        agentName = 'Jarvis';
+      if (userAgent.includes('Jarvis') || userAgent.includes('MyApi')) {
+        agentName = 'MyApi Assistant';
         agentType = 'ai';
       } else if (userAgent.includes('OpenClaw')) {
         agentName = 'OpenClaw';
@@ -2373,7 +2373,7 @@ function inferMemorySource(req) {
   if (!label || isMaster(req) && !label) return 'user';
   if (label.includes('chatgpt') || label.includes('openai') || label.includes('gpt')) return 'chatgpt';
   if (label.includes('claude') || label.includes('anthropic')) return 'claude';
-  if (label.includes('jarvis')) return 'jarvis';
+  if (label.includes('jarvis') || label.includes('myapi')) return 'myapi';
   if (label.includes('gemini') || label.includes('google ai')) return 'gemini';
   if (label.includes('copilot') || label.includes('github')) return 'github copilot';
   if (isMaster(req)) return 'user';

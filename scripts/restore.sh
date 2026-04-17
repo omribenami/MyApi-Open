@@ -10,10 +10,10 @@
 set -euo pipefail
 
 # Load env vars
-set -a; source /opt/MyApi/.env; set +a
+set -a; source ${APP_DIR:-/opt/MyApi-Open}/.env; set +a
 
-BACKUP_DIR="/opt/MyApi/backups"
-COMPOSE_FILE="/opt/MyApi/docker-compose.prod.yml"
+BACKUP_DIR="${APP_DIR:-/opt/MyApi-Open}/backups"
+COMPOSE_FILE="${APP_DIR:-/opt/MyApi-Open}/docker-compose.prod.yml"
 SUPABASE_PROJECT_REF="hamdecobkbdzvzkxoqqr"
 SUPABASE_BUCKET="db-backups"
 
@@ -76,8 +76,8 @@ do_restore() {
   docker compose -f "$COMPOSE_FILE" stop myapi
 
   # Copy current DB as emergency backup
-  EMERGENCY="/opt/MyApi/backups/pre-restore-emergency-$(date +%Y%m%d-%H%M%S).db"
-  docker run --rm -v myapi_myapi-data:/data -v /opt/MyApi/backups:/out alpine \
+  EMERGENCY="${APP_DIR:-/opt/MyApi-Open}/backups/pre-restore-emergency-$(date +%Y%m%d-%H%M%S).db"
+  docker run --rm -v myapi_myapi-data:/data -v "${APP_DIR:-/opt/MyApi-Open}"/backups:/out alpine \
     cp /data/myapi.db "/out/$(basename $EMERGENCY)" 2>/dev/null || true
   echo "[restore] Current DB saved to: $EMERGENCY"
 

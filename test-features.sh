@@ -12,7 +12,7 @@ echo ""
 
 # Start server in background
 echo "▶️  Starting MyApi server..."
-cd /home/jarvis/.openclaw/workspace/projects/MyApi
+cd "${PROJECT_DIR:-.}"
 NODE_ENV=test node src/index.js > /tmp/myapi-test.log 2>&1 &
 SERVER_PID=$!
 sleep 5

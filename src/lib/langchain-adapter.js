@@ -57,9 +57,9 @@ class LLMAdapter {
    */
   _getMockResponse(userMessage) {
     const responses = {
-      'who are you': 'I am Jarvis, your personal AI assistant. I help you manage information, maintain memories, and provide intelligent responses based on your personal context.',
-      'what is your name': 'My name is Jarvis, your personal AI brain.',
-      'hello': 'Hello! I am Jarvis, your AI assistant. How can I help you today?',
+      'who are you': 'I am MyApi Assistant, your personal AI assistant. I help you manage information, maintain memories, and provide intelligent responses based on your personal context.',
+      'what is your name': 'My name is MyApi Assistant, your personal AI brain.',
+      'hello': 'Hello! I am MyApi Assistant, your AI assistant. How can I help you today?',
       'what can you do': 'I can help you with conversations, answer questions using your personal knowledge base, and maintain context across our interactions.',
       'default': `I understand you said: "${userMessage}". Based on your personal context and knowledge base, I am ready to assist you. Please note that I am currently running in demo mode without API connectivity.`
     };

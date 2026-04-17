@@ -576,7 +576,8 @@ async function run() {
 
 run().then(summary => {
   const fs = require('fs');
-  fs.writeFileSync('/home/jarvis/.openclaw/workspace/projects/MyApi/qa-tests/phase1-results.json', JSON.stringify(summary, null, 2));
+  const path = require('path');
+  fs.writeFileSync(path.join(process.cwd(), 'qa-tests/phase1-results.json'), JSON.stringify(summary, null, 2));
   process.exit(summary.failed > 0 ? 1 : 0);
 }).catch(err => {
   console.error('Fatal error:', err);

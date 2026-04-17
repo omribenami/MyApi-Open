@@ -5,8 +5,8 @@
 
 set -e
 
-MYAPI_DIR="/home/jarvis/.openclaw/workspace/projects/MyApi"
-CLOUDFLARE_DIR="/home/jarvis/.cloudflared"
+MYAPI_DIR="${PROJECT_DIR:-/opt/MyApi-Open}"
+CLOUDFLARE_DIR="${CLOUDFLARED_CONFIG_DIR:-/etc/cloudflared}"
 LOG_FILE="/tmp/myapi-watchdog.log"
 MYAPI_LOG="/tmp/myapi.log"
 CLOUDFLARE_LOG="/tmp/cloudflare-myapi.log"
@@ -35,7 +35,7 @@ check_and_restart_tunnel() {
         log "⚠️ Cloudflare tunnel down, restarting..."
         pkill -f "cloudflared.*config-myapi" 2>/dev/null || true
         sleep 2
-        cd "$CLOUDFLARE_DIR" && /home/jarvis/bin/cloudflared tunnel --config config-myapi.yml run myapi-prod > "$CLOUDFLARE_LOG" 2>&1 &
+        cd "$CLOUDFLARE_DIR" && ${CLOUDFLARED_BIN:-cloudflared} tunnel --config config-myapi.yml run myapi-prod > "$CLOUDFLARE_LOG" 2>&1 &
         sleep 10
         if pgrep -f "cloudflared.*config-myapi" > /dev/null; then
             log "✓ Cloudflare tunnel restarted"

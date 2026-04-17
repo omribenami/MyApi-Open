@@ -34,7 +34,7 @@ if (!skillsDir) {
   const candidates = [
     path.join(__dirname, '../../skills'), // workspace/skills
     path.join(__dirname, '../../../skills'), // one level up
-    '/home/jarvis/.openclaw/workspace/skills', // absolute path
+    path.join(process.cwd(), 'skills'), // project root skills
   ];
   for (const candidate of candidates) {
     if (fs.existsSync(candidate)) {
