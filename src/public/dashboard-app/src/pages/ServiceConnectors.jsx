@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { useServicesStore } from '../stores/servicesStore';
 import ServiceCard from '../components/ServiceCard';
+import ServiceConfigModal from '../components/ServiceConfigModal';
 import Toast from '../components/Toast';
 import { useToast } from '../hooks/useToast';
 import { startOAuthFlow } from '../utils/oauth';
@@ -28,6 +29,7 @@ function ServiceConnectors() {
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [categories, setCategories] = useState([]);
   const [oauthSuccessService, setOauthSuccessService] = useState(null);
+  const [configService, setConfigService] = useState(null);
 
   useEffect(() => {
     fetchCategories();
@@ -305,6 +307,7 @@ function ServiceConnectors() {
                   service={service}
                   onConnect={handleConnect}
                   onRevoke={() => openRevokeModal(service.name)}
+                  onConfigure={() => setConfigService(service)}
                 />
               ))}
             </>
@@ -333,6 +336,14 @@ function ServiceConnectors() {
           )}
         </div>
       )}
+
+      {/* Service config modal */}
+      <ServiceConfigModal
+        isOpen={!!configService}
+        service={configService}
+        onClose={() => setConfigService(null)}
+        onSave={() => setConfigService(null)}
+      />
 
       {/* Disconnect confirm modal */}
       {showRevokeModal && revokeServiceId && (
