@@ -7894,6 +7894,10 @@ app.post('/api/v1/users/cleanup-test-users', authenticate, (req, res) => {
   }
 });
 
+// Tickets — power-user-only complaint tracking
+const createTicketsRoutes = require('./routes/tickets');
+app.use('/api/v1/tickets', authenticate, createTicketsRoutes({ db, requirePowerUser, isMaster }));
+
 // ============================
 // NEW: HANDSHAKES (AI Agent Access Requests)
 // ============================

@@ -182,7 +182,8 @@ function Layout({ children, onLogout }) {
       label: 'Admin',
       items: [
         { path: '/users', label: 'Users' },
-        { path: '/beta', label: 'Beta' }
+        { path: '/beta', label: 'Beta' },
+        { path: '/tickets', label: 'Tickets' }
       ]
     });
   }

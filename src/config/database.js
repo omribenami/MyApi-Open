@@ -93,12 +93,31 @@ function createTables() {
     )
   `);
 
+  // Tickets — power-user-only complaint/issue tracking
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tickets (
+      id TEXT PRIMARY KEY,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      date INTEGER,
+      complainer TEXT,
+      complaint TEXT,
+      repro_steps TEXT,
+      status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'inprogress', 'closed')),
+      fix_commit TEXT,
+      source TEXT NOT NULL DEFAULT 'manual' CHECK(source IN ('discord', 'manual', 'api')),
+      source_message_id TEXT
+    )
+  `);
+
   // Create indexes
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp);
     CREATE INDEX IF NOT EXISTS idx_audit_token ON audit_log(token_id);
     CREATE INDEX IF NOT EXISTS idx_tokens_type ON tokens(type);
     CREATE INDEX IF NOT EXISTS idx_identity_category ON identity_vault(category);
+    CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status);
+    CREATE INDEX IF NOT EXISTS idx_tickets_created_at ON tickets(created_at);
   `);
 
   // Enforce append-only semantics on audit_log (SOC2 CC7)
