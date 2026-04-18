@@ -200,9 +200,11 @@ function deviceApprovalMiddleware(req, res, next) {
           message: 'Access denied — waiting for the user to approve you in the dashboard.',
         });
       }
-      // Step 2: Device registration/tracking — fail open (non-critical)
+      // Step 2: Device registration/tracking — fail open (non-critical).
+      // Track per (token, device) so each OAuth token has its own approved row
+      // and the dashboard can list/revoke devices per token.
       try {
-        const existing = db.getApprovedDeviceByHash(userId, fingerprint.fingerprintHash);
+        const existing = db.getApprovedDeviceByHashAndToken(userId, fingerprint.fingerprintHash, tokenId);
         if (!existing) {
           db.createApprovedDevice(tokenId, userId, fingerprint.fingerprintHash, tokenRow.label, fingerprint.summary, fingerprint.fingerprint.ipAddress);
         } else {
@@ -223,8 +225,11 @@ function deviceApprovalMiddleware(req, res, next) {
     const currentFingerprint = DeviceFingerprint.fromRequest(req);
     const fingerprintHash = currentFingerprint.fingerprintHash;
 
-    // Check if device is already approved by fingerprint
-    const approvedDevice = db.getApprovedDeviceByHash(userId, fingerprintHash);
+    // Check if device is already approved for THIS token.
+    // Token-scoped lookup prevents an approval granted to a master token (or any
+    // other token) from auto-authorizing a different guest token on the same
+    // device. Each (token, device) pair must be explicitly approved.
+    const approvedDevice = db.getApprovedDeviceByHashAndToken(userId, fingerprintHash, tokenId);
 
     if (approvedDevice && !approvedDevice.revoked_at) {
       // Device is approved, update last used

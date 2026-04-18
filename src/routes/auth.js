@@ -433,30 +433,31 @@ router.get('/me', async (req, res) => {
             break;
           }
         }
-        // Check device revocation for Bearer token requests.
-        // If the user has revoked this token's device, deny even /auth/me.
+        // Bearer tokens reaching /auth/me MUST honor requires_approval and per-token
+        // device approval. Do NOT trust caller-controlled Referer/Origin — those are spoofable.
+        // Session-authed dashboard hits the session branch above; this path only runs for
+        // external Bearer callers (agents, AI), which must be gated.
         if (matchedToken) {
           try {
-            // Skip device revocation check for the user's own browser (session expired fallback)
-            const referer = req.headers.referer || req.headers.referrer || '';
-            const origin = req.headers.origin || '';
-            const isDashboardBrowser = referer.includes('/dashboard') || origin === `${req.protocol}://${req.get('host')}`;
-            if (isDashboardBrowser) { /* skip device check for dashboard browser */ }
-            else {
             const { db: dbInstance, getPendingApprovals, createPendingApproval } = require('../database');
             const DeviceFingerprint = require('../utils/deviceFingerprint');
-            // Block only if there are NO active (non-revoked) approved devices for this token.
-            // If at least one approved entry exists, the user has approved this token — allow it.
-            const anyApproved = dbInstance.prepare(
-              'SELECT id FROM approved_devices WHERE token_id = ? AND user_id = ? AND revoked_at IS NULL LIMIT 1'
-            ).get(matchedToken.tokenId, userId);
-            if (!anyApproved) {
-              const anyRevoked = dbInstance.prepare(
-                'SELECT id FROM approved_devices WHERE token_id = ? AND user_id = ? AND revoked_at IS NOT NULL LIMIT 1'
-              ).get(matchedToken.tokenId, userId);
-              if (anyRevoked) {
-                // Token had approved devices but all were revoked — require re-approval
-                const fingerprint = DeviceFingerprint.fromRequest(req);
+            const tokenRow = dbInstance.prepare(
+              'SELECT label, requires_approval, token_type, scope FROM access_tokens WHERE id = ?'
+            ).get(matchedToken.tokenId);
+            const isMasterToken = tokenRow?.token_type === 'master' || tokenRow?.scope === 'full';
+            const isOAuthToken = tokenRow?.label && tokenRow.label.endsWith('(OAuth)');
+            // Gate if: master token, OAuth-labeled token, OR guest token with requires_approval=1.
+            // Guest token without approval requirement still passes (existing policy).
+            const gateEnabled = isMasterToken || isOAuthToken || !!tokenRow?.requires_approval;
+
+            if (gateEnabled) {
+              const fingerprint = DeviceFingerprint.fromRequest(req);
+              // Per-token lookup: master approval must NOT auto-authorize guest tokens.
+              const approvedForToken = dbInstance.prepare(
+                'SELECT id FROM approved_devices WHERE token_id = ? AND user_id = ? AND device_fingerprint_hash = ? AND revoked_at IS NULL LIMIT 1'
+              ).get(matchedToken.tokenId, userId, fingerprint.fingerprintHash);
+
+              if (!approvedForToken) {
                 const pendingApprovals = getPendingApprovals(userId, matchedToken.tokenId);
                 const existingPending = pendingApprovals.find(p => p.device_fingerprint_hash === fingerprint.fingerprintHash);
                 if (!existingPending) {
@@ -469,8 +470,14 @@ router.get('/me', async (req, res) => {
                 });
               }
             }
-            } // end else (non-dashboard browser)
-          } catch (_) { /* never block on error */ }
+          } catch (err) {
+            logger.error('[Auth/Me] Device approval check failed, failing closed', { err: err.message });
+            return res.status(403).json({
+              error: 'device_approval_error',
+              code: 'DEVICE_APPROVAL_FAILED',
+              message: 'Access denied — device check temporarily unavailable.',
+            });
+          }
         }
       }
     }

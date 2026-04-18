@@ -4444,8 +4444,12 @@ function createApprovedDevice(tokenId, userId, fingerprintHash, deviceName, devi
   `).run(id, tokenId, userId, deviceFingerprintRaw, fingerprintHash, deviceName, JSON.stringify(deviceInfo), ipAddress, now, now);
 
   if (result.changes === 0) {
-    // Already exists — return the existing device's id
-    const existing = db.prepare('SELECT id FROM approved_devices WHERE user_id = ? AND device_fingerprint_hash = ?').get(userId, fingerprintHash);
+    // Already exists for this (token, device) pair — return that row's id.
+    // Scope by token_id so we don't silently return a row belonging to a
+    // different token (prevents master→guest approval leakage).
+    const existing = db.prepare(
+      'SELECT id FROM approved_devices WHERE user_id = ? AND device_fingerprint_hash = ? AND token_id = ?'
+    ).get(userId, fingerprintHash, tokenId);
     return existing?.id || id;
   }
   return id;
@@ -4466,9 +4470,19 @@ function getApprovedDevices(userId, tokenId = null) {
 
 function getApprovedDeviceByHash(userId, fingerprintHash) {
   return db.prepare(`
-    SELECT * FROM approved_devices 
+    SELECT * FROM approved_devices
     WHERE user_id = ? AND device_fingerprint_hash = ? AND revoked_at IS NULL
   `).get(userId, fingerprintHash);
+}
+
+// Token-scoped lookup: an approval for one token must NOT authorize a different
+// token on the same device. Use this when enforcing requires_approval on
+// guest tokens so master-token approvals can't leak across.
+function getApprovedDeviceByHashAndToken(userId, fingerprintHash, tokenId) {
+  return db.prepare(`
+    SELECT * FROM approved_devices
+    WHERE user_id = ? AND device_fingerprint_hash = ? AND token_id = ? AND revoked_at IS NULL
+  `).get(userId, fingerprintHash, tokenId);
 }
 
 function updateDeviceLastUsed(deviceId) {
@@ -4553,10 +4567,12 @@ function approvePendingDevice(approvalId, deviceName) {
   const now = new Date().toISOString();
   const resolvedName = deviceName || 'Approved Device';
 
-  // Check for any existing device with this fingerprint (including revoked ones)
+  // Check for an existing device row for THIS token (including revoked ones).
+  // Must be token-scoped so re-approval updates the right row and doesn't
+  // accidentally reuse a row belonging to a different token.
   const anyExisting = db.prepare(
-    'SELECT id, revoked_at FROM approved_devices WHERE user_id = ? AND device_fingerprint_hash = ?'
-  ).get(approval.user_id, approval.device_fingerprint_hash);
+    'SELECT id, revoked_at FROM approved_devices WHERE user_id = ? AND device_fingerprint_hash = ? AND token_id = ?'
+  ).get(approval.user_id, approval.device_fingerprint_hash, approval.token_id);
 
   let deviceInfo;
   try { deviceInfo = JSON.parse(approval.device_info_json || '{}'); } catch { deviceInfo = {}; }
@@ -6904,6 +6920,7 @@ module.exports = {
   createApprovedDevice,
   getApprovedDevices,
   getApprovedDeviceByHash,
+  getApprovedDeviceByHashAndToken,
   updateDeviceLastUsed,
   revokeDevice,
   renameDevice,
