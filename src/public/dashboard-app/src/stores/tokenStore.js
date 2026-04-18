@@ -141,10 +141,25 @@ export const useTokenStore = create((set, get) => ({
     }
   },
 
-  // Update token scopes
-  updateToken: async (masterToken, tokenId, { scopes }) => {
+  // Update token: partial update — only include fields that should change.
+  // Supported fields: scopes, requiresApproval, scopeBundle, allowedResources, allowedPersonas, label.
+  updateToken: async (masterToken, tokenId, updates = {}) => {
     if (!masterToken) {
       set({ error: 'No master token available' });
+      return null;
+    }
+
+    // Build body with only keys explicitly provided in updates
+    const body = {};
+    if ('scopes' in updates) body.scopes = updates.scopes;
+    if ('requiresApproval' in updates) body.requiresApproval = !!updates.requiresApproval;
+    if ('scopeBundle' in updates) body.scopeBundle = updates.scopeBundle;
+    if ('allowedResources' in updates) body.allowedResources = updates.allowedResources;
+    if ('allowedPersonas' in updates) body.allowedPersonas = updates.allowedPersonas;
+    if ('label' in updates) body.label = updates.label;
+
+    if (Object.keys(body).length === 0) {
+      set({ error: 'No fields provided to update' });
       return null;
     }
 
@@ -154,7 +169,7 @@ export const useTokenStore = create((set, get) => ({
       const response = await fetch(`/api/v1/tokens/${tokenId}`, {
         method: 'PUT',
         headers: getAuthHeaders(masterToken, { 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ scopes }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
@@ -163,10 +178,11 @@ export const useTokenStore = create((set, get) => ({
       }
 
       const data = await response.json();
+      const updated = data.data || {};
 
-      // Update token in list
+      // Update token in list, merging only the fields the server echoed back
       const tokens = get().tokens.map(t =>
-        t.id === tokenId ? { ...t, scopes: data.data.scopes } : t
+        t.id === tokenId ? { ...t, ...updated, id: tokenId } : t
       );
 
       set({
@@ -176,7 +192,7 @@ export const useTokenStore = create((set, get) => ({
         success: 'Token updated successfully',
       });
 
-      return data.data;
+      return updated;
     } catch (err) {
       set({
         error: err.message || 'Failed to update token',

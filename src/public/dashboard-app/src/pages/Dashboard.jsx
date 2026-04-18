@@ -289,7 +289,7 @@ function Dashboard() {
 
       navigate(`${targetPath}?${forwardedParams.toString()}`, { replace: true });
     }
-  }, [navigate]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [navigate]);
 
   // Initial setup
   useEffect(() => {
@@ -311,6 +311,7 @@ function Dashboard() {
         wsRef.current.close();
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [masterToken, isAuthenticated, currentWorkspace?.id]);
 
   const checklistItems = [

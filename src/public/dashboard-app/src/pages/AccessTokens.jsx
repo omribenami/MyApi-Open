@@ -222,14 +222,16 @@ function AccessTokens() {
     if (kbDocs.length === 0) {
       setLoading('kb', true);
       fetch('/api/v1/brain/knowledge-base', { headers: authHdr })
-        .then((r) => r.json()).then((j) => setKbDocs(j.data || j.documents || []))
+        .then((r) => r.json())
+        .then((j) => setKbDocs(Array.isArray(j) ? j : (j.data || j.documents || [])))
         .catch(() => {}).finally(() => setLoading('kb', false));
     }
     // Skills
     if (skills.length === 0) {
       setLoading('skills', true);
       fetch('/api/v1/skills', { headers: authHdr })
-        .then((r) => r.json()).then((j) => setSkills(j.data || []))
+        .then((r) => r.json())
+        .then((j) => setSkills(Array.isArray(j) ? j : (j.skills || j.data || [])))
         .catch(() => {}).finally(() => setLoading('skills', false));
     }
     // Connected services
@@ -1144,7 +1146,7 @@ function AccessTokens() {
                             <ResourceItem
                               key={doc.id}
                               label={doc.title || doc.name || `Document ${doc.id}`}
-                              sublabel={doc.type || doc.source_type}
+                              sublabel={doc.source || doc.type || doc.source_type}
                               checked={selectedKbIds.has(doc.id)}
                               onChange={() => toggleSet(selectedKbIds, setSelectedKbIds, doc.id)}
                             />

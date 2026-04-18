@@ -17,19 +17,19 @@ export default function NotificationBell() {
   const [loading, setLoading] = useState(false);
 
   // Fetch unread count on mount and periodically
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchUnreadCount();
     const interval = setInterval(() => fetchUnreadCount(), 30000); // Poll every 30s
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentWorkspace?.id]);
 
   // Fetch notifications when dropdown opens
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!isOpen) return;
     setLoading(true);
     fetchNotifications().finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, currentWorkspace?.id]);
 
   const handleMarkAsRead = async (notificationId) => {
