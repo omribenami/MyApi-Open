@@ -21,7 +21,7 @@ describe('BETA mode', () => {
   describe('countTotalUsers', () => {
     it('reflects new users and excludes deleted', () => {
       const before = db.countTotalUsers();
-      const u = db.createUser(`count_user_${suffix}`, 'Count User', `count${suffix}@example.com`, 'UTC', 'Passw0rd!x');
+      const u = db.createUser(`count_user_${suffix}`, 'Count User', `count${suffix}@example.com`, 'UTC', 'test-password-only');
       expect(db.countTotalUsers()).toBe(before + 1);
       db.db.prepare("UPDATE users SET status = 'deleted' WHERE id = ?").run(u.id);
       expect(db.countTotalUsers()).toBe(before);
@@ -79,13 +79,13 @@ describe('BETA mode', () => {
       // Cap is 2. Seat the DB up to the cap.
       while (db.countTotalUsers() < 2) {
         const n = db.countTotalUsers();
-        db.createUser(`beta_seat_${suffix}_${n}`, `Seat ${n}`, `seat${suffix}_${n}@example.com`, 'UTC', 'Passw0rd!x');
+        db.createUser(`beta_seat_${suffix}_${n}`, `Seat ${n}`, `seat${suffix}_${n}@example.com`, 'UTC', 'test-password-only');
       }
       betaMode.invalidateBetaFullCache();
 
       const res = await request(app).post('/api/v1/auth/register').send({
         username: `capped_${suffix}`,
-        password: 'Passw0rd!xYZ',
+        password: 'test-password-only',
         email: `capped${suffix}@example.com`,
       });
       expect(res.status).toBe(403);

@@ -1578,7 +1578,7 @@ app.post('/api/v1/ask', authenticate, async (req, res) => {
       google: 'gmail(/gmail/v1/users/me/messages), calendar(/calendar/v3/calendars/primary/events)',
       slack: 'channels(/conversations.list), messages(/conversations.history), users(/users.list)',
       notion: 'pages(/pages), databases(/databases), search(/search)',
-      discord: 'guilds(/users/@me/guilds), channels(/channels/{id}/messages)',
+      discord: 'user-guilds(/users/@me/guilds), guild-channels(/guilds/{id}/channels), messages(/channels/{id}/messages)',
       linear: 'issues(/issues), projects(/projects), teams(/teams)',
       microsoft365: 'mail(/me/messages), calendar(/me/events), files(/me/drive/root/children)',
       jira: 'issues(/rest/api/3/search), projects(/rest/api/3/project)',
@@ -9121,7 +9121,7 @@ app.post("/api/v1/oauth/disconnect/:service", authenticate, async (req, res) => 
     }
 
     if (!token) {
-      return res.status(404).json({ error: "No token found for this service" });
+      return res.json({ ok: true, message: `${service} was not connected` });
     }
 
     // Try to revoke on remote service (only if we have a valid token)
@@ -9839,9 +9839,31 @@ app.post('/api/v1/services/:serviceName/proxy', authenticate, async (req, res) =
     };
 
     if (token.accessToken) {
-      if (serviceName === 'github') headers['Authorization'] = `token ${token.accessToken}`;
-      else if (serviceName === 'fal') headers['Authorization'] = `Key ${token.accessToken}`;
-      else headers['Authorization'] = `Bearer ${token.accessToken}`;
+      if (serviceName === 'github') {
+        headers['Authorization'] = `token ${token.accessToken}`;
+      } else if (serviceName === 'fal') {
+        headers['Authorization'] = `Key ${token.accessToken}`;
+      } else if (serviceName === 'discord') {
+        // Guild/channel endpoints require a bot token stored per-user in service preferences.
+        // User endpoints (/users/@me) use the OAuth bearer token as normal.
+        const isBotEndpoint = /^\/(guilds|channels)\//.test(apiPath);
+        if (isBotEndpoint) {
+          const discordPrefs = getServicePreference(userId, 'discord');
+          const botToken = String(discordPrefs?.preferences?.bot_token || '').trim();
+          if (!botToken) {
+            return res.status(503).json({
+              error: 'Discord bot token not configured',
+              message: 'Reading guild/channel data requires a personal bot token. Save it via PUT /api/v1/services/discord/preferences with {"bot_token":"<your-token>"}.',
+              hint: 'Get your bot token from: Discord Developer Portal → your app → Bot → Reset Token. The bot must be installed in the target server.'
+            });
+          }
+          headers['Authorization'] = `Bot ${botToken}`;
+        } else {
+          headers['Authorization'] = `Bearer ${token.accessToken}`;
+        }
+      } else {
+        headers['Authorization'] = `Bearer ${token.accessToken}`;
+      }
     }
 
     let bodyStr = null;
