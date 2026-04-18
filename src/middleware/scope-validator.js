@@ -162,7 +162,46 @@ function checkScopes(tokenScopes, requiredScopes) {
   return tokenScopes.includes(requiredScopes);
 }
 
+/**
+ * Per-resource allow-list filter.
+ *
+ * Guest tokens may carry an optional `allowed_resources` JSON object that narrows
+ * category scopes down to specific resource IDs, e.g.
+ *   { "knowledge_docs": ["doc1","doc7"], "skills": [17,42], "services": ["gmail"] }
+ *
+ * Semantics:
+ *   - No allowedResources on the token  → no restriction (fall back to scope check).
+ *   - allowedResources present but kind missing / empty array → unrestricted within
+ *     that kind (category scope still applies).
+ *   - allowedResources[kind] = [ids...] → resource must be in the list.
+ *
+ * Master tokens and session (dashboard) users are never restricted.
+ * IDs are compared as strings to avoid number/string mismatch from DB rows.
+ */
+function getAllowedResources(req) {
+  const raw = req.tokenMeta?.allowedResources;
+  if (!raw) return null;
+  if (typeof raw === 'object') return raw;
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
+function isResourceAllowed(req, kind, id) {
+  // Master token / session user bypass — mirrors isMaster() in src/index.js.
+  const meta = req.tokenMeta;
+  if (!meta) return true;
+  if (meta.scope === 'full' || meta.tokenType === 'master') return true;
+  if (String(meta.tokenId || '').startsWith('sess_')) return true;
+
+  const res = getAllowedResources(req);
+  if (!res) return true;
+  const list = res[kind];
+  if (!Array.isArray(list) || list.length === 0) return true;
+  return list.map(String).includes(String(id));
+}
+
 module.exports = {
   requireScopes,
-  checkScopes
+  checkScopes,
+  getAllowedResources,
+  isResourceAllowed
 };

@@ -1610,6 +1610,7 @@ function getAccessTokens(ownerId = null, workspaceId = null) {
     isShareable: row.is_shareable || 0,
     requiresApproval: row.requires_approval || 0,
     scopeBundle: row.scope_bundle ? (() => { try { return JSON.parse(row.scope_bundle); } catch { return null; } })() : null,
+    allowedResources: row.allowed_resources ? (() => { try { return JSON.parse(row.allowed_resources); } catch { return null; } })() : null,
     marketplaceListingId: row.marketplace_listing_id || null
   }));
 }

@@ -309,6 +309,7 @@ const LEGAL_DOCS_DIR = path.join(__dirname, '..', 'docs', 'legal');
 
 // Import device approval middleware
 const { deviceApprovalMiddleware, setAlertEmitter: setDeviceAlertEmitter } = require('./middleware/deviceApproval');
+const { isResourceAllowed } = require('./middleware/scope-validator');
 
 function escapeHtml(value = '') {
   return String(value)
@@ -2633,7 +2634,17 @@ const exportRoutes = require('./routes/export');
 const importRoutes = require('./routes/import');
 const createVaultInstructionsRoutes = require('./routes/vault-instructions');
 
-app.use('/api/v1/export', authenticate, exportRoutes);
+// Export dumps entire user state (tokens, personas, skills, KB, OAuth metadata).
+// Guard: only master tokens and dashboard sessions may export. Guest/scoped
+// tokens never reach this — otherwise a narrow token could exfiltrate the
+// full account via the export bundle.
+app.use('/api/v1/export', authenticate, (req, res, next) => {
+  const meta = req.tokenMeta || {};
+  const isSession = String(meta.tokenId || '').startsWith('sess_') || Boolean(req.session?.user);
+  const isMasterTok = meta.scope === 'full' || meta.tokenType === 'master';
+  if (isSession || isMasterTok) return next();
+  return res.status(403).json({ error: 'Export requires a master token or dashboard session' });
+}, exportRoutes);
 app.use('/api/v1/import', authenticate, importRoutes);
 app.use('/api/v1/vault', authenticate, createVaultInstructionsRoutes(db, null, createAuditLog));
 
@@ -10067,15 +10078,19 @@ app.post('/api/v1/brain/chat', authenticate, async (req, res) => {
     const context = await contextEngine.assembleContext(convId, db);
 
     // Query global knowledge base
-    const relevantDocs = knowledgeBase.queryKnowledgeBase(message, 3, getRequestOwnerId(req));
+    let relevantDocs = knowledgeBase.queryKnowledgeBase(message, 3, getRequestOwnerId(req));
+    relevantDocs = (Array.isArray(relevantDocs) ? relevantDocs : [])
+      .filter((d) => isResourceAllowed(req, 'knowledge_docs', d.id));
 
     // Add persona-scoped docs + skills package when persona scope is active
     let personaDocs = [];
     let personaSkillPackages = [];
     if (personaScope.personaId !== null && personaScope.personaId !== undefined) {
       const ownerId = getRequestOwnerId(req);
-      personaDocs = getPersonaDocumentContents(personaScope.personaId, ownerId);
-      personaSkillPackages = Object.values(getPersonaSkillPackages(personaScope.personaId, ownerId));
+      personaDocs = getPersonaDocumentContents(personaScope.personaId, ownerId)
+        .filter((d) => isResourceAllowed(req, 'knowledge_docs', d.id));
+      personaSkillPackages = Object.values(getPersonaSkillPackages(personaScope.personaId, ownerId))
+        .filter((pkg) => isResourceAllowed(req, 'skills', pkg.id));
     }
 
     const rankedPersonaDocs = personaDocs
@@ -10271,6 +10286,11 @@ app.put('/api/v1/brain/knowledge-base/:id', authenticate, async (req, res) => {
 
     if (!content) return res.status(400).json({ error: 'content is required' });
 
+    // Per-resource allow-list gate (narrow-scoped token).
+    if (!isResourceAllowed(req, 'knowledge_docs', req.params.id)) {
+      return res.status(403).json({ error: 'Document not accessible with this token' });
+    }
+
     const existing = getKBDocumentById(req.params.id, ownerId);
     if (!existing) return res.status(404).json({ error: 'Document not found' });
 
@@ -10445,6 +10465,12 @@ app.get('/api/v1/brain/knowledge-base', authenticate, (req, res) => {
       documents = Array.isArray(documents) ? documents.filter(d => allowedIds.has(d.id)) : documents;
     }
 
+    // Per-resource allow-list filter: if the token specifies knowledge_docs,
+    // drop everything else. No-op for master tokens and tokens without an allow-list.
+    if (Array.isArray(documents)) {
+      documents = documents.filter((d) => isResourceAllowed(req, 'knowledge_docs', d.id));
+    }
+
     createAuditLog({
       requesterId: req.tokenMeta.tokenId,
       action: 'kb_documents_list',
@@ -10466,6 +10492,12 @@ app.get('/api/v1/brain/knowledge-base/:id', authenticate, (req, res) => {
   try {
     const { id } = req.params;
     const ownerId = getRequestOwnerId(req);
+
+    // Per-resource allow-list gate (narrow-scoped token).
+    if (!isResourceAllowed(req, 'knowledge_docs', id)) {
+      return res.status(403).json({ error: 'Document not accessible with this token' });
+    }
+
     const doc = getKBDocumentById(id, ownerId);
     if (!doc) return res.status(404).json({ error: 'Document not found' });
 
@@ -10493,6 +10525,12 @@ app.get('/api/v1/brain/knowledge-base/:id', authenticate, (req, res) => {
 
 // GET /api/v1/brain/knowledge-base/:id/attachments - list persona references
 app.get('/api/v1/brain/knowledge-base/:id/attachments', authenticate, (req, res) => {
+  if (!hasScope(req, 'knowledge') && !isMaster(req)) {
+    return res.status(403).json({ error: "Requires 'knowledge' scope" });
+  }
+  if (!isResourceAllowed(req, 'knowledge_docs', req.params.id)) {
+    return res.status(403).json({ error: 'Document not accessible with this token' });
+  }
   try {
     const { id } = req.params;
     const personaDocs = db.prepare(`

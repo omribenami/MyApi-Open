@@ -176,6 +176,18 @@ const SERVICE_METHODS = {
     };
   }
 
+  // Per-param variant: resolves the service name from req.params at request time
+  // so a scoped token can only touch the specific service it's scoped for.
+  function requireServiceScopeParam(paramName, operation = 'read') {
+    return (req, res, next) => {
+      const serviceName = String(req.params[paramName] || '').toLowerCase();
+      if (hasServiceScope(req, serviceName, operation)) return next();
+      return res.status(403).json({
+        error: `Requires 'services:${operation}' or 'services:${serviceName}:${operation}' scope`,
+      });
+    };
+  }
+
   async function getConnectionMetadata(serviceId, userId) {
     if (serviceId === 'fal') {
       const prefs = getServicePreference(userId, 'fal');
@@ -249,7 +261,7 @@ const SERVICE_METHODS = {
   });
 
   // GET /api/v1/services/categories
-  router.get('/categories', (req, res) => {
+  router.get('/categories', requireAuth, (req, res) => {
     try {
       const map = new Map();
       for (const svc of SERVICE_CATALOG) {
@@ -265,13 +277,18 @@ const SERVICE_METHODS = {
     }
   });
 
-  // GET /api/v1/services/:serviceName - Service detail
-  router.get('/:serviceName', requireAuth, requireServiceScope(null, 'read'), async (req, res, next) => {
+  // GET /api/v1/services/:serviceName - Service detail.
+  // Reserved names (available/preferences/categories) must short-circuit to the
+  // next matching route BEFORE the broad scope middleware runs — otherwise a
+  // narrow-scoped token (e.g. services:gmail:read) would hit 403 here when it
+  // actually wanted /preferences, which has its own scope handling downstream.
+  router.get('/:serviceName', requireAuth, (req, res, next) => {
     const blocked = new Set(['available', 'preferences', 'categories']);
     if (blocked.has(String(req.params.serviceName || '').toLowerCase())) {
-      return next();
+      return next('route');
     }
-
+    return requireServiceScope(null, 'read')(req, res, next);
+  }, async (req, res, next) => {
     try {
       const userId = resolveUserId(req);
       const serviceName = String(req.params.serviceName || '').toLowerCase();
@@ -319,7 +336,7 @@ const SERVICE_METHODS = {
       res.status(500).json({ error: 'Failed to fetch service methods' });
     }
   });
-  router.get('/available', (req, res) => {
+  router.get('/available', requireAuth, (req, res) => {
     try {
       res.json({
         success: true,
@@ -332,19 +349,29 @@ const SERVICE_METHODS = {
     }
   });
 
-  router.get('/preferences', (req, res) => {
+  router.get('/preferences', requireAuth, (req, res) => {
     try {
       const userId = req.session?.user?.id || req.user?.id || req.tokenMeta?.userId || 'owner';
       const preferences = getServicePreferences(userId);
 
-      res.json({ success: true, data: preferences });
+      // Filter down to the services this token is actually scoped for.
+      // Master tokens, session users, and broad 'services:*'/'services:read' all pass
+      // every row via hasServiceScope(); narrow `services:{id}:read` tokens see only
+      // their one service; tokens with no services scope at all see an empty array.
+      // Prevents a narrow-scoped token from enumerating every connected OAuth
+      // provider (and any API keys stored in preferences JSON).
+      const filtered = Array.isArray(preferences)
+        ? preferences.filter((p) => hasServiceScope(req, String(p.service_name || p.serviceName || '').toLowerCase(), 'read'))
+        : preferences;
+
+      res.json({ success: true, data: filtered });
     } catch (error) {
       logger.error('[ServicePreferences] Error fetching preferences:', error);
       res.status(500).json({ error: 'Failed to fetch service preferences' });
     }
   });
 
-  router.get('/preferences/:serviceName', (req, res) => {
+  router.get('/preferences/:serviceName', requireAuth, requireServiceScopeParam('serviceName', 'read'), (req, res) => {
     try {
       const userId = req.session?.user?.id || req.user?.id || req.tokenMeta?.userId || 'owner';
       const { serviceName } = req.params;
@@ -362,7 +389,7 @@ const SERVICE_METHODS = {
     }
   });
 
-  router.post('/preferences/:serviceName', requireAuth, (req, res) => {
+  router.post('/preferences/:serviceName', requireAuth, requireServiceScopeParam('serviceName', 'write'), (req, res) => {
     try {
       const userId = req.session?.user?.id || req.user?.id || req.tokenMeta?.ownerId || 'owner';
       const { serviceName } = req.params;
@@ -389,7 +416,7 @@ const SERVICE_METHODS = {
     }
   });
 
-  router.put('/preferences/:serviceName', requireAuth, (req, res) => {
+  router.put('/preferences/:serviceName', requireAuth, requireServiceScopeParam('serviceName', 'write'), (req, res) => {
     try {
       const userId = req.user?.id || req.tokenMeta?.ownerId || 'owner';
       const { serviceName } = req.params;
@@ -416,7 +443,7 @@ const SERVICE_METHODS = {
     }
   });
 
-  router.delete('/preferences/:serviceName', requireAuth, (req, res) => {
+  router.delete('/preferences/:serviceName', requireAuth, requireServiceScopeParam('serviceName', 'write'), (req, res) => {
     try {
       const userId = req.session?.user?.id || req.user?.id || req.tokenMeta?.userId || 'owner';
       const { serviceName } = req.params;

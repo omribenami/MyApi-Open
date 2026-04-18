@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const GitHubRepoMetadata = require('../services/github-repo-metadata');
 const NotificationDispatcher = require('../lib/notificationDispatcher');
+const { isResourceAllowed } = require('../middleware/scope-validator');
 
 // Where Claude Code skills live when mounted into the container
 const CLAUDE_SKILLS_DIR = process.env.CLAUDE_SKILLS_DIR || '/app/claude-skills';
@@ -156,6 +157,9 @@ function createSkillsRoutes(
         skills = skills.filter(s => allowedIds.has(Number(s.id)));
       }
 
+      // Per-resource allow-list filter.
+      skills = skills.filter((s) => isResourceAllowed(req, 'skills', s.id));
+
       const result = { skills: skills.map(enrichSkill) };
       if (result.skills.length === 0) {
         result._discovery = {
@@ -219,6 +223,10 @@ function createSkillsRoutes(
         if (!attached) return res.status(403).json({ error: 'Skill not accessible with this token' });
       }
 
+      if (!isResourceAllowed(req, 'skills', skill.id)) {
+        return res.status(403).json({ error: 'Skill not accessible with this token' });
+      }
+
       res.json({ skill: enrichSkill(skill) });
     } catch (error) {
       logger.error('Error fetching skill by slug:', error);
@@ -257,6 +265,7 @@ function createSkillsRoutes(
 
       const skills = combined
         .filter(s => !allowed || allowed.has(Number(s.id)))
+        .filter(s => isResourceAllowed(req, 'skills', s.id))
         .map(enrichSkill);
 
       res.json({ skills });
@@ -282,6 +291,10 @@ function createSkillsRoutes(
       if (bundlePersonaId) {
         const attached = db.prepare('SELECT skill_id FROM persona_skills WHERE persona_id = ? AND skill_id = ?').get(bundlePersonaId, skill.id);
         if (!attached) return res.status(403).json({ error: 'Skill not accessible with this token' });
+      }
+
+      if (!isResourceAllowed(req, 'skills', skill.id)) {
+        return res.status(403).json({ error: 'Skill not accessible with this token' });
       }
 
       // Get fork info if it's a fork
@@ -320,6 +333,10 @@ function createSkillsRoutes(
       if (bundlePersonaId) {
         const attached = db.prepare('SELECT skill_id FROM persona_skills WHERE persona_id = ? AND skill_id = ?').get(bundlePersonaId, skill.id);
         if (!attached) return res.status(403).json({ error: 'Skill not accessible with this token' });
+      }
+
+      if (!isResourceAllowed(req, 'skills', skill.id)) {
+        return res.status(403).json({ error: 'Skill not accessible with this token' });
       }
 
       let content = skill.script_content || '';
@@ -506,6 +523,10 @@ function createSkillsRoutes(
         return res.status(404).json({ error: 'Skill not found' });
       }
 
+      if (!isResourceAllowed(req, 'skills', skill.id)) {
+        return res.status(403).json({ error: 'Skill not accessible with this token' });
+      }
+
       const { releaseNotes } = req.body;
       
       // Calculate content hash
@@ -583,6 +604,10 @@ function createSkillsRoutes(
         return res.status(404).json({ error: 'Original skill not found' });
       }
 
+      if (!isResourceAllowed(req, 'skills', originalSkill.id)) {
+        return res.status(403).json({ error: 'Skill not accessible with this token' });
+      }
+
       // Check license allows forking
       const license = getLicense(originalSkill.license || 'Proprietary');
       if (license && !license.canFork) {
@@ -650,6 +675,10 @@ function createSkillsRoutes(
         if (!attached) return res.status(403).json({ error: 'Skill not accessible with this token' });
       }
 
+      if (!isResourceAllowed(req, 'skills', skill.id)) {
+        return res.status(403).json({ error: 'Skill not accessible with this token' });
+      }
+
       let content = skill.script_content || null;
 
       // Fall back to SKILL.md on disk (mounted from the host Claude skills dir)
@@ -692,6 +721,10 @@ function createSkillsRoutes(
 
         if (!skill) {
           return res.status(404).json({ error: 'Skill not found' });
+        }
+
+        if (!isResourceAllowed(req, 'skills', skill.id)) {
+          return res.status(403).json({ error: 'Skill not accessible with this token' });
         }
 
         // Resolve content from either raw text or JSON body
