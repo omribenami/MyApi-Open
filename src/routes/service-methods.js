@@ -335,7 +335,23 @@ const SERVICE_METHODS = {
       },
       returns: 'messages array with id, content, author (username, avatar), timestamp, attachments, reactions, embeds',
       rateLimit: '5 requests per 5 seconds',
-      notes: 'Bulk delete requires 2+ messages. Requires MESSAGE_HISTORY intent.'
+      notes: 'Requires MESSAGE_HISTORY intent.'
+    },
+    {
+      name: 'messages.send',
+      description: 'Send a message to a Discord channel',
+      method: 'POST',
+      endpoint: '/services/discord/channels/:channelId/messages',
+      scope: 'services:write or services:discord:write or master',
+      parameters: {
+        channelId: { type: 'string', description: 'Discord channel ID', optional: false },
+        content: { type: 'string', description: 'Message text (max 2000 chars)', optional: false },
+        embeds: { type: 'array', description: 'Rich embed objects', optional: true },
+        message_reference: { type: 'object', description: 'Reply to a message: {message_id}', optional: true }
+      },
+      returns: 'created message object with id, content, author, timestamp',
+      rateLimit: '5 requests per 5 seconds',
+      notes: 'Bot must have Send Messages permission in the channel. Use via POST /api/v1/services/discord/proxy with {path: "/channels/{id}/messages", method: "POST", body: {content: "..."}}'
     }
   ],
   
