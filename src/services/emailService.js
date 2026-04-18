@@ -482,6 +482,186 @@ class EmailService {
     }
   }
 
+  /**
+   * Waitlist confirmation email sent after POST /api/v1/waitlist.
+   * Fire-and-forget: caller should not await.
+   */
+  async sendWaitlistConfirmationEmail(toEmail) {
+    if (!toEmail || !this.fromAddress) return;
+    const base = (process.env.PUBLIC_URL || process.env.BASE_URL || 'https://www.myapiai.com').replace(/\/$/, '');
+    const html = `<!doctype html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>You're on the MyApi waitlist</title></head>
+<body style="margin:0;padding:0;background:#020617;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#020617;padding:32px 12px;">
+  <tr><td align="center">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;">
+      <tr><td style="background:linear-gradient(135deg,#1e3a8a 0%,#7c3aed 100%);border-radius:16px 16px 0 0;padding:28px 32px;">
+        <p style="margin:0 0 6px 0;font-size:13px;font-weight:600;color:rgba(255,255,255,0.7);letter-spacing:1px;text-transform:uppercase;">MyApi Beta</p>
+        <h1 style="margin:0;font-size:26px;font-weight:800;color:#fff;line-height:1.3;">You're on the waitlist</h1>
+      </td></tr>
+      <tr><td style="background:#0f172a;border:1px solid #1e293b;border-top:none;border-radius:0 0 16px 16px;padding:28px 32px;">
+        <p style="margin:0 0 16px 0;font-size:15px;line-height:1.7;color:#cbd5e1;">
+          Thanks for your interest in MyApi. We're currently at capacity during the closed beta, but we'll email you as soon as a spot opens up.
+        </p>
+        <p style="margin:0 0 20px 0;font-size:15px;line-height:1.7;color:#cbd5e1;">
+          In the meantime, feel free to join the conversation on Discord — early beta testers often hear about access there first.
+        </p>
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:4px 0 8px 0;">
+          <tr><td align="center">
+            <a href="https://discord.gg/WPp4sCN4xB" style="display:inline-block;background:#5865f2;color:#fff;text-decoration:none;font-size:14px;font-weight:700;padding:12px 28px;border-radius:10px;">Join the Discord →</a>
+          </td></tr>
+        </table>
+        <p style="margin:22px 0 0 0;font-size:12px;color:#475569;line-height:1.6;text-align:center;">
+          <a href="${base}" style="color:#3b82f6;text-decoration:none;">myapiai.com</a>
+        </p>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>`;
+    const data = {
+      email_address: toEmail.trim(),
+      subject: "You're on the MyApi waitlist",
+      body: `Thanks for your interest in MyApi. We're currently at capacity during the closed beta; we'll email you when a spot opens up. Join our Discord in the meantime: https://discord.gg/WPp4sCN4xB`,
+      html_body: html,
+    };
+    try {
+      if (this.provider === 'resend') {
+        await this.sendEmailViaResend(data);
+      } else {
+        if (!this.transporter) throw new Error('Email service not configured');
+        await this.transporter.sendMail({
+          from: `${this.fromName} <${this.fromAddress}>`,
+          to: data.email_address,
+          subject: data.subject,
+          text: data.body,
+          html: data.html_body,
+        });
+      }
+      console.log(`[Email] Waitlist confirmation sent to ${toEmail}`);
+    } catch (err) {
+      console.error(`[Email] Failed to send waitlist confirmation to ${toEmail}:`, err.message);
+    }
+  }
+
+  /**
+   * Beta-launch announcement sent to every pending waitlist entry when the
+   * operator flips BETA off. Re-uses the welcome-email visual language.
+   */
+  async sendBetaLaunchEmail(toEmail) {
+    if (!toEmail || !this.fromAddress) return;
+    const base = (process.env.PUBLIC_URL || process.env.BASE_URL || 'https://www.myapiai.com').replace(/\/$/, '');
+    const html = `<!doctype html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MyApi is now open</title></head>
+<body style="margin:0;padding:0;background:#020617;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#020617;padding:32px 12px;">
+  <tr><td align="center">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;">
+
+      <tr><td style="background:linear-gradient(135deg,#1e3a8a 0%,#2563eb 45%,#7c3aed 100%);border-radius:16px 16px 0 0;padding:32px 36px;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+          <tr>
+            <td style="vertical-align:middle;">
+              <table role="presentation" cellspacing="0" cellpadding="0"><tr>
+                <td style="width:36px;height:36px;background:rgba(255,255,255,0.2);border-radius:50%;text-align:center;vertical-align:middle;">
+                  <span style="font-size:18px;line-height:36px;font-weight:900;color:#fff;">M</span>
+                </td>
+                <td style="padding-left:10px;font-size:20px;font-weight:700;color:#fff;letter-spacing:0.3px;">MyApi</td>
+              </tr></table>
+            </td>
+          </tr>
+          <tr><td style="padding-top:28px;">
+            <p style="margin:0 0 6px 0;font-size:13px;font-weight:600;color:rgba(255,255,255,0.65);letter-spacing:1px;text-transform:uppercase;">The waitlist is over</p>
+            <h1 style="margin:0;font-size:30px;font-weight:800;color:#fff;line-height:1.25;">MyApi is now open — come on in 🎉</h1>
+          </td></tr>
+        </table>
+      </td></tr>
+
+      <tr><td style="background:#0f172a;border-left:1px solid #1e293b;border-right:1px solid #1e293b;padding:36px 36px 28px 36px;">
+        <p style="margin:0 0 18px 0;font-size:16px;line-height:1.7;color:#cbd5e1;">
+          Thanks for being patient during our closed beta. We've officially opened the doors and your spot is ready — no more waiting.
+        </p>
+        <p style="margin:0 0 22px 0;font-size:16px;line-height:1.7;color:#cbd5e1;">
+          MyApi gives you a privacy-first personal API platform: connect 45+ services, build AI personas with scoped access, share skills, and issue per-agent tokens you can revoke at any time.
+        </p>
+
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:24px 0;">
+          <tr>
+            <td width="48%" style="vertical-align:top;padding:0 8px 12px 0;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:18px;">
+                <tr><td>
+                  <p style="margin:0 0 8px 0;font-size:22px;">🔐</p>
+                  <p style="margin:0 0 6px 0;font-size:14px;font-weight:700;color:#f1f5f9;">Private by default</p>
+                  <p style="margin:0;font-size:13px;color:#94a3b8;line-height:1.5;">Credentials stay encrypted in your vault. Agents only see what you allow.</p>
+                </td></tr>
+              </table>
+            </td>
+            <td width="48%" style="vertical-align:top;padding:0 0 12px 8px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:18px;">
+                <tr><td>
+                  <p style="margin:0 0 8px 0;font-size:22px;">⚡</p>
+                  <p style="margin:0 0 6px 0;font-size:14px;font-weight:700;color:#f1f5f9;">Built for AI agents</p>
+                  <p style="margin:0;font-size:13px;color:#94a3b8;line-height:1.5;">OAuth-ready, scope-aware, and speaks OpenAPI — plug into any agent stack.</p>
+                </td></tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:28px 0 8px 0;">
+          <tr><td align="center">
+            <a href="${base}" style="display:inline-block;background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 36px;border-radius:10px;letter-spacing:0.2px;">Create your account →</a>
+          </td></tr>
+        </table>
+
+        <p style="margin:18px 0 0 0;font-size:13px;color:#64748b;line-height:1.6;text-align:center;">
+          Or head straight to <a href="${base}" style="color:#60a5fa;text-decoration:none;">${base.replace(/^https?:\/\//, '')}</a> and sign in.
+        </p>
+      </td></tr>
+
+      <tr><td style="background:#0a1120;border:1px solid #1e293b;border-top:none;border-radius:0 0 16px 16px;padding:20px 36px;">
+        <p style="margin:0;font-size:12px;color:#475569;line-height:1.6;text-align:center;">
+          You're receiving this because you joined the MyApi waitlist.<br>
+          <a href="${base}" style="color:#3b82f6;text-decoration:none;">myapiai.com</a>
+          &nbsp;·&nbsp;
+          <a href="https://discord.gg/WPp4sCN4xB" style="color:#3b82f6;text-decoration:none;">Discord</a>
+        </p>
+      </td></tr>
+
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>`;
+    const data = {
+      email_address: toEmail.trim(),
+      subject: 'MyApi is now open — your spot is ready',
+      body: `MyApi is now open. Create your account at ${base}.`,
+      html_body: html,
+    };
+    try {
+      if (this.provider === 'resend') {
+        await this.sendEmailViaResend(data);
+      } else {
+        if (!this.transporter) throw new Error('Email service not configured');
+        await this.transporter.sendMail({
+          from: `${this.fromName} <${this.fromAddress}>`,
+          to: data.email_address,
+          subject: data.subject,
+          text: data.body,
+          html: data.html_body,
+        });
+      }
+      console.log(`[Email] Beta launch email sent to ${toEmail}`);
+    } catch (err) {
+      console.error(`[Email] Failed to send beta launch email to ${toEmail}:`, err.message);
+      throw err;
+    }
+  }
+
   async sendTestEmail(toEmail) {
     if (!toEmail || typeof toEmail !== 'string') {
       throw new Error('A valid destination email is required');

@@ -16,6 +16,7 @@ import Identity from './pages/Identity';
 import Settings from './pages/Settings';
 import EnterpriseSettings from './pages/EnterpriseSettings';
 import UserManagement from './pages/UserManagement';
+import BetaAdmin from './pages/BetaAdmin';
 import PlatformDocs from './pages/PlatformDocs';
 import ApiDocs from './pages/ApiDocs';
 import Marketplace from './pages/Marketplace';
@@ -341,6 +342,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <UserManagement />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/beta"
+              element={
+                <ProtectedRoute>
+                  <BetaAdmin />
                 </ProtectedRoute>
               }
             />

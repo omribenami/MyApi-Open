@@ -35,6 +35,8 @@ const EventEmitter = require('events');
 const expressRateLimit = require('express-rate-limit');
 const logger = require('./utils/logger');
 const { requestContextMiddleware } = require('./lib/request-context');
+const betaMode = require('./lib/betaMode');
+const { requireBetaSlot } = require('./middleware/betaCap');
 
 // Database initialization
 let mongodbReady = Promise.resolve();
@@ -2559,6 +2561,10 @@ app.use('/api/v1/email', authenticate, emailRoutes);
 app.use('/api/v1/workspaces', authenticate, workspacesRoutes);
 app.use('/api/v1/invitations', authenticate, invitationsRoutes);
 
+// Waitlist: public POST (email capture), admin-gated list/invite/notify-launch.
+const createWaitlistRoutes = require('./routes/waitlist');
+app.use('/api/v1/waitlist', createWaitlistRoutes({ isMaster, authenticate }));
+
 // Mount management routes (audit, tokens, etc)
 // Note: Management routes require authentication but have their own permission checks
 const auditLogService = {
@@ -2878,6 +2884,20 @@ app.get('/api/v1/agent-guide', (req, res) => {
 const createGoogleRoutes = require('./routes/google');
 app.use('/api/v1/google', createGoogleRoutes());
 
+// --- PUBLIC: RUNTIME CONFIG (no auth required) ---
+// Landing page + signup flows read this to decide whether to render the
+// "Now in Beta" chrome and whether to swap signup for the waitlist form.
+// Cache 30s so a BETA flag flip propagates within half a minute.
+app.get('/api/v1/config/public', (req, res) => {
+  try {
+    res.set('Cache-Control', 'public, max-age=30');
+    return res.json({ data: betaMode.getBetaStatus() });
+  } catch (err) {
+    console.error('[Config] public config error:', err);
+    return res.json({ data: { beta: true, betaFull: false, betaMaxUsers: 50 } });
+  }
+});
+
 // --- PUBLIC: BILLING PLANS ENDPOINT (no auth required) ---
 app.get('/api/v1/billing/plans', (req, res) => {
   try {
@@ -2892,9 +2912,15 @@ app.get('/api/v1/billing/plans', (req, res) => {
     `);
     const dbPlans = stmt.all();
 
+    const betaActive = betaMode.isBetaMode();
+    const annotate = (plan) => ({
+      ...plan,
+      beta_locked: betaActive && String(plan.id).toLowerCase() !== 'free',
+    });
+
     if (dbPlans && dbPlans.length > 0) {
       // Transform database plans to frontend format
-      const plans = dbPlans.map(plan => ({
+      const plans = dbPlans.map(plan => annotate({
         id: plan.id,
         name: plan.name,
         price_cents: plan.price_cents,
@@ -2911,7 +2937,7 @@ app.get('/api/v1/billing/plans', (req, res) => {
     }
 
     // Fallback to hardcoded plans if database is empty
-    const plans = Object.values(BILLING_PLANS).map(plan => ({
+    const plans = Object.values(BILLING_PLANS).map(plan => annotate({
       id: plan.id,
       name: plan.name,
       price_cents: plan.price_cents,
@@ -2928,6 +2954,7 @@ app.get('/api/v1/billing/plans', (req, res) => {
   } catch (err) {
     console.error('[Billing] Error fetching plans:', err);
     // Return hardcoded plans as fallback
+    const betaActive = betaMode.isBetaMode();
     const plans = Object.values(BILLING_PLANS).map(plan => ({
       id: plan.id,
       name: plan.name,
@@ -2939,7 +2966,8 @@ app.get('/api/v1/billing/plans', (req, res) => {
       maxServices: plan.maxServices,
       maxTeamMembers: plan.maxTeamMembers,
       maxSkillsPerPersona: plan.maxSkillsPerPersona,
-      stripe_product_id: plan.stripe_product_id
+      stripe_product_id: plan.stripe_product_id,
+      beta_locked: betaActive && String(plan.id).toLowerCase() !== 'free',
     }));
     res.json({ data: plans });
   }
@@ -5972,6 +6000,14 @@ app.post('/api/v1/billing/checkout', authenticate, async (req, res) => {
       return res.status(400).json({ error: `Invalid plan. Allowed: ${Object.keys(BILLING_PLANS).join(', ')}` });
     }
 
+    if (betaMode.isBetaMode() && selectedPlan !== 'free') {
+      return res.status(403).json({
+        error: 'Paid plans are not available during beta. Ask in Discord for access.',
+        code: 'BETA_PLAN_LOCKED',
+        discordUrl: 'https://discord.gg/WPp4sCN4xB',
+      });
+    }
+
     const workspaceId = getRequestWorkspaceId(req);
     if (!workspaceId) return res.status(400).json({ error: 'Workspace context is required' });
 
@@ -6628,7 +6664,7 @@ app.delete('/api/v1/vault/:tokenId/revoke', authenticate, (req, res) => {
 // ============================
 // PUBLIC AUTH (Register + Login)
 // =============================
-app.post("/api/v1/auth/register", authRateLimit, (req, res) => {
+app.post("/api/v1/auth/register", authRateLimit, requireBetaSlot, (req, res) => {
   const { username, password, display_name, email, timezone, accepted_terms_at, accepted_privacy_policy_at } = req.body;
   if (!username || !password) return res.status(400).json({ error: "username and password are required" });
 
@@ -6643,6 +6679,7 @@ app.post("/api/v1/auth/register", authRateLimit, (req, res) => {
       acceptedPrivacyPolicyAt: accepted_privacy_policy_at || now,
     };
     const user = createUser(username, display_name || username, email, timezone, password, 'free', null, consentTimestamps);
+    betaMode.invalidateBetaFullCache();
     createAuditLog({ requesterId: user.id, action: "user_register", resource: `/users/${user.id}`, scope: "public", ip: req.ip });
     res.status(201).json({ data: user });
   } catch (e) {
@@ -7006,6 +7043,15 @@ app.post('/api/v1/auth/oauth-signup/complete', async (req, res) => {
   const pending = req.session?.oauth_signup;
   if (!pending) return res.status(400).json({ error: 'No pending OAuth signup session' });
 
+  if (betaMode.isBetaMode() && betaMode.isBetaFull()) {
+    return res.status(403).json({
+      error: 'Beta is at capacity. Join the waitlist to be notified when a spot opens.',
+      code: 'BETA_FULL',
+      waitlistUrl: '/api/v1/waitlist',
+      email: pending.email || null,
+    });
+  }
+
   const body = req.body || {};
   const confirm = body?.oauthSignupConfirm === true;
   const nonce = String(body?.oauthSignupNonce || '').trim();
@@ -7056,6 +7102,7 @@ app.post('/api/v1/auth/oauth-signup/complete', async (req, res) => {
 
     try {
       createdUser = createUser(usernameCandidate, displayName, email, timezone, generatedPassword);
+      betaMode.invalidateBetaFullCache();
       createdUser = updateUserOAuthProfile(createdUser.id, {
         displayName,
         email,
@@ -8537,6 +8584,12 @@ app.get([
 
       // NEW USER: Store OAuth data in session and route to explicit signup flow (no silent login/create)
       if (!appUser) {
+        // BETA cap: block new-user creation at the callback itself so the user never
+        // bounces through the signup wizard only to be rejected at the final step.
+        if (betaMode.isBetaMode() && betaMode.isBetaFull()) {
+          const waitlistEmail = email ? `&email=${encodeURIComponent(email)}` : '';
+          return res.redirect(`/?beta=full${waitlistEmail}`);
+        }
         req.session.oauth_signup = {
           service,
           providerUserId,

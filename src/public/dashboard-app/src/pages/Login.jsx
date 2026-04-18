@@ -232,7 +232,14 @@ function Login() {
         }),
       });
       const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result?.error || 'Failed to complete signup');
+      if (!response.ok) {
+        if (result?.code === 'BETA_FULL') {
+          const email = encodeURIComponent(result.email || profileData.email || '');
+          window.location.href = `/?beta=full${email ? `&email=${email}` : ''}`;
+          return;
+        }
+        throw new Error(result?.error || 'Failed to complete signup');
+      }
 
       if (result?.data?.bootstrap?.masterToken) setMasterToken(result.data.bootstrap.masterToken);
       if (result?.data?.user) setUser(result.data.user);

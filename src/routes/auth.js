@@ -11,6 +11,8 @@ const { getAccessTokens, getExistingMasterToken, createAccessToken, db } = requi
 const emailService = require('../services/emailService');
 
 const { generateCSRFToken, validateCSRFToken } = require('../lib/csrf-protection');
+const { requireBetaSlot } = require('../middleware/betaCap');
+const { invalidateBetaFullCache } = require('../lib/betaMode');
 
 const router = express.Router();
 
@@ -224,7 +226,7 @@ router.post('/login', requireCsrfForSession, async (req, res) => {
  * Body: { username, password, email, timezone, display_name }
  * Response: { success: true, data: { token, user: {...}, needsOnboarding: true } }
  */
-router.post('/register', requireCsrfForSession, async (req, res) => {
+router.post('/register', requireCsrfForSession, requireBetaSlot, async (req, res) => {
   const { username, password, display_name, email, timezone } = req.body || {};
   if (!username || !password) return res.status(400).json({ error: 'username and password required' });
   const { isStrongPassword } = require('../utils/passwordUtils');
@@ -250,6 +252,7 @@ router.post('/register', requireCsrfForSession, async (req, res) => {
       VALUES (?, ?, ?, ?, ?, ?, ?, 'active', 'user')`).run(
       id, username, hash, display_name || username, email || '', timezone || 'UTC', now
     );
+    invalidateBetaFullCache();
 
     // Fire-and-forget welcome email (does not block the 201 response)
     if (email) {
