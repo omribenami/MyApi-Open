@@ -6368,6 +6368,116 @@ app.get("/api/v1/gateway/context", authenticate, (req, res) => {
       { method: 'GET',    path: '/api/v1/oauth/status',                  description: 'List all connected OAuth services and their status' },
     ];
 
+    // Per-service usage instructions for connected services — tells AI exactly how to proxy each one
+    const SERVICE_INSTRUCTIONS = {
+      discord: {
+        description: 'Discord — read/write messages and channels via bot token proxy',
+        proxy_note: 'All Discord calls go through POST /api/v1/services/discord/proxy with {path, method, body}.',
+        auth_note: '/users/@me paths use your OAuth token automatically. /guilds/* and /channels/* use the configured bot token automatically — no extra headers needed.',
+        actions: [
+          { action: 'List your guilds (servers)',       method: 'GET',  path: '/users/@me/guilds' },
+          { action: 'List channels in a server',        method: 'GET',  path: '/guilds/{guild_id}/channels' },
+          { action: 'Read messages from a channel',     method: 'GET',  path: '/channels/{channel_id}/messages?limit=50' },
+          { action: 'Send a message to a channel',      method: 'POST', path: '/channels/{channel_id}/messages', body: { content: 'your message text' } },
+          { action: 'Get your Discord profile',         method: 'GET',  path: '/users/@me' },
+        ],
+        example: {
+          description: 'Send a message to a Discord channel',
+          request: { method: 'POST', url: '/api/v1/services/discord/proxy', body: { path: '/channels/{channel_id}/messages', method: 'POST', body: { content: 'Hello from MyApi!' } } },
+        },
+      },
+      github: {
+        description: 'GitHub — repos, issues, pull requests, gists',
+        proxy_note: 'All GitHub calls go through POST /api/v1/services/github/proxy with {path, method, body}.',
+        actions: [
+          { action: 'List your repos',              method: 'GET',  path: '/user/repos?per_page=30' },
+          { action: 'List issues in a repo',        method: 'GET',  path: '/repos/{owner}/{repo}/issues' },
+          { action: 'Create an issue',              method: 'POST', path: '/repos/{owner}/{repo}/issues', body: { title: 'Issue title', body: 'Description' } },
+          { action: 'List pull requests',           method: 'GET',  path: '/repos/{owner}/{repo}/pulls' },
+          { action: 'Get your profile',             method: 'GET',  path: '/user' },
+        ],
+      },
+      google: {
+        description: 'Google — Gmail, Calendar, Drive',
+        proxy_note: 'All Google calls go through POST /api/v1/services/google/proxy with {path, method, body}.',
+        actions: [
+          { action: 'List Gmail messages',          method: 'GET',  path: '/gmail/v1/users/me/messages?maxResults=10' },
+          { action: 'Get a Gmail message',          method: 'GET',  path: '/gmail/v1/users/me/messages/{messageId}' },
+          { action: 'List calendar events',         method: 'GET',  path: '/calendar/v3/calendars/primary/events?maxResults=10' },
+          { action: 'List Drive files',             method: 'GET',  path: '/drive/v3/files?pageSize=10' },
+        ],
+      },
+      slack: {
+        description: 'Slack — channels, messages, users',
+        proxy_note: 'All Slack calls go through POST /api/v1/services/slack/proxy with {path, method, body}.',
+        actions: [
+          { action: 'List channels',                method: 'GET',  path: '/conversations.list?limit=20' },
+          { action: 'Read channel messages',        method: 'GET',  path: '/conversations.history?channel={channel_id}&limit=20' },
+          { action: 'Send a message',               method: 'POST', path: '/chat.postMessage', body: { channel: '{channel_id}', text: 'message' } },
+          { action: 'List workspace users',         method: 'GET',  path: '/users.list' },
+        ],
+      },
+      notion: {
+        description: 'Notion — pages, databases',
+        proxy_note: 'All Notion calls go through POST /api/v1/services/notion/proxy with {path, method, body}.',
+        actions: [
+          { action: 'Search all pages/databases',   method: 'POST', path: '/search', body: { query: '' } },
+          { action: 'List databases',               method: 'POST', path: '/search', body: { filter: { property: 'object', value: 'database' } } },
+          { action: 'Query a database',             method: 'POST', path: '/databases/{database_id}/query', body: {} },
+          { action: 'Get a page',                   method: 'GET',  path: '/pages/{page_id}' },
+        ],
+      },
+      linkedin: {
+        description: 'LinkedIn — profile, posts',
+        proxy_note: 'All LinkedIn calls go through POST /api/v1/services/linkedin/proxy with {path, method, body}.',
+        actions: [
+          { action: 'Get your profile',             method: 'GET',  path: '/me' },
+          { action: 'Get profile picture',          method: 'GET',  path: '/me?projection=(id,profilePicture(displayImage~:playableStreams))' },
+        ],
+      },
+      twitter: {
+        description: 'Twitter/X — tweets, timeline',
+        proxy_note: 'All Twitter calls go through POST /api/v1/services/twitter/proxy with {path, method, body}.',
+        actions: [
+          { action: 'Get your profile',             method: 'GET',  path: '/users/me' },
+          { action: 'Post a tweet',                 method: 'POST', path: '/tweets', body: { text: 'tweet text' } },
+          { action: 'Get home timeline',            method: 'GET',  path: '/timelines/home_timeline?max_results=10' },
+        ],
+      },
+      facebook: {
+        description: 'Facebook — pages, posts',
+        proxy_note: 'All Facebook calls go through POST /api/v1/services/facebook/proxy with {path, method, body}.',
+        actions: [
+          { action: 'Get your profile',             method: 'GET',  path: '/me?fields=id,name,email' },
+          { action: 'List your pages',              method: 'GET',  path: '/me/accounts' },
+        ],
+      },
+      tiktok: {
+        description: 'TikTok — user info, videos',
+        proxy_note: 'All TikTok calls go through POST /api/v1/services/tiktok/proxy with {path, method, body}.',
+        actions: [
+          { action: 'Get your profile',             method: 'POST', path: '/v2/user/info/', body: { fields: ['display_name', 'avatar_url', 'follower_count'] } },
+        ],
+      },
+    };
+
+    // Build connected_services: only include services that have an OAuth token stored
+    const connectedServiceIds = OAUTH_SERVICES.filter(svcId => {
+      try {
+        const tok = getCachedOAuthToken(svcId, ownerId) || getOAuthToken(svcId, ownerId);
+        return !!tok;
+      } catch { return false; }
+    });
+
+    const connectedServices = connectedServiceIds.map(svcId => ({
+      service: svcId,
+      proxy_endpoint: `/api/v1/services/${svcId}/proxy`,
+      ...(SERVICE_INSTRUCTIONS[svcId] || {
+        description: `${svcId} — connected OAuth service`,
+        proxy_note: `All calls go through POST /api/v1/services/${svcId}/proxy with {path, method, body}.`,
+      }),
+    }));
+
     const context = {
       timestamp: new Date().toISOString(),
       version: "2.0",
@@ -6380,6 +6490,8 @@ app.get("/api/v1/gateway/context", authenticate, (req, res) => {
       // Long-term memory: structured DB entries + legacy MEMORY.md bullets
       memory: dbMemories.map(m => ({ id: m.id, content: m.content, created_at: m.created_at })),
       memory_legacy: fileMemory.memories || [],
+      // Connected services with per-service usage instructions
+      connected_services: connectedServices,
       // Connected services metadata (no credentials)
       vault: { tokens: vaultTokens },
       // All available personas
