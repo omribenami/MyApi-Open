@@ -611,6 +611,17 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_service_preferences_user ON service_preferences(user_id);
     CREATE INDEX IF NOT EXISTS idx_service_preferences_service ON service_preferences(service_name);
 
+    CREATE TABLE IF NOT EXISTS waitlist (
+      id TEXT PRIMARY KEY,
+      email TEXT UNIQUE NOT NULL,
+      created_at TEXT NOT NULL,
+      notified_at TEXT,
+      invited_at TEXT,
+      status TEXT NOT NULL DEFAULT 'pending'
+    );
+    CREATE INDEX IF NOT EXISTS idx_waitlist_email ON waitlist(email);
+    CREATE INDEX IF NOT EXISTS idx_waitlist_status ON waitlist(status);
+
     -- Phase 1: Teams & Multi-Tenancy Tables
     CREATE TABLE IF NOT EXISTS workspaces (
       id TEXT PRIMARY KEY,
@@ -1883,6 +1894,49 @@ function getUsersTableColumns() {
   } catch (_) {
     return new Set();
   }
+}
+
+function countTotalUsers() {
+  const cols = getUsersTableColumns();
+  if (cols.has('status')) {
+    const row = db.prepare("SELECT COUNT(*) AS n FROM users WHERE status IS NULL OR status != 'deleted'").get();
+    return row ? Number(row.n) : 0;
+  }
+  const row = db.prepare('SELECT COUNT(*) AS n FROM users').get();
+  return row ? Number(row.n) : 0;
+}
+
+function addToWaitlist(email) {
+  const now = new Date().toISOString();
+  const id = 'wl_' + crypto.randomBytes(12).toString('hex');
+  const existing = db.prepare('SELECT id, email, status, created_at FROM waitlist WHERE email = ?').get(email);
+  if (existing) {
+    return { entry: existing, created: false };
+  }
+  db.prepare('INSERT INTO waitlist (id, email, created_at, status) VALUES (?, ?, ?, ?)')
+    .run(id, email, now, 'pending');
+  return { entry: { id, email, status: 'pending', created_at: now }, created: true };
+}
+
+function listWaitlist({ limit = 100, offset = 0 } = {}) {
+  return db.prepare('SELECT id, email, status, created_at, notified_at, invited_at FROM waitlist ORDER BY created_at ASC LIMIT ? OFFSET ?')
+    .all(limit, offset);
+}
+
+function markWaitlistInvited(id) {
+  const now = new Date().toISOString();
+  const result = db.prepare("UPDATE waitlist SET status = 'invited', invited_at = ? WHERE id = ? AND status = 'pending'")
+    .run(now, id);
+  return result.changes > 0;
+}
+
+function markWaitlistNotified(ids) {
+  if (!Array.isArray(ids) || ids.length === 0) return 0;
+  const now = new Date().toISOString();
+  const stmt = db.prepare('UPDATE waitlist SET notified_at = ? WHERE id = ?');
+  let changes = 0;
+  for (const id of ids) changes += stmt.run(now, id).changes;
+  return changes;
 }
 
 function getUsers() {
@@ -6790,6 +6844,11 @@ module.exports = {
   getAuditLogs,
   createUser,
   getUsers,
+  countTotalUsers,
+  addToWaitlist,
+  listWaitlist,
+  markWaitlistInvited,
+  markWaitlistNotified,
   getUserByUsername,
   getUserByEmail,
   getUserById,

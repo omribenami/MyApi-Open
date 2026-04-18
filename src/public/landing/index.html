@@ -196,6 +196,38 @@
     .modal-terms a { color: var(--muted); text-decoration: underline; text-underline-offset: 2px; }
     .modal-terms a:hover { color: var(--text); }
 
+    /* Waitlist sub-view inside the auth modal. Shown only when the modal is in
+       signup mode AND the beta is full — sign-in (login mode) always shows OAuth. */
+    .modal-signup-view { display: block; }
+    .modal-waitlist-view { display: none; }
+    .modal.waitlist-mode .modal-signup-view { display: none; }
+    .modal.waitlist-mode .modal-waitlist-view { display: block; }
+    .waitlist-input {
+      width: 100%; padding: .7rem .9rem;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; color: var(--text);
+      font-size: .9rem; font-family: inherit;
+      margin-bottom: .6rem;
+    }
+    .waitlist-input:focus { outline: none; border-color: var(--accent); }
+    .waitlist-submit {
+      width: 100%; padding: .75rem 1rem;
+      background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+      color: #fff; border: none; border-radius: 10px;
+      font-size: .9rem; font-weight: 600; font-family: inherit;
+      cursor: pointer;
+    }
+    .waitlist-submit:disabled { opacity: .6; cursor: default; }
+    .waitlist-status { font-size: .85rem; margin-top: .75rem; }
+    .waitlist-status.success { color: #34d399; }
+    .waitlist-status.error { color: #f87171; }
+
+    /* When BETA is off, hide beta-only chrome (badge + Discord banner, "Soon" buttons). */
+    body.beta-off .beta-only { display: none !important; }
+    /* Inverse: only visible when BETA is off (real checkout CTAs). */
+    .beta-off-only { display: none; }
+    body.beta-off .beta-off-only { display: inline-flex; }
+
     @media (max-width: 640px) {
       .nav-links > a { display: none; }
       .stats { gap: 1.5rem; }
@@ -212,6 +244,7 @@
 
       <div class="modal-logo">My<span>Api</span></div>
 
+      <div class="modal-signup-view">
       <div class="modal-heading">
         <h3 id="modal-title">Welcome back</h3>
         <p id="modal-subtitle">Sign in to continue to MyApi.</p>
@@ -249,6 +282,30 @@
         By continuing you agree to our
         <a href="/terms">Terms</a> and <a href="/privacy">Privacy Policy</a>.
       </p>
+      </div>
+
+      <div class="modal-waitlist-view">
+        <div class="modal-heading">
+          <h3>We're at capacity</h3>
+          <p>MyApi is in closed beta and all seats are taken. Drop your email and we'll notify you the moment a spot opens up.</p>
+        </div>
+        <form id="waitlist-form" autocomplete="off">
+          <input
+            type="email"
+            id="waitlist-email"
+            class="waitlist-input"
+            placeholder="you@example.com"
+            required
+            autocomplete="email"
+            inputmode="email"
+          />
+          <button type="submit" class="waitlist-submit" id="waitlist-submit">Join the waitlist</button>
+          <p class="waitlist-status" id="waitlist-status" role="status" aria-live="polite"></p>
+        </form>
+        <p class="modal-terms" style="margin-top:1rem;">
+          Prefer Discord? <a href="https://discord.gg/WPp4sCN4xB" target="_blank" rel="noopener noreferrer">Ask for early access there</a>.
+        </p>
+      </div>
     </div>
   </div>
 
@@ -265,7 +322,7 @@
 
   <!-- HERO -->
   <section class="hero">
-    <div class="hero-badge">
+    <div class="hero-badge beta-only">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
       Now in Beta — Free for early users
     </div>
@@ -387,10 +444,10 @@
   <section class="section" id="pricing">
     <div class="section-tag">Pricing</div>
     <h2>Simple, transparent plans</h2>
-    <p>Free during beta. $10/month when we launch — no surprises.</p>
+    <p>Free during beta. Upgrade after launch and get your first month free.</p>
 
     <!-- Discord beta banner -->
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;padding:1.1rem 1.5rem;border-radius:12px;background:rgba(88,101,242,.1);border:1px solid rgba(88,101,242,.3);margin-bottom:2rem;">
+    <div class="beta-only" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;padding:1.1rem 1.5rem;border-radius:12px;background:rgba(88,101,242,.1);border:1px solid rgba(88,101,242,.3);margin-bottom:2rem;">
       <div style="display:flex;align-items:center;gap:.75rem;">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="#a5b4fc" aria-hidden="true"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
         <div>
@@ -409,7 +466,7 @@
       <!-- Free -->
       <div class="plan">
         <div class="plan-name">Free</div>
-        <div class="plan-price"><span style="text-decoration:line-through;opacity:0.45;font-size:0.85em;margin-right:6px;">$10</span>Free<span style="font-size:0.5em;vertical-align:middle;margin-left:6px;color:#a78bfa;font-weight:600;text-decoration:none;">Beta</span></div>
+        <div class="plan-price">Free<span style="font-size:0.5em;vertical-align:middle;margin-left:6px;color:#a78bfa;font-weight:600;text-decoration:none;">Forever</span></div>
         <div class="plan-desc">Perfect for personal use and getting started.</div>
         <ul class="plan-features">
           <li>2 AI personas</li>
@@ -425,7 +482,7 @@
       <div class="plan featured">
         <div class="plan-badge">Most popular</div>
         <div class="plan-name">Pro</div>
-        <div class="plan-price">$29<span>/mo</span></div>
+        <div class="plan-price"><span style="font-size:0.6em;vertical-align:super;color:#22c55e;font-weight:600;">First month free</span><br>$29<span>/mo</span></div>
         <div class="plan-desc">For power users who need unlimited access.</div>
         <ul class="plan-features">
           <li>5 AI personas</li>
@@ -436,13 +493,14 @@
           <li>AFP — API File Protocol</li>
           <li>Priority support</li>
         </ul>
-        <button class="btn btn-primary" disabled style="opacity:0.5;cursor:default;pointer-events:none;">Soon</button>
+        <button class="btn btn-primary beta-only" disabled style="opacity:0.5;cursor:default;pointer-events:none;">Soon</button>
+        <button class="btn btn-primary beta-off-only" data-action="open-modal" data-mode="signup">Get started</button>
       </div>
 
       <!-- Enterprise -->
       <div class="plan">
         <div class="plan-name">Enterprise</div>
-        <div class="plan-price">$99<span>/mo</span></div>
+        <div class="plan-price"><span style="font-size:0.6em;vertical-align:super;color:#22c55e;font-weight:600;">First month free</span><br>$99<span>/mo</span></div>
         <div class="plan-desc">Teams and organizations with advanced needs.</div>
         <ul class="plan-features">
           <li>20 AI personas</li>
@@ -453,7 +511,8 @@
           <li>RBAC &amp; SSO</li>
           <li>Dedicated support</li>
         </ul>
-        <button class="btn btn-outline" disabled style="opacity:0.5;cursor:default;pointer-events:none;">Soon</button>
+        <button class="btn btn-outline beta-only" disabled style="opacity:0.5;cursor:default;pointer-events:none;">Soon</button>
+        <button class="btn btn-outline beta-off-only" data-action="open-modal" data-mode="signup">Get started</button>
       </div>
 
     </div>
@@ -462,13 +521,13 @@
   <!-- CTA -->
   <div class="cta-banner">
     <h2>Ready to give your AI a memory?</h2>
-    <p>Join the beta — free forever on the Free plan. No credit card required.</p>
+    <p>Join the beta free. Upgrade after launch and get your first month free. No surprises.</p>
     <button class="btn btn-primary btn-lg" data-action="open-modal" data-mode="signup">Create your account →</button>
   </div>
 
   <!-- FOOTER -->
   <footer>
-    <p>© 2026 MyApi · <button class="footer-link" data-action="open-modal" data-mode="login">Dashboard</button> · <a href="/api/v1/">API</a> · <a href="/connectors/openai/openapi.yaml">OpenAPI spec</a> · <a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Use</a> · Open source under AGPL-3.0</p>
+    <p>© 2026 MyApi · <button class="footer-link" data-action="open-modal" data-mode="login">Dashboard</button> · <a href="/api/v1/">API</a> · <a href="/openapi.json">OpenAPI spec</a> · <a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Use</a> · Open source under AGPL-3.0</p>
     <p style="margin-top:.75rem;">
       <a href="https://discord.gg/WPp4sCN4xB" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:.4rem;color:#a5b4fc;font-size:.8rem;font-weight:500;">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>

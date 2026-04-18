@@ -6,6 +6,7 @@ import DeleteAccountModal from '../components/DeleteAccountModal';
 import NotificationSettings from '../components/NotificationSettings';
 import ImportExport from '../components/ImportExport';
 import { restartOnboarding, requestOnboardingModal } from '../utils/onboardingUtils';
+import { fetchPublicConfig } from '../utils/publicConfig';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared UI helpers
@@ -1700,6 +1701,15 @@ function BillingSection() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [betaActive, setBetaActive] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchPublicConfig().then((cfg) => {
+      if (!cancelled) setBetaActive(Boolean(cfg?.beta));
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   const loadBilling = useCallback(async () => {
     try {
@@ -1904,7 +1914,7 @@ function BillingSection() {
           const isCurrent = String(current.plan).toLowerCase() === String(plan.id).toLowerCase();
           const planId = String(plan.id).toLowerCase();
           const isFree = planId === 'free';
-          const isComingSoon = planId === 'pro' || planId === 'enterprise';
+          const isComingSoon = Boolean(plan.beta_locked) || (betaActive && !isFree);
           return (
             <div key={plan.id} className={`bg-slate-900 border rounded-lg p-4 ${isCurrent ? 'border-blue-500 ring-1 ring-blue-500/40' : 'border-slate-700'}`}>
               <div className="flex items-center justify-between gap-2">
@@ -1915,9 +1925,9 @@ function BillingSection() {
               </div>
               {isFree ? (
                 <p className="text-slate-300 text-xl mt-1 flex items-baseline gap-2">
-                  <span className="line-through text-slate-500 text-base">$10</span>
+                  {betaActive && <span className="line-through text-slate-500 text-base">$10</span>}
                   <span>Free</span>
-                  <span className="text-xs text-violet-400 font-semibold">Beta</span>
+                  {betaActive && <span className="text-xs text-violet-400 font-semibold">Beta</span>}
                 </p>
               ) : (
                 <p className="text-slate-300 text-xl mt-1">${plan.priceMonthly ?? Math.floor((plan.price_cents || 0) / 100)}<span className="text-sm text-slate-400">/mo</span></p>

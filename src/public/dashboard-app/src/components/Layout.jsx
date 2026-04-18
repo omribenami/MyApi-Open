@@ -181,7 +181,8 @@ function Layout({ children, onLogout }) {
     navGroups.push({
       label: 'Admin',
       items: [
-        { path: '/users', label: 'Users' }
+        { path: '/users', label: 'Users' },
+        { path: '/beta', label: 'Beta' }
       ]
     });
   }

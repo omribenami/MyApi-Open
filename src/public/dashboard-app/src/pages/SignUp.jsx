@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { handleOAuthCallback, AVAILABLE_SERVICES } from '../utils/oauth';
 import BrandLogo from '../components/BrandLogo';
+import WaitlistForm from '../components/WaitlistForm';
 import { clearAuthArtifacts } from '../utils/authRuntime';
+import { fetchPublicConfig } from '../utils/publicConfig';
 
 const OAuthIcons = {
   google: (
@@ -30,6 +32,23 @@ function SignUp() {
   const navigate = useNavigate();
   const [error, setError] = useState('');
   const { setMasterToken, setUser, isAuthenticated } = useAuthStore();
+  const [betaFull, setBetaFull] = useState(false);
+  const [prefillEmail, setPrefillEmail] = useState('');
+
+  useEffect(() => {
+    // ?beta=full is set by the OAuth callback when a new signup hits the cap.
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('beta') === 'full') {
+      setBetaFull(true);
+      setPrefillEmail(params.get('email') || '');
+      return;
+    }
+    let cancelled = false;
+    fetchPublicConfig().then((cfg) => {
+      if (!cancelled && cfg?.beta && cfg.betaFull) setBetaFull(true);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     const callback = handleOAuthCallback();
@@ -133,6 +152,14 @@ function SignUp() {
 
           <section className="lg:col-span-7">
             <div className="rounded-3xl border border-slate-700/80 bg-slate-900/85 p-5 shadow-2xl shadow-black/40 sm:p-7 lg:p-8">
+              {betaFull ? (
+                <WaitlistForm
+                  defaultEmail={prefillEmail}
+                  title="Sorry — MyApi is at capacity"
+                  subtitle="We're running a closed beta and all 50 seats are currently filled. Leave your email and we'll let you know as soon as a spot opens."
+                />
+              ) : (
+              <>
               <div className="mb-6">
                 <h2 className="text-2xl font-semibold">Get started</h2>
                 <p className="mt-2 text-sm text-slate-400">Choose your preferred sign-in method.</p>
@@ -172,6 +199,8 @@ function SignUp() {
                 {' '}and{' '}
                 <a href="/privacy" className="text-blue-400 hover:text-blue-300">Privacy Policy</a>
               </p>
+              </>
+              )}
             </div>
           </section>
         </div>
