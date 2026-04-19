@@ -11,6 +11,8 @@ const AVAILABLE_SCOPES = [
   { value: 'chat', label: 'Chat', description: 'Conversation and messaging' },
   { value: 'skills:read', label: 'Skills (Read)', description: 'Read skills and metadata' },
   { value: 'skills:write', label: 'Skills (Write)', description: 'Create and manage skills' },
+  { value: 'tickets:read', label: 'Tickets (Read)', description: 'View complaint tickets' },
+  { value: 'tickets:write', label: 'Tickets (Write)', description: 'Create, update and delete tickets' },
 ];
 
 function EditTokenModal({ isOpen, token, onClose, onSuccess }) {
