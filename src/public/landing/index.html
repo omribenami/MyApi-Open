@@ -227,6 +227,8 @@
     /* Inverse: only visible when BETA is off (real checkout CTAs). */
     .beta-off-only { display: none; }
     body.beta-off .beta-off-only { display: inline-flex; }
+    /* Block-level beta-off-only (e.g. plan price div) */
+    body.beta-off .beta-off-only.plan-price { display: block; }
 
     @media (max-width: 640px) {
       .nav-links > a { display: none; }
@@ -316,7 +318,8 @@
       <a href="#features">Features</a>
       <a href="#pricing">Pricing</a>
       <button class="btn btn-outline" data-action="open-modal" data-mode="login">Sign in</button>
-      <button class="btn btn-primary" data-action="open-modal" data-mode="signup">Get started free</button>
+      <button class="btn btn-primary beta-only" data-action="open-modal" data-mode="signup">Get started free</button>
+      <button class="btn btn-primary beta-off-only" data-action="open-modal" data-mode="signup">Get started</button>
     </div>
   </nav>
 
@@ -324,12 +327,13 @@
   <section class="hero">
     <div class="hero-badge beta-only">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
-      Now in Beta — Free for early users
+      Now in Beta — Starter plan is free
     </div>
     <h1>Your Data.<br><em>Your AI.</em> Your API.</h1>
     <p>MyApi is a personal API platform that gives AI agents secure, scoped access to your identity, services, knowledge base, and personas — all under your control.</p>
     <div class="hero-cta">
-      <button class="btn btn-primary btn-lg" data-action="open-modal" data-mode="signup">Start for free →</button>
+      <button class="btn btn-primary btn-lg beta-only" data-action="open-modal" data-mode="signup">Start for free →</button>
+      <button class="btn btn-primary btn-lg beta-off-only" data-action="open-modal" data-mode="signup">Get started →</button>
       <a href="#features" class="btn btn-outline btn-lg">See how it works</a>
     </div>
   </section>
@@ -444,7 +448,8 @@
   <section class="section" id="pricing">
     <div class="section-tag">Pricing</div>
     <h2>Simple, transparent plans</h2>
-    <p>Free during beta. Upgrade after launch and get your first month free.</p>
+    <p class="beta-only">Starter plan is free during beta. Paid plans are available after launch.</p>
+    <p class="beta-off-only" style="display:none">All plans billed from month one. No free tier — pick the plan that fits.</p>
 
     <!-- Discord beta banner -->
     <div class="beta-only" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;padding:1.1rem 1.5rem;border-radius:12px;background:rgba(88,101,242,.1);border:1px solid rgba(88,101,242,.3);margin-bottom:2rem;">
@@ -463,10 +468,13 @@
 
     <div class="pricing-grid">
 
-      <!-- Free -->
+      <!-- Starter -->
       <div class="plan">
-        <div class="plan-name">Free</div>
-        <div class="plan-price">Free<span style="font-size:0.5em;vertical-align:middle;margin-left:6px;color:#a78bfa;font-weight:600;text-decoration:none;">Forever</span></div>
+        <div class="plan-name">Starter</div>
+        <!-- Beta: free -->
+        <div class="plan-price beta-only">Free<span style="font-size:0.5em;vertical-align:middle;margin-left:6px;color:#a78bfa;font-weight:600;">During beta</span></div>
+        <!-- Non-beta: $10/mo -->
+        <div class="plan-price beta-off-only" style="display:none">$10<span>/mo</span></div>
         <div class="plan-desc">Perfect for personal use and getting started.</div>
         <ul class="plan-features">
           <li>2 AI personas</li>
@@ -475,14 +483,15 @@
           <li>Knowledge base</li>
           <li>Long-term memory</li>
         </ul>
-        <button class="btn btn-outline" data-action="open-modal" data-mode="signup">Get started free</button>
+        <button class="btn btn-outline beta-only" data-action="open-modal" data-mode="signup">Get started free</button>
+        <button class="btn btn-outline beta-off-only" data-action="open-modal" data-mode="signup">Get started</button>
       </div>
 
       <!-- Pro -->
       <div class="plan featured">
         <div class="plan-badge">Most popular</div>
         <div class="plan-name">Pro</div>
-        <div class="plan-price"><span style="font-size:0.6em;vertical-align:super;color:#22c55e;font-weight:600;">First month free</span><br>$29<span>/mo</span></div>
+        <div class="plan-price">$29<span>/mo</span></div>
         <div class="plan-desc">For power users who need unlimited access.</div>
         <ul class="plan-features">
           <li>5 AI personas</li>
@@ -500,7 +509,7 @@
       <!-- Enterprise -->
       <div class="plan">
         <div class="plan-name">Enterprise</div>
-        <div class="plan-price"><span style="font-size:0.6em;vertical-align:super;color:#22c55e;font-weight:600;">First month free</span><br>$99<span>/mo</span></div>
+        <div class="plan-price">$99<span>/mo</span></div>
         <div class="plan-desc">Teams and organizations with advanced needs.</div>
         <ul class="plan-features">
           <li>20 AI personas</li>
@@ -521,7 +530,8 @@
   <!-- CTA -->
   <div class="cta-banner">
     <h2>Ready to give your AI a memory?</h2>
-    <p>Join the beta free. Upgrade after launch and get your first month free. No surprises.</p>
+    <p class="beta-only">Join the beta — Starter plan is free. No surprises.</p>
+    <p class="beta-off-only" style="display:none">All plans billed from month one. No surprises.</p>
     <button class="btn btn-primary btn-lg" data-action="open-modal" data-mode="signup">Create your account →</button>
   </div>
 
