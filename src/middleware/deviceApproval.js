@@ -192,7 +192,7 @@ function deviceApprovalMiddleware(req, res, next) {
         const pendingApprovals = db.getPendingApprovals(userId, tokenId);
         const existingPending = pendingApprovals.find(p => p.device_fingerprint_hash === fingerprint.fingerprintHash);
         if (!existingPending) {
-          db.createPendingApproval(tokenId, userId, fingerprint.fingerprintHash, fingerprint.summary, fingerprint.fingerprint.ipAddress);
+          db.createPendingApproval(tokenId, userId, fingerprint.fingerprintHash, fingerprint.summary, fingerprint.summary.ipAddress);
         }
         return res.status(403).json({
           error: 'device_not_approved',
@@ -206,7 +206,7 @@ function deviceApprovalMiddleware(req, res, next) {
       try {
         const existing = db.getApprovedDeviceByHashAndToken(userId, fingerprint.fingerprintHash, tokenId);
         if (!existing) {
-          db.createApprovedDevice(tokenId, userId, fingerprint.fingerprintHash, tokenRow.label, fingerprint.summary, fingerprint.fingerprint.ipAddress);
+          db.createApprovedDevice(tokenId, userId, fingerprint.fingerprintHash, tokenRow.label, fingerprint.summary, fingerprint.summary.ipAddress);
         } else {
           db.updateDeviceLastUsed(existing.id);
         }
@@ -293,20 +293,20 @@ function deviceApprovalMiddleware(req, res, next) {
         userId,
         fingerprintHash,
         currentFingerprint.summary,
-        currentFingerprint.fingerprint.ipAddress
+        currentFingerprint.summary.ipAddress
       );
       
       // Emit notification and log activity for new device approval request
       const deviceInfo = `${currentFingerprint.summary.os} · ${currentFingerprint.summary.browser}`;
       NotificationService.emitNotification(userId, 'device_approval_requested',
         `New Device Requesting Access (${tokenKind === 'master' ? 'Master Token' : 'Guest Token'}: "${tokenName}")`,
-        `A new device is requesting access via ${tokenKind} token "${tokenName}" from ${currentFingerprint.fingerprint.ipAddress}`,
+        `A new device is requesting access via ${tokenKind} token "${tokenName}" from ${currentFingerprint.summary.ipAddress}`,
         {
           relatedEntityType: 'device',
           relatedEntityId: approvalId,
           data: {
             deviceInfo,
-            ipAddress: currentFingerprint.fingerprint.ipAddress,
+            ipAddress: currentFingerprint.summary.ipAddress,
             os: currentFingerprint.summary.os,
             browser: currentFingerprint.summary.browser,
             tokenKind,
@@ -322,12 +322,12 @@ function deviceApprovalMiddleware(req, res, next) {
         resourceName: deviceInfo,
         actorType: 'system',
         details: {
-          ip_address: currentFingerprint.fingerprint.ipAddress,
+          ip_address: currentFingerprint.summary.ipAddress,
           os: currentFingerprint.summary.os,
           browser: currentFingerprint.summary.browser,
         },
         result: 'pending',
-        ipAddress: currentFingerprint.fingerprint.ipAddress,
+        ipAddress: currentFingerprint.summary.ipAddress,
       });
       
       // Emit alert event for new device approval request (legacy WebSocket)
@@ -336,7 +336,7 @@ function deviceApprovalMiddleware(req, res, next) {
           userId,
           deviceId: approvalId,
           deviceName: currentFingerprint.summary.os || 'Unknown Device',
-          ip: currentFingerprint.fingerprint.ipAddress,
+          ip: currentFingerprint.summary.ipAddress,
           userAgent: currentFingerprint.summary.browser || 'Unknown',
           timestamp: new Date().toISOString(),
         });
@@ -378,7 +378,7 @@ function deviceApprovalMiddleware(req, res, next) {
       approvalId,
       tokenName,
       deviceInfo: currentFingerprint.summary,
-      ipAddress: currentFingerprint.fingerprint.ipAddress,
+      ipAddress: currentFingerprint.summary.ipAddress,
       suspiciousActivity: suspiciousAnalysis,
     };
 
@@ -404,7 +404,7 @@ function deviceApprovalMiddleware(req, res, next) {
         expiresIn: '24 hours',
       },
       device: currentFingerprint.summary,
-      ipAddress: currentFingerprint.fingerprint.ipAddress,
+      ipAddress: currentFingerprint.summary.ipAddress,
       suspiciousActivity: suspiciousAnalysis.warnings.length > 0 ? suspiciousAnalysis : null,
       ...(isMasterToken ? {
         recommendation: {
