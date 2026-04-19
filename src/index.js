@@ -777,7 +777,7 @@ app.use(helmet({
       imgSrc: ["'self'", "data:", "https:", "blob:"],
       fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
       connectSrc: ["'self'", "https:", "wss:"],
-      frameSrc: ["'self'"],
+      frameSrc: ["'self'", "https://www.youtube.com", "https://www.youtube-nocookie.com"],
       objectSrc: ["'none'"],
       baseUri: ["'self'"],
       formAction: ["'self'", "https://chat.openai.com", "https://chatgpt.com"],
