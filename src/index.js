@@ -5672,10 +5672,10 @@ app.post("/api/v1/tokens/validate", authRateLimit, async (req, res) => {
 const BILLING_PLANS = {
   free: {
     id: 'free',
-    name: 'Free',
-    price_cents: 0,
-    priceMonthly: 0, // deprecated, kept for backwards compat
-    description: 'Perfect for individuals getting started',
+    name: 'Starter',
+    price_cents: 1000,
+    priceMonthly: 10, // deprecated, kept for backwards compat
+    description: 'Perfect for personal use and getting started.',
     features: [
       '2 AI Personas',
       '3 Service Connections',
@@ -5689,9 +5689,9 @@ const BILLING_PLANS = {
     maxServices: 3,
     maxTeamMembers: 2,
     maxSkillsPerPersona: 4,
-    stripe_product_id: null,
-    stripePriceId: null,
-    stripePaymentLinkEnv: null,
+    stripe_product_id: process.env.STRIPE_PRODUCT_ID_STARTER_LIVE || 'prod_UE1qwjLE5Sfyqs',
+    stripePriceId: process.env.STRIPE_PRICE_ID_STARTER_LIVE,
+    stripePaymentLinkEnv: 'STRIPE_PAYMENT_LINK_STARTER',
   },
   pro: {
     id: 'pro',
@@ -6047,10 +6047,10 @@ app.post('/api/v1/billing/checkout', authenticate, async (req, res) => {
       customer = upsertBillingCustomer(workspaceId, created.id, ownerEmail);
     }
 
-    // SECURITY: Only auto-upgrade to free plan. For paid plans, wait for Stripe webhook confirmation
-    if (selectedPlan === 'free') {
+    // During beta, Starter (free) is complimentary — activate without payment
+    if (selectedPlan === 'free' && betaMode.isBetaMode()) {
       upsertBillingSubscription(workspaceId, {
-        stripe_subscription_id: `free_${Date.now()}`,
+        stripe_subscription_id: `beta_starter_${Date.now()}`,
         plan_id: 'free',
         status: 'active',
       });
@@ -6058,7 +6058,7 @@ app.post('/api/v1/billing/checkout', authenticate, async (req, res) => {
         url: null,
         plan: 'free',
         provider: 'stripe',
-        message: 'Free plan activated'
+        message: 'Starter plan activated (free during beta)'
       });
     }
 

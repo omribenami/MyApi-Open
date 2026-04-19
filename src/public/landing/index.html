@@ -318,7 +318,7 @@
       <a href="#features">Features</a>
       <a href="#pricing">Pricing</a>
       <button class="btn btn-outline" data-action="open-modal" data-mode="login">Sign in</button>
-      <button class="btn btn-primary beta-only" data-action="open-modal" data-mode="signup">Get started free</button>
+      <button class="btn btn-primary beta-only" data-action="open-modal" data-mode="signup">Get started</button>
       <button class="btn btn-primary beta-off-only" data-action="open-modal" data-mode="signup">Get started</button>
     </div>
   </nav>
@@ -332,7 +332,7 @@
     <h1>Your Data.<br><em>Your AI.</em> Your API.</h1>
     <p>MyApi is a personal API platform that gives AI agents secure, scoped access to your identity, services, knowledge base, and personas — all under your control.</p>
     <div class="hero-cta">
-      <button class="btn btn-primary btn-lg beta-only" data-action="open-modal" data-mode="signup">Start for free →</button>
+      <button class="btn btn-primary btn-lg beta-only" data-action="open-modal" data-mode="signup">Start →</button>
       <button class="btn btn-primary btn-lg beta-off-only" data-action="open-modal" data-mode="signup">Get started →</button>
       <a href="#features" class="btn btn-outline btn-lg">See how it works</a>
     </div>
@@ -471,8 +471,8 @@
       <!-- Starter -->
       <div class="plan">
         <div class="plan-name">Starter</div>
-        <!-- Beta: free -->
-        <div class="plan-price beta-only">Free<span style="font-size:0.5em;vertical-align:middle;margin-left:6px;color:#a78bfa;font-weight:600;">During beta</span></div>
+        <!-- Beta: free (was $15) -->
+        <div class="plan-price beta-only">Free<span style="font-size:0.5em;vertical-align:middle;margin-left:6px;color:#94a3b8;font-weight:500;text-decoration:line-through;">$15</span><span style="font-size:0.5em;vertical-align:middle;margin-left:5px;color:#a78bfa;font-weight:600;">During beta</span></div>
         <!-- Non-beta: $10/mo -->
         <div class="plan-price beta-off-only" style="display:none">$10<span>/mo</span></div>
         <div class="plan-desc">Perfect for personal use and getting started.</div>
@@ -483,7 +483,7 @@
           <li>Knowledge base</li>
           <li>Long-term memory</li>
         </ul>
-        <button class="btn btn-outline beta-only" data-action="open-modal" data-mode="signup">Get started free</button>
+        <button class="btn btn-outline beta-only" data-action="open-modal" data-mode="signup">Get started</button>
         <button class="btn btn-outline beta-off-only" data-action="open-modal" data-mode="signup">Get started</button>
       </div>
 
@@ -527,11 +527,20 @@
     </div>
   </section>
 
-  <!-- CTA -->
-  <div class="cta-banner">
-    <h2>Ready to give your AI a memory?</h2>
-    <p class="beta-only">Join the beta — Starter plan is free. No surprises.</p>
-    <p class="beta-off-only" style="display:none">All plans billed from month one. No surprises.</p>
+  <!-- VIDEO + CTA -->
+  <div style="margin: 4rem 2rem; text-align: center;">
+    <div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:14px;border:1px solid var(--border);max-width:860px;margin:0 auto 2.5rem;">
+      <iframe
+        src="https://www.youtube.com/embed/JIy3FrCWHGo"
+        title="MyApi — See how it works"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        allowfullscreen
+        style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;border-radius:14px;">
+      </iframe>
+    </div>
+    <h2 style="font-size:2rem;font-weight:700;margin-bottom:.75rem;">Ready to give your AI a memory?</h2>
+    <p style="color:var(--muted);margin-bottom:2rem;" class="beta-only">Join the beta — Starter plan is free. No surprises.</p>
+    <p style="color:var(--muted);margin-bottom:2rem;display:none;" class="beta-off-only">All plans billed from month one. No surprises.</p>
     <button class="btn btn-primary btn-lg" data-action="open-modal" data-mode="signup">Create your account →</button>
   </div>
 
