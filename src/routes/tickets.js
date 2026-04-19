@@ -1,6 +1,6 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
-const { queueEmail } = require('../database');
+const { queueEmail, getTokenScopes } = require('../database');
 
 const ALLOWED_FIELDS = ['date', 'complainer', 'complaint', 'repro_steps', 'status', 'fix_commit', 'source', 'source_message_id'];
 const VALID_STATUSES = ['open', 'inprogress', 'closed'];
@@ -115,17 +115,24 @@ function ticketHtml(ticket, heading) {
 function createTicketsRoutes({ db, requirePowerUser, isMaster }) {
   const router = express.Router();
 
-  function guard(req, res) {
-    if (!isMaster(req)) {
-      res.status(403).json({ error: 'Master token required' });
-      return false;
-    }
-    return requirePowerUser(req, res);
+  function hasTicketScope(req, write = false) {
+    const tokenId = req.tokenMeta?.tokenId;
+    if (!tokenId) return false;
+    const scopes = getTokenScopes(tokenId);
+    return scopes.includes('admin:*') ||
+      (write ? scopes.includes('tickets:write') : scopes.includes('tickets:read') || scopes.includes('tickets:write'));
+  }
+
+  function guard(req, res, write = false) {
+    if (isMaster(req)) return requirePowerUser(req, res);
+    if (hasTicketScope(req, write)) return true;
+    res.status(403).json({ error: write ? 'tickets:write scope required' : 'tickets:read scope required' });
+    return false;
   }
 
   // GET /api/v1/tickets
   router.get('/', (req, res) => {
-    if (!guard(req, res)) return;
+    if (!guard(req, res, false)) return;
     const { status, source, limit = 100, offset = 0 } = req.query;
     let sql = 'SELECT * FROM tickets WHERE 1=1';
     const params = [];
@@ -143,7 +150,7 @@ function createTicketsRoutes({ db, requirePowerUser, isMaster }) {
 
   // GET /api/v1/tickets/:id
   router.get('/:id', (req, res) => {
-    if (!guard(req, res)) return;
+    if (!guard(req, res, false)) return;
     try {
       const row = db.prepare('SELECT * FROM tickets WHERE id = ?').get(req.params.id);
       if (!row) return res.status(404).json({ error: 'Ticket not found' });
@@ -155,7 +162,7 @@ function createTicketsRoutes({ db, requirePowerUser, isMaster }) {
 
   // POST /api/v1/tickets
   router.post('/', (req, res) => {
-    if (!guard(req, res)) return;
+    if (!guard(req, res, true)) return;
     const { complaint, complainer, date, repro_steps, status = 'open', fix_commit, source = 'manual', source_message_id } = req.body || {};
     if (!complaint) return res.status(400).json({ error: 'complaint is required' });
     if (status && !VALID_STATUSES.includes(status)) return res.status(400).json({ error: `status must be one of: ${VALID_STATUSES.join(', ')}` });
@@ -181,7 +188,7 @@ function createTicketsRoutes({ db, requirePowerUser, isMaster }) {
 
   // PUT /api/v1/tickets/:id
   router.put('/:id', (req, res) => {
-    if (!guard(req, res)) return;
+    if (!guard(req, res, true)) return;
     const existing = db.prepare('SELECT * FROM tickets WHERE id = ?').get(req.params.id);
     if (!existing) return res.status(404).json({ error: 'Ticket not found' });
     const updates = {};
@@ -216,7 +223,7 @@ function createTicketsRoutes({ db, requirePowerUser, isMaster }) {
 
   // DELETE /api/v1/tickets/:id
   router.delete('/:id', (req, res) => {
-    if (!guard(req, res)) return;
+    if (!guard(req, res, true)) return;
     try {
       const result = db.prepare('DELETE FROM tickets WHERE id = ?').run(req.params.id);
       if (result.changes === 0) return res.status(404).json({ error: 'Ticket not found' });

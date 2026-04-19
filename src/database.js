@@ -1646,6 +1646,8 @@ function seedDefaultScopes() {
     { name: 'skills:write',   category: 'skills',    description: 'Create and manage skills' },
     { name: 'services:read',  category: 'services',  description: 'Proxy GET requests to connected OAuth services' },
     { name: 'services:write', category: 'services',  description: 'Proxy POST/PUT/DELETE requests to connected OAuth services' },
+    { name: 'tickets:read',   category: 'tickets',   description: 'Read tickets' },
+    { name: 'tickets:write',  category: 'tickets',   description: 'Create and update tickets' },
     { name: 'admin:*',        category: 'admin',     description: 'Full admin access (grants all scopes)' },
   ];
 
