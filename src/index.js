@@ -5066,6 +5066,17 @@ app.post("/api/v1/tokens", authenticate, (req, res) => {
     return res.status(400).json({ error: "No valid scopes provided" });
   }
 
+  // Auto-add required scopes from persona's attached skills/KB when creating a bundle token
+  if (scopeBundle && typeof scopeBundle === 'object' && scopeBundle.persona_id) {
+    const pid = Number(scopeBundle.persona_id);
+    if (!isNaN(pid)) {
+      const hasSkills = db.prepare('SELECT 1 FROM persona_skills WHERE persona_id = ? LIMIT 1').get(pid);
+      const hasDocs   = db.prepare('SELECT 1 FROM persona_documents WHERE persona_id = ? LIMIT 1').get(pid);
+      if (hasSkills && !finalScopes.includes('skills:read')) finalScopes.push('skills:read');
+      if (hasDocs   && !finalScopes.includes('knowledge'))   finalScopes.push('knowledge');
+    }
+  }
+
   // Create the token
   const rawToken = 'myapi_' + crypto.randomBytes(32).toString("hex");
   const hash = bcrypt.hashSync(rawToken, 10);
