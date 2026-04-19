@@ -12476,8 +12476,9 @@ if (process.env.NODE_ENV !== 'test') {
           clientId: 'myapi-agent',
           clientSecretHash: agentSecretHash,
           clientName: 'AI Agent',
-          // Allow localhost on any port (CLI/desktop agents) and any HTTPS callback (cloud agents)
-          redirectUris: ['http://localhost:*/callback', 'https://*/callback'],
+          // Allow localhost/LAN IPs on any port (CLI/desktop agents) and any HTTPS callback (cloud agents)
+          // HTTP is allowed for local network IPs since myapi-agent is PKCE-only (security via code_verifier)
+          redirectUris: ['http://localhost:*/callback', 'http://*:*/callback', 'https://*/callback'],
           ownerId: null,
         });
         console.log('[OAuthServer] myapi-agent public client bootstrapped (PKCE-only)');
