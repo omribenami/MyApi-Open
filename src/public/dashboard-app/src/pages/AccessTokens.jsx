@@ -163,6 +163,7 @@ function AccessTokens() {
 
   // Memory: boolean
   const [memoryAccess, setMemoryAccess] = useState(false);
+  const [ticketAccess, setTicketAccess] = useState('none'); // 'none' | 'read' | 'write'
 
   // ── Resources from API ──────────────────────────────────────────────────────
   const [personas, setPersonas] = useState([]);
@@ -326,6 +327,8 @@ function AccessTokens() {
 
     // Memory
     if (memoryAccess) scopes.push('memory');
+    if (ticketAccess === 'read') scopes.push('tickets:read');
+    if (ticketAccess === 'write') { scopes.push('tickets:read'); scopes.push('tickets:write'); }
 
     return { scopes: [...new Set(scopes)], allowedResources: Object.keys(allowedResources).length > 0 ? allowedResources : null };
   };
@@ -339,6 +342,7 @@ function AccessTokens() {
     if (skillAccess !== 'none') n++;
     if (serviceAccess !== 'none') n++;
     if (memoryAccess) n++;
+    if (ticketAccess !== 'none') n++;
     return n;
   };
 
@@ -490,6 +494,7 @@ function AccessTokens() {
     setSkillAccess('none'); setSelectedSkillIds(new Set()); setSkillSelectionMode('all');
     setServiceAccess('none'); setSelectedServiceNames(new Set()); setServiceSelectionMode('all');
     setMemoryAccess(false);
+    setTicketAccess('none');
   };
 
   const handleCreateSubmit = async (e) => {
@@ -731,6 +736,7 @@ function AccessTokens() {
                       if (['basic','professional','availability'].includes(s)) cats.add('Identity');
                       else if (s === 'personas') cats.add('Personas');
                       else if (['knowledge','chat','memory'].includes(s)) cats.add('Knowledge');
+                      else if (s === 'tickets:read' || s === 'tickets:write') cats.add('Tickets');
                       else if (s.startsWith('skills:')) cats.add('Skills');
                       else if (s.startsWith('services')) cats.add('Services');
                     });
@@ -1325,6 +1331,33 @@ function AccessTokens() {
                         <p className="text-xs text-slate-500">Token can read and write memory entries</p>
                       </div>
                     </label>
+                  </ScopeRow>
+
+                  {/* ── Tickets ── */}
+                  <ScopeRow
+                    icon="🎫"
+                    title="Tickets"
+                    description="Access the complaint ticket system"
+                    summary={ticketAccess === 'write' ? 'Read & Write' : ticketAccess === 'read' ? 'Read Only' : 'No access'}
+                    summaryColor={ticketAccess !== 'none' ? 'text-blue-400' : 'text-slate-600'}
+                    active={ticketAccess !== 'none'}
+                  >
+                    {['none', 'read', 'write'].map((value) => (
+                      <label key={value} className={`flex items-center gap-3 px-2 py-2 rounded-lg cursor-pointer transition-colors hover:bg-slate-800/60 ${ticketAccess === value ? 'bg-blue-900/10' : ''}`}>
+                        <input
+                          type="radio"
+                          name="ticketAccess"
+                          value={value}
+                          checked={ticketAccess === value}
+                          onChange={() => setTicketAccess(value)}
+                          className="h-4 w-4 border-slate-600 bg-slate-700 text-blue-500"
+                        />
+                        <div>
+                          <span className="text-sm text-white">{value === 'none' ? 'No access' : value === 'read' ? 'Read only' : 'Read & Write'}</span>
+                          <p className="text-xs text-slate-500">{value === 'none' ? 'Token cannot access tickets' : value === 'read' ? 'View tickets (tickets:read)' : 'View, create, update and delete tickets (tickets:write)'}</p>
+                        </div>
+                      </label>
+                    ))}
                   </ScopeRow>
 
                 </div>
