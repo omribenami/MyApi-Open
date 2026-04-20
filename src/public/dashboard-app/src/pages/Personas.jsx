@@ -414,20 +414,6 @@ function Personas() {
         </div>
       )}
 
-      {/* Detail Modal (kept from original) */}
-      {selectedPersona && editingPersona === null && false && (
-        <PersonaDetailModal
-          persona={selectedPersona}
-          onClose={() => setSelectedPersona(null)}
-          onEdit={async () => {
-            await openEditModal(selectedPersona);
-            setSelectedPersona(null);
-          }}
-          onSetActive={() => handleSetActive(selectedPersona.id)}
-          onDelete={() => handleDeletePersona(selectedPersona.id)}
-        />
-      )}
-
       {/* Create Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ background: 'rgba(0,0,0,0.6)' }}>

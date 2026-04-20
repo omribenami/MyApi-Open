@@ -35,7 +35,6 @@ function KnowledgeBase() {
     isLoading,
     error,
     success,
-    viewMode,
     searchQuery,
     sortBy,
     sortOrder,
@@ -46,7 +45,6 @@ function KnowledgeBase() {
     setSuccess,
     clearError,
     clearSuccess,
-    setViewMode,
     setSearchQuery,
     setSortBy,
     setSortOrder,
@@ -103,16 +101,6 @@ function KnowledgeBase() {
     const s = new Set(documents.map((d) => d.source));
     return Array.from(s).sort();
   }, [documents]);
-
-  // Derived: stats
-  const stats = useMemo(() => {
-    const totalWords = documents.reduce((sum, d) => sum + (d.metadata?.wordCount || 0), 0);
-    return {
-      total: documents.length,
-      sources: uniqueSources.length,
-      words: totalWords,
-    };
-  }, [documents, uniqueSources]);
 
   // Derived: filtered + sorted documents
   const displayDocuments = useMemo(() => {

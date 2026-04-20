@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 
 // ── Tiny icon helper ──────────────────────────────────────────────────
@@ -101,8 +101,6 @@ function Metric({ label, value, unit }) {
 function DashboardHome() {
   const masterToken = useAuthStore((s) => s.masterToken);
   const currentWorkspace = useAuthStore((s) => s.currentWorkspace);
-  const user = useAuthStore((s) => s.user);
-  const navigate = useNavigate();
 
   const [stats, setStats] = useState({
     tokens: 0,

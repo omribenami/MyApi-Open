@@ -19,11 +19,6 @@ const SOURCE_COLORS = {
   api:              'bg-slate-600/30 text-slate-400 border-slate-600/30',
 };
 
-function sourceBadgeClass(source) {
-  const key = (source || 'user').toLowerCase();
-  return SOURCE_COLORS[key] || 'bg-slate-600/30 text-slate-400 border-slate-600/30';
-}
-
 function SourceBadge({ source }) {
   return (
     <span style={{ fontFamily: 'JetBrains Mono,monospace', fontSize: '10.5px', padding: '1px 6px', border: '1px solid var(--line)', background: 'var(--bg-sunk)', color: 'var(--ink-3)', borderRadius: '3px' }}>

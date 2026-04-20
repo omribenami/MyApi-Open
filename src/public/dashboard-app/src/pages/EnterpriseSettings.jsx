@@ -120,7 +120,6 @@ function EnterpriseSettings() {
   }
 
   const isSuccess = message.startsWith('success:');
-  const isError = message.startsWith('error:');
   const messageText = message.replace(/^(success|error):/, '');
 
   return (

@@ -200,7 +200,7 @@ function Skills() {
   const masterToken = useAuthStore((s) => s.masterToken);
   const currentWorkspace = useAuthStore((s) => s.currentWorkspace);
   const {
-    skills, isLoading, error, setSkills, setIsLoading, setError, clearError,
+    skills, isLoading, error, setSkills, setIsLoading, setError,
     showCreateModal, openCreateModal, closeCreateModal,
     showEditModal, selectedSkill, openEditModal, closeEditModal,
     openDetailModal,
@@ -420,15 +420,6 @@ function Skills() {
     }
   };
 
-  const categoryLabel = (cat) => CATEGORIES.find((c) => c.value === cat)?.label || cat;
-  const formatUpdatedDate = (dateString) => {
-    if (!dateString) return '—';
-    return new Date(dateString).toLocaleDateString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
-  };
 
   if (isLoading && skills.length === 0) {
     return (

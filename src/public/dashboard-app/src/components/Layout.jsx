@@ -373,7 +373,6 @@ function Layout({ children, onLogout }) {
   const location = useLocation();
   const { user } = useAuthStore();
   const masterToken = useAuthStore((state) => state.masterToken);
-  const workspaces = useAuthStore((state) => state.workspaces);
   const unreadCount = useNotificationStore(state => state.unreadCount);
   const fetchUnreadCount = useNotificationStore(state => state.fetchUnreadCount);
   const toasts = useNotificationStore(state => state.toasts) || [];
@@ -480,11 +479,6 @@ function Layout({ children, onLogout }) {
   }, [user]);
 
   const userInitial = displayName.slice(0, 1).toUpperCase();
-
-  const currentWorkspace = useMemo(() => {
-    if (!workspaces?.length) return null;
-    return workspaces.find(w => w.isActive || w.is_active) || workspaces[0];
-  }, [workspaces]);
 
   const handleLogout = () => {
     if (window.confirm('Are you sure you want to log out?')) onLogout();
