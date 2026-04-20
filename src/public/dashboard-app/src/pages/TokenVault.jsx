@@ -243,7 +243,7 @@ function TokenVault() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <div className="micro mb-2">VAULT · CREDENTIALS</div>
-          <h1 className="font-serif text-[28px] font-medium tracking-tight ink">External Token Vault.</h1>
+          <h1 className="font-serif text-[20px] sm:text-[28px] font-medium tracking-tight ink">External Token Vault.</h1>
           <p className="mt-2 ink-3 text-sm">Securely store API keys and credentials for external services</p>
         </div>
         <button

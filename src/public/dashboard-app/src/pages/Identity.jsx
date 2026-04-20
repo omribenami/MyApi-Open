@@ -568,10 +568,10 @@ function Identity() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start gap-6 mb-8">
+      <div className="flex flex-col sm:flex-row items-start gap-4 mb-8">
         <div className="flex-1 min-w-0">
           <div className="micro mb-2">AI BRAIN · IDENTITY</div>
-          <h1 className="font-serif text-[34px] leading-[1.05] tracking-tight ink font-medium">Who you are, precisely.</h1>
+          <h1 className="font-serif text-[22px] sm:text-[34px] leading-[1.05] tracking-tight ink font-medium">Who you are, precisely.</h1>
           <p className="mt-2 text-[15px] ink-2 max-w-[60ch]">Your identity anchors every persona and scopes what agents can reveal about you.</p>
         </div>
       </div>

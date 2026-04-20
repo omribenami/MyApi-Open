@@ -2333,7 +2333,7 @@ function Settings() {
       {/* Page header */}
       <div>
         <div className="micro mb-2">ACCOUNT · SETTINGS</div>
-        <h1 className="font-serif text-[28px] font-medium tracking-tight ink">Settings.</h1>
+        <h1 className="font-serif text-[20px] sm:text-[28px] font-medium tracking-tight ink">Settings.</h1>
         <p className="ink-3 text-sm mt-1">Manage your account, security, and privacy preferences</p>
       </div>
 

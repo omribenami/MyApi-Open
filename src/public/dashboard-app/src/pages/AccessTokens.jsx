@@ -568,7 +568,7 @@ function AccessTokens() {
       {/* Header */}
       <div>
         <div className="micro mb-2">TOKENS · ACCESS</div>
-        <h1 className="font-serif text-[28px] font-medium tracking-tight ink">Access Tokens.</h1>
+        <h1 className="font-serif text-[20px] sm:text-[28px] font-medium tracking-tight ink">Access Tokens.</h1>
         <p className="mt-1 text-sm ink-3">Manage your master token, guest tokens, and marketplace-installed tokens</p>
       </div>
 

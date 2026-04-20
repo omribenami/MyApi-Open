@@ -267,10 +267,10 @@ export default function Memory() {
       )}
 
       {/* Header */}
-      <div className="flex items-start gap-6 mb-8">
+      <div className="flex flex-col sm:flex-row items-start gap-4 mb-8">
         <div className="flex-1 min-w-0">
           <div className="micro mb-2">AI BRAIN · MEMORY</div>
-          <h1 className="font-serif text-[34px] leading-[1.05] tracking-tight ink font-medium">What every persona has learned.</h1>
+          <h1 className="font-serif text-[22px] sm:text-[34px] leading-[1.05] tracking-tight ink font-medium">What every persona has learned.</h1>
           <p className="mt-2 text-[15px] ink-2 max-w-[60ch]">Long-lived facts agents have stored about you. Each memory is scoped to a persona and can be forgotten one at a time.</p>
         </div>
         <div className="flex items-center gap-2 pt-1">

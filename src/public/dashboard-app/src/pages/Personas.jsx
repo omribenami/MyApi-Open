@@ -252,10 +252,10 @@ function Personas() {
   return (
     <div className="space-y-8">
       {/* Section head */}
-      <div className="flex items-start gap-6 mb-6">
+      <div className="flex flex-col sm:flex-row items-start gap-4 mb-6">
         <div className="flex-1 min-w-0">
           <div className="micro mb-2">AI BRAIN · PERSONAS</div>
-          <h1 className="font-serif text-[34px] leading-[1.05] tracking-tight ink font-medium">One brain, many voices.</h1>
+          <h1 className="font-serif text-[22px] sm:text-[34px] leading-[1.05] tracking-tight ink font-medium">One brain, many voices.</h1>
           <p className="mt-2 text-[15px] ink-2 max-w-[60ch]">Each persona is a soul file plus the knowledge and skills attached to it. The active persona shapes every API response until you switch.</p>
         </div>
         <div className="flex items-center gap-2 pt-1">

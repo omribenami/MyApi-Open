@@ -155,7 +155,7 @@ const DeviceManagement = () => {
       {/* Header */}
       <div>
         <div className="micro mb-2">DEVICES · MANAGEMENT</div>
-        <h1 className="font-serif text-[28px] font-medium tracking-tight ink">Device Management.</h1>
+        <h1 className="font-serif text-[20px] sm:text-[28px] font-medium tracking-tight ink">Device Management.</h1>
         <p className="ink-3 text-sm mt-1">Control which devices and agents can access your MyApi tokens</p>
       </div>
 

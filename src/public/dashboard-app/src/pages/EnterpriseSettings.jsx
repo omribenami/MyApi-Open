@@ -94,10 +94,10 @@ function EnterpriseSettings() {
   if (!hasEnterpriseAccess) {
     return (
       <div className="ui-page">
-        <div className="flex items-start gap-6 mb-2">
+        <div className="flex flex-col sm:flex-row items-start gap-4 mb-2">
           <div className="flex-1 min-w-0">
             <div className="micro mb-2">WORKSPACE · ENTERPRISE</div>
-            <h1 className="font-serif text-[34px] leading-[1.05] tracking-tight ink font-medium">Enterprise Settings</h1>
+            <h1 className="font-serif text-[22px] sm:text-[34px] leading-[1.05] tracking-tight ink font-medium">Enterprise Settings</h1>
             <p className="mt-2 text-[15px] ink-2 max-w-[60ch]">This section is available on the Enterprise plan.</p>
           </div>
         </div>
@@ -124,10 +124,10 @@ function EnterpriseSettings() {
 
   return (
     <div className="ui-page">
-      <div className="flex items-start gap-6 mb-2">
+      <div className="flex flex-col sm:flex-row items-start gap-4 mb-2">
         <div className="flex-1 min-w-0">
           <div className="micro mb-2">WORKSPACE · ENTERPRISE</div>
-          <h1 className="font-serif text-[34px] leading-[1.05] tracking-tight ink font-medium">Enterprise Settings</h1>
+          <h1 className="font-serif text-[22px] sm:text-[34px] leading-[1.05] tracking-tight ink font-medium">Enterprise Settings</h1>
           <p className="mt-2 text-[15px] ink-2 max-w-[60ch]">Configure SSO, RBAC, and advanced security for your organization.</p>
         </div>
       </div>

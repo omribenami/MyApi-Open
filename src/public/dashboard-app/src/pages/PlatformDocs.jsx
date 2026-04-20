@@ -165,7 +165,7 @@ function PlatformDocs() {
   return (
     <div className="max-w-7xl mx-auto">
       <div className="mb-8">
-        <h1 className="font-serif text-[28px] font-medium tracking-tight ink">Platform Documentation</h1>
+        <h1 className="font-serif text-[20px] sm:text-[28px] font-medium tracking-tight ink">Platform Documentation</h1>
         <p className="ink-3 mt-2">
           Everything you need to know about MyApi — what each feature does, how to use it, and real-world examples.
         </p>

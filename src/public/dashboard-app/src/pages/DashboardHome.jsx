@@ -50,10 +50,10 @@ function ServiceGlyph({ id = '', size = 26 }) {
 // ── Section head ──────────────────────────────────────────────────────
 function SectionHead({ eyebrow, title, lede, actions }) {
   return (
-    <div className="flex items-start gap-6 mb-8">
+    <div className="flex flex-col sm:flex-row items-start gap-4 mb-8">
       <div className="flex-1 min-w-0">
         {eyebrow && <div className="micro mb-2">{eyebrow}</div>}
-        <h1 className="font-serif text-[34px] leading-[1.05] tracking-tight ink font-medium">{title}</h1>
+        <h1 className="font-serif text-[22px] sm:text-[34px] leading-[1.05] tracking-tight ink font-medium">{title}</h1>
         {lede && <p className="mt-2 text-[15px] ink-2 max-w-[60ch]">{lede}</p>}
       </div>
       {actions && <div className="flex items-center gap-2 pt-1">{actions}</div>}

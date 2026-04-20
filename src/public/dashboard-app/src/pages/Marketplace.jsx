@@ -1015,10 +1015,10 @@ export default function Marketplace() {
     <MarketplaceErrorBoundary>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-start gap-6 mb-2">
+        <div className="flex flex-col sm:flex-row items-start gap-4 mb-2">
           <div className="flex-1 min-w-0">
             <div className="micro mb-2">MARKETPLACE</div>
-            <h1 className="font-serif text-[34px] leading-[1.05] tracking-tight ink font-medium">Discover <span className="accent" style={{ fontStyle: 'italic' }}>&</span> share.</h1>
+            <h1 className="font-serif text-[22px] sm:text-[34px] leading-[1.05] tracking-tight ink font-medium">Discover <span className="accent" style={{ fontStyle: 'italic' }}>&</span> share.</h1>
             <p className="mt-2 text-[15px] ink-2 max-w-[60ch]">Browse personas, skills, and tokens built by the community.</p>
           </div>
         </div>

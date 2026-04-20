@@ -557,10 +557,10 @@ function Dashboard() {
       <PendingInvitations />
 
       {/* Section header */}
-      <div className="flex items-start gap-6 mb-8">
+      <div className="flex flex-col sm:flex-row items-start gap-4 mb-8">
         <div className="flex-1 min-w-0">
           <div className="micro mb-2">CONTROL ROOM · {dayLabel}</div>
-          <h1 className="font-serif text-[34px] leading-[1.05] tracking-tight ink font-medium">
+          <h1 className="font-serif text-[22px] sm:text-[34px] leading-[1.05] tracking-tight ink font-medium">
             Everything passing through <span className="accent" style={{ fontStyle: 'italic' }}>MyApi</span>.
           </h1>
           <p className="mt-2 text-[15px] ink-2 max-w-[60ch]">One gateway between your services and the agents that use them.</p>

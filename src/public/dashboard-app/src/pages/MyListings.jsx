@@ -560,10 +560,10 @@ export default function MyListings() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start gap-6 mb-8">
+      <div className="flex flex-col sm:flex-row items-start gap-4 mb-8">
         <div className="flex-1 min-w-0">
           <div className="micro mb-2">MARKETPLACE · MY LISTINGS</div>
-          <h1 className="font-serif text-[34px] leading-[1.05] tracking-tight ink font-medium">Your published items.</h1>
+          <h1 className="font-serif text-[22px] sm:text-[34px] leading-[1.05] tracking-tight ink font-medium">Your published items.</h1>
           <p className="mt-2 text-[15px] ink-2 max-w-[60ch]">Personas, skills, and APIs you've shared with the community.</p>
         </div>
         <div className="flex items-center gap-2 pt-1">
