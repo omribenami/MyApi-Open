@@ -116,7 +116,7 @@ function Dashboard() {
         apiClient.get('/dashboard/metrics'),
         apiClient.get('/personas', { headers }).catch(() => null),
         apiClient.get('/billing/current', { headers }).catch(() => null),
-        apiClient.get('/billing/usage', { headers }).catch(() => null),
+        apiClient.get('/billing/usage?range=30d', { headers }).catch(() => null),
         fetch('/api/v1/services', { credentials: 'include', headers: masterToken ? { Authorization: `Bearer ${masterToken}` } : {} }).catch(() => null),
       ]);
 

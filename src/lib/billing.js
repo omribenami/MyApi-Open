@@ -78,7 +78,11 @@ function computeUsageVsLimits(plan, usageTotals = {}) {
 }
 
 function getRangeDays(rangeParam) {
-  return String(rangeParam || '').toLowerCase() === '30d' ? 30 : 7;
+  const r = String(rangeParam || '').toLowerCase();
+  if (r === '1d') return 1;
+  if (r === '7d') return 7;
+  if (r === '30d') return 30;
+  return 7;
 }
 
 module.exports = {
