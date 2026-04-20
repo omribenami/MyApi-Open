@@ -112,10 +112,11 @@ function Dashboard() {
     try {
       const headers = masterToken ? { Authorization: `Bearer ${masterToken}` } : {};
 
-      const [metricsRes, personasRes, billingRes, servicesRes] = await Promise.all([
+      const [metricsRes, personasRes, billingRes, billingUsageRes, servicesRes] = await Promise.all([
         apiClient.get('/dashboard/metrics'),
         apiClient.get('/personas', { headers }).catch(() => null),
         apiClient.get('/billing/current', { headers }).catch(() => null),
+        apiClient.get('/billing/usage', { headers }).catch(() => null),
         fetch('/api/v1/services', { credentials: 'include', headers: masterToken ? { Authorization: `Bearer ${masterToken}` } : {} }).catch(() => null),
       ]);
 
@@ -140,13 +141,20 @@ function Dashboard() {
         }
       }
 
-      // Billing
+      // Billing plan + limits
       if (billingRes?.data) {
         const b = billingRes.data?.data || billingRes.data;
         if (b) {
           setBillingPlan(b.plan || 'free');
-          setBillingUsed(b.used || b.requests_used || 0);
-          setBillingLimit(b.limit || b.requests_limit || 1000);
+          const rawLimit = b.limits?.monthlyApiCalls ?? b.limit ?? b.requests_limit ?? null;
+          setBillingLimit(rawLimit === null ? Infinity : Number(rawLimit));
+        }
+      }
+      // Billing actual usage
+      if (billingUsageRes?.data) {
+        const u = billingUsageRes.data?.data || billingUsageRes.data;
+        if (u?.totals?.monthlyApiCalls !== undefined) {
+          setBillingUsed(Number(u.totals.monthlyApiCalls) || 0);
         }
       }
 
@@ -358,7 +366,8 @@ function Dashboard() {
   const personaTint = activePersona
     ? TINTS[(activePersona.name || '?').charCodeAt(0) % TINTS.length]
     : 'var(--ink-4)';
-  const usagePct = billingLimit > 0 ? Math.round((billingUsed / billingLimit) * 100) : 0;
+  const isUnlimited = billingLimit === Infinity || billingLimit === null;
+  const usagePct = (!isUnlimited && billingLimit > 0) ? Math.round((billingUsed / billingLimit) * 100) : 0;
   const dayLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }).toLowerCase();
 
   const sparkData = Array.from({ length: 24 }, (_, i) => {
@@ -614,7 +623,7 @@ function Dashboard() {
               <div className="micro">API USAGE · THIS MONTH</div>
               <div className="mt-1 flex items-baseline gap-2">
                 <span className="font-serif text-[32px] ink">{billingUsed.toLocaleString()}</span>
-                <span className="ink-3 mono text-[13px]">/ {billingLimit.toLocaleString()}</span>
+                <span className="ink-3 mono text-[13px]">/ {isUnlimited ? '∞' : billingLimit.toLocaleString()}</span>
               </div>
               <div className="text-[13px] ink-3 mt-0.5 capitalize">{billingPlan} plan</div>
             </div>

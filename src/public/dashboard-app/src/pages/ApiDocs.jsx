@@ -2,7 +2,7 @@ import React from 'react';
 
 function ApiDocs() {
   return (
-    <div className="space-y-6 flex flex-col" style={{ minHeight: 'calc(100vh - 120px)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       <div className="flex items-start gap-6 mb-2">
         <div className="flex-1 min-w-0">
           <div className="micro mb-2">RESOURCES</div>
@@ -11,12 +11,11 @@ function ApiDocs() {
         </div>
       </div>
 
-      <div className="flex-1 card overflow-hidden" style={{ minHeight: '500px' }}>
+      <div className="card overflow-hidden" style={{ height: 'calc(100vh - 220px)', minHeight: '500px' }}>
         <iframe
           src="/api-docs-ui"
-          className="w-full h-full border-0"
-          style={{ minHeight: '500px' }}
           title="MyApi API Docs"
+          style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
         />
       </div>
     </div>

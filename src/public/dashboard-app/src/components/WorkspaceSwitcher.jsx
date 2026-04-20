@@ -1,12 +1,5 @@
-/**
- * WorkspaceSwitcher Component
- * Phase 1: Teams & Multi-Tenancy
- * Allows users to switch between workspaces
- */
-
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '../stores/authStore';
-import './WorkspaceSwitcher.css';
 
 const WorkspaceSwitcher = ({ variant = 'menu' }) => {
   const currentWorkspace = useAuthStore((state) => state.currentWorkspace);
@@ -21,7 +14,6 @@ const WorkspaceSwitcher = ({ variant = 'menu' }) => {
         setIsOpen(false);
       }
     };
-
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
@@ -35,106 +27,127 @@ const WorkspaceSwitcher = ({ variant = 'menu' }) => {
     }
   };
 
-  // Show switcher even if only one workspace, for testing & visibility
   const displayName = currentWorkspace?.name || 'Workspace';
   const displayWorkspaces = workspaces || [];
 
-  // Menu variant: simple text item in a dropdown menu
   if (variant === 'menu') {
-    const hasMultiple = displayWorkspaces.length > 1;
-
-    if (!hasMultiple) return null;
+    if (displayWorkspaces.length <= 1) return null;
 
     return (
-      <div className="relative" ref={dropdownRef}>
+      <div ref={dropdownRef} style={{ position: 'relative' }}>
         <button
-          className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-slate-800 hover:text-white transition-all flex items-center justify-between"
           onClick={() => setIsOpen(!isOpen)}
           title="Switch workspace"
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '5px 8px',
+            background: isOpen ? 'var(--bg-hover)' : 'transparent',
+            border: '1px solid',
+            borderColor: isOpen ? 'var(--line)' : 'transparent',
+            borderRadius: '5px',
+            cursor: 'pointer',
+            color: 'var(--ink-2)',
+            fontSize: '12px',
+            textAlign: 'left',
+            transition: 'all 0.15s',
+          }}
+          onMouseEnter={e => { if (!isOpen) { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.borderColor = 'var(--line)'; } }}
+          onMouseLeave={e => { if (!isOpen) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; } }}
         >
-          <span>🏢 {displayName}</span>
-          <svg className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, color: 'var(--ink-3)' }}>
+            <rect x="1" y="1" width="6" height="6" rx="1.5" fill="currentColor" opacity="0.5"/>
+            <rect x="9" y="1" width="6" height="6" rx="1.5" fill="currentColor"/>
+            <rect x="1" y="9" width="6" height="6" rx="1.5" fill="currentColor"/>
+            <rect x="9" y="9" width="6" height="6" rx="1.5" fill="currentColor" opacity="0.5"/>
+          </svg>
+          <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'JetBrains Mono, monospace', fontSize: '11px' }}>
+            {displayName}
+          </span>
+          <svg
+            width="10" height="10" viewBox="0 0 10 10" fill="none"
+            style={{ flexShrink: 0, transition: 'transform 0.15s', transform: isOpen ? 'rotate(180deg)' : 'none', color: 'var(--ink-4)' }}
+          >
+            <path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </button>
 
         {isOpen && (
-          <div className="absolute left-0 top-full w-56 mt-1 rounded-lg border border-slate-700 bg-slate-900 shadow-xl py-1 z-50">
-            <div className="px-4 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">Workspaces</div>
-            {displayWorkspaces.map((workspace) => (
-              <button
-                key={workspace.id}
-                className={`w-full text-left px-4 py-2 text-sm transition-all flex items-center justify-between ${
-                  workspace.id === currentWorkspace?.id
-                    ? 'text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.8)] bg-slate-800/50'
-                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                }`}
-                onClick={() => handleSwitchWorkspace(workspace.id)}
+          <div style={{
+            position: 'fixed',
+            zIndex: 9999,
+            top: (() => {
+              if (!dropdownRef.current) return 0;
+              const r = dropdownRef.current.getBoundingClientRect();
+              return r.bottom + 4;
+            })(),
+            left: (() => {
+              if (!dropdownRef.current) return 0;
+              const r = dropdownRef.current.getBoundingClientRect();
+              return r.left;
+            })(),
+            width: '220px',
+            background: 'var(--bg-raised)',
+            border: '1px solid var(--line)',
+            borderRadius: '6px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+            overflow: 'hidden',
+          }}>
+            <div style={{ padding: '8px 12px 6px', borderBottom: '1px solid var(--line-2)' }}>
+              <span className="micro" style={{ color: 'var(--ink-4)' }}>Workspaces</span>
+            </div>
+            {displayWorkspaces.map((workspace) => {
+              const active = workspace.id === currentWorkspace?.id;
+              return (
+                <button
+                  key={workspace.id}
+                  onClick={() => handleSwitchWorkspace(workspace.id)}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '8px',
+                    padding: '8px 12px',
+                    background: active ? 'var(--bg-hover)' : 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: active ? 'var(--ink)' : 'var(--ink-2)',
+                    fontSize: '13px',
+                    textAlign: 'left',
+                    transition: 'background 0.1s',
+                  }}
+                  onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--bg-hover)'; }}
+                  onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{workspace.name}</span>
+                  {active && (
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ flexShrink: 0, color: 'var(--accent)' }}>
+                      <path d="M1.5 6l3 3 6-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                </button>
+              );
+            })}
+            <div style={{ borderTop: '1px solid var(--line-2)', padding: '6px 8px' }}>
+              <a
+                href="/dashboard/settings/team"
+                style={{ display: 'block', padding: '5px 4px', fontSize: '12px', color: 'var(--ink-3)', textDecoration: 'none', borderRadius: '4px' }}
+                onMouseEnter={e => { e.currentTarget.style.color = 'var(--ink-2)'; e.currentTarget.style.background = 'var(--bg-hover)'; }}
+                onMouseLeave={e => { e.currentTarget.style.color = 'var(--ink-3)'; e.currentTarget.style.background = 'transparent'; }}
               >
-                <span>{workspace.name}</span>
-                {workspace.id === currentWorkspace?.id && (
-                  <span className="text-blue-400">✓</span>
-                )}
-              </button>
-            ))}
+                Team Settings →
+              </a>
+            </div>
           </div>
         )}
       </div>
     );
   }
 
-  // Navbar variant: fancy button (unused now but keeping for legacy)
-  return (
-    <div className="workspace-switcher" ref={dropdownRef}>
-      <button
-        className="workspace-switcher-btn"
-        onClick={() => setIsOpen(!isOpen)}
-        title="Switch workspace"
-      >
-        <span className="workspace-icon">🏢</span>
-        <span className="workspace-name">{displayName}</span>
-        {displayWorkspaces.length > 1 && (
-          <span className={`dropdown-arrow ${isOpen ? 'open' : ''}`}>▼</span>
-        )}
-      </button>
-
-      {isOpen && displayWorkspaces.length > 0 && (
-        <div className="workspace-dropdown">
-          <div className="workspace-dropdown-header">
-            <h4>Workspaces ({displayWorkspaces.length})</h4>
-          </div>
-          
-          <ul className="workspace-list">
-            {displayWorkspaces.map((workspace) => (
-              <li key={workspace.id}>
-                <button
-                  className={`workspace-option ${
-                    workspace.id === currentWorkspace?.id ? 'active' : ''
-                  }`}
-                  onClick={() => handleSwitchWorkspace(workspace.id)}
-                >
-                  <span className="workspace-icon">🏢</span>
-                  <span className="workspace-info">
-                    <span className="workspace-option-name">{workspace.name}</span>
-                    <span className="workspace-option-slug">{workspace.slug}</span>
-                  </span>
-                  {workspace.id === currentWorkspace?.id && (
-                    <span className="checkmark">✓</span>
-                  )}
-                </button>
-              </li>
-            ))}
-          </ul>
-
-          <div className="workspace-dropdown-footer">
-            <a href="/dashboard/settings/team" className="settings-link">
-              ⚙️ Team Settings
-            </a>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  return null;
 };
 
 export default WorkspaceSwitcher;
