@@ -2,10 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../utils/apiClient';
 import { useAuthStore } from '../stores/authStore';
-
 import { dismissModal } from '../utils/onboardingUtils';
-
-// ─── Service icons ────────────────────────────────────────────────────────────
 
 const ServiceIcons = {
   github: (
@@ -52,82 +49,21 @@ const CONNECT_SERVICES = [
   { id: 'linear',  name: 'Linear'  },
 ];
 
-// ─── Per-step tips sourced from platform docs ─────────────────────────────────
-
 const TIPS = [
-  {
-    label: 'Already have a USER.md?',
-    body: "If your AI agent already knows you from a USER.md file, skip this — connect it first, then ask it to fill your profile for you automatically.",
-  },
-  {
-    label: 'What gets saved here',
-    body: "Your context is written into USER.md (who you are). Your tone and traits shape your first AI persona (how agents respond). Both can be refined anytime from the Identity page.",
-  },
-  {
-    label: 'Why 2FA matters here',
-    body: 'Your master token grants full read/write access to every connected service. 2FA ensures only you can log in and issue new tokens — even if your password is compromised.',
-  },
-  {
-    label: 'Your credentials never leave MyApi',
-    body: 'Connecting a service means MyApi proxies every request on your behalf. Agents receive scoped access tokens and call through the proxy — your actual OAuth secrets stay encrypted inside MyApi, never transmitted.',
-  },
-  {
-    label: 'The pattern that works',
-    body: 'Create a persona for a specific role, attach relevant knowledge docs to it, then issue it a scoped token with only the permissions it needs. Revoke the token any time without affecting anything else.',
-  },
-  {
-    label: 'Your agent reads, you decide',
-    body: 'Paste this prompt into any AI — Claude, ChatGPT, Gemini. It fetches the connection guide from your API and walks you through choosing and setting up a method. Nothing is sent until you approve.',
-  },
+  { label: 'Already have a USER.md?', body: "If your AI agent already knows you from a USER.md file, skip this — connect it first, then ask it to fill your profile for you automatically." },
+  { label: 'What gets saved here', body: "Your context is written into USER.md (who you are). Your tone and traits shape your first AI persona (how agents respond). Both can be refined anytime from the Identity page." },
+  { label: 'Why 2FA matters here', body: 'Your master token grants full read/write access to every connected service. 2FA ensures only you can log in and issue new tokens — even if your password is compromised.' },
+  { label: 'Your credentials never leave MyApi', body: 'Connecting a service means MyApi proxies every request on your behalf. Agents receive scoped access tokens and call through the proxy — your actual OAuth secrets stay encrypted inside MyApi, never transmitted.' },
+  { label: 'The pattern that works', body: 'Create a persona for a specific role, attach relevant knowledge docs to it, then issue it a scoped token with only the permissions it needs. Revoke the token any time without affecting anything else.' },
+  { label: 'Your agent reads, you decide', body: 'Paste this prompt into any AI — Claude, ChatGPT, Gemini. It fetches the connection guide from your API and walks you through choosing and setting up a method. Nothing is sent until you approve.' },
 ];
-
-// ─── Destination tiles for the Ready step ────────────────────────────────────
 
 const NEXT_STEPS = [
-  {
-    path: '/personas',
-    title: 'Create a Persona',
-    desc: 'Give an agent a role, personality, and attached knowledge',
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
-      </svg>
-    ),
-  },
-  {
-    path: '/knowledge',
-    title: 'Add Knowledge',
-    desc: 'Upload docs, SOPs, or notes that ground your agents',
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-      </svg>
-    ),
-  },
-  {
-    path: '/access-tokens',
-    title: 'Issue a Token',
-    desc: 'Create a scoped key for any agent or integration',
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
-      </svg>
-    ),
-  },
-  {
-    path: '/services',
-    title: 'Connect Services',
-    desc: 'Link GitHub, Google, Slack and 40+ more integrations',
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
-        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
-      </svg>
-    ),
-  },
+  { path: '/personas', title: 'Create a Persona', desc: 'Give an agent a role, personality, and attached knowledge', icon: (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>) },
+  { path: '/knowledge', title: 'Add Knowledge', desc: 'Upload docs, SOPs, or notes that ground your agents', icon: (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></svg>) },
+  { path: '/access-tokens', title: 'Issue a Token', desc: 'Create a scoped key for any agent or integration', icon: (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" /></svg>) },
+  { path: '/services', title: 'Connect Services', desc: 'Link GitHub, Google, Slack and 40+ more integrations', icon: (<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" /></svg>) },
 ];
-
-// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function OnboardingModal({ onClose }) {
   const [step, setStep]           = useState(1);
@@ -138,7 +74,6 @@ export default function OnboardingModal({ onClose }) {
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
 
-  // Profile data collected across steps 1–2
   const [name, setName]             = useState(user?.displayName || '');
   const [role, setRole]             = useState('');
   const [bio, setBio]               = useState('');
@@ -146,20 +81,17 @@ export default function OnboardingModal({ onClose }) {
   const [traits, setTraits]         = useState([]);
   const [customInstr, setCustomInstr] = useState('');
 
-  // Step 3 — 2FA state
   const [twoFaQr, setTwoFaQr]         = useState(null);
   const [twoFaCode, setTwoFaCode]     = useState('');
   const [twoFaLoading, setTwoFaLoading] = useState(false);
   const [twoFaError, setTwoFaError]   = useState(null);
   const [twoFaEnabled, setTwoFaEnabled] = useState(false);
 
-  // Animate in on mount
   useEffect(() => {
     const t = setTimeout(() => setVisible(true), 30);
     return () => clearTimeout(t);
   }, []);
 
-  // Load QR code when user reaches 2FA step
   useEffect(() => {
     if (step !== 3 || twoFaQr || twoFaEnabled) return;
     setTwoFaLoading(true);
@@ -179,89 +111,50 @@ export default function OnboardingModal({ onClose }) {
 
   const goTo = (next) => {
     setTransitioning(true);
-    setTimeout(() => {
-      setStep(next);
-      setError(null);
-      setTransitioning(false);
-    }, 200);
+    setTimeout(() => { setStep(next); setError(null); setTransitioning(false); }, 200);
   };
 
-  // Step 1 → 2: validate locally, no API yet
   const handleStep1 = () => {
     if (!name.trim()) { setError('Display name is required'); return; }
     goTo(2);
   };
 
-  // Step 2 → 3: save profile (name + role + bio) and create initial persona
   const handleStep2 = async () => {
-    setLoading(true);
-    setError(null);
+    setLoading(true); setError(null);
     try {
-      await apiClient.post('/onboard/step1', {
-        name: name.trim(),
-        role: role.trim(),
-        bio:  bio.trim(),
-      });
-
-      // Build and save initial persona from AI preferences
-      const styleMap = {
-        direct:   'Direct and concise. Give short, actionable answers. Skip preamble.',
-        detailed: 'Detailed and thorough. Explain reasoning and use examples.',
-        casual:   'Casual and collaborative. Conversational tone, think out loud.',
-      };
+      await apiClient.post('/onboard/step1', { name: name.trim(), role: role.trim(), bio: bio.trim() });
+      const styleMap = { direct: 'Direct and concise. Give short, actionable answers. Skip preamble.', detailed: 'Detailed and thorough. Explain reasoning and use examples.', casual: 'Casual and collaborative. Conversational tone, think out loud.' };
       const traitLine = traits.length ? traits.join(', ') + '.' : null;
-      const soulLines = [
-        `You are a personal AI assistant for ${name.trim() || 'the user'}.`,
-        '',
-        '## Communication Style',
-        styleMap[commStyle] || styleMap.direct,
-      ];
+      const soulLines = [`You are a personal AI assistant for ${name.trim() || 'the user'}.`, '', '## Communication Style', styleMap[commStyle] || styleMap.direct];
       if (traitLine) soulLines.push('', '## Personality', traitLine);
       if (customInstr.trim()) soulLines.push('', '## Additional Instructions', customInstr.trim());
-      const soulContent = soulLines.join('\n');
-
-      await apiClient.post('/personas', {
-        name: 'My Assistant',
-        soul_content: soulContent,
-        description: 'Initial persona created during onboarding',
-      });
-
+      await apiClient.post('/personas', { name: 'My Assistant', soul_content: soulLines.join('\n'), description: 'Initial persona created during onboarding' });
       goTo(3);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to save profile — try again');
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
-  // Step 3 — verify 2FA code
   const handleTwoFaVerify = async () => {
     if (twoFaCode.length !== 6) return;
-    setTwoFaLoading(true);
-    setTwoFaError(null);
+    setTwoFaLoading(true); setTwoFaError(null);
     try {
       await apiClient.post('/auth/2fa/verify', { code: twoFaCode });
       setTwoFaEnabled(true);
       setTimeout(() => goTo(4), 1000);
     } catch (err) {
       setTwoFaError(err.response?.data?.error || 'Invalid code — check your app and try the current code');
-    } finally {
-      setTwoFaLoading(false);
-    }
+    } finally { setTwoFaLoading(false); }
   };
 
-  // Step 4 → 5: finalize onboarding
   const handleStep4 = async () => {
-    setLoading(true);
-    setError(null);
+    setLoading(true); setError(null);
     try {
       await apiClient.post('/onboard/step3', {});
       goTo(5);
     } catch (err) {
       setError(err.response?.data?.error || 'Setup error — try again');
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   const handleConnectService = (serviceId) => {
@@ -279,212 +172,117 @@ export default function OnboardingModal({ onClose }) {
   const TOTAL = 6;
 
   return (
-    <>
-      {/* Google Font */}
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap');`}</style>
-
-      {/* Backdrop */}
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 sm:p-6"
+      style={{ background: 'rgba(1,4,9,0.8)', backdropFilter: 'blur(4px)', transition: 'opacity 0.28s', opacity: visible ? 1 : 0 }}
+    >
       <div
-        className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 sm:p-6"
+        className="relative w-full flex flex-col"
         style={{
-          background: 'rgba(2,6,23,0.75)',
-          backdropFilter: 'blur(6px)',
-          transition: 'opacity 0.28s ease',
+          maxWidth: 520,
+          maxHeight: 'calc(100dvh - 2rem)',
+          background: 'var(--bg-raised)',
+          border: '1px solid var(--line)',
+          borderRadius: '8px',
+          boxShadow: '0 24px 64px rgba(0,0,0,0.6)',
+          overflow: 'hidden',
+          transition: 'opacity 0.28s, transform 0.28s cubic-bezier(0.34,1.28,0.64,1)',
           opacity: visible ? 1 : 0,
+          transform: visible ? 'translateY(0) scale(1)' : 'translateY(12px) scale(0.98)',
         }}
       >
-        {/* Modal */}
-        <div
-          className="relative w-full overflow-hidden flex flex-col"
-          style={{
-            maxWidth: 520,
-            maxHeight: 'calc(100dvh - 2rem)',
-            background: 'linear-gradient(165deg, rgb(15,23,42) 0%, rgb(15,20,40) 100%)',
-            border: '1px solid rgba(100,116,139,0.25)',
-            borderRadius: 20,
-            boxShadow: '0 32px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.03) inset',
-            fontFamily: "'Outfit', sans-serif",
-            transition: 'opacity 0.28s ease, transform 0.28s cubic-bezier(0.34,1.28,0.64,1)',
-            opacity: visible ? 1 : 0,
-            transform: visible ? 'translateY(0) scale(1)' : 'translateY(16px) scale(0.98)',
-          }}
-        >
-          {/* Top accent line */}
-          <div style={{
-            height: 1,
-            background: 'linear-gradient(90deg, transparent, rgba(99,102,241,0.6) 30%, rgba(59,130,246,0.8) 50%, rgba(99,102,241,0.6) 70%, transparent)',
-          }} />
+        {/* Top accent line */}
+        <div style={{ height: '2px', background: 'var(--accent)', flexShrink: 0 }} />
 
-          {/* ── Header ── */}
-          <div className="px-6 pt-5 pb-0 flex-shrink-0">
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-widest mb-1"
-                   style={{ color: 'rgba(147,197,253,0.7)', letterSpacing: '0.12em' }}>
-                  Getting started — {step} of {TOTAL}
-                </p>
-                <h2 className="text-xl font-semibold text-white leading-tight">
-                  {step === 1 && 'Your profile'}
-                  {step === 2 && 'Your context'}
-                  {step === 3 && 'Secure your account'}
-                  {step === 4 && 'Connect a service'}
-                  {step === 5 && 'You\'re all set'}
-                  {step === 6 && 'Connect your AI agent'}
-                </h2>
+        {/* Header */}
+        <div style={{ padding: '18px 20px 0', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '14px' }}>
+            <div>
+              <div className="micro" style={{ marginBottom: '4px', color: 'var(--ink-4)' }}>
+                GETTING STARTED — {step} of {TOTAL}
               </div>
-              <button
-                onClick={handleDismiss}
-                className="flex items-center justify-center rounded-lg transition-colors mt-0.5"
-                style={{
-                  width: 32, height: 32,
-                  background: 'rgba(148,163,184,0.08)',
-                  border: '1px solid rgba(148,163,184,0.1)',
-                  color: 'rgba(148,163,184,0.6)',
-                  flexShrink: 0,
-                }}
-                onMouseEnter={e => { e.currentTarget.style.color = '#e2e8f0'; e.currentTarget.style.background = 'rgba(148,163,184,0.12)'; }}
-                onMouseLeave={e => { e.currentTarget.style.color = 'rgba(148,163,184,0.6)'; e.currentTarget.style.background = 'rgba(148,163,184,0.08)'; }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
+              <h2 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--ink)', margin: 0 }}>
+                {step === 1 && 'Your profile'}
+                {step === 2 && 'Your context'}
+                {step === 3 && 'Secure your account'}
+                {step === 4 && 'Connect a service'}
+                {step === 5 && "You're all set"}
+                {step === 6 && 'Connect your AI agent'}
+              </h2>
             </div>
-
-            {/* Progress segments */}
-            <div className="flex gap-1.5 pb-5">
-              {Array.from({ length: TOTAL }, (_, i) => i + 1).map((s) => (
-                <div
-                  key={s}
-                  style={{
-                    flex: 1, height: 3, borderRadius: 999,
-                    transition: 'background 0.4s ease, opacity 0.4s ease',
-                    background: s <= step
-                      ? 'linear-gradient(90deg, #3b82f6, #6366f1)'
-                      : 'rgba(51,65,85,0.8)',
-                    opacity: s === step ? 1 : s < step ? 0.7 : 0.35,
-                  }}
-                />
-              ))}
-            </div>
+            <button
+              onClick={handleDismiss}
+              style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-hover)', border: '1px solid var(--line)', borderRadius: '5px', cursor: 'pointer', color: 'var(--ink-3)', flexShrink: 0 }}
+              onMouseEnter={e => { e.currentTarget.style.color = 'var(--ink)'; }}
+              onMouseLeave={e => { e.currentTarget.style.color = 'var(--ink-3)'; }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
           </div>
 
-          {/* ── Scrollable body (step content + tip) ── */}
-          <div className="overflow-y-auto min-h-0 flex-1">
+          {/* Progress */}
+          <div style={{ display: 'flex', gap: '4px', paddingBottom: '16px' }}>
+            {Array.from({ length: TOTAL }, (_, i) => i + 1).map((s) => (
+              <div key={s} style={{ flex: 1, height: '3px', borderRadius: '999px', background: s <= step ? 'var(--accent)' : 'var(--line)', opacity: s <= step ? 1 : 0.4, transition: 'background 0.3s, opacity 0.3s' }} />
+            ))}
+          </div>
+        </div>
 
-          {/* ── Step content ── */}
-          <div
-            className="px-6"
-            style={{
-              transition: 'opacity 0.2s ease, transform 0.2s ease',
-              opacity: transitioning ? 0 : 1,
-              transform: transitioning ? 'translateY(6px)' : 'translateY(0)',
-            }}
-          >
-            {/* Error */}
+        {/* Scrollable body */}
+        <div style={{ overflowY: 'auto', flex: 1, minHeight: 0 }} className="thin-scroll">
+          {/* Step content */}
+          <div style={{ padding: '0 20px', transition: 'opacity 0.2s, transform 0.2s', opacity: transitioning ? 0 : 1, transform: transitioning ? 'translateY(4px)' : 'translateY(0)' }}>
+
             {error && (
-              <div className="mb-4 px-3.5 py-2.5 rounded-xl text-sm"
-                   style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#fca5a5' }}>
+              <div style={{ marginBottom: '12px', padding: '10px 14px', borderRadius: '6px', background: 'var(--red-bg)', border: '1px solid var(--red)', color: 'var(--red)', fontSize: '13px' }}>
                 {error}
               </div>
             )}
 
             {/* Step 1 — Profile */}
             {step === 1 && (
-              <div className="space-y-3">
-                <p className="text-sm leading-relaxed" style={{ color: 'rgba(148,163,184,0.9)' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <p style={{ fontSize: '13px', color: 'var(--ink-2)', margin: 0, lineHeight: 1.6 }}>
                   Tell your agents who they're working with. This shapes every response they give you.
                 </p>
                 <div>
-                  <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide"
-                         style={{ color: 'rgba(148,163,184,0.6)', letterSpacing: '0.08em' }}>
-                    Display Name <span style={{ color: '#60a5fa' }}>*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleStep1()}
-                    placeholder="How should agents address you?"
-                    autoFocus
-                    style={inputStyle}
-                    onFocus={e => Object.assign(e.currentTarget.style, inputFocusStyle)}
-                    onBlur={e => Object.assign(e.currentTarget.style, inputBlurStyle)}
-                  />
+                  <label style={labelStyle}>Display Name <span style={{ color: 'var(--accent)' }}>*</span></label>
+                  <input type="text" value={name} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleStep1()} placeholder="How should agents address you?" autoFocus className="ui-input" style={{ width: '100%' }} />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide"
-                         style={{ color: 'rgba(148,163,184,0.6)', letterSpacing: '0.08em' }}>
-                    Role <span style={{ color: 'rgba(100,116,139,0.6)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>— optional</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={role}
-                    onChange={(e) => setRole(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleStep1()}
-                    placeholder="e.g. Software Engineer, Founder, Product Designer"
-                    style={inputStyle}
-                    onFocus={e => Object.assign(e.currentTarget.style, inputFocusStyle)}
-                    onBlur={e => Object.assign(e.currentTarget.style, inputBlurStyle)}
-                  />
+                  <label style={labelStyle}>Role <span style={{ color: 'var(--ink-4)', fontWeight: 400 }}>— optional</span></label>
+                  <input type="text" value={role} onChange={e => setRole(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleStep1()} placeholder="e.g. Software Engineer, Founder, Product Designer" className="ui-input" style={{ width: '100%' }} />
                 </div>
               </div>
             )}
 
-            {/* Step 2 — Context + AI preferences */}
+            {/* Step 2 — Context + preferences */}
             {step === 2 && (
-              <div className="space-y-4">
-                <p className="text-sm leading-relaxed" style={{ color: 'rgba(148,163,184,0.9)' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <p style={{ fontSize: '13px', color: 'var(--ink-2)', margin: 0, lineHeight: 1.6 }}>
                   A few sentences about yourself — your tools, how you work, what you're building.
                 </p>
-                <textarea
-                  value={bio}
-                  onChange={(e) => setBio(e.target.value)}
-                  rows={3}
-                  placeholder={"e.g. Full-stack dev building a SaaS in TypeScript. I work best async and ship fast."}
-                  style={{ ...inputStyle, resize: 'none', lineHeight: 1.6 }}
-                  onFocus={e => Object.assign(e.currentTarget.style, inputFocusStyle)}
-                  onBlur={e => Object.assign(e.currentTarget.style, inputBlurStyle)}
-                />
+                <textarea value={bio} onChange={e => setBio(e.target.value)} rows={3} placeholder="e.g. Full-stack dev building a SaaS in TypeScript. I work best async and ship fast." className="ui-input" style={{ width: '100%', resize: 'none', lineHeight: 1.6 }} />
 
-                {/* Divider */}
-                <div style={{ height: 1, background: 'rgba(51,65,85,0.6)', margin: '4px 0' }} />
+                <div style={{ height: '1px', background: 'var(--line-2)' }} />
 
-                {/* Communication style */}
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide mb-2"
-                     style={{ color: 'rgba(148,163,184,0.6)', letterSpacing: '0.08em' }}>
-                    How should agents respond?
-                  </p>
-                  <div className="flex flex-col gap-1.5">
+                  <div style={labelStyle}>How should agents respond?</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                     {[
-                      { value: 'direct',   label: 'Direct & concise',      desc: 'Short answers, no fluff' },
-                      { value: 'detailed', label: 'Detailed & thorough',   desc: 'Explain reasoning, examples' },
-                      { value: 'casual',   label: 'Casual & collaborative',desc: 'Conversational, think out loud' },
+                      { value: 'direct',   label: 'Direct & concise',       desc: 'Short answers, no fluff' },
+                      { value: 'detailed', label: 'Detailed & thorough',    desc: 'Explain reasoning, examples' },
+                      { value: 'casual',   label: 'Casual & collaborative', desc: 'Conversational, think out loud' },
                     ].map((opt) => {
                       const sel = commStyle === opt.value;
                       return (
-                        <label
-                          key={opt.value}
-                          style={{
-                            display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer',
-                            padding: '8px 12px', borderRadius: 10,
-                            background: sel ? 'rgba(59,130,246,0.1)' : 'rgba(30,41,59,0.5)',
-                            border: `1px solid ${sel ? 'rgba(59,130,246,0.45)' : 'rgba(51,65,85,0.7)'}`,
-                            transition: 'background 0.15s, border-color 0.15s',
-                          }}
-                        >
-                          <input
-                            type="radio"
-                            name="commStyle"
-                            value={opt.value}
-                            checked={sel}
-                            onChange={() => setCommStyle(opt.value)}
-                            style={{ marginTop: 2, accentColor: '#3b82f6', flexShrink: 0 }}
-                          />
+                        <label key={opt.value} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', cursor: 'pointer', padding: '8px 12px', borderRadius: '6px', background: sel ? 'var(--accent-bg)' : 'var(--bg-sunk)', border: `1px solid ${sel ? 'var(--accent-2)' : 'var(--line)'}`, transition: 'background 0.15s, border-color 0.15s' }}>
+                          <input type="radio" name="commStyle" value={opt.value} checked={sel} onChange={() => setCommStyle(opt.value)} style={{ marginTop: '3px', accentColor: 'var(--accent)', flexShrink: 0 }} />
                           <span>
-                            <span style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#e2e8f0' }}>{opt.label}</span>
-                            <span style={{ display: 'block', fontSize: 11, color: 'rgba(100,116,139,0.9)' }}>{opt.desc}</span>
+                            <span style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: 'var(--ink)' }}>{opt.label}</span>
+                            <span style={{ display: 'block', fontSize: '11px', color: 'var(--ink-3)' }}>{opt.desc}</span>
                           </span>
                         </label>
                       );
@@ -492,31 +290,14 @@ export default function OnboardingModal({ onClose }) {
                   </div>
                 </div>
 
-                {/* Work traits */}
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide mb-2"
-                     style={{ color: 'rgba(148,163,184,0.6)', letterSpacing: '0.08em' }}>
-                    Work traits <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: 'rgba(100,116,139,0.7)' }}>— pick up to 3</span>
-                  </p>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  <div style={labelStyle}>Work traits <span style={{ color: 'var(--ink-4)', fontWeight: 400 }}>— pick up to 3</span></div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                     {['Decisive', 'Analytical', 'Creative', 'Pragmatic', 'Detail-oriented', 'Big-picture'].map((t) => {
                       const sel = traits.includes(t);
                       return (
-                        <button
-                          key={t}
-                          type="button"
-                          onClick={() => {
-                            if (sel) setTraits(traits.filter((x) => x !== t));
-                            else if (traits.length < 3) setTraits([...traits, t]);
-                          }}
-                          style={{
-                            padding: '4px 12px', borderRadius: 999, fontSize: 12, fontWeight: 500,
-                            cursor: 'pointer', transition: 'background 0.15s, border-color 0.15s',
-                            background: sel ? 'rgba(59,130,246,0.15)' : 'rgba(30,41,59,0.6)',
-                            border: `1px solid ${sel ? 'rgba(59,130,246,0.5)' : 'rgba(51,65,85,0.7)'}`,
-                            color: sel ? '#93c5fd' : 'rgba(148,163,184,0.85)',
-                          }}
-                        >
+                        <button key={t} type="button" onClick={() => { if (sel) setTraits(traits.filter(x => x !== t)); else if (traits.length < 3) setTraits([...traits, t]); }}
+                          style={{ padding: '3px 12px', borderRadius: '999px', fontSize: '12px', fontWeight: 500, cursor: 'pointer', background: sel ? 'var(--accent-bg)' : 'var(--bg-sunk)', border: `1px solid ${sel ? 'var(--accent-2)' : 'var(--line)'}`, color: sel ? 'var(--accent)' : 'var(--ink-3)', transition: 'all 0.15s' }}>
                           {t}
                         </button>
                       );
@@ -524,71 +305,50 @@ export default function OnboardingModal({ onClose }) {
                   </div>
                 </div>
 
-                {/* Custom instructions */}
-                <textarea
-                  value={customInstr}
-                  onChange={(e) => setCustomInstr(e.target.value)}
-                  rows={2}
-                  placeholder="Custom instructions (optional) — e.g. Always ask before making assumptions."
-                  style={{ ...inputStyle, resize: 'none', lineHeight: 1.6, fontSize: 12 }}
-                  onFocus={e => Object.assign(e.currentTarget.style, inputFocusStyle)}
-                  onBlur={e => Object.assign(e.currentTarget.style, inputBlurStyle)}
-                />
+                <textarea value={customInstr} onChange={e => setCustomInstr(e.target.value)} rows={2} placeholder="Custom instructions (optional) — e.g. Always ask before making assumptions." className="ui-input" style={{ width: '100%', resize: 'none', lineHeight: 1.6, fontSize: '12px' }} />
               </div>
             )}
 
-            {/* Step 3 — 2FA setup */}
+            {/* Step 3 — 2FA */}
             {step === 3 && (
-              <div className="space-y-4">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 {twoFaEnabled ? (
-                  <div style={{ textAlign: 'center', padding: '20px 0' }}>
-                    <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                  <div style={{ textAlign: 'center', padding: '24px 0' }}>
+                    <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'var(--green-bg)', border: '1px solid var(--green)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--green)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
                     </div>
-                    <p style={{ color: '#4ade80', fontWeight: 600, fontSize: 15 }}>2FA enabled</p>
-                    <p style={{ color: 'rgba(148,163,184,0.75)', fontSize: 13, marginTop: 4 }}>Your account is now protected. Moving on…</p>
+                    <p style={{ color: 'var(--green)', fontWeight: 600, fontSize: '15px', margin: '0 0 4px' }}>2FA enabled</p>
+                    <p style={{ color: 'var(--ink-3)', fontSize: '13px', margin: 0 }}>Your account is now protected. Moving on…</p>
                   </div>
                 ) : (
                   <>
-                    <p className="text-sm leading-relaxed" style={{ color: 'rgba(148,163,184,0.9)' }}>
+                    <p style={{ fontSize: '13px', color: 'var(--ink-2)', margin: 0, lineHeight: 1.6 }}>
                       Scan the QR code with your authenticator app (Google Authenticator, Authy, 1Password), then enter the 6-digit code to activate.
                     </p>
                     {twoFaLoading && !twoFaQr && (
                       <div style={{ textAlign: 'center', padding: '16px 0' }}>
-                        <div style={{ display: 'inline-block', width: 28, height: 28, borderRadius: '50%', borderBottom: '2px solid #3b82f6', animation: 'spin 0.8s linear infinite' }} />
+                        <div style={{ display: 'inline-block', width: 24, height: 24, borderRadius: '50%', borderBottom: '2px solid var(--accent)', animation: 'spin 0.8s linear infinite' }} />
                       </div>
                     )}
                     {twoFaQr && (
                       <div style={{ textAlign: 'center' }}>
-                        <div style={{ display: 'inline-block', padding: 10, background: '#ffffff', borderRadius: 12 }}>
-                          <img src={twoFaQr} alt="Scan with your authenticator app" style={{ width: 156, height: 156, display: 'block' }} />
+                        <div style={{ display: 'inline-block', padding: '8px', background: '#fff', borderRadius: '6px' }}>
+                          <img src={twoFaQr} alt="Scan with authenticator" style={{ width: 148, height: 148, display: 'block' }} />
                         </div>
                       </div>
                     )}
                     {twoFaError && !twoFaQr && (
-                      <p style={{ fontSize: 12, color: '#fca5a5', textAlign: 'center' }}>{twoFaError}</p>
+                      <p style={{ fontSize: '12px', color: 'var(--red)', textAlign: 'center', margin: 0 }}>{twoFaError}</p>
                     )}
                     <div>
-                      <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide" style={{ color: 'rgba(148,163,184,0.6)', letterSpacing: '0.08em' }}>
-                        6-digit code
-                      </label>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        maxLength={6}
-                        value={twoFaCode}
-                        onChange={(e) => { setTwoFaCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setTwoFaError(null); }}
-                        onKeyDown={(e) => e.key === 'Enter' && twoFaCode.length === 6 && !twoFaLoading && handleTwoFaVerify()}
-                        placeholder="000000"
-                        style={{ ...inputStyle, letterSpacing: '0.35em', textAlign: 'center', fontSize: 22, fontWeight: 600 }}
-                        onFocus={e => Object.assign(e.currentTarget.style, inputFocusStyle)}
-                        onBlur={e => Object.assign(e.currentTarget.style, inputBlurStyle)}
-                      />
+                      <label style={labelStyle}>6-digit code</label>
+                      <input type="text" inputMode="numeric" pattern="[0-9]*" maxLength={6} value={twoFaCode}
+                        onChange={e => { setTwoFaCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setTwoFaError(null); }}
+                        onKeyDown={e => e.key === 'Enter' && twoFaCode.length === 6 && !twoFaLoading && handleTwoFaVerify()}
+                        placeholder="000000" className="ui-input"
+                        style={{ width: '100%', letterSpacing: '0.35em', textAlign: 'center', fontSize: '22px', fontWeight: 600, fontFamily: 'JetBrains Mono, monospace' }} />
                     </div>
-                    {twoFaError && twoFaQr && (
-                      <p style={{ fontSize: 12, color: '#fca5a5', marginTop: -8 }}>{twoFaError}</p>
-                    )}
+                    {twoFaError && twoFaQr && <p style={{ fontSize: '12px', color: 'var(--red)', margin: 0 }}>{twoFaError}</p>}
                   </>
                 )}
               </div>
@@ -596,23 +356,18 @@ export default function OnboardingModal({ onClose }) {
 
             {/* Step 4 — Connect a service */}
             {step === 4 && (
-              <div className="space-y-3">
-                <p className="text-sm leading-relaxed" style={{ color: 'rgba(148,163,184,0.9)' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <p style={{ fontSize: '13px', color: 'var(--ink-2)', margin: 0, lineHeight: 1.6 }}>
                   Connect a service to give your agents something to act on. You can add all 45+ integrations later from the Services page.
                 </p>
-                <div className="grid grid-cols-3 gap-2">
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '8px' }}>
                   {CONNECT_SERVICES.map((svc) => (
-                    <button
-                      key={svc.id}
-                      onClick={() => handleConnectService(svc.id)}
-                      style={serviceBtnStyle}
-                      onMouseEnter={e => Object.assign(e.currentTarget.style, serviceBtnHoverStyle)}
-                      onMouseLeave={e => Object.assign(e.currentTarget.style, serviceBtnStyle)}
+                    <button key={svc.id} onClick={() => handleConnectService(svc.id)}
+                      className="btn"
+                      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '7px', padding: '14px 8px' }}
                     >
-                      <span className="flex items-center justify-center" style={{ opacity: 0.9 }}>
-                        {ServiceIcons[svc.id]}
-                      </span>
-                      <span className="text-xs font-medium" style={{ color: 'rgba(203,213,225,0.9)' }}>{svc.name}</span>
+                      <span style={{ opacity: 0.9, color: 'var(--ink-2)' }}>{ServiceIcons[svc.id]}</span>
+                      <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--ink-2)' }}>{svc.name}</span>
                     </button>
                   ))}
                 </div>
@@ -621,30 +376,23 @@ export default function OnboardingModal({ onClose }) {
 
             {/* Step 5 — Ready */}
             {step === 5 && (
-              <div className="space-y-3">
-                <p className="text-sm leading-relaxed" style={{ color: 'rgba(148,163,184,0.9)' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <p style={{ fontSize: '13px', color: 'var(--ink-2)', margin: 0, lineHeight: 1.6 }}>
                   Your workspace is configured and ready. Here's where to go next — or continue to connect your AI agent.
                 </p>
-                <div className="grid grid-cols-2 gap-2">
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: '8px' }}>
                   {NEXT_STEPS.map((item) => (
-                    <button
-                      key={item.path}
-                      onClick={() => handleFinish(item.path)}
-                      className="text-left"
-                      style={nextStepBtnStyle}
-                      onMouseEnter={e => Object.assign(e.currentTarget.style, nextStepBtnHoverStyle)}
-                      onMouseLeave={e => Object.assign(e.currentTarget.style, nextStepBtnStyle)}
-                    >
-                      <span style={{ color: 'rgba(96,165,250,0.85)' }} className="mb-2 block">{item.icon}</span>
-                      <p className="text-sm font-semibold text-white mb-0.5">{item.title}</p>
-                      <p className="text-xs leading-snug" style={{ color: 'rgba(100,116,139,0.9)' }}>{item.desc}</p>
+                    <button key={item.path} onClick={() => handleFinish(item.path)} className="btn" style={{ textAlign: 'left', padding: '12px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '6px' }}>
+                      <span style={{ color: 'var(--accent)' }}>{item.icon}</span>
+                      <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ink)' }}>{item.title}</span>
+                      <span style={{ fontSize: '11px', color: 'var(--ink-3)', lineHeight: 1.4 }}>{item.desc}</span>
                     </button>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Step 6 — Connect Your AI Agent */}
+            {/* Step 6 — Connect AI Agent */}
             {step === 6 && (() => {
               const AGENT_PROMPT = `I'd like you to connect to my personal AI context API — MyApi.
 
@@ -658,141 +406,51 @@ Once you've read it:
 4. Guide me through the setup step by step — I'll follow your lead`;
 
               const CONNECTION_METHODS = [
-                {
-                  id: 'device_flow',
-                  badge: 'Recommended',
-                  badgeColor: 'rgba(59,130,246,0.15)',
-                  badgeBorder: 'rgba(59,130,246,0.4)',
-                  badgeText: 'rgba(147,197,253,0.95)',
-                  title: 'OAuth Device Flow',
-                  desc: 'Your agent requests a short code, you approve it in the browser — it gets its own named, scoped token.',
-                  pros: ['Each agent gets its own token & audit trail', 'You explicitly approve every agent', 'Revoke a single agent without affecting others'],
-                  cons: ['Requires opening a browser tab once to approve'],
-                  bestFor: 'Most users',
-                },
-                {
-                  id: 'master_token',
-                  badge: 'Simplest',
-                  badgeColor: 'rgba(234,179,8,0.1)',
-                  badgeBorder: 'rgba(234,179,8,0.35)',
-                  badgeText: 'rgba(253,224,71,0.9)',
-                  title: 'Master Token',
-                  desc: 'Copy your master token from Access Tokens and paste it directly into the agent.',
-                  pros: ['Zero setup — token already exists', 'Works immediately with any HTTP client'],
-                  cons: ['One token shared by all agents', 'Cannot be scoped to read-only'],
-                  bestFor: 'Quick local experiments',
-                },
-                {
-                  id: 'asc_keypair',
-                  badge: 'Advanced',
-                  badgeColor: 'rgba(168,85,247,0.1)',
-                  badgeBorder: 'rgba(168,85,247,0.35)',
-                  badgeText: 'rgba(216,180,254,0.9)',
-                  title: 'ASC — Ed25519 Keypair',
-                  desc: 'The agent generates a cryptographic keypair and signs every request. The private key never leaves the agent.',
-                  pros: ['Strongest security — private key never transmitted', 'Cryptographic proof of origin per request', 'Replay protection built-in'],
-                  cons: ['Agent must implement Ed25519 signing', 'Requires accurate system clock'],
-                  bestFor: 'Production agents & automated pipelines',
-                },
+                { id: 'device_flow', badge: 'Recommended', badgeColor: 'var(--accent-bg)', badgeBorder: 'var(--accent-2)', badgeText: 'var(--accent)', title: 'OAuth Device Flow', desc: 'Your agent requests a short code, you approve it in the browser — it gets its own named, scoped token.', pros: ['Each agent gets its own token & audit trail', 'You explicitly approve every agent', 'Revoke a single agent without affecting others'], cons: ['Requires opening a browser tab once to approve'], bestFor: 'Most users' },
+                { id: 'master_token', badge: 'Simplest', badgeColor: 'rgba(210,153,34,0.12)', badgeBorder: 'var(--amber)', badgeText: 'var(--amber)', title: 'Master Token', desc: 'Copy your master token from Access Tokens and paste it directly into the agent.', pros: ['Zero setup — token already exists', 'Works immediately with any HTTP client'], cons: ['One token shared by all agents', 'Cannot be scoped to read-only'], bestFor: 'Quick local experiments' },
+                { id: 'asc_keypair', badge: 'Advanced', badgeColor: 'rgba(188,140,255,0.1)', badgeBorder: 'rgba(188,140,255,0.5)', badgeText: '#bc8cff', title: 'ASC — Ed25519 Keypair', desc: 'The agent generates a cryptographic keypair and signs every request. The private key never leaves the agent.', pros: ['Strongest security — private key never transmitted', 'Cryptographic proof of origin per request', 'Replay protection built-in'], cons: ['Agent must implement Ed25519 signing', 'Requires accurate system clock'], bestFor: 'Production agents & automated pipelines' },
               ];
 
               return (
-                <div className="space-y-3">
-                  <p className="text-sm leading-relaxed" style={{ color: 'rgba(148,163,184,0.9)' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <p style={{ fontSize: '13px', color: 'var(--ink-2)', margin: 0, lineHeight: 1.6 }}>
                     There are three ways to connect an AI agent to your API. Pick the one that fits your situation.
                   </p>
-
-                  {/* Connection method cards */}
-                  <div className="space-y-2">
-                    {CONNECTION_METHODS.map((m) => (
-                      <div key={m.id} style={{
-                        background: 'rgba(15,23,42,0.6)',
-                        border: '1px solid rgba(51,65,85,0.7)',
-                        borderRadius: 10,
-                        padding: '11px 13px',
-                      }}>
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <span className="text-sm font-semibold" style={{ color: 'rgba(226,232,240,0.95)' }}>{m.title}</span>
-                          <span style={{
-                            fontSize: 10,
-                            fontWeight: 600,
-                            padding: '2px 7px',
-                            borderRadius: 20,
-                            background: m.badgeColor,
-                            border: `1px solid ${m.badgeBorder}`,
-                            color: m.badgeText,
-                            letterSpacing: '0.03em',
-                          }}>{m.badge}</span>
-                        </div>
-                        <p className="text-xs mb-2" style={{ color: 'rgba(148,163,184,0.8)', lineHeight: 1.5 }}>{m.desc}</p>
-                        <div className="flex gap-4">
-                          <div style={{ flex: 1 }}>
-                            {m.pros.map((p, i) => (
-                              <div key={i} className="flex items-start gap-1.5 mb-0.5">
-                                <span style={{ color: '#4ade80', fontSize: 10, marginTop: 2, flexShrink: 0 }}>✓</span>
-                                <span className="text-xs" style={{ color: 'rgba(134,239,172,0.8)', lineHeight: 1.4 }}>{p}</span>
-                              </div>
-                            ))}
-                          </div>
-                          <div style={{ flex: 1 }}>
-                            {m.cons.map((c, i) => (
-                              <div key={i} className="flex items-start gap-1.5 mb-0.5">
-                                <span style={{ color: '#f87171', fontSize: 10, marginTop: 2, flexShrink: 0 }}>✕</span>
-                                <span className="text-xs" style={{ color: 'rgba(252,165,165,0.75)', lineHeight: 1.4 }}>{c}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                        <p className="text-xs mt-1.5" style={{ color: 'rgba(100,116,139,0.9)' }}>
-                          Best for: <span style={{ color: 'rgba(148,163,184,0.85)' }}>{m.bestFor}</span>
-                        </p>
+                  {CONNECTION_METHODS.map((m) => (
+                    <div key={m.id} style={{ background: 'var(--bg-sunk)', border: '1px solid var(--line)', borderRadius: '6px', padding: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                        <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ink)' }}>{m.title}</span>
+                        <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 7px', borderRadius: '20px', background: m.badgeColor, border: `1px solid ${m.badgeBorder}`, color: m.badgeText }}>{m.badge}</span>
                       </div>
-                    ))}
-                  </div>
+                      <p style={{ fontSize: '12px', color: 'var(--ink-3)', margin: '0 0 8px', lineHeight: 1.5 }}>{m.desc}</p>
+                      <div style={{ display: 'flex', gap: '16px' }}>
+                        <div style={{ flex: 1 }}>
+                          {m.pros.map((p, i) => (
+                            <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', marginBottom: '2px' }}>
+                              <span style={{ color: 'var(--green)', fontSize: '10px', marginTop: '2px', flexShrink: 0 }}>✓</span>
+                              <span style={{ fontSize: '11px', color: 'var(--green)', lineHeight: 1.4, opacity: 0.85 }}>{p}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          {m.cons.map((c, i) => (
+                            <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', marginBottom: '2px' }}>
+                              <span style={{ color: 'var(--red)', fontSize: '10px', marginTop: '2px', flexShrink: 0 }}>✕</span>
+                              <span style={{ fontSize: '11px', color: 'var(--red)', lineHeight: 1.4, opacity: 0.8 }}>{c}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <p style={{ fontSize: '11px', color: 'var(--ink-4)', marginTop: '6px', marginBottom: 0 }}>Best for: <span style={{ color: 'var(--ink-3)' }}>{m.bestFor}</span></p>
+                    </div>
+                  ))}
 
-                  {/* AI prompt section */}
                   <div>
-                    <p className="text-xs mb-1.5" style={{ color: 'rgba(100,116,139,0.9)' }}>
-                      Or let your AI agent walk you through it — paste this prompt:
-                    </p>
-                    <div style={{
-                      position: 'relative',
-                      background: 'rgba(15,23,42,0.8)',
-                      border: '1px solid rgba(71,85,105,0.5)',
-                      borderRadius: 10,
-                      padding: '12px 12px 38px 12px',
-                    }}>
-                      <pre style={{
-                        margin: 0,
-                        fontSize: 11,
-                        lineHeight: 1.6,
-                        color: 'rgba(203,213,225,0.85)',
-                        whiteSpace: 'pre-wrap',
-                        wordBreak: 'break-word',
-                        fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
-                      }}>{AGENT_PROMPT}</pre>
-                      <button
-                        onClick={() => {
-                          navigator.clipboard.writeText(AGENT_PROMPT).then(() => {
-                            setCopied(true);
-                            setTimeout(() => setCopied(false), 2000);
-                          });
-                        }}
-                        style={{
-                          position: 'absolute',
-                          bottom: 8,
-                          right: 8,
-                          padding: '4px 10px',
-                          borderRadius: 6,
-                          border: copied ? '1px solid rgba(34,197,94,0.4)' : '1px solid rgba(71,85,105,0.6)',
-                          background: copied ? 'rgba(34,197,94,0.08)' : 'rgba(30,41,59,0.8)',
-                          color: copied ? 'rgba(134,239,172,0.9)' : 'rgba(148,163,184,0.9)',
-                          fontSize: 11,
-                          fontWeight: 500,
-                          cursor: 'pointer',
-                          transition: 'all 0.15s ease',
-                        }}
-                      >
+                    <p style={{ fontSize: '12px', color: 'var(--ink-3)', marginBottom: '6px' }}>Or let your AI agent walk you through it — paste this prompt:</p>
+                    <div style={{ position: 'relative', background: 'var(--bg-sunk)', border: '1px solid var(--line)', borderRadius: '6px', padding: '12px 12px 40px 12px' }}>
+                      <pre style={{ margin: 0, fontSize: '11px', lineHeight: 1.6, color: 'var(--ink-2)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'JetBrains Mono, monospace' }}>{AGENT_PROMPT}</pre>
+                      <button onClick={() => { navigator.clipboard.writeText(AGENT_PROMPT).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }); }}
+                        style={{ position: 'absolute', bottom: '8px', right: '8px', padding: '4px 10px', borderRadius: '4px', border: `1px solid ${copied ? 'var(--green)' : 'var(--line)'}`, background: copied ? 'var(--green-bg)' : 'var(--bg-hover)', color: copied ? 'var(--green)' : 'var(--ink-3)', fontSize: '11px', fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s' }}>
                         {copied ? '✓ Copied' : 'Copy Prompt'}
                       </button>
                     </div>
@@ -802,225 +460,86 @@ Once you've read it:
             })()}
           </div>
 
-          {/* ── Tip block ── */}
-          <div
-            className="mx-6 mt-4 mb-1"
-            style={{
-              borderRadius: 12,
-              background: 'rgba(59,130,246,0.05)',
-              border: '1px solid rgba(59,130,246,0.15)',
-              borderLeft: '3px solid rgba(59,130,246,0.5)',
-              padding: '10px 14px',
-              transition: 'opacity 0.2s ease',
-              opacity: transitioning ? 0 : 1,
-            }}
-          >
-            <div className="flex gap-2.5">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(96,165,250,0.8)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
-                <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
-              </svg>
-              <div>
-                <p className="text-xs font-semibold mb-0.5" style={{ color: 'rgba(147,197,253,0.9)' }}>{tip.label}</p>
-                <p className="text-xs leading-relaxed" style={{ color: 'rgba(148,163,184,0.75)' }}>{tip.body}</p>
+          {/* Tip block */}
+          {tip && (
+            <div style={{ margin: '14px 20px 4px', borderRadius: '6px', background: 'var(--accent-bg)', border: '1px solid var(--line)', borderLeft: '3px solid var(--accent)', padding: '10px 14px', transition: 'opacity 0.2s', opacity: transitioning ? 0 : 1 }}>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: '1px' }}>
+                  <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
+                </svg>
+                <div>
+                  <p style={{ fontSize: '12px', fontWeight: 600, color: 'var(--accent)', margin: '0 0 2px' }}>{tip.label}</p>
+                  <p style={{ fontSize: '12px', color: 'var(--ink-3)', margin: 0, lineHeight: 1.5 }}>{tip.body}</p>
+                </div>
               </div>
             </div>
-          </div>
-          </div>{/* end scrollable body */}
+          )}
+        </div>
 
-          {/* ── Footer ── */}
-          <div
-            className="flex items-center justify-between px-6 py-4 flex-shrink-0"
-            style={{ borderTop: '1px solid rgba(51,65,85,0.6)', marginTop: 0 }}
-          >
-            <button
-              onClick={handleDismiss}
-              className="text-xs transition-colors"
-              style={{ color: 'rgba(100,116,139,0.8)' }}
-              onMouseEnter={e => { e.currentTarget.style.color = 'rgba(148,163,184,0.9)'; }}
-              onMouseLeave={e => { e.currentTarget.style.color = 'rgba(100,116,139,0.8)'; }}
-            >
-              {step === 3 ? 'Skip for now' : 'Skip setup'}
-            </button>
+        {/* Footer */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderTop: '1px solid var(--line)', flexShrink: 0 }}>
+          <button onClick={handleDismiss} style={{ fontSize: '12px', color: 'var(--ink-4)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0' }}
+            onMouseEnter={e => e.currentTarget.style.color = 'var(--ink-3)'}
+            onMouseLeave={e => e.currentTarget.style.color = 'var(--ink-4)'}>
+            {step === 3 ? 'Skip for now' : 'Skip setup'}
+          </button>
 
-            <div className="flex items-center gap-2">
-              {/* Back button (steps 2–4, but not while 2FA is auto-advancing) */}
-              {step > 1 && step < 5 && !twoFaEnabled && (
-                <button
-                  onClick={() => goTo(step - 1)}
-                  disabled={loading || twoFaLoading}
-                  className="px-4 py-2 text-sm font-medium rounded-xl transition-colors"
-                  style={{
-                    background: 'rgba(51,65,85,0.5)',
-                    border: '1px solid rgba(71,85,105,0.5)',
-                    color: 'rgba(148,163,184,0.9)',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.background = 'rgba(71,85,105,0.6)'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'rgba(51,65,85,0.5)'; }}
-                >
-                  Back
-                </button>
-              )}
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {step > 1 && step < 5 && !twoFaEnabled && (
+              <button onClick={() => goTo(step - 1)} disabled={loading || twoFaLoading} className="btn" style={{ minHeight: '32px', padding: '5px 14px', fontSize: '13px' }}>
+                Back
+              </button>
+            )}
 
-              {/* Primary action */}
-              {step === 1 && (
-                <button
-                  onClick={handleStep1}
-                  disabled={!name.trim()}
-                  style={primaryBtnStyle(!name.trim())}
-                  onMouseEnter={e => { if (name.trim()) e.currentTarget.style.opacity = '0.88'; }}
-                  onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
-                >
-                  Continue
+            {step === 1 && (
+              <button onClick={handleStep1} disabled={!name.trim()} className="btn-primary" style={{ minHeight: '32px', padding: '5px 16px', fontSize: '13px', opacity: !name.trim() ? 0.5 : 1, cursor: !name.trim() ? 'not-allowed' : 'pointer' }}>
+                Continue
+              </button>
+            )}
+            {step === 2 && (
+              <button onClick={handleStep2} disabled={loading} className="btn-primary" style={{ minHeight: '32px', padding: '5px 16px', fontSize: '13px', opacity: loading ? 0.7 : 1 }}>
+                {loading ? 'Saving…' : bio.trim() ? 'Continue' : 'Skip'}
+              </button>
+            )}
+            {step === 3 && !twoFaEnabled && (
+              <>
+                <button onClick={() => goTo(4)} className="btn" style={{ minHeight: '32px', padding: '5px 14px', fontSize: '13px' }}>
+                  Maybe later
                 </button>
-              )}
-              {step === 2 && (
-                <button
-                  onClick={handleStep2}
-                  disabled={loading}
-                  style={primaryBtnStyle(loading)}
-                  onMouseEnter={e => { if (!loading) e.currentTarget.style.opacity = '0.88'; }}
-                  onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
-                >
-                  {loading ? 'Saving…' : bio.trim() ? 'Continue' : 'Skip'}
+                <button onClick={handleTwoFaVerify} disabled={twoFaCode.length !== 6 || twoFaLoading || !twoFaQr} className="btn-primary" style={{ minHeight: '32px', padding: '5px 16px', fontSize: '13px', opacity: (twoFaCode.length !== 6 || twoFaLoading || !twoFaQr) ? 0.5 : 1, cursor: (twoFaCode.length !== 6 || twoFaLoading || !twoFaQr) ? 'not-allowed' : 'pointer' }}>
+                  {twoFaLoading ? 'Verifying…' : 'Enable 2FA'}
                 </button>
-              )}
-              {step === 3 && !twoFaEnabled && (
-                <>
-                  <button
-                    onClick={() => goTo(4)}
-                    className="px-4 py-2 text-sm font-medium rounded-xl transition-colors"
-                    style={{
-                      background: 'rgba(51,65,85,0.5)',
-                      border: '1px solid rgba(71,85,105,0.5)',
-                      color: 'rgba(148,163,184,0.9)',
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(71,85,105,0.6)'; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(51,65,85,0.5)'; }}
-                  >
-                    Maybe Later
-                  </button>
-                  <button
-                    onClick={handleTwoFaVerify}
-                    disabled={twoFaCode.length !== 6 || twoFaLoading || !twoFaQr}
-                    style={primaryBtnStyle(twoFaCode.length !== 6 || twoFaLoading || !twoFaQr)}
-                    onMouseEnter={e => { if (twoFaCode.length === 6 && !twoFaLoading && twoFaQr) e.currentTarget.style.opacity = '0.88'; }}
-                    onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
-                  >
-                    {twoFaLoading ? 'Verifying…' : 'Enable 2FA'}
-                  </button>
-                </>
-              )}
-              {step === 4 && (
-                <button
-                  onClick={handleStep4}
-                  disabled={loading}
-                  style={primaryBtnStyle(loading)}
-                  onMouseEnter={e => { if (!loading) e.currentTarget.style.opacity = '0.88'; }}
-                  onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
-                >
-                  {loading ? 'Setting up…' : 'Continue'}
-                </button>
-              )}
-              {step === 5 && (
-                <button
-                  onClick={() => setStep(6)}
-                  style={primaryBtnStyle(false)}
-                  onMouseEnter={e => { e.currentTarget.style.opacity = '0.88'; }}
-                  onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
-                >
-                  Next →
-                </button>
-              )}
-              {step === 6 && (
-                <button
-                  onClick={() => handleFinish('/')}
-                  style={primaryBtnStyle(false)}
-                  onMouseEnter={e => { e.currentTarget.style.opacity = '0.88'; }}
-                  onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
-                >
-                  Go to Dashboard
-                </button>
-              )}
-            </div>
+              </>
+            )}
+            {step === 4 && (
+              <button onClick={handleStep4} disabled={loading} className="btn-primary" style={{ minHeight: '32px', padding: '5px 16px', fontSize: '13px', opacity: loading ? 0.7 : 1 }}>
+                {loading ? 'Setting up…' : 'Continue'}
+              </button>
+            )}
+            {step === 5 && (
+              <button onClick={() => setStep(6)} className="btn-primary" style={{ minHeight: '32px', padding: '5px 16px', fontSize: '13px' }}>
+                Next →
+              </button>
+            )}
+            {step === 6 && (
+              <button onClick={() => handleFinish('/')} className="btn-primary" style={{ minHeight: '32px', padding: '5px 16px', fontSize: '13px' }}>
+                Go to Dashboard
+              </button>
+            )}
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }
 
-// ─── Style helpers (inline styles for fine-grained control) ──────────────────
-
-const inputStyle = {
-  width: '100%',
-  padding: '10px 14px',
-  background: 'rgba(30,41,59,0.7)',
-  border: '1px solid rgba(71,85,105,0.5)',
-  borderRadius: 12,
-  color: '#f1f5f9',
-  fontSize: 14,
-  fontFamily: "'Outfit', sans-serif",
-  outline: 'none',
-  transition: 'border-color 0.15s, box-shadow 0.15s',
+const labelStyle = {
+  display: 'block',
+  fontSize: '11px',
+  fontWeight: 500,
+  color: 'var(--ink-3)',
+  marginBottom: '6px',
+  fontFamily: 'JetBrains Mono, monospace',
+  textTransform: 'uppercase',
+  letterSpacing: '0.07em',
 };
-
-const inputFocusStyle = {
-  borderColor: 'rgba(99,102,241,0.6)',
-  boxShadow: '0 0 0 3px rgba(99,102,241,0.12)',
-};
-
-const inputBlurStyle = {
-  borderColor: 'rgba(71,85,105,0.5)',
-  boxShadow: 'none',
-};
-
-const serviceBtnStyle = {
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  gap: 8,
-  padding: '14px 8px',
-  background: 'rgba(30,41,59,0.5)',
-  border: '1px solid rgba(51,65,85,0.7)',
-  borderRadius: 12,
-  cursor: 'pointer',
-  transition: 'background 0.15s, border-color 0.15s',
-};
-
-const serviceBtnHoverStyle = {
-  ...serviceBtnStyle,
-  background: 'rgba(51,65,85,0.6)',
-  borderColor: 'rgba(99,102,241,0.3)',
-};
-
-const nextStepBtnStyle = {
-  padding: '14px',
-  background: 'rgba(30,41,59,0.5)',
-  border: '1px solid rgba(51,65,85,0.7)',
-  borderRadius: 12,
-  cursor: 'pointer',
-  transition: 'background 0.15s, border-color 0.15s',
-  textAlign: 'left',
-};
-
-const nextStepBtnHoverStyle = {
-  ...nextStepBtnStyle,
-  background: 'rgba(51,65,85,0.6)',
-  borderColor: 'rgba(59,130,246,0.25)',
-};
-
-const primaryBtnStyle = (disabled) => ({
-  padding: '9px 20px',
-  background: disabled
-    ? 'rgba(37,99,235,0.35)'
-    : 'linear-gradient(135deg, #3b82f6, #6366f1)',
-  border: 'none',
-  borderRadius: 10,
-  color: disabled ? 'rgba(255,255,255,0.4)' : '#fff',
-  fontSize: 14,
-  fontWeight: 600,
-  fontFamily: "'Outfit', sans-serif",
-  cursor: disabled ? 'not-allowed' : 'pointer',
-  transition: 'opacity 0.15s',
-  letterSpacing: '0.01em',
-});

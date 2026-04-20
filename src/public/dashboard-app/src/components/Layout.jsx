@@ -570,7 +570,7 @@ function Layout({ children, onLogout }) {
       </nav>
 
       {/* User row */}
-      <div style={{ borderTop: '1px solid var(--line)', padding: '10px 12px', flexShrink: 0 }}>
+      <div style={{ borderTop: '1px solid var(--line)', padding: '10px 12px', paddingBottom: 'max(10px, calc(10px + env(safe-area-inset-bottom)))', flexShrink: 0 }}>
         <div className="relative" ref={mobile ? undefined : avatarMenuRef}>
           <button
             type="button"
@@ -690,7 +690,7 @@ function Layout({ children, onLogout }) {
           <div
             onClick={e => e.stopPropagation()}
             style={{
-              width: '260px', height: '100vh', overflowY: 'auto',
+              width: '260px', height: '100dvh', overflowY: 'auto',
               background: 'var(--bg)', borderRight: '1px solid var(--line)',
             }}
             className="thin-scroll"
