@@ -480,9 +480,9 @@ function Dashboard() {
           tone: 'default',
           kicker: 'BACKUP READY',
           title: 'Weekly snapshot is available',
-          body: 'Personas, knowledge, skills, memory. Auto-retained for 12 weeks.',
-          href: '/settings',
-          action: 'Manage exports →',
+          body: 'Personas, knowledge, skills, memory. Manage schedule and retention in Backup settings.',
+          href: '/settings?section=dataPrivacy',
+          action: 'Go to Backup settings →',
         },
         {
           tone: 'accent',

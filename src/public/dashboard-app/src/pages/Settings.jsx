@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import apiRequest from '../utils/apiRequest';
@@ -2292,6 +2293,12 @@ function OnboardingSection() {
 function Settings() {
   const { activeSection, setActiveSection } = useSettingsStore();
   const forceUnauthenticated = useAuthStore((state) => state.forceUnauthenticated);
+  const [searchParams] = useSearchParams();
+
+  useEffect(() => {
+    const sec = searchParams.get('section');
+    if (sec) setActiveSection(sec);
+  }, [searchParams, setActiveSection]);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
