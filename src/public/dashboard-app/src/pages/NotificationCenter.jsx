@@ -94,11 +94,17 @@ export default function NotificationCenter() {
   };
 
   const filteredNotifications = notifications.filter(n => {
-    if (!searchQuery) return true;
-    return (
-      n.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (n.message && n.message.toLowerCase().includes(searchQuery.toLowerCase()))
-    );
+    if (filter === 'unread' && n.isRead) return false;
+    if (filter === 'read' && !n.isRead) return false;
+    if (typeFilter && n.type !== typeFilter) return false;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      return (
+        n.title.toLowerCase().includes(q) ||
+        (n.message && n.message.toLowerCase().includes(q))
+      );
+    }
+    return true;
   });
 
   const notificationTypes = [...new Set(notifications.map(n => n.type))];
