@@ -772,7 +772,7 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "https://unpkg.com", "https://static.cloudflareinsights.com", (req, res) => `'nonce-${res.locals.cspNonce}'`],
+      scriptSrc: ["'self'", "https://unpkg.com", "https://static.cloudflareinsights.com", "https://cdn.tailwindcss.com", (req, res) => `'nonce-${res.locals.cspNonce}'`],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://unpkg.com"],
       imgSrc: ["'self'", "data:", "https:", "blob:"],
       fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
@@ -1266,7 +1266,11 @@ app.get('/', (req, res) => {
   // Serve the marketing landing page for browser visitors
   const landingPath = path.join(__dirname, 'public', 'landing', 'index.html');
   if (fs.existsSync(landingPath)) {
-    return res.sendFile(landingPath);
+    const nonce = res.locals.cspNonce;
+    let html = fs.readFileSync(landingPath, 'utf8');
+    html = html.replace(/<script/g, `<script nonce="${nonce}"`);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.send(html);
   }
   res.redirect('/dashboard/');
 });

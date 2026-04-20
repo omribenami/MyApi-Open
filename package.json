@@ -2,6 +2,10 @@
   "name": "MyApi",
   "version": "1.0.0",
   "description": "Self-hosted Personal API for AI Agents",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/omribenami/MyApi-Open"
+  },
   "scripts": {
     "test": "jest --detectOpenHandles --forceExit",
     "test:watch": "jest --watch",

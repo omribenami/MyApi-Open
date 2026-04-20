@@ -75,8 +75,6 @@ function UserManagement() {
       }
     };
 
-    // Always fetch on mount and when masterToken changes
-    // Use session cookies as fallback if no masterToken
     fetchUsers();
     loadPlans();
   }, [masterToken, currentWorkspace?.id]);
@@ -128,85 +126,113 @@ function UserManagement() {
     }
   };
 
-
+  const selectStyle = {
+    background: 'var(--bg-sunk)',
+    border: '1px solid var(--line)',
+    color: 'var(--ink)',
+    borderRadius: 6,
+    padding: '4px 8px',
+    fontSize: 12,
+    outline: 'none',
+  };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-bold text-white">User Management</h1>
-          <p className="text-slate-400 mt-2">Assign plans (Free/Pro/Enterprise) to users.</p>
+    <div className="ui-page">
+      {/* Header */}
+      <div className="ui-page-header">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="ui-title">User Management</h1>
+            <p className="ui-subtitle mt-1">Assign plans (Free / Pro / Enterprise) to users.</p>
+          </div>
         </div>
       </div>
 
+      {/* Action error */}
       {actionError && (
-        <div className="rounded-lg border border-red-700 bg-red-900/30 text-red-200 p-3 text-sm flex items-center justify-between gap-4">
+        <div
+          className="ui-card p-3 text-[13px] flex items-center justify-between gap-4"
+          style={{ borderColor: 'var(--red)', color: 'var(--red)', background: 'var(--red-bg)' }}
+        >
           <span>{actionError}</span>
-          <button type="button" onClick={() => setActionError('')} className="text-red-300 hover:text-red-100">✕</button>
+          <button type="button" onClick={() => setActionError('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--red)' }}>✕</button>
         </div>
       )}
 
+      {/* Load error */}
       {loadError ? (
-        <div className="rounded-lg border border-red-700 bg-red-900/30 text-red-200 p-5 text-sm space-y-3">
+        <div
+          className="ui-card p-4 text-[13px] space-y-3"
+          style={{ borderColor: 'var(--red)', color: 'var(--red)', background: 'var(--red-bg)' }}
+        >
           <p>{loadError}</p>
-          <button
-            type="button"
-            onClick={fetchUsers}
-            className="px-3 py-1.5 rounded border border-red-600 text-red-200 hover:bg-red-800/30 text-xs"
-          >
+          <button type="button" onClick={fetchUsers} className="ui-button text-[12px]">
             Retry
           </button>
         </div>
       ) : (
-        <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
+        <div className="ui-card overflow-hidden">
+          <div className="px-5 py-3 border-b" style={{ borderColor: 'var(--line)' }}>
+            <div className="flex items-center justify-between">
+              <span className="ink font-semibold text-[14px]">Users ({users.length})</span>
+              <button type="button" onClick={fetchUsers} className="ui-button text-[12px]">Refresh</button>
+            </div>
+          </div>
+
           {loading ? (
-            <div className="p-6 text-slate-400">Loading users...</div>
+            <div className="p-6 ui-subtitle text-[13px]">Loading users...</div>
           ) : users.length === 0 ? (
-            <div className="p-6 text-slate-400">No users found.</div>
+            <div className="p-6 ui-subtitle text-[13px]">No users found.</div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-800/60 text-slate-300">
+              <table className="min-w-full text-[13px]">
+                <thead style={{ background: 'var(--bg-sunk)', borderBottom: '1px solid var(--line)' }}>
                   <tr>
-                    <th className="text-left px-4 py-3">Username</th>
-                    <th className="text-left px-4 py-3">Email</th>
-                    <th className="text-left px-4 py-3">Account</th>
-                    <th className="text-left px-4 py-3">Plan</th>
-                    <th className="text-left px-4 py-3">Plan Active</th>
-                    <th className="text-left px-4 py-3">Stripe Sub Status</th>
-                    <th className="text-left px-4 py-3">Actions</th>
+                    {['Username', 'Email', 'Account', 'Plan', 'Plan Active', 'Stripe Sub Status', 'Actions'].map(h => (
+                      <th key={h} className="text-left px-5 py-2.5 font-medium micro">{h}</th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map((user) => (
-                    <tr key={user.id} className="border-t border-slate-800">
-                      <td className="px-4 py-3 text-slate-100">{user.username}</td>
-                      <td className="px-4 py-3 text-slate-300">{user.email || '-'}</td>
-                      <td className="px-4 py-3 text-slate-300">{user.status || 'active'}</td>
-                      <td className="px-4 py-3">
+                  {users.map((user, i) => (
+                    <tr
+                      key={user.id}
+                      style={{ borderBottom: i < users.length - 1 ? '1px solid var(--line-2)' : 'none' }}
+                    >
+                      <td className="px-5 py-2.5 ink mono text-[12px]">{user.username}</td>
+                      <td className="px-5 py-2.5 ink-2">{user.email || '—'}</td>
+                      <td className="px-5 py-2.5 ink-2">{user.status || 'active'}</td>
+                      <td className="px-5 py-2.5">
                         <select
                           value={user.plan || 'free'}
                           onChange={(e) => updatePlan(user.id, e.target.value)}
                           disabled={savingUserId === user.id}
-                          className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-slate-100"
+                          style={selectStyle}
                         >
                           {(plans.length ? plans.map((p) => p.id) : ['free', 'pro', 'enterprise']).map((p) => (
                             <option key={p} value={p}>{p}</option>
                           ))}
                         </select>
                       </td>
-                      <td className="px-4 py-3 text-slate-300">
-                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${user.planActive ? 'bg-emerald-900/40 text-emerald-300 border border-emerald-700' : 'bg-rose-900/40 text-rose-300 border border-rose-700'}`}>
+                      <td className="px-5 py-2.5">
+                        <span
+                          className="inline-flex items-center px-2 py-0.5 rounded-full border text-[11px] font-medium"
+                          style={user.planActive
+                            ? { borderColor: 'var(--green)',  background: 'var(--green-bg)',  color: 'var(--green)' }
+                            : { borderColor: 'var(--red)',    background: 'var(--red-bg)',    color: 'var(--red)' }
+                          }
+                        >
                           {user.planActive ? 'Active' : 'Inactive'}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-slate-400">{user.stripeSubscriptionStatus || '-'}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-5 py-2.5 ink-3">{user.stripeSubscriptionStatus || '—'}</td>
+                      <td className="px-5 py-2.5">
                         <button
                           type="button"
                           onClick={() => deleteUser(user)}
                           disabled={deletingUserId === user.id}
-                          className="px-2 py-1 rounded border border-rose-600 text-rose-300 hover:bg-rose-900/20 text-xs disabled:opacity-50"
+                          className="btn btn-ghost text-[12px] disabled:opacity-50"
+                          style={{ color: 'var(--red)' }}
                         >
                           {deletingUserId === user.id ? 'Deleting…' : 'Delete'}
                         </button>

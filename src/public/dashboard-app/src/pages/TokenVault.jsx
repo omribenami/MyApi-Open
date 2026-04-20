@@ -242,8 +242,9 @@ function TokenVault() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-100">External Token Vault</h1>
-          <p className="mt-2 text-slate-400">Securely store API keys and credentials for external services</p>
+          <div className="micro mb-2">VAULT · CREDENTIALS</div>
+          <h1 className="font-serif text-[28px] font-medium tracking-tight ink">External Token Vault.</h1>
+          <p className="mt-2 ink-3 text-sm">Securely store API keys and credentials for external services</p>
         </div>
         <button
           onClick={() => { setShowAddModal(true); setError(''); }}
@@ -254,7 +255,7 @@ function TokenVault() {
       </div>
 
       {error && (
-        <div className="ui-toast border-red-500/30 bg-red-500/10 text-red-300">
+        <div className="rounded p-3 text-sm" style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red)' }}>
           {error}
         </div>
       )}
@@ -262,14 +263,14 @@ function TokenVault() {
       {isLoading ? (
         <div className="flex justify-center items-center py-16">
           <div className="text-center">
-            <div className="inline-block animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500 mb-4"></div>
-            <p className="text-slate-400">Loading tokens...</p>
+            <div className="inline-block animate-spin rounded-full h-10 w-10 border-b-2 mb-4" style={{ borderColor: 'var(--accent)' }}></div>
+            <p className="ink-3">Loading tokens...</p>
           </div>
         </div>
       ) : tokens.length === 0 ? (
         <div className="ui-card border-2 border-dashed p-10 text-center">
-                    <h3 className="text-lg font-semibold text-white mb-2">No external tokens stored yet</h3>
-          <p className="text-slate-400 mb-6">Add API keys for OpenAI, AWS, GitHub, Stripe, and more</p>
+          <h3 className="text-lg font-semibold ink mb-2">No external tokens stored yet</h3>
+          <p className="ink-3 mb-6">Add API keys for OpenAI, AWS, GitHub, Stripe, and more</p>
           <button
             onClick={() => setShowAddModal(true)}
             className="ui-button px-6"
@@ -278,34 +279,34 @@ function TokenVault() {
           </button>
         </div>
       ) : (
-        <div className="rounded-lg border border-slate-800 overflow-x-auto">
+        <div className="rounded hairline overflow-x-auto">
           <table className="w-full text-sm border-collapse">
             <thead>
-              <tr className="border-b border-slate-800 bg-slate-900/80">
-                <th className="px-4 py-2.5 text-left text-[11px] font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">Name</th>
-                <th className="px-4 py-2.5 text-left text-[11px] font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap hidden sm:table-cell">Service</th>
-                <th className="px-4 py-2.5 text-left text-[11px] font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">Secret Key</th>
-                <th className="px-4 py-2.5 text-left text-[11px] font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap hidden lg:table-cell">API Endpoint</th>
-                <th className="px-4 py-2.5 text-left text-[11px] font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap hidden md:table-cell">Added</th>
-                <th className="px-4 py-2.5 text-right text-[11px] font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap"></th>
+              <tr className="bg-sunk" style={{ borderBottom: '1px solid var(--line)' }}>
+                <th className="px-4 py-2.5 text-left micro whitespace-nowrap">Name</th>
+                <th className="px-4 py-2.5 text-left micro whitespace-nowrap hidden sm:table-cell">Service</th>
+                <th className="px-4 py-2.5 text-left micro whitespace-nowrap">Secret Key</th>
+                <th className="px-4 py-2.5 text-left micro whitespace-nowrap hidden lg:table-cell">API Endpoint</th>
+                <th className="px-4 py-2.5 text-left micro whitespace-nowrap hidden md:table-cell">Added</th>
+                <th className="px-4 py-2.5 text-right micro whitespace-nowrap"></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60">
+            <tbody style={{ borderTop: 'none' }}>
               {tokens.map((token) => {
                 const isRevealed = revealedTokens[token.id] !== undefined;
                 const displayValue = isRevealed
                   ? revealedTokens[token.id]
                   : (token.tokenPreview ? `${token.tokenPreview.slice(0, 8)}…` : '••••••••••••');
                 return (
-                  <tr key={token.id} className="hover:bg-slate-800/25 transition-colors group">
+                  <tr key={token.id} className="row row-cell group" style={{ borderTop: '1px solid var(--line)' }}>
                     {/* Name */}
                     <td className="px-4 py-2.5 whitespace-nowrap">
-                      <span className="font-medium text-white text-sm">{token.name || token.label}</span>
+                      <span className="font-medium ink text-sm">{token.name || token.label}</span>
                     </td>
                     {/* Service */}
                     <td className="px-4 py-2.5 whitespace-nowrap hidden sm:table-cell">
-                      <span className="inline-flex items-center gap-1.5 text-xs text-slate-300">
-                        <span className="inline-flex h-5 w-5 items-center justify-center rounded bg-slate-700 text-[10px] font-bold text-slate-200 flex-shrink-0">
+                      <span className="inline-flex items-center gap-1.5 text-xs ink-2">
+                        <span className="inline-flex h-5 w-5 items-center justify-center rounded bg-raised text-[10px] font-bold ink-2 flex-shrink-0">
                           {getServiceIcon(token.service)}
                         </span>
                         {getServiceName(token.service)}
@@ -314,14 +315,14 @@ function TokenVault() {
                     {/* Secret Key */}
                     <td className="px-4 py-2.5 whitespace-nowrap">
                       <div className="flex items-center gap-2">
-                        <code className="text-[11px] font-mono text-slate-400 bg-slate-800/70 px-2 py-0.5 rounded border border-slate-700/50 max-w-[160px] truncate">
+                        <code className="mono text-[11px] ink-3 bg-sunk px-2 py-0.5 rounded hairline max-w-[160px] truncate">
                           {displayValue}
                         </code>
                         <button
                           onClick={() => handleReveal(token.id)}
                           disabled={revealingId === token.id}
                           title={isRevealed ? 'Hide' : 'Reveal'}
-                          className="text-slate-600 hover:text-slate-300 transition-colors disabled:opacity-30"
+                          className="ink-4 hover:ink-2 transition-colors disabled:opacity-30"
                         >
                           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             {isRevealed
@@ -335,19 +336,19 @@ function TokenVault() {
                     {/* API Endpoint */}
                     <td className="px-4 py-2.5 whitespace-nowrap hidden lg:table-cell">
                       {token.discoveredApiUrl ? (
-                        <span className="text-xs text-emerald-400 truncate max-w-[200px] block" title={token.discoveredApiUrl}>
+                        <span className="text-xs truncate max-w-[200px] block" style={{ color: 'var(--green)' }} title={token.discoveredApiUrl}>
                           {token.discoveredApiUrl.replace(/^https?:\/\//, '')}
                           {token.discoveredAuthScheme && token.discoveredAuthScheme !== 'unknown' && (
-                            <span className="ml-1 text-slate-500">({token.discoveredAuthScheme})</span>
+                            <span className="ml-1 ink-4">({token.discoveredAuthScheme})</span>
                           )}
                         </span>
                       ) : (
-                        <span className="text-xs text-slate-600">—</span>
+                        <span className="text-xs ink-4">—</span>
                       )}
                     </td>
                     {/* Added */}
                     <td className="px-4 py-2.5 whitespace-nowrap hidden md:table-cell">
-                      <span className="text-xs text-slate-500">
+                      <span className="text-xs ink-3">
                         {token.createdAt ? new Date(token.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
                       </span>
                     </td>
@@ -357,7 +358,7 @@ function TokenVault() {
                         <button
                           onClick={() => handleCopyToken(token.id)}
                           title={copiedId === token.id ? 'Copied!' : 'Copy key'}
-                          className={`p-1.5 rounded transition-colors ${copiedId === token.id ? 'text-cyan-400' : 'text-slate-500 hover:text-cyan-400 hover:bg-cyan-900/20'}`}
+                          className={`p-1.5 rounded transition-colors ${copiedId === token.id ? 'accent' : 'ink-4 hover:ink'}`}
                         >
                           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
                         </button>
@@ -374,14 +375,14 @@ function TokenVault() {
                             setShowAddModal(true);
                           }}
                           title="Edit"
-                          className="p-1.5 rounded text-slate-500 hover:text-white hover:bg-slate-700 transition-colors"
+                          className="p-1.5 rounded ink-4 hover:ink transition-colors"
                         >
                           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                         </button>
                         <button
                           onClick={() => setDeleteTarget(token)}
                           title="Delete"
-                          className="p-1.5 rounded text-slate-500 hover:text-red-400 hover:bg-red-900/20 transition-colors"
+                          className="p-1.5 rounded ink-4 transition-colors hover:text-[color:var(--red)]"
                         >
                           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                         </button>
@@ -398,56 +399,56 @@ function TokenVault() {
       {/* Add Token Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-lg p-6 max-w-md w-full">
-            <h2 className="text-xl font-bold text-white mb-4">{editingToken ? 'Edit External Token' : 'Add External Token'}</h2>
+          <div className="bg-raised hairline rounded p-6 max-w-md w-full" style={{ background: 'var(--bg-raised)' }}>
+            <h2 className="text-xl font-bold ink mb-4">{editingToken ? 'Edit External Token' : 'Add External Token'}</h2>
 
             {error && (
-              <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-sm">
+              <div className="mb-4 p-3 rounded text-sm" style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red)' }}>
                 {error}
               </div>
             )}
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm text-slate-300 mb-2">Token Name</label>
+                <label className="block text-sm ink-2 mb-2">Token Name</label>
                 <input
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   placeholder="e.g., My OpenAI API Key"
-                  className="w-full px-3 py-2 ui-input focus:border-slate-500 focus:outline-none"
+                  className="ui-input w-full"
                 />
               </div>
 
 
               <div>
-                <label className="block text-sm text-slate-300 mb-2">Website URL</label>
+                <label className="block text-sm ink-2 mb-2">Website URL</label>
                 <input
                   type="url"
                   value={formData.websiteUrl}
                   onChange={(e) => setFormData({ ...formData, websiteUrl: e.target.value })}
                   placeholder="https://example.com"
-                  className="w-full px-3 py-2 ui-input focus:border-slate-500 focus:outline-none"
+                  className="ui-input w-full"
                 />
               </div>
 
               <div>
-                <label className="block text-sm text-slate-300 mb-2">API URL (Optional)</label>
+                <label className="block text-sm ink-2 mb-2">API URL (Optional)</label>
                 <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                   <input
                     type="url"
                     value={formData.discoveredApiUrl}
                     onChange={(e) => setFormData({ ...formData, discoveredApiUrl: e.target.value })}
                     placeholder="https://api.example.com"
-                    className="flex-1 w-full px-3 py-2 ui-input focus:border-slate-500 focus:outline-none"
+                    className="ui-input flex-1 w-full"
                   />
                   <div className="flex items-center gap-3 w-full sm:w-auto">
-                    <span className="text-slate-500 text-xs font-semibold uppercase tracking-wider hidden sm:inline">or</span>
+                    <span className="ink-4 text-xs font-semibold uppercase tracking-wider hidden sm:inline">or</span>
                     <button
                       type="button"
                       onClick={handleDiscoverApi}
                       disabled={discovering || !formData.websiteUrl}
-                      className="w-full sm:w-auto px-4 py-2 rounded bg-slate-700 hover:bg-slate-600 disabled:opacity-60 text-slate-100 text-sm border border-slate-600 whitespace-nowrap transition-colors"
+                      className="ui-button w-full sm:w-auto whitespace-nowrap disabled:opacity-60"
                       title="Scan Website URL for API endpoint"
                     >
                       {discovering ? 'Scanning...' : 'Scan Website'}
@@ -455,17 +456,17 @@ function TokenVault() {
                   </div>
                 </div>
                 {formData.discoveredAuthScheme && formData.discoveredAuthScheme !== 'unknown' && (
-                  <p className="mt-2 text-xs text-emerald-400">Detected auth: {formData.discoveredAuthScheme}</p>
+                  <p className="mt-2 text-xs" style={{ color: 'var(--green)' }}>Detected auth: {formData.discoveredAuthScheme}</p>
                 )}
               </div>
 
               <div>
-                <label className="block text-sm text-slate-300 mb-2">Token / API Key</label>
+                <label className="block text-sm ink-2 mb-2">Token / API Key</label>
                 <textarea
                   value={formData.token}
                   onChange={(e) => setFormData({ ...formData, token: e.target.value })}
                   placeholder="Paste your API key here"
-                  className="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-800 text-white font-mono text-sm focus:border-blue-500 focus:outline-none"
+                  className="ui-input mono w-full"
                   rows={4}
                 />
               </div>
@@ -479,13 +480,13 @@ function TokenVault() {
                   setFormData({ name: '', token: '', websiteUrl: '', discoveredApiUrl: '', discoveredAuthScheme: '' });
                   setError('');
                 }}
-                className="flex-1 px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 transition-colors"
+                className="flex-1 ui-button"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSaveToken}
-                className="flex-1 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors"
+                className="flex-1 ui-button-primary"
               >
                 {editingToken ? 'Save Changes' : 'Add Token'}
               </button>
@@ -496,16 +497,16 @@ function TokenVault() {
 
       {deleteTarget && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-red-800 rounded-lg max-w-md w-full p-6">
-            <h3 className="text-lg font-semibold text-red-300 mb-2">Delete token?</h3>
-            <p className="text-sm text-slate-300 mb-5">
-              Are you sure you want to delete <span className="font-semibold text-white">{deleteTarget.name || deleteTarget.label}</span>?
+          <div className="bg-raised rounded max-w-md w-full p-6" style={{ background: 'var(--bg-raised)', border: '1px solid var(--red)' }}>
+            <h3 className="text-lg font-semibold mb-2" style={{ color: 'var(--red)' }}>Delete token?</h3>
+            <p className="text-sm ink-2 mb-5">
+              Are you sure you want to delete <span className="font-semibold ink">{deleteTarget.name || deleteTarget.label}</span>?
               This action cannot be undone.
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setDeleteTarget(null)}
-                className="flex-1 px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800"
+                className="flex-1 ui-button"
               >
                 Cancel
               </button>
@@ -514,7 +515,7 @@ function TokenVault() {
                   await handleDeleteToken(deleteTarget.id);
                   setDeleteTarget(null);
                 }}
-                className="flex-1 px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white"
+                className="flex-1 ui-button-danger"
               >
                 Delete
               </button>

@@ -30,14 +30,14 @@ function ChevronIcon({ open }) {
 function ActionBtn({ onClick, disabled, title, children, variant = 'default' }) {
   const base = 'inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed';
   const variants = {
-    default: 'text-slate-300 hover:text-white hover:bg-slate-700',
-    danger:  'text-red-400 hover:text-red-300 hover:bg-red-900/30',
-    amber:   'text-amber-400 hover:text-amber-300 hover:bg-amber-900/30',
-    blue:    'text-blue-400 hover:text-blue-300 hover:bg-blue-900/30',
-    green:   'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-900/30',
-    cyan:    'text-cyan-400 hover:text-cyan-300 hover:bg-cyan-900/30',
+    default: 'ink-2 hover:ink',
+    danger:  'hover:text-[color:var(--red)]',
+    amber:   'hover:text-[color:var(--amber)]',
+    blue:    'accent hover:opacity-80',
+    green:   'hover:text-[color:var(--green)]',
+    cyan:    'accent hover:opacity-80',
   };
-  return <button onClick={onClick} disabled={disabled} title={title} className={`${base} ${variants[variant]}`}>{children}</button>;
+  return <button onClick={onClick} disabled={disabled} title={title} className={`${base} ink-3 ${variants[variant]}`}>{children}</button>;
 }
 
 function isBundle(token) {
@@ -51,28 +51,28 @@ function isBundle(token) {
 
 // ── GitHub-style Scope Row ─────────────────────────────────────────────────────
 // A single collapsible category row (Identity / Personas / Knowledge / Skills / Services / Memory)
-function ScopeRow({ icon, title, description, summary, summaryColor = 'text-slate-500', active, children }) {
+function ScopeRow({ icon, title, description, summary, summaryColor = 'ink-4', active, children }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className={`border rounded-lg overflow-hidden transition-colors ${active ? 'border-blue-700/50' : 'border-slate-700'}`}>
+    <div className={`rounded overflow-hidden transition-colors ${active ? 'hairline-2' : 'hairline'}`}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-800/50 transition-colors"
+        className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[color:var(--bg-hover)]"
       >
         <span className="text-lg flex-shrink-0">{icon}</span>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-white">{title}</span>
-            {active && <span className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0"/>}
+            <span className="text-sm font-medium ink">{title}</span>
+            {active && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: 'var(--accent)' }}/>}
           </div>
-          <p className="text-[11px] text-slate-500 mt-0.5 truncate">{description}</p>
+          <p className="text-[11px] ink-4 mt-0.5 truncate">{description}</p>
         </div>
         <span className={`text-xs font-medium flex-shrink-0 mr-2 ${summaryColor}`}>{summary}</span>
         <ChevronIcon open={open}/>
       </button>
       {open && (
-        <div className="border-t border-slate-700/60 bg-slate-900/30 px-4 py-3">
+        <div className="px-4 py-3 bg-sunk" style={{ borderTop: '1px solid var(--line)' }}>
           {children}
         </div>
       )}
@@ -83,16 +83,17 @@ function ScopeRow({ icon, title, description, summary, summaryColor = 'text-slat
 // Checkbox row for a resource item
 function ResourceItem({ label, sublabel, checked, onChange, accent = false }) {
   return (
-    <label className={`flex items-center gap-3 px-2 py-2 rounded-lg cursor-pointer transition-colors hover:bg-slate-800/60 ${checked ? (accent ? 'bg-purple-900/10' : 'bg-blue-900/10') : ''}`}>
+    <label className={`flex items-center gap-3 px-2 py-2 rounded cursor-pointer transition-colors hover:bg-[color:var(--bg-hover)] ${checked ? 'bg-[color:var(--accent-bg)]' : ''}`}>
       <input
         type="checkbox"
         checked={checked}
         onChange={onChange}
-        className={`h-4 w-4 rounded border-slate-600 bg-slate-700 ${accent ? 'text-purple-500' : 'text-blue-500'}`}
+        className={`h-4 w-4 rounded ${accent ? 'text-violet-500' : ''}`}
+        style={{ accentColor: accent ? 'var(--violet)' : 'var(--accent)' }}
       />
       <div className="flex-1 min-w-0">
-        <span className="text-sm text-white">{label}</span>
-        {sublabel && <span className="ml-2 text-xs text-slate-500 truncate">{sublabel}</span>}
+        <span className="text-sm ink">{label}</span>
+        {sublabel && <span className="ml-2 text-xs ink-3 truncate">{sublabel}</span>}
       </div>
     </label>
   );
@@ -103,7 +104,7 @@ function LoadingSkeleton({ lines = 3 }) {
   return (
     <div className="space-y-2 py-1">
       {Array.from({ length: lines }).map((_, i) => (
-        <div key={i} className="h-8 bg-slate-800 rounded-lg animate-pulse" style={{ opacity: 1 - i * 0.2 }}/>
+        <div key={i} className="h-8 bg-raised rounded animate-pulse" style={{ opacity: 1 - i * 0.2 }}/>
       ))}
     </div>
   );
@@ -348,40 +349,40 @@ function AccessTokens() {
 
   // ── Summary labels ───────────────────────────────────────────────────────────
   const identitySummary = () => {
-    if (identityScopes.size === 0) return { text: 'No access', color: 'text-slate-600' };
+    if (identityScopes.size === 0) return { text: 'No access', color: 'ink-4' };
     const labels = [];
     if (identityScopes.has('basic')) labels.push('Basic');
     if (identityScopes.has('professional')) labels.push('Professional');
     if (identityScopes.has('availability')) labels.push('Availability');
-    return { text: labels.join(', '), color: 'text-blue-400' };
+    return { text: labels.join(', '), color: 'accent' };
   };
 
   const personaSummary = () => {
-    if (personaAccess === 'none') return { text: 'No access', color: 'text-slate-600' };
-    if (personaAccess === 'all') return { text: 'All personas', color: 'text-blue-400' };
+    if (personaAccess === 'none') return { text: 'No access', color: 'ink-4' };
+    if (personaAccess === 'all') return { text: 'All personas', color: 'accent' };
     const count = selectedPersonaIds.size;
-    return { text: `${count} persona${count !== 1 ? 's' : ''}`, color: 'text-blue-400' };
+    return { text: `${count} persona${count !== 1 ? 's' : ''}`, color: 'accent' };
   };
 
   const kbSummary = () => {
-    if (kbAccess === 'none') return { text: 'No access', color: 'text-slate-600' };
-    if (kbAccess === 'all') return { text: 'All documents', color: 'text-blue-400' };
+    if (kbAccess === 'none') return { text: 'No access', color: 'ink-4' };
+    if (kbAccess === 'all') return { text: 'All documents', color: 'accent' };
     const count = selectedKbIds.size;
-    return { text: `${count} document${count !== 1 ? 's' : ''}`, color: 'text-blue-400' };
+    return { text: `${count} document${count !== 1 ? 's' : ''}`, color: 'accent' };
   };
 
   const skillSummary = () => {
-    if (skillAccess === 'none') return { text: 'No access', color: 'text-slate-600' };
+    if (skillAccess === 'none') return { text: 'No access', color: 'ink-4' };
     const access = skillAccess === 'write' ? 'Read & Write' : 'Read';
     const sel = skillSelectionMode === 'selected' && selectedSkillIds.size > 0 ? ` · ${selectedSkillIds.size} selected` : '';
-    return { text: access + sel, color: 'text-blue-400' };
+    return { text: access + sel, color: 'accent' };
   };
 
   const serviceSummary = () => {
-    if (serviceAccess === 'none') return { text: 'No access', color: 'text-slate-600' };
+    if (serviceAccess === 'none') return { text: 'No access', color: 'ink-4' };
     const access = serviceAccess === 'write' ? 'Read & Write' : 'Read';
     const sel = serviceSelectionMode === 'selected' && selectedServiceNames.size > 0 ? ` · ${selectedServiceNames.size} selected` : '';
-    return { text: access + sel, color: 'text-blue-400' };
+    return { text: access + sel, color: 'accent' };
   };
 
   // ── Master token actions ─────────────────────────────────────────────────────
@@ -559,27 +560,31 @@ function AccessTokens() {
     });
   };
 
+  // Shared table header cell style
+  const thClass = 'px-4 py-2.5 text-left micro whitespace-nowrap';
+
   return (
     <div className="space-y-10">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-semibold text-white tracking-tight">Access Tokens</h1>
-        <p className="mt-1 text-sm text-slate-400">Manage your master token, guest tokens, and marketplace-installed tokens</p>
+        <div className="micro mb-2">TOKENS · ACCESS</div>
+        <h1 className="font-serif text-[28px] font-medium tracking-tight ink">Access Tokens.</h1>
+        <p className="mt-1 text-sm ink-3">Manage your master token, guest tokens, and marketplace-installed tokens</p>
       </div>
 
       {/* Alerts */}
       {error && (
-        <div className="flex items-center justify-between gap-4 px-4 py-3 rounded-lg border border-red-700/60 bg-red-950/40 text-red-300 text-sm">
+        <div className="flex items-center justify-between gap-4 px-4 py-3 rounded text-sm" style={{ border: '1px solid var(--red)', background: 'var(--red-bg)', color: 'var(--red)' }}>
           <span>{error}</span>
-          <button onClick={clearError} className="text-red-400 hover:text-red-200 flex-shrink-0">
+          <button onClick={clearError} className="flex-shrink-0" style={{ color: 'var(--red)' }}>
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
           </button>
         </div>
       )}
       {success && (
-        <div className="flex items-center justify-between gap-4 px-4 py-3 rounded-lg border border-emerald-700/60 bg-emerald-950/40 text-emerald-300 text-sm">
+        <div className="flex items-center justify-between gap-4 px-4 py-3 rounded text-sm" style={{ border: '1px solid var(--green)', background: 'var(--green-bg)', color: 'var(--green)' }}>
           <span>{success}</span>
-          <button onClick={clearSuccess} className="text-emerald-400 hover:text-emerald-200 flex-shrink-0">
+          <button onClick={clearSuccess} className="flex-shrink-0" style={{ color: 'var(--green)' }}>
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
           </button>
         </div>
@@ -588,57 +593,57 @@ function AccessTokens() {
       {/* ── Master Token ── */}
       <section className="space-y-3">
         <div>
-          <h2 className="text-base font-semibold text-white">Master Token</h2>
-          <p className="text-xs text-slate-400 mt-0.5">Full access · Never expires · Keep it secret</p>
+          <h2 className="text-base font-semibold ink">Master Token</h2>
+          <p className="text-xs ink-3 mt-0.5">Full access · Never expires · Keep it secret</p>
         </div>
-        <div className="rounded-lg border border-slate-800 overflow-x-auto">
+        <div className="rounded hairline overflow-x-auto">
           <table className="w-full text-sm border-collapse">
             <thead>
-              <tr className="border-b border-slate-800 bg-slate-900/80">
-                <th className="px-4 py-2.5 text-left text-[11px] font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">Name</th>
-                <th className="px-4 py-2.5 text-left text-[11px] font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">Status</th>
-                <th className="px-4 py-2.5 text-left text-[11px] font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">Secret Key</th>
-                <th className="px-4 py-2.5 text-left text-[11px] font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap hidden lg:table-cell">Created</th>
-                <th className="px-4 py-2.5 text-left text-[11px] font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap hidden sm:table-cell">Expires</th>
-                <th className="px-4 py-2.5 text-left text-[11px] font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">Permissions</th>
-                <th className="px-4 py-2.5 text-right text-[11px] font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap"></th>
+              <tr className="bg-sunk" style={{ borderBottom: '1px solid var(--line)' }}>
+                <th className={thClass}>Name</th>
+                <th className={thClass}>Status</th>
+                <th className={thClass}>Secret Key</th>
+                <th className={`${thClass} hidden lg:table-cell`}>Created</th>
+                <th className={`${thClass} hidden sm:table-cell`}>Expires</th>
+                <th className={thClass}>Permissions</th>
+                <th className="px-4 py-2.5 text-right micro whitespace-nowrap"></th>
               </tr>
             </thead>
             <tbody>
-              <tr className="hover:bg-slate-800/25 transition-colors group">
+              <tr className="row row-cell group">
                 <td className="px-4 py-2.5 whitespace-nowrap">
-                  <span className="font-medium text-white text-sm">Master Token</span>
+                  <span className="font-medium ink text-sm">Master Token</span>
                 </td>
                 <td className="px-4 py-2.5 whitespace-nowrap">
-                  <span className="inline-flex items-center gap-1.5 text-xs text-emerald-400">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0"/>Active
+                  <span className="inline-flex items-center gap-1.5 text-xs" style={{ color: 'var(--green)' }}>
+                    <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: 'var(--green)' }}/>Active
                   </span>
                 </td>
                 <td className="px-4 py-2.5 whitespace-nowrap">
                   <div className="flex items-center gap-2">
-                    <code className="text-[11px] font-mono text-slate-400 bg-slate-800/70 px-2 py-0.5 rounded border border-slate-700/50">
+                    <code className="mono text-[11px] ink-3 bg-sunk px-2 py-0.5 rounded hairline">
                       {masterRevealed ? masterToken : maskToken(masterToken)}
                     </code>
-                    <button onClick={() => setMasterRevealed((v) => !v)} title={masterRevealed ? 'Hide' : 'Reveal'} className="text-slate-600 hover:text-slate-300 transition-colors">
+                    <button onClick={() => setMasterRevealed((v) => !v)} title={masterRevealed ? 'Hide' : 'Reveal'} className="ink-4 hover:ink-2 transition-colors">
                       <EyeIcon className="w-3.5 h-3.5" off={masterRevealed}/>
                     </button>
                   </div>
                 </td>
                 <td className="px-4 py-2.5 whitespace-nowrap hidden lg:table-cell">
-                  <span className="text-xs text-slate-500">—</span>
+                  <span className="text-xs ink-3">—</span>
                 </td>
                 <td className="px-4 py-2.5 whitespace-nowrap hidden sm:table-cell">
-                  <span className="text-xs text-slate-500">Never</span>
+                  <span className="text-xs ink-3">Never</span>
                 </td>
                 <td className="px-4 py-2.5 whitespace-nowrap">
-                  <span className="text-xs font-medium text-amber-400">Full access</span>
+                  <span className="text-xs font-medium" style={{ color: 'var(--amber)' }}>Full access</span>
                 </td>
                 <td className="px-4 py-2.5 whitespace-nowrap text-right">
                   <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={handleCopyMaster} title={masterCopied ? 'Copied!' : 'Copy'} className="p-1.5 rounded text-slate-500 hover:text-cyan-400 hover:bg-cyan-900/20 transition-colors">
+                    <button onClick={handleCopyMaster} title={masterCopied ? 'Copied!' : 'Copy'} className="p-1.5 rounded ink-4 hover:ink transition-colors">
                       <CopyIcon className="w-3.5 h-3.5"/>
                     </button>
-                    <button onClick={handleRegenerateMaster} disabled={masterRegenerating} title="Rotate master token" className="p-1.5 rounded text-slate-500 hover:text-amber-400 hover:bg-amber-900/20 transition-colors disabled:opacity-30">
+                    <button onClick={handleRegenerateMaster} disabled={masterRegenerating} title="Rotate master token" className="p-1.5 rounded ink-4 hover:ink transition-colors disabled:opacity-30">
                       <RotateIcon className={`w-3.5 h-3.5 ${masterRegenerating ? 'animate-spin' : ''}`}/>
                     </button>
                   </div>
@@ -647,14 +652,14 @@ function AccessTokens() {
             </tbody>
           </table>
         </div>
-        <div className="flex gap-3 px-4 py-3 rounded-lg border border-amber-700/30 bg-amber-950/20">
-          <svg className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+        <div className="flex gap-3 px-4 py-3 rounded" style={{ border: '1px solid var(--amber)', background: 'var(--accent-bg)', opacity: 0.85 }}>
+          <svg className="w-4 h-4 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20" style={{ color: 'var(--amber)' }}>
             <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd"/>
           </svg>
-          <p className="text-xs text-amber-300/70 leading-relaxed">
-            <span className="font-semibold text-amber-300">Not recommended for agents.</span>{' '}
-            Use <strong className="text-amber-300">ASC</strong> or <strong className="text-amber-300">OAuth Device Flow</strong> instead — each agent gets its own revocable identity.{' '}
-            <a href="/dashboard/connectors#asc" className="underline text-amber-300 hover:text-amber-200 transition-colors">Set up ASC →</a>
+          <p className="text-xs ink-3 leading-relaxed">
+            <span className="font-semibold ink-2">Not recommended for agents.</span>{' '}
+            Use <strong className="ink-2">ASC</strong> or <strong className="ink-2">OAuth Device Flow</strong> instead — each agent gets its own revocable identity.{' '}
+            <a href="/dashboard/connectors#asc" className="underline accent hover:opacity-80 transition-opacity">Set up ASC →</a>
           </p>
         </div>
       </section>
@@ -663,12 +668,12 @@ function AccessTokens() {
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-base font-semibold text-white">Guest Tokens</h2>
-            <p className="text-xs text-slate-400 mt-0.5">Fine-grained scoped tokens for agents or external parties</p>
+            <h2 className="text-base font-semibold ink">Guest Tokens</h2>
+            <p className="text-xs ink-3 mt-0.5">Fine-grained scoped tokens for agents or external parties</p>
           </div>
           <button
             onClick={() => { resetForm(); setNewlyCreated(null); setShowCreateForm(true); }}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors flex-shrink-0"
+            className="ui-button-primary inline-flex items-center gap-2 flex-shrink-0"
           >
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>
             New Token
@@ -677,45 +682,45 @@ function AccessTokens() {
 
         {/* Newly created banner */}
         {newlyCreated && (
-          <div className="rounded-lg border border-emerald-700/50 bg-emerald-950/30 p-4">
+          <div className="rounded p-4" style={{ border: '1px solid var(--green)', background: 'var(--green-bg)' }}>
             <div className="flex items-center gap-2 mb-3">
-              <svg className="h-4 w-4 text-emerald-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-              <h3 className="text-sm font-semibold text-emerald-300">Token created — copy it now, it won't be shown again</h3>
+              <svg className="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: 'var(--green)' }}><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              <h3 className="text-sm font-semibold" style={{ color: 'var(--green)' }}>Token created — copy it now, it won't be shown again</h3>
             </div>
-            <div className="flex items-center gap-3 bg-slate-900 rounded-lg px-3 py-2.5 border border-slate-700">
-              <code className="flex-1 text-xs text-emerald-300 font-mono break-all">{newlyCreated.token}</code>
-              <button onClick={() => copyText(newlyCreated.token)} className="text-blue-400 hover:text-blue-300 flex-shrink-0"><CopyIcon className="w-4 h-4"/></button>
+            <div className="flex items-center gap-3 bg-sunk rounded px-3 py-2.5 hairline">
+              <code className="flex-1 text-xs mono break-all" style={{ color: 'var(--green)' }}>{newlyCreated.token}</code>
+              <button onClick={() => copyText(newlyCreated.token)} className="accent flex-shrink-0"><CopyIcon className="w-4 h-4"/></button>
             </div>
-            <div className="mt-2 flex gap-4 text-xs text-slate-400">
-              <span>Label: <span className="text-slate-300">{newlyCreated.label || newlyCreated.name}</span></span>
-              {newlyCreated.expiresAt && <span>Expires: <span className="text-slate-300">{getExpiry(newlyCreated.expiresAt).label}</span></span>}
+            <div className="mt-2 flex gap-4 text-xs ink-3">
+              <span>Label: <span className="ink-2">{newlyCreated.label || newlyCreated.name}</span></span>
+              {newlyCreated.expiresAt && <span>Expires: <span className="ink-2">{getExpiry(newlyCreated.expiresAt).label}</span></span>}
             </div>
-            <button onClick={() => setNewlyCreated(null)} className="mt-2 text-xs text-emerald-500 hover:text-emerald-400 underline">Dismiss</button>
+            <button onClick={() => setNewlyCreated(null)} className="mt-2 text-xs underline" style={{ color: 'var(--green)' }}>Dismiss</button>
           </div>
         )}
 
         {/* Token table */}
         {isLoading ? (
-          <div className="flex justify-center py-10"><div className="w-5 h-5 border-2 border-slate-600 border-t-blue-500 rounded-full animate-spin"/></div>
+          <div className="flex justify-center py-10"><div className="w-5 h-5 border-2 rounded-full animate-spin" style={{ borderColor: 'var(--line)', borderTopColor: 'var(--accent)' }}/></div>
         ) : guestTokens.length === 0 ? (
-          <div className="rounded-lg border-2 border-dashed border-slate-800 p-10 text-center">
-            <p className="text-sm text-slate-500">No guest tokens yet. Create one to grant scoped access.</p>
+          <div className="rounded hairline border-dashed p-10 text-center">
+            <p className="text-sm ink-3">No guest tokens yet. Create one to grant scoped access.</p>
           </div>
         ) : (
-          <div className="rounded-lg border border-slate-800 overflow-x-auto">
+          <div className="rounded hairline overflow-x-auto">
             <table className="w-full text-sm border-collapse">
               <thead>
-                <tr className="border-b border-slate-800 bg-slate-900/80">
-                  <th className="px-4 py-2.5 text-left text-[11px] font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">Name</th>
-                  <th className="px-4 py-2.5 text-left text-[11px] font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">Status</th>
-                  <th className="px-4 py-2.5 text-left text-[11px] font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">Secret Key</th>
-                  <th className="px-4 py-2.5 text-left text-[11px] font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap hidden lg:table-cell">Created</th>
-                  <th className="px-4 py-2.5 text-left text-[11px] font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap hidden sm:table-cell">Expires</th>
-                  <th className="px-4 py-2.5 text-left text-[11px] font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">Permissions</th>
-                  <th className="px-4 py-2.5 text-right text-[11px] font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap"></th>
+                <tr className="bg-sunk" style={{ borderBottom: '1px solid var(--line)' }}>
+                  <th className={thClass}>Name</th>
+                  <th className={thClass}>Status</th>
+                  <th className={thClass}>Secret Key</th>
+                  <th className={`${thClass} hidden lg:table-cell`}>Created</th>
+                  <th className={`${thClass} hidden sm:table-cell`}>Expires</th>
+                  <th className={thClass}>Permissions</th>
+                  <th className="px-4 py-2.5 text-right micro whitespace-nowrap"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60">
+              <tbody>
                 {guestTokens.map((token) => {
                   const key = getTokenKey(token);
                   const rawToken = revealedTokens[key];
@@ -729,8 +734,8 @@ function AccessTokens() {
 
                   // Compact permission summary
                   const permLabel = (() => {
-                    if (scopes.length === 0) return { text: 'No access', cls: 'text-slate-600' };
-                    if (scopes.includes('admin:*')) return { text: 'Full access', cls: 'text-emerald-400' };
+                    if (scopes.length === 0) return { text: 'No access', cls: 'ink-4' };
+                    if (scopes.includes('admin:*')) return { text: 'Full access', cls: '' };
                     const cats = new Set();
                     scopes.forEach(s => {
                       if (['basic','professional','availability'].includes(s)) cats.add('Identity');
@@ -741,9 +746,9 @@ function AccessTokens() {
                       else if (s.startsWith('services')) cats.add('Services');
                     });
                     const catArr = Array.from(cats);
-                    if (catArr.length === 1) return { text: catArr[0], cls: 'text-slate-300' };
-                    if (catArr.length <= 2) return { text: catArr.join(' · '), cls: 'text-slate-300' };
-                    return { text: `${catArr[0]} +${catArr.length - 1}`, cls: 'text-slate-300' };
+                    if (catArr.length === 1) return { text: catArr[0], cls: 'ink-2' };
+                    if (catArr.length <= 2) return { text: catArr.join(' · '), cls: 'ink-2' };
+                    return { text: `${catArr[0]} +${catArr.length - 1}`, cls: 'ink-2' };
                   })();
 
                   const maskedKey = (() => {
@@ -755,26 +760,26 @@ function AccessTokens() {
                   })();
 
                   return (
-                    <tr key={key} className="hover:bg-slate-800/25 transition-colors group">
+                    <tr key={key} className="row row-cell group" style={{ borderTop: '1px solid var(--line)' }}>
                       {/* Name */}
                       <td className="px-4 py-2.5 whitespace-nowrap">
                         <div className="flex items-center gap-2">
-                          <span className="font-medium text-white text-sm">{token.label || token.name}</span>
-                          {bundle && <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-sm bg-purple-900/40 text-purple-300 border border-purple-700/50">Bundle</span>}
-                          {isPublished && <span className="px-1.5 py-0.5 text-[10px] font-medium rounded-sm bg-emerald-900/30 text-emerald-300 border border-emerald-700/40">Published</span>}
+                          <span className="font-medium ink text-sm">{token.label || token.name}</span>
+                          {bundle && <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded" style={{ background: 'var(--accent-bg)', color: 'var(--violet)', border: '1px solid var(--violet)' }}>Bundle</span>}
+                          {isPublished && <span className="ui-badge-success text-[10px]">Published</span>}
                         </div>
                       </td>
                       {/* Status */}
                       <td className="px-4 py-2.5 whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1.5 text-xs text-emerald-400">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0"/>
+                        <span className="inline-flex items-center gap-1.5 text-xs" style={{ color: 'var(--green)' }}>
+                          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: 'var(--green)' }}/>
                           Active
                         </span>
                       </td>
                       {/* Secret Key */}
                       <td className="px-4 py-2.5 whitespace-nowrap">
                         <div className="flex items-center gap-2">
-                          <code className="text-[11px] font-mono text-slate-400 bg-slate-800/70 px-2 py-0.5 rounded border border-slate-700/50">
+                          <code className="mono text-[11px] ink-3 bg-sunk px-2 py-0.5 rounded hairline">
                             {isRevealed ? (rawToken || maskedKey) : maskedKey}
                           </code>
                           <button
@@ -783,7 +788,7 @@ function AccessTokens() {
                               setVisibleTokenIds((p) => ({ ...p, [key]: !p[key] }));
                             }}
                             title={rawToken ? (isRevealed ? 'Hide' : 'Reveal') : 'Rotate to reveal'}
-                            className="text-slate-600 hover:text-slate-300 transition-colors"
+                            className="ink-4 hover:ink-2 transition-colors"
                           >
                             <EyeIcon className="w-3.5 h-3.5" off={isRevealed}/>
                           </button>
@@ -791,21 +796,21 @@ function AccessTokens() {
                       </td>
                       {/* Created */}
                       <td className="px-4 py-2.5 whitespace-nowrap hidden lg:table-cell">
-                        <span className="text-xs text-slate-500">{token.createdAt ? new Date(token.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</span>
+                        <span className="text-xs ink-3">{token.createdAt ? new Date(token.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</span>
                       </td>
                       {/* Expires */}
                       <td className="px-4 py-2.5 whitespace-nowrap hidden sm:table-cell">
-                        <span className={`text-xs ${expiry.urgent ? 'text-amber-400' : 'text-slate-500'}`}>{expiry.label}</span>
+                        <span className={`text-xs ${expiry.urgent ? '' : 'ink-3'}`} style={expiry.urgent ? { color: 'var(--amber)' } : {}}>{expiry.label}</span>
                       </td>
                       {/* Permissions */}
                       <td className="px-4 py-2.5 whitespace-nowrap">
-                        <span className={`text-xs font-medium ${permLabel.cls}`} title={scopes.join(', ')}>{permLabel.text}</span>
+                        <span className={`text-xs font-medium ${permLabel.cls}`} style={permLabel.text === 'Full access' ? { color: 'var(--green)' } : {}} title={scopes.join(', ')}>{permLabel.text}</span>
                       </td>
                       {/* Actions — icon only */}
                       <td className="px-4 py-2.5 whitespace-nowrap text-right">
                         <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                           {/* Edit */}
-                          <button onClick={() => { selectToken(token); setShowEditModal(true); }} title="Edit" className="p-1.5 rounded text-slate-500 hover:text-white hover:bg-slate-700 transition-colors">
+                          <button onClick={() => { selectToken(token); setShowEditModal(true); }} title="Edit" className="p-1.5 rounded ink-4 hover:ink transition-colors">
                             <EditIcon className="w-3.5 h-3.5"/>
                           </button>
                           {/* Services */}
@@ -813,21 +818,21 @@ function AccessTokens() {
                             onClick={() => { if (!isPublished) { selectToken(token); setShowServiceScopeModal(true); } }}
                             disabled={isPublished}
                             title={isPublished ? 'Unpublish before editing service scopes' : 'Edit service scopes'}
-                            className="p-1.5 rounded text-slate-500 hover:text-blue-400 hover:bg-blue-900/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                            className="p-1.5 rounded ink-4 hover:accent transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                           >
                             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
                           </button>
                           {/* Copy */}
-                          <button onClick={() => handleCopyGuestToken(token)} title="Copy key" className="p-1.5 rounded text-slate-500 hover:text-cyan-400 hover:bg-cyan-900/20 transition-colors">
+                          <button onClick={() => handleCopyGuestToken(token)} title="Copy key" className="p-1.5 rounded ink-4 hover:ink transition-colors">
                             <CopyIcon className="w-3.5 h-3.5"/>
                           </button>
                           {/* Rotate */}
-                          <button onClick={() => handleRegenerateToken(token)} disabled={isRegen} title="Rotate key" className="p-1.5 rounded text-slate-500 hover:text-amber-400 hover:bg-amber-900/20 transition-colors disabled:opacity-30">
+                          <button onClick={() => handleRegenerateToken(token)} disabled={isRegen} title="Rotate key" className="p-1.5 rounded ink-4 hover:ink transition-colors disabled:opacity-30">
                             <RotateIcon className={`w-3.5 h-3.5 ${isRegen ? 'animate-spin' : ''}`}/>
                           </button>
                           {/* Publish / Unpublish */}
                           {isPublished ? (
-                            <button onClick={() => handleUnpublishToken(token)} disabled={publishingTokenId === key} title="Unpublish" className="p-1.5 rounded text-emerald-500 hover:text-emerald-300 hover:bg-emerald-900/20 transition-colors disabled:opacity-30">
+                            <button onClick={() => handleUnpublishToken(token)} disabled={publishingTokenId === key} title="Unpublish" className="p-1.5 rounded transition-colors disabled:opacity-30" style={{ color: 'var(--green)' }}>
                               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
                             </button>
                           ) : (
@@ -835,13 +840,13 @@ function AccessTokens() {
                               onClick={() => !svcScope && handlePublishToken(token)}
                               disabled={publishingTokenId === key || svcScope}
                               title={svcScope ? 'Service scopes block publishing' : 'Publish to marketplace'}
-                              className="p-1.5 rounded text-slate-500 hover:text-emerald-400 hover:bg-emerald-900/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                              className="p-1.5 rounded ink-4 hover:ink transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                             >
                               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
                             </button>
                           )}
                           {/* Revoke */}
-                          <button onClick={() => { selectToken(token); setShowRevokeModal(true); }} title="Revoke" className="p-1.5 rounded text-slate-500 hover:text-red-400 hover:bg-red-900/20 transition-colors">
+                          <button onClick={() => { selectToken(token); setShowRevokeModal(true); }} title="Revoke" className="p-1.5 rounded ink-4 hover:text-[color:var(--red)] transition-colors">
                             <TrashIcon className="w-3.5 h-3.5"/>
                           </button>
                         </div>
@@ -858,53 +863,53 @@ function AccessTokens() {
       {/* ── Installed from Marketplace ── */}
       <section className="space-y-4">
         <div>
-          <h2 className="text-base font-semibold text-white">Installed from Marketplace</h2>
-          <p className="text-xs text-slate-400 mt-0.5">Tokens installed from the marketplace — access to other users' data with their permission</p>
+          <h2 className="text-base font-semibold ink">Installed from Marketplace</h2>
+          <p className="text-xs ink-3 mt-0.5">Tokens installed from the marketplace — access to other users' data with their permission</p>
         </div>
         {vaultLoading ? (
-          <div className="flex justify-center py-8"><div className="w-5 h-5 border-2 border-slate-600 border-t-blue-500 rounded-full animate-spin"/></div>
+          <div className="flex justify-center py-8"><div className="w-5 h-5 border-2 rounded-full animate-spin" style={{ borderColor: 'var(--line)', borderTopColor: 'var(--accent)' }}/></div>
         ) : installedTokens.length === 0 ? (
-          <div className="rounded-lg border-2 border-dashed border-slate-800 p-8 text-center">
-            <p className="text-sm text-slate-500">No installed tokens. Browse the marketplace to find and add tokens.</p>
+          <div className="rounded hairline border-dashed p-8 text-center">
+            <p className="text-sm ink-3">No installed tokens. Browse the marketplace to find and add tokens.</p>
           </div>
         ) : (
-          <div className="rounded-lg border border-slate-800 overflow-x-auto">
+          <div className="rounded hairline overflow-x-auto">
             <table className="w-full text-sm border-collapse">
               <thead>
-                <tr className="border-b border-slate-800 bg-slate-900/80">
-                  <th className="px-4 py-2.5 text-left text-[11px] font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">Name</th>
-                  <th className="px-4 py-2.5 text-left text-[11px] font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">Status</th>
-                  <th className="px-4 py-2.5 text-left text-[11px] font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap hidden lg:table-cell">Installed</th>
-                  <th className="px-4 py-2.5 text-left text-[11px] font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap hidden sm:table-cell">Expires</th>
-                  <th className="px-4 py-2.5 text-left text-[11px] font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap">Permissions</th>
-                  <th className="px-4 py-2.5 text-right text-[11px] font-medium text-slate-500 uppercase tracking-wider whitespace-nowrap"></th>
+                <tr className="bg-sunk" style={{ borderBottom: '1px solid var(--line)' }}>
+                  <th className={thClass}>Name</th>
+                  <th className={thClass}>Status</th>
+                  <th className={`${thClass} hidden lg:table-cell`}>Installed</th>
+                  <th className={`${thClass} hidden sm:table-cell`}>Expires</th>
+                  <th className={thClass}>Permissions</th>
+                  <th className="px-4 py-2.5 text-right micro whitespace-nowrap"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60">
+              <tbody>
                 {installedTokens.map((token) => {
                   const installedExpiry = getExpiry(token.expires_at || token.expiresAt);
                   return (
-                    <tr key={token.id} className="hover:bg-slate-800/25 transition-colors group">
+                    <tr key={token.id} className="row row-cell group" style={{ borderTop: '1px solid var(--line)' }}>
                       <td className="px-4 py-2.5 whitespace-nowrap">
-                        <span className="font-medium text-white text-sm">{token.label || 'Untitled'}</span>
+                        <span className="font-medium ink text-sm">{token.label || 'Untitled'}</span>
                       </td>
                       <td className="px-4 py-2.5 whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1.5 text-xs text-cyan-400">
-                          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 flex-shrink-0"/>Installed
+                        <span className="inline-flex items-center gap-1.5 text-xs accent">
+                          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: 'var(--accent)' }}/>Installed
                         </span>
                       </td>
                       <td className="px-4 py-2.5 whitespace-nowrap hidden lg:table-cell">
-                        <span className="text-xs text-slate-500">{token.created_at ? new Date(token.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</span>
+                        <span className="text-xs ink-3">{token.created_at ? new Date(token.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</span>
                       </td>
                       <td className="px-4 py-2.5 whitespace-nowrap hidden sm:table-cell">
-                        <span className={`text-xs ${installedExpiry.urgent ? 'text-amber-400' : 'text-slate-500'}`}>{installedExpiry.label}</span>
+                        <span className={`text-xs ${installedExpiry.urgent ? '' : 'ink-3'}`} style={installedExpiry.urgent ? { color: 'var(--amber)' } : {}}>{installedExpiry.label}</span>
                       </td>
                       <td className="px-4 py-2.5 whitespace-nowrap">
-                        <span className={`text-xs font-medium ${token.readOnly ? 'text-slate-400' : 'text-blue-300'}`}>{token.readOnly ? 'Read only' : 'Read & Write'}</span>
+                        <span className={`text-xs font-medium ${token.readOnly ? 'ink-2' : 'accent'}`}>{token.readOnly ? 'Read only' : 'Read & Write'}</span>
                       </td>
                       <td className="px-4 py-2.5 whitespace-nowrap text-right">
                         <div className="flex items-center justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => handleRevokeInstalled(token.id)} disabled={revokingTokenId === token.id} title="Revoke" className="p-1.5 rounded text-slate-500 hover:text-red-400 hover:bg-red-900/20 transition-colors disabled:opacity-30">
+                          <button onClick={() => handleRevokeInstalled(token.id)} disabled={revokingTokenId === token.id} title="Revoke" className="p-1.5 rounded ink-4 hover:text-[color:var(--red)] transition-colors disabled:opacity-30">
                             <TrashIcon className="w-3.5 h-3.5"/>
                           </button>
                         </div>
@@ -921,48 +926,48 @@ function AccessTokens() {
       {/* ── Create Token Modal ── */}
       {showCreateForm && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-start justify-center p-4 overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-2xl my-8 shadow-2xl">
+          <div className="bg-raised hairline rounded w-full max-w-2xl my-8 shadow-2xl" style={{ background: 'var(--bg-raised)' }}>
             {/* Modal header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700">
+            <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid var(--line)' }}>
               <div>
-                <h3 className="text-base font-semibold text-white">Create Guest Token</h3>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <h3 className="text-base font-semibold ink">Create Guest Token</h3>
+                <p className="text-xs ink-4 mt-0.5">
                   {totalScopesSelected() > 0 ? `${totalScopesSelected()} permission categor${totalScopesSelected() !== 1 ? 'ies' : 'y'} selected` : 'Choose permissions for this token'}
                 </p>
               </div>
-              <button onClick={() => setShowCreateForm(false)} className="text-slate-500 hover:text-slate-300 transition-colors">
+              <button onClick={() => setShowCreateForm(false)} className="ink-4 hover:ink-2 transition-colors">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
               </button>
             </div>
 
-            <form onSubmit={handleCreateSubmit} className="divide-y divide-slate-800">
+            <form onSubmit={handleCreateSubmit} style={{ borderTop: 'none' }}>
               {/* Label + Description */}
-              <div className="px-6 py-5 space-y-4">
+              <div className="px-6 py-5 space-y-4" style={{ borderBottom: '1px solid var(--line)' }}>
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-1.5">Label *</label>
+                  <label className="block micro mb-1.5">Label *</label>
                   <input
                     type="text" required value={form.label}
                     onChange={(e) => setForm((p) => ({ ...p, label: e.target.value }))}
                     placeholder="e.g., Claude Agent — Production"
-                    className="w-full px-3 py-2.5 rounded-lg border border-slate-700 bg-slate-800 text-white placeholder-slate-600 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+                    className="ui-input w-full"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-1.5">Description <span className="text-slate-600 normal-case font-normal">(optional)</span></label>
+                  <label className="block micro mb-1.5">Description <span className="ink-4 normal-case font-normal">(optional)</span></label>
                   <input
                     type="text" value={form.description}
                     onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
                     placeholder="What is this token used for?"
-                    className="w-full px-3 py-2.5 rounded-lg border border-slate-700 bg-slate-800 text-white placeholder-slate-600 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+                    className="ui-input w-full"
                   />
                 </div>
               </div>
 
               {/* ── Permissions (GitHub-style) ── */}
-              <div className="px-6 py-5">
+              <div className="px-6 py-5" style={{ borderBottom: '1px solid var(--line)' }}>
                 <div className="flex items-center justify-between mb-3">
-                  <label className="text-xs font-medium text-slate-400 uppercase tracking-wider">Permissions</label>
-                  <span className="text-xs text-slate-600">Click a category to expand</span>
+                  <label className="micro">Permissions</label>
+                  <span className="text-xs ink-4">Click a category to expand</span>
                 </div>
                 <div className="space-y-2">
 
@@ -1039,11 +1044,12 @@ function AccessTokens() {
                               setPersonaAccess(value);
                               if (value !== 'selected') { setSelectedPersonaIds(new Set()); setBundlePersonaId(null); setBundleKb(false); }
                             }}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                            className={`px-3 py-1.5 rounded text-xs font-medium hairline transition-colors ${
                               personaAccess === value
-                                ? 'bg-blue-600 border-blue-500 text-white'
-                                : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white hover:border-slate-600'
+                                ? 'ink'
+                                : 'ink-3 hover:ink'
                             }`}
+                            style={personaAccess === value ? { background: 'var(--accent)', color: '#fff', borderColor: 'var(--accent)' } : {}}
                           >
                             {label}
                           </button>
@@ -1054,9 +1060,9 @@ function AccessTokens() {
                       {personaAccess === 'selected' && (
                         <div className="space-y-1">
                           {resourcesLoading.personas ? <LoadingSkeleton lines={2}/> : personas.length === 0 ? (
-                            <p className="text-xs text-slate-500 px-2">No personas found.</p>
+                            <p className="text-xs ink-3 px-2">No personas found.</p>
                           ) : personas.map((p) => (
-                            <label key={p.id} className={`flex items-center gap-3 px-2 py-2 rounded-lg cursor-pointer transition-colors hover:bg-slate-800/60 ${selectedPersonaIds.has(p.id) ? 'bg-blue-900/10' : ''}`}>
+                            <label key={p.id} className={`flex items-center gap-3 px-2 py-2 rounded cursor-pointer transition-colors hover:bg-[color:var(--bg-hover)] ${selectedPersonaIds.has(p.id) ? 'bg-[color:var(--accent-bg)]' : ''}`}>
                               <input
                                 type="checkbox"
                                 checked={selectedPersonaIds.has(p.id)}
@@ -1065,13 +1071,14 @@ function AccessTokens() {
                                   // Only one persona can be the bundle persona
                                   if (bundlePersonaId === p.id) { setBundlePersonaId(null); setBundleKb(false); }
                                 }}
-                                className="h-4 w-4 rounded border-slate-600 bg-slate-700 text-blue-500"
+                                className="h-4 w-4 rounded"
+                                style={{ accentColor: 'var(--accent)' }}
                               />
                               <div className="flex-1 min-w-0">
-                                <span className="text-sm text-white">{p.name}</span>
-                                {p.description && <span className="ml-2 text-xs text-slate-500 truncate">{p.description}</span>}
+                                <span className="text-sm ink">{p.name}</span>
+                                {p.description && <span className="ml-2 text-xs ink-3 truncate">{p.description}</span>}
                               </div>
-                              {p.active && <span className="text-xs text-emerald-400 flex-shrink-0">Active</span>}
+                              {p.active && <span className="text-xs flex-shrink-0" style={{ color: 'var(--green)' }}>Active</span>}
                               {/* Bundle trigger: radio to "focus" this persona */}
                               {selectedPersonaIds.has(p.id) && (
                                 <button
@@ -1081,7 +1088,8 @@ function AccessTokens() {
                                     setBundlePersonaId(bundlePersonaId === p.id ? null : p.id);
                                     if (bundlePersonaId === p.id) setBundleKb(false);
                                   }}
-                                  className={`ml-1 px-2 py-0.5 rounded text-[10px] font-medium border transition-colors flex-shrink-0 ${bundlePersonaId === p.id ? 'bg-purple-900/40 text-purple-300 border-purple-700/50' : 'bg-slate-700 text-slate-400 border-slate-600 hover:text-white'}`}
+                                  className={`ml-1 px-2 py-0.5 rounded text-[10px] font-medium hairline transition-colors flex-shrink-0 ${bundlePersonaId === p.id ? '' : 'ink-3 hover:ink'}`}
+                                  style={bundlePersonaId === p.id ? { background: 'var(--accent-bg)', color: 'var(--violet)', borderColor: 'var(--violet)' } : {}}
                                 >
                                   {bundlePersonaId === p.id ? 'Bundle ✓' : 'Bundle?'}
                                 </button>
@@ -1093,20 +1101,22 @@ function AccessTokens() {
 
                       {/* Bundle KB toggle — shown when a bundle persona is chosen */}
                       {bundlePersonaId && (
-                        <label className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer border transition-colors ${bundleKb ? 'bg-purple-900/20 border-purple-700/60' : 'bg-slate-800 border-slate-700 hover:border-slate-600'}`}>
+                        <label className={`flex items-start gap-3 p-3 rounded cursor-pointer hairline transition-colors ${bundleKb ? '' : 'hover:border-opacity-60'}`}
+                          style={bundleKb ? { background: 'var(--accent-bg)', borderColor: 'var(--violet)' } : {}}>
                           <input
                             type="checkbox"
                             checked={bundleKb}
                             onChange={(e) => setBundleKb(e.target.checked)}
-                            className="mt-0.5 h-4 w-4 rounded text-purple-500 bg-slate-700 border-slate-600"
+                            className="mt-0.5 h-4 w-4 rounded"
+                            style={{ accentColor: 'var(--violet)' }}
                           />
                           <div>
                             <div className="flex items-center gap-2">
-                              <p className="text-sm font-semibold text-white">Include skills &amp; knowledge base</p>
-                              {bundleKb && <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-purple-900/40 text-purple-300 border border-purple-700/50">Bundle</span>}
+                              <p className="text-sm font-semibold ink">Include skills &amp; knowledge base</p>
+                              {bundleKb && <span className="px-1.5 py-0.5 text-[10px] font-bold rounded" style={{ background: 'var(--accent-bg)', color: 'var(--violet)', border: '1px solid var(--violet)' }}>Bundle</span>}
                             </div>
-                            <p className="text-xs text-slate-500 mt-0.5">
-                              Expose skills and knowledge docs attached to this persona. Auto-adds <code className="text-purple-300">knowledge</code> + <code className="text-purple-300">skills:read</code>.
+                            <p className="text-xs ink-4 mt-0.5">
+                              Expose skills and knowledge docs attached to this persona. Auto-adds <code style={{ color: 'var(--violet)' }}>knowledge</code> + <code style={{ color: 'var(--violet)' }}>skills:read</code>.
                             </p>
                           </div>
                         </label>
@@ -1134,11 +1144,10 @@ function AccessTokens() {
                             key={value}
                             type="button"
                             onClick={() => { setKbAccess(value); if (value !== 'selected') setSelectedKbIds(new Set()); }}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                              kbAccess === value
-                                ? 'bg-blue-600 border-blue-500 text-white'
-                                : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white hover:border-slate-600'
+                            className={`px-3 py-1.5 rounded text-xs font-medium hairline transition-colors ${
+                              kbAccess === value ? 'ink' : 'ink-3 hover:ink'
                             }`}
+                            style={kbAccess === value ? { background: 'var(--accent)', color: '#fff', borderColor: 'var(--accent)' } : {}}
                           >
                             {label}
                           </button>
@@ -1147,7 +1156,7 @@ function AccessTokens() {
                       {kbAccess === 'selected' && (
                         <div className="space-y-1 max-h-48 overflow-y-auto">
                           {resourcesLoading.kb ? <LoadingSkeleton lines={3}/> : kbDocs.length === 0 ? (
-                            <p className="text-xs text-slate-500 px-2">No knowledge base documents found.</p>
+                            <p className="text-xs ink-3 px-2">No knowledge base documents found.</p>
                           ) : kbDocs.map((doc) => (
                             <ResourceItem
                               key={doc.id}
@@ -1183,11 +1192,10 @@ function AccessTokens() {
                             key={value}
                             type="button"
                             onClick={() => setSkillAccess(value)}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                              skillAccess === value
-                                ? 'bg-blue-600 border-blue-500 text-white'
-                                : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white hover:border-slate-600'
+                            className={`px-3 py-1.5 rounded text-xs font-medium hairline transition-colors ${
+                              skillAccess === value ? 'ink' : 'ink-3 hover:ink'
                             }`}
+                            style={skillAccess === value ? { background: 'var(--accent)', color: '#fff', borderColor: 'var(--accent)' } : {}}
                           >
                             {label}
                           </button>
@@ -1205,11 +1213,10 @@ function AccessTokens() {
                                 key={value}
                                 type="button"
                                 onClick={() => { setSkillSelectionMode(value); if (value !== 'selected') setSelectedSkillIds(new Set()); }}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                                  skillSelectionMode === value
-                                    ? 'bg-slate-600 border-slate-500 text-white'
-                                    : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white hover:border-slate-600'
+                                className={`px-3 py-1.5 rounded text-xs font-medium hairline transition-colors ${
+                                  skillSelectionMode === value ? 'ink' : 'ink-3 hover:ink'
                                 }`}
+                                style={skillSelectionMode === value ? { background: 'var(--bg-hover)', borderColor: 'var(--line-2)' } : {}}
                               >
                                 {label}
                               </button>
@@ -1218,7 +1225,7 @@ function AccessTokens() {
                           {skillSelectionMode === 'selected' && (
                             <div className="space-y-1 max-h-48 overflow-y-auto">
                               {resourcesLoading.skills ? <LoadingSkeleton lines={3}/> : skills.length === 0 ? (
-                                <p className="text-xs text-slate-500 px-2">No skills found.</p>
+                                <p className="text-xs ink-3 px-2">No skills found.</p>
                               ) : skills.map((skill) => (
                                 <ResourceItem
                                   key={skill.id}
@@ -1255,11 +1262,10 @@ function AccessTokens() {
                             key={value}
                             type="button"
                             onClick={() => setServiceAccess(value)}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                              serviceAccess === value
-                                ? 'bg-blue-600 border-blue-500 text-white'
-                                : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white hover:border-slate-600'
+                            className={`px-3 py-1.5 rounded text-xs font-medium hairline transition-colors ${
+                              serviceAccess === value ? 'ink' : 'ink-3 hover:ink'
                             }`}
+                            style={serviceAccess === value ? { background: 'var(--accent)', color: '#fff', borderColor: 'var(--accent)' } : {}}
                           >
                             {label}
                           </button>
@@ -1276,11 +1282,10 @@ function AccessTokens() {
                                 key={value}
                                 type="button"
                                 onClick={() => { setServiceSelectionMode(value); if (value !== 'selected') setSelectedServiceNames(new Set()); }}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                                  serviceSelectionMode === value
-                                    ? 'bg-slate-600 border-slate-500 text-white'
-                                    : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white hover:border-slate-600'
+                                className={`px-3 py-1.5 rounded text-xs font-medium hairline transition-colors ${
+                                  serviceSelectionMode === value ? 'ink' : 'ink-3 hover:ink'
                                 }`}
+                                style={serviceSelectionMode === value ? { background: 'var(--bg-hover)', borderColor: 'var(--line-2)' } : {}}
                               >
                                 {label}
                               </button>
@@ -1289,7 +1294,7 @@ function AccessTokens() {
                           {serviceSelectionMode === 'selected' && (
                             <div className="space-y-1">
                               {resourcesLoading.services ? <LoadingSkeleton lines={3}/> : connectedServices.length === 0 ? (
-                                <p className="text-xs text-slate-500 px-2">No connected services found. Connect services in the Connectors page.</p>
+                                <p className="text-xs ink-3 px-2">No connected services found. Connect services in the Connectors page.</p>
                               ) : connectedServices.map((svc) => (
                                 <ResourceItem
                                   key={svc.name}
@@ -1302,8 +1307,8 @@ function AccessTokens() {
                             </div>
                           )}
                           <div className="flex gap-2 items-start pt-1 px-1">
-                            <svg className="w-3.5 h-3.5 text-amber-400 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd"/></svg>
-                            <p className="text-[11px] text-amber-300/60">Tokens with service scopes cannot be published to the marketplace.</p>
+                            <svg className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20" style={{ color: 'var(--amber)' }}><path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd"/></svg>
+                            <p className="text-[11px] ink-4">Tokens with service scopes cannot be published to the marketplace.</p>
                           </div>
                         </>
                       )}
@@ -1316,19 +1321,20 @@ function AccessTokens() {
                     title="Memory"
                     description="Read and write memory entries"
                     summary={memoryAccess ? 'Read & Write' : 'No access'}
-                    summaryColor={memoryAccess ? 'text-blue-400' : 'text-slate-600'}
+                    summaryColor={memoryAccess ? 'accent' : 'ink-4'}
                     active={memoryAccess}
                   >
-                    <label className={`flex items-center gap-3 px-2 py-2 rounded-lg cursor-pointer transition-colors hover:bg-slate-800/60 ${memoryAccess ? 'bg-blue-900/10' : ''}`}>
+                    <label className={`flex items-center gap-3 px-2 py-2 rounded cursor-pointer transition-colors hover:bg-[color:var(--bg-hover)] ${memoryAccess ? 'bg-[color:var(--accent-bg)]' : ''}`}>
                       <input
                         type="checkbox"
                         checked={memoryAccess}
                         onChange={(e) => setMemoryAccess(e.target.checked)}
-                        className="h-4 w-4 rounded border-slate-600 bg-slate-700 text-blue-500"
+                        className="h-4 w-4 rounded"
+                        style={{ accentColor: 'var(--accent)' }}
                       />
                       <div>
-                        <span className="text-sm text-white">Enable memory access</span>
-                        <p className="text-xs text-slate-500">Token can read and write memory entries</p>
+                        <span className="text-sm ink">Enable memory access</span>
+                        <p className="text-xs ink-4">Token can read and write memory entries</p>
                       </div>
                     </label>
                   </ScopeRow>
@@ -1339,22 +1345,23 @@ function AccessTokens() {
                     title="Tickets"
                     description="Access the complaint ticket system"
                     summary={ticketAccess === 'write' ? 'Read & Write' : ticketAccess === 'read' ? 'Read Only' : 'No access'}
-                    summaryColor={ticketAccess !== 'none' ? 'text-blue-400' : 'text-slate-600'}
+                    summaryColor={ticketAccess !== 'none' ? 'accent' : 'ink-4'}
                     active={ticketAccess !== 'none'}
                   >
                     {['none', 'read', 'write'].map((value) => (
-                      <label key={value} className={`flex items-center gap-3 px-2 py-2 rounded-lg cursor-pointer transition-colors hover:bg-slate-800/60 ${ticketAccess === value ? 'bg-blue-900/10' : ''}`}>
+                      <label key={value} className={`flex items-center gap-3 px-2 py-2 rounded cursor-pointer transition-colors hover:bg-[color:var(--bg-hover)] ${ticketAccess === value ? 'bg-[color:var(--accent-bg)]' : ''}`}>
                         <input
                           type="radio"
                           name="ticketAccess"
                           value={value}
                           checked={ticketAccess === value}
                           onChange={() => setTicketAccess(value)}
-                          className="h-4 w-4 border-slate-600 bg-slate-700 text-blue-500"
+                          className="h-4 w-4"
+                          style={{ accentColor: 'var(--accent)' }}
                         />
                         <div>
-                          <span className="text-sm text-white">{value === 'none' ? 'No access' : value === 'read' ? 'Read only' : 'Read & Write'}</span>
-                          <p className="text-xs text-slate-500">{value === 'none' ? 'Token cannot access tickets' : value === 'read' ? 'View tickets (tickets:read)' : 'View, create, update and delete tickets (tickets:write)'}</p>
+                          <span className="text-sm ink">{value === 'none' ? 'No access' : value === 'read' ? 'Read only' : 'Read & Write'}</span>
+                          <p className="text-xs ink-4">{value === 'none' ? 'Token cannot access tickets' : value === 'read' ? 'View tickets (tickets:read)' : 'View, create, update and delete tickets (tickets:write)'}</p>
                         </div>
                       </label>
                     ))}
@@ -1363,21 +1370,21 @@ function AccessTokens() {
                 </div>
 
                 {totalScopesSelected() === 0 && (
-                  <p className="text-xs text-red-400 mt-2 px-1">Select at least one permission category</p>
+                  <p className="text-xs mt-2 px-1" style={{ color: 'var(--red)' }}>Select at least one permission category</p>
                 )}
               </div>
 
               {/* ── Options ── */}
-              <div className="px-6 py-5 space-y-3">
-                <label className="block text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Options</label>
+              <div className="px-6 py-5 space-y-3" style={{ borderBottom: '1px solid var(--line)' }}>
+                <label className="block micro mb-2">Options</label>
 
                 {/* Expiry */}
                 <div>
-                  <label className="block text-xs text-slate-500 mb-1">Expires In</label>
+                  <label className="block text-xs ink-3 mb-1">Expires In</label>
                   <select
                     value={form.expiresInHours}
                     onChange={(e) => setForm((p) => ({ ...p, expiresInHours: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-700 bg-slate-800 text-white focus:border-blue-500 focus:outline-none text-sm"
+                    className="ui-input w-full"
                   >
                     <option value="1">1 hour</option>
                     <option value="24">24 hours</option>
@@ -1388,28 +1395,30 @@ function AccessTokens() {
                 </div>
 
                 {/* Requires Approval */}
-                <label className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer border transition-colors ${form.requiresApproval ? 'bg-amber-900/20 border-amber-700/50' : 'bg-slate-800 border-transparent hover:border-slate-600'}`}>
-                  <input type="checkbox" checked={form.requiresApproval} onChange={(e) => setForm((p) => ({ ...p, requiresApproval: e.target.checked }))} className="mt-0.5 h-4 w-4 rounded text-amber-500 bg-slate-700 border-slate-600"/>
+                <label className={`flex items-start gap-3 p-3 rounded cursor-pointer hairline transition-colors`}
+                  style={form.requiresApproval ? { background: 'var(--accent-bg)', borderColor: 'var(--amber)' } : {}}>
+                  <input type="checkbox" checked={form.requiresApproval} onChange={(e) => setForm((p) => ({ ...p, requiresApproval: e.target.checked }))} className="mt-0.5 h-4 w-4 rounded" style={{ accentColor: 'var(--amber)' }}/>
                   <div>
-                    <p className="text-sm font-medium text-white">Requires Approval</p>
-                    <p className="text-xs text-slate-500">Users must be approved before this token grants access</p>
+                    <p className="text-sm font-medium ink">Requires Approval</p>
+                    <p className="text-xs ink-4">Users must be approved before this token grants access</p>
                   </div>
                 </label>
 
                 {/* Publish on create */}
                 {!hasServiceScopeInState() ? (
-                  <label className={`flex items-start gap-3 p-3 rounded-lg cursor-pointer border transition-colors ${form.publishOnCreate ? 'bg-emerald-900/20 border-emerald-700/50' : 'bg-slate-800 border-transparent hover:border-slate-600'}`}>
-                    <input type="checkbox" checked={form.publishOnCreate} onChange={(e) => setForm((p) => ({ ...p, publishOnCreate: e.target.checked }))} className="mt-0.5 h-4 w-4 rounded text-emerald-500 bg-slate-700 border-slate-600"/>
+                  <label className={`flex items-start gap-3 p-3 rounded cursor-pointer hairline transition-colors`}
+                    style={form.publishOnCreate ? { background: 'var(--green-bg)', borderColor: 'var(--green)' } : {}}>
+                    <input type="checkbox" checked={form.publishOnCreate} onChange={(e) => setForm((p) => ({ ...p, publishOnCreate: e.target.checked }))} className="mt-0.5 h-4 w-4 rounded" style={{ accentColor: 'var(--green)' }}/>
                     <div>
                       <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium text-white">Publish to Marketplace</p>
-                        {bundleKb && form.publishOnCreate && <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-purple-900/40 text-purple-300 border border-purple-700/50">Bundle</span>}
+                        <p className="text-sm font-medium ink">Publish to Marketplace</p>
+                        {bundleKb && form.publishOnCreate && <span className="px-1.5 py-0.5 text-[10px] font-bold rounded" style={{ background: 'var(--accent-bg)', color: 'var(--violet)', border: '1px solid var(--violet)' }}>Bundle</span>}
                       </div>
-                      <p className="text-xs text-slate-500">Make this token available in the marketplace immediately after creation</p>
+                      <p className="text-xs ink-4">Make this token available in the marketplace immediately after creation</p>
                     </div>
                   </label>
                 ) : (
-                  <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-slate-800/60 border border-slate-700 text-xs text-slate-500">
+                  <div className="flex items-center gap-2 px-3 py-2.5 rounded hairline text-xs ink-4">
                     <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
                     Tokens with service scopes cannot be published to the marketplace
                   </div>
@@ -1418,13 +1427,13 @@ function AccessTokens() {
 
               {/* Footer buttons */}
               <div className="flex justify-end gap-3 px-6 py-4">
-                <button type="button" onClick={() => setShowCreateForm(false)} className="px-4 py-2 text-sm text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700 transition-colors">
+                <button type="button" onClick={() => setShowCreateForm(false)} className="ui-button">
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSaving || totalScopesSelected() === 0}
-                  className="px-5 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50"
+                  className="ui-button-primary disabled:opacity-50"
                 >
                   {isSaving ? 'Creating…' : 'Create Token'}
                 </button>

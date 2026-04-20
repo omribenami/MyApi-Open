@@ -9,19 +9,19 @@ function ActivityLog() {
   const [activity, setActivity] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  
+
   // Pagination
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [totalLoaded, setTotalLoaded] = useState(0);
-  
+
   // Filters
   const [actionType, setActionType] = useState('');
   const [resourceType, setResourceType] = useState('');
   const [result, setResult] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [dateRange, setDateRange] = useState('all');
-  
+
   // Real-time updates via WebSocket
   const wsRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
@@ -120,7 +120,7 @@ function ActivityLog() {
     try {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const wsUrl = `${protocol}//${window.location.host}/api/v1/ws`;
-      
+
       const ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
@@ -136,7 +136,7 @@ function ActivityLog() {
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          
+
           if (data.type === 'activity:new') {
             // Add new activity to the top
             setActivity(prev => [data.activity, ...prev]);
@@ -192,14 +192,23 @@ function ActivityLog() {
     return new Date(dateString).toLocaleString();
   };
 
-  const getResultColor = (res) => {
-    const colors = {
-      success: 'text-green-400',
-      failure: 'text-red-400',
-      failed: 'text-red-400',
-      pending: 'text-amber-400',
-    };
-    return colors[res] || 'text-slate-400';
+  const getMethodColor = (method) => {
+    switch ((method || '').toUpperCase()) {
+      case 'GET': return 'var(--ink-2)';
+      case 'POST': return 'var(--accent)';
+      case 'DELETE': return 'var(--ink)';
+      case 'PUT': return 'var(--amber)';
+      case 'PATCH': return 'var(--amber)';
+      default: return 'var(--ink-3)';
+    }
+  };
+
+  const getStatusColor = (statusCode) => {
+    const code = Number(statusCode);
+    if (code >= 200 && code < 300) return 'var(--ink-3)';
+    if (code >= 400 && code < 500) return 'var(--amber)';
+    if (code >= 500) return 'var(--red)';
+    return 'var(--ink-4)';
   };
 
   const getActionIcon = (actionType) => {
@@ -223,34 +232,35 @@ function ActivityLog() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-slate-100 mb-2">Activity Log</h1>
-        <p className="text-slate-400">
+        <div className="micro mb-2">ACCOUNT · ACTIVITY</div>
+        <h1 className="font-serif text-[28px] font-medium tracking-tight ink">Activity Log.</h1>
+        <p className="ink-3 text-sm mt-1">
           View all token usage, skill executions, persona invocations, and other activities
         </p>
       </div>
 
       {/* Filters */}
-      <div className="bg-slate-900/50 border border-slate-700/50 rounded-lg p-6 space-y-4">
+      <div className="ui-card p-5 space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           {/* Search */}
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-2 uppercase">Search</label>
+            <label className="micro block mb-2">Search</label>
             <input
               type="text"
               placeholder="Search by name or ID..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="ui-input w-full"
             />
           </div>
 
           {/* Action Type */}
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-2 uppercase">Action</label>
+            <label className="micro block mb-2">Action</label>
             <select
               value={actionType}
               onChange={(e) => setActionType(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="ui-input w-full"
             >
               <option value="">All Actions</option>
               {actionTypes.map(type => (
@@ -261,11 +271,11 @@ function ActivityLog() {
 
           {/* Resource Type */}
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-2 uppercase">Resource</label>
+            <label className="micro block mb-2">Resource</label>
             <select
               value={resourceType}
               onChange={(e) => setResourceType(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="ui-input w-full"
             >
               <option value="">All Resources</option>
               {resourceTypes.map(type => (
@@ -276,11 +286,11 @@ function ActivityLog() {
 
           {/* Result */}
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-2 uppercase">Result</label>
+            <label className="micro block mb-2">Result</label>
             <select
               value={result}
               onChange={(e) => setResult(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="ui-input w-full"
             >
               <option value="">All Results</option>
               {results.map(res => (
@@ -291,11 +301,11 @@ function ActivityLog() {
 
           {/* Date Range */}
           <div>
-            <label className="block text-xs font-semibold text-slate-300 mb-2 uppercase">Date Range</label>
+            <label className="micro block mb-2">Date Range</label>
             <select
               value={dateRange}
               onChange={(e) => setDateRange(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="ui-input w-full"
             >
               <option value="all">All time</option>
               <option value="1day">Last 24 hours</option>
@@ -309,64 +319,110 @@ function ActivityLog() {
 
       {/* Error Message */}
       {error && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 text-red-400">
+        <div
+          className="px-4 py-3 rounded text-sm"
+          style={{ background: 'var(--red-bg)', border: '1px solid var(--red)', color: 'var(--red)' }}
+        >
           {error}
         </div>
       )}
 
       {/* Activity List */}
-      <div className="space-y-3">
+      <div>
         {loading && totalLoaded === 0 ? (
           <div className="text-center py-12">
-            <div className="inline-block h-8 w-8 animate-spin rounded-full border-b-2 border-blue-500"></div>
-            <p className="text-slate-400 mt-4">Loading activity...</p>
+            <div
+              className="inline-block h-8 w-8 animate-spin rounded-full border-2"
+              style={{ borderColor: 'var(--line)', borderTopColor: 'var(--accent)' }}
+            />
+            <p className="ink-3 mt-4 text-sm">Loading activity...</p>
           </div>
         ) : filteredActivity.length === 0 ? (
-          <div className="text-center py-12 bg-slate-900/30 rounded-lg border border-slate-700/30">
-            <p className="text-slate-400">No activity found. Try adjusting your filters.</p>
+          <div
+            className="text-center py-12 rounded"
+            style={{ border: '1px solid var(--line)' }}
+          >
+            <p className="ink-3 text-sm">No activity found. Try adjusting your filters.</p>
           </div>
         ) : (
           <>
-            {filteredActivity.map((item, index) => (
-              <div key={`${item.id}-${index}`} className="bg-slate-900/50 border border-slate-700/50 rounded-lg p-4 hover:border-slate-600/50 transition-all">
-                <div className="flex items-start gap-4">
-                  <div className="text-2xl flex-shrink-0">
-                    {getActionIcon(item.action)}
-                  </div>
-                  
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-3 mb-2">
-                      <h3 className="text-sm font-semibold text-slate-100">
-                        {item.action}
-                      </h3>
-                      <span className={`text-xs font-bold ${getResultColor((item.statusCode || 0) < 400 ? 'success' : 'failed')}`}>
-                        {item.statusCode || 'N/A'}
-                      </span>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-slate-400">
-                      <p><span className="text-slate-500">Resource:</span> {item.resource}</p>
-                      <p><span className="text-slate-500">Actor:</span> {item.actorType} {item.actor ? `(${item.actor})` : ''}</p>
-                      <p><span className="text-slate-500">Time:</span> {formatDate(item.timestamp)}</p>
-                      {item.ip && <p><span className="text-slate-500">IP:</span> {item.ip}</p>}
-                    </div>
-                    
-                    {item.details && (
-                      <details className="mt-2">
-                        <summary className="text-xs text-blue-400 cursor-pointer hover:text-blue-300">
-                          Show details
-                        </summary>
-                        <pre className="mt-2 bg-slate-800 p-2 rounded text-xs overflow-auto text-slate-300">
-                          {typeof item.details === 'string' 
-                            ? item.details 
-                            : JSON.stringify(item.details, null, 2)}
-                        </pre>
-                      </details>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
+            <div className="rounded overflow-hidden" style={{ border: '1px solid var(--line)' }}>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-sunk" style={{ borderBottom: '1px solid var(--line)' }}>
+                    <th className="px-4 py-3 text-left micro">Action</th>
+                    <th className="px-4 py-3 text-left micro hidden md:table-cell">Resource</th>
+                    <th className="px-4 py-3 text-left micro hidden sm:table-cell">Actor</th>
+                    <th className="px-4 py-3 text-left micro">Status</th>
+                    <th className="px-4 py-3 text-left micro hidden lg:table-cell">Time</th>
+                    <th className="px-4 py-3 text-left micro hidden lg:table-cell">IP</th>
+                    <th className="px-4 py-3 text-left micro hidden xl:table-cell">Details</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredActivity.map((item, index) => (
+                    <tr key={`${item.id}-${index}`} className="row row-cell">
+                      <td className="px-4 py-3.5">
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-base flex-shrink-0">{getActionIcon(item.action)}</span>
+                          <span
+                            className="text-xs mono font-medium"
+                            style={{ color: getMethodColor(item.method) }}
+                          >
+                            {item.action}
+                          </span>
+                        </div>
+                      </td>
+
+                      <td className="px-4 py-3.5 hidden md:table-cell">
+                        <span className="text-xs ink-2">{item.resource || '—'}</span>
+                      </td>
+
+                      <td className="px-4 py-3.5 hidden sm:table-cell">
+                        <span className="text-xs ink-3">
+                          {item.actorType}{item.actor ? ` (${item.actor})` : ''}
+                        </span>
+                      </td>
+
+                      <td className="px-4 py-3.5">
+                        <span
+                          className="text-xs mono font-semibold"
+                          style={{ color: getStatusColor(item.statusCode) }}
+                        >
+                          {item.statusCode || 'N/A'}
+                        </span>
+                      </td>
+
+                      <td className="px-4 py-3.5 hidden lg:table-cell">
+                        <span className="text-xs ink-4">{formatDate(item.timestamp)}</span>
+                      </td>
+
+                      <td className="px-4 py-3.5 hidden lg:table-cell">
+                        {item.ip && <code className="text-xs mono ink-3">{item.ip}</code>}
+                      </td>
+
+                      <td className="px-4 py-3.5 hidden xl:table-cell">
+                        {item.details && (
+                          <details>
+                            <summary className="text-xs accent cursor-pointer hover:opacity-80">
+                              Show details
+                            </summary>
+                            <pre
+                              className="mt-2 p-2 rounded text-xs overflow-auto ink-2"
+                              style={{ background: 'var(--bg-sunk)', maxWidth: '260px' }}
+                            >
+                              {typeof item.details === 'string'
+                                ? item.details
+                                : JSON.stringify(item.details, null, 2)}
+                            </pre>
+                          </details>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
             {/* Load More Button */}
             {hasMore && (
@@ -374,7 +430,7 @@ function ActivityLog() {
                 <button
                   onClick={() => fetchActivityLog(false)}
                   disabled={loading}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 text-white rounded text-sm font-semibold transition-colors"
+                  className="ui-button-primary px-4 py-2 text-sm disabled:opacity-50"
                 >
                   {loading ? 'Loading...' : 'Load More'}
                 </button>
@@ -382,7 +438,7 @@ function ActivityLog() {
             )}
 
             {!hasMore && activity.length > 0 && (
-              <p className="text-center text-slate-400 text-sm py-4">
+              <p className="text-center ink-3 text-sm py-4">
                 Showing {totalLoaded} activities
               </p>
             )}

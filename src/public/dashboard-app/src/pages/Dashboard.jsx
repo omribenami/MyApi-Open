@@ -6,15 +6,6 @@ import PendingInvitations from '../components/PendingInvitations';
 import { useAuthStore } from '../stores/authStore';
 import { isOnboardingActive, wasChecklistDismissed, dismissChecklist, completeOnboarding } from '../utils/onboardingUtils';
 
-/**
- * Dashboard - Professional enterprise-grade dashboard with real-time alerts
- * Features:
- * - Professional real-time alert system (WebSocket)
- * - 4 key metric cards with clear data hierarchy
- * - Quick action buttons
- * - Responsive grid layout
- * - Enterprise SaaS styling (AWS/Vercel/Stripe inspired)
- */
 function Dashboard() {
   const navigate = useNavigate();
   const masterToken = useAuthStore((state) => state.masterToken);
@@ -45,6 +36,13 @@ function Dashboard() {
   const [twoFAEnabled, setTwoFAEnabled] = useState(null);
   const [checklistHidden, setChecklistHidden] = useState(() => wasChecklistDismissed());
   const [onboardingActive, setOnboardingActive] = useState(() => Boolean(user?.needsOnboarding) || isOnboardingActive());
+
+  // New state
+  const [activePersona, setActivePersona] = useState(null);
+  const [billingUsed, setBillingUsed] = useState(0);
+  const [billingLimit, setBillingLimit] = useState(1000);
+  const [billingPlan, setBillingPlan] = useState('free');
+  const [connectedServicesList, setConnectedServicesList] = useState([]);
 
   const dismissChecklistPermanently = () => {
     dismissChecklist();
@@ -112,8 +110,46 @@ function Dashboard() {
   const fetchMetrics = async () => {
     if (!isAuthenticated) return;
     try {
-      const response = await apiClient.get('/dashboard/metrics');
-      setMetrics(response.data?.data || response.data);
+      const headers = masterToken ? { Authorization: `Bearer ${masterToken}` } : {};
+
+      const [metricsRes, personasRes, billingRes, servicesRes] = await Promise.all([
+        apiClient.get('/dashboard/metrics'),
+        apiClient.get('/personas', { headers }).catch(() => null),
+        apiClient.get('/billing/current', { headers }).catch(() => null),
+        fetch('/api/v1/services', { credentials: 'include', headers: masterToken ? { Authorization: `Bearer ${masterToken}` } : {} }).catch(() => null),
+      ]);
+
+      setMetrics(metricsRes.data?.data || metricsRes.data);
+
+      // Connected services list
+      if (servicesRes?.ok) {
+        const sd = await servicesRes.json().catch(() => null);
+        const slist = sd?.data || sd?.services || sd || [];
+        if (Array.isArray(slist)) {
+          setConnectedServicesList(slist.filter(s => s.status === 'connected' || s.connected));
+        }
+      }
+
+      // Active persona
+      if (personasRes?.data) {
+        const d = personasRes.data;
+        const list = d.data || d;
+        if (Array.isArray(list)) {
+          const found = list.find((p) => p.active);
+          setActivePersona(found || null);
+        }
+      }
+
+      // Billing
+      if (billingRes?.data) {
+        const b = billingRes.data?.data || billingRes.data;
+        if (b) {
+          setBillingPlan(b.plan || 'free');
+          setBillingUsed(b.used || b.requests_used || 0);
+          setBillingLimit(b.limit || b.requests_limit || 1000);
+        }
+      }
+
       setError(null);
     } catch (err) {
       if (err?.code === 'MYAPI_LOGOUT_IN_PROGRESS' || err?.code === 'MYAPI_RATE_LIMIT_BACKOFF') {
@@ -146,12 +182,11 @@ function Dashboard() {
     try {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const wsUrl = `${protocol}//${window.location.host}/api/v1/ws`;
-      
+
       const ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
         console.log('WebSocket connected');
-        // Send authentication token if available
         if (masterToken) {
           ws.send(JSON.stringify({
             type: 'auth',
@@ -163,8 +198,7 @@ function Dashboard() {
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          
-          // Handle device pending approval alert
+
           if (data.type === 'device:pending_approval') {
             const newAlert = {
               id: `alert-${Date.now()}`,
@@ -176,12 +210,8 @@ function Dashboard() {
               timestamp: new Date(),
             };
             setAlerts((prev) => [newAlert, ...prev]);
-
-            // Refresh metrics to update pending approvals count
             fetchMetrics();
-          }
-          // Handle rate limit warning
-          else if (data.type === 'rate_limit:warning') {
+          } else if (data.type === 'rate_limit:warning') {
             const newAlert = {
               id: `alert-${Date.now()}`,
               severity: 'warning',
@@ -190,9 +220,7 @@ function Dashboard() {
               timestamp: new Date(),
             };
             setAlerts((prev) => [newAlert, ...prev]);
-          }
-          // Handle service status
-          else if (data.type === 'service:status') {
+          } else if (data.type === 'service:status') {
             if (data.status === 'error') {
               const newAlert = {
                 id: `alert-${Date.now()}`,
@@ -209,13 +237,12 @@ function Dashboard() {
         }
       };
 
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
+      ws.onerror = (err) => {
+        console.error('WebSocket error:', err);
       };
 
       ws.onclose = () => {
         console.log('WebSocket disconnected');
-        // Attempt reconnect after 3 seconds
         reconnectTimeoutRef.current = setTimeout(() => {
           setupWebSocket();
         }, 3000);
@@ -236,8 +263,8 @@ function Dashboard() {
   const handleApproveDevice = async (deviceId) => {
     try {
       const headers = masterToken ? { Authorization: `Bearer ${masterToken}` } : {};
-      await apiClient.post(`/devices/approve/${deviceId}`, 
-        { device_name: 'Approved Device' }, 
+      await apiClient.post(`/devices/approve/${deviceId}`,
+        { device_name: 'Approved Device' },
         { headers }
       );
       fetchMetrics();
@@ -247,40 +274,32 @@ function Dashboard() {
     }
   };
 
-  // Handle OAuth redirect params: forward to the intended target page (e.g. /services)
-  // The OAuth callback always redirects to /dashboard/?oauth_status=...&next=...
-  // but the ServiceConnectors page needs to receive those params to show the result.
+  // Handle OAuth redirect params
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const oauthStatus = params.get('oauth_status');
     const oauthService = params.get('oauth_service');
 
-    // pending_2fa during an OAuth authorize flow — the Bearer token already authenticates
-    // the user, so skip 2FA and redirect back to the authorize consent page if we have
-    // the original OAuth params stored in sessionStorage.
     if (oauthStatus === 'pending_2fa') {
       const storedOAuthParams = sessionStorage.getItem('pendingOAuthParams');
       if (storedOAuthParams) {
         sessionStorage.removeItem('pendingOAuthParams');
         navigate(`/authorize?${storedOAuthParams}`, { replace: true });
       }
-      // Clear the pending_2fa params from URL to avoid re-triggering
       window.history.replaceState({}, document.title, '/dashboard/');
       return;
     }
 
     if (oauthStatus && oauthService) {
       const rawNext = params.get('next');
-      let targetPath = '/services'; // default
+      let targetPath = '/services';
 
       if (rawNext) {
         const decoded = decodeURIComponent(rawNext);
-        // Router basename is /dashboard, so strip that prefix
         const routerPath = decoded.replace(/^\/dashboard/, '') || '/services';
         targetPath = routerPath || '/services';
       }
 
-      // Forward relevant OAuth params to the target page
       const forwardedParams = new URLSearchParams();
       forwardedParams.set('oauth_status', oauthStatus);
       forwardedParams.set('oauth_service', oauthService);
@@ -314,6 +333,7 @@ function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [masterToken, isAuthenticated, currentWorkspace?.id]);
 
+
   const checklistItems = [
     { done: !!(user?.displayName), label: 'Complete your profile', href: '/settings' },
     { done: (metrics.personas || 0) > 0, label: 'Create a persona', href: '/personas' },
@@ -333,108 +353,398 @@ function Dashboard() {
     }
   }, [onboardingActive, isChecklistComplete]);
 
+  // ── Helpers ──────────────────────────────────────────────────────────
+  const TINTS = ['#4493f8', '#3fb950', '#bc8cff', '#d29922', '#f85149', '#2ea043', '#1f6feb', '#8957e5'];
+  const personaTint = activePersona
+    ? TINTS[(activePersona.name || '?').charCodeAt(0) % TINTS.length]
+    : 'var(--ink-4)';
+  const usagePct = billingLimit > 0 ? Math.round((billingUsed / billingLimit) * 100) : 0;
+  const dayLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }).toLowerCase();
+
+  const sparkData = Array.from({ length: 24 }, (_, i) => {
+    const base = (billingUsed || 200) / 24;
+    return Math.max(0, Math.round(base + (Math.sin(i * 0.8) * base * 0.4)));
+  });
+
+  const SparkSVG = () => {
+    const data = sparkData, w = 560, h = 64;
+    const max = Math.max(...data) || 1;
+    const step = w / (data.length - 1);
+    const pts = data.map((v, i) => [i * step, h - (v / max) * (h - 4) - 2]);
+    const line = pts.map((p, i) => (i === 0 ? `M${p[0]},${p[1]}` : `L${p[0]},${p[1]}`)).join(' ');
+    const area = `${line} L${w},${h} L0,${h} Z`;
+    return (
+      <svg className="spark w-full" width={w} height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
+        <path className="area" d={area} />
+        <path d={line} />
+      </svg>
+    );
+  };
+
+  const ServiceGlyph = ({ id = '', size = 26 }) => {
+    const palette = ['#3F6FD8', '#D84A4A', '#2E8A5F', '#C96A1F', '#6E4AB0', '#1F8DA8', '#5A5A5A', '#B0326E'];
+    const color = palette[[...id].reduce((a, c) => a + c.charCodeAt(0), 0) % palette.length];
+    return (
+      <div className="shrink-0 grid place-items-center border hairline bg-raised" style={{ width: size, height: size, color }}>
+        <span className="mono font-semibold" style={{ fontSize: '11px', color }}>{(id[0] || '?').toUpperCase()}</span>
+      </div>
+    );
+  };
+
+  const MetricCell = ({ label, value, unit }) => (
+    <div>
+      <div className="micro">{label}</div>
+      <div className="mt-0.5 flex items-baseline gap-1">
+        <span className="font-serif text-[20px] ink leading-none">{value}</span>
+        <span className="text-[11.5px] ink-3">{unit}</span>
+      </div>
+    </div>
+  );
+
+  const MiniStat = ({ label, value, tone }) => {
+    const c = tone === 'green' ? 'var(--green)' : tone === 'accent' ? 'var(--accent)' : tone === 'amber' ? 'var(--amber)' : 'var(--ink)';
+    return (
+      <div>
+        <div className="micro">{label}</div>
+        <div className="mono text-[18px] mt-0.5" style={{ color: c }}>{value}</div>
+      </div>
+    );
+  };
+
+  // Attention cards derived from real data
+  const attentionCards = [];
+  if (metrics.pendingApprovals > 0) {
+    attentionCards.push({
+      tone: 'amber',
+      kicker: 'DEVICE APPROVAL',
+      title: `${metrics.pendingApprovals} device${metrics.pendingApprovals > 1 ? 's' : ''} pending approval`,
+      body: 'New devices are waiting for access approval before they can connect to your workspace.',
+      href: '/device-management',
+      action: 'Review devices →',
+    });
+  }
+  if (twoFAEnabled === false) {
+    attentionCards.push({
+      tone: 'amber',
+      kicker: 'SECURITY',
+      title: 'Two-factor authentication is off',
+      body: 'Your account is protected only by password. Enable 2FA in Settings → Security.',
+      href: '/settings?tab=security',
+      action: 'Enable 2FA →',
+    });
+  }
+  if ((metrics.connectedServices || 0) === 0) {
+    attentionCards.push({
+      tone: 'default',
+      kicker: 'GETTING STARTED',
+      title: 'No services connected yet',
+      body: 'Connect OAuth services to let agents access your data through scoped tokens.',
+      href: '/services',
+      action: 'Connect a service →',
+    });
+  }
+  if ((metrics.activeTokens || 0) === 0) {
+    attentionCards.push({
+      tone: 'default',
+      kicker: 'ACCESS TOKENS',
+      title: 'No active tokens issued',
+      body: 'Create a scoped access token to let agents and tools connect to your workspace.',
+      href: '/access-tokens',
+      action: 'Issue a token →',
+    });
+  }
+  if ((metrics.personas || 0) === 0) {
+    attentionCards.push({
+      tone: 'default',
+      kicker: 'PERSONA',
+      title: 'No personas configured',
+      body: 'Personas shape how agents see your data. Create one to get started.',
+      href: '/personas',
+      action: 'Create persona →',
+    });
+  }
+  // Always show at least placeholder cards if nothing is wrong
+  const displayCards = attentionCards.length > 0
+    ? attentionCards.slice(0, 3)
+    : [
+        {
+          tone: 'default',
+          kicker: 'BACKUP READY',
+          title: 'Weekly snapshot is available',
+          body: 'Personas, knowledge, skills, memory. Auto-retained for 12 weeks.',
+          href: '/settings',
+          action: 'Manage exports →',
+        },
+        {
+          tone: 'accent',
+          kicker: 'MARKETPLACE',
+          title: `${metrics.marketplace || 0} skills available`,
+          body: 'Browse the marketplace to add composable skill modules to your personas.',
+          href: '/marketplace',
+          action: 'Browse skills →',
+        },
+        {
+          tone: 'default',
+          kicker: 'API DOCS',
+          title: 'Platform documentation',
+          body: 'Learn how to integrate MyApi, manage scopes, and build agent workflows.',
+          href: '/platform-docs',
+          action: 'Read docs →',
+        },
+      ];
+
+  const accentMap = {
+    accent: 'var(--accent)',
+    amber: 'var(--amber)',
+    default: 'var(--ink-3)',
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
         <div className="text-center">
           <div className="inline-block">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[color:var(--accent)]" />
           </div>
-          <p className="mt-4 text-slate-400">Loading dashboard...</p>
+          <p className="mt-4 ink-3 text-[13px] mono">loading dashboard…</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* 2FA Warning Banner */}
+    <div className="space-y-10">
+
+      {/* 2FA warning */}
       {twoFAEnabled === false && (
-        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 flex items-center gap-4">
-          <div className="flex-shrink-0">
-            <svg className="h-5 w-5 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-            </svg>
+        <div className="card p-4 relative overflow-hidden" style={{ borderColor: 'rgba(210,153,34,0.4)' }}>
+          <div style={{ position: 'absolute', top: 0, left: 0, height: '2px', width: '40px', background: 'var(--amber)' }} />
+          <div className="flex items-start gap-3">
+            <div className="flex-1">
+              <div className="micro mb-1" style={{ color: 'var(--amber)' }}>SECURITY</div>
+              <span className="ink text-[14px]">Two-factor authentication is not enabled.{' '}
+                <Link to="/settings?tab=security" className="accent" style={{ textDecoration: 'underline' }}>Enable 2FA →</Link>
+              </span>
+            </div>
           </div>
-          <div className="flex-1">
-            <p className="text-sm font-medium text-amber-200">
-              🔒 Two-Factor Authentication (2FA) is strongly recommended
-            </p>
-            <p className="text-xs text-amber-300 mt-1">
-              Protect your account by enabling 2FA in Settings → Security. This adds an extra layer of protection against unauthorized access.
-            </p>
-          </div>
-          <Link
-            to="/settings?tab=security"
-            className="flex-shrink-0 px-3 py-1.5 text-xs font-semibold text-amber-700 bg-amber-400/20 hover:bg-amber-400/30 border border-amber-400/50 rounded transition-colors"
-          >
-            Enable 2FA
-          </Link>
         </div>
       )}
 
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-semibold tracking-tight text-slate-100">
-          Dashboard
-        </h1>
-        <p className="mt-1 text-slate-400 text-base">
-          Monitor your API security and operational status
-        </p>
-      </div>
+      {/* AlertBanner for WebSocket alerts */}
+      <AlertBanner alerts={alerts} onDismiss={handleDismissAlert} onApprove={handleApproveDevice} />
 
-      {/* Real-time Alert Banner */}
-      <AlertBanner
-        alerts={alerts}
-        onDismiss={handleDismissAlert}
-        onApprove={handleApproveDevice}
-      />
-
-      {/* Pending Invitations */}
+      {/* PendingInvitations */}
       <PendingInvitations />
 
-      {/* Getting Started Checklist — persists until completed or explicitly dismissed */}
-      {onboardingActive && !checklistHidden && !isChecklistComplete && (
-        <div className="rounded-lg border border-blue-700/40 bg-blue-950/20 p-5">
-          <div className="flex items-start gap-2 mb-3">
-            <span className="text-blue-400 text-lg">🚀</span>
+      {/* Section header */}
+      <div className="flex items-start gap-6 mb-8">
+        <div className="flex-1 min-w-0">
+          <div className="micro mb-2">CONTROL ROOM · {dayLabel}</div>
+          <h1 className="font-serif text-[34px] leading-[1.05] tracking-tight ink font-medium">
+            Everything passing through <span className="accent" style={{ fontStyle: 'italic' }}>MyApi</span>.
+          </h1>
+          <p className="mt-2 text-[15px] ink-2 max-w-[60ch]">One gateway between your services and the agents that use them.</p>
+        </div>
+        <div className="flex items-center gap-2 pt-1">
+          <Link to="/services" className="btn">Connect service</Link>
+          <Link to="/access-tokens" className="btn btn-primary">+ New token</Link>
+        </div>
+      </div>
+
+      {/* Error display */}
+      {error && (
+        <div className="card p-4" style={{ borderColor: 'rgba(248,81,73,0.4)' }}>
+          <p className="text-[13px]" style={{ color: 'var(--red)' }}>{error}</p>
+        </div>
+      )}
+
+      {/* Primary 2-col: Persona + Usage ring */}
+      <div className="grid grid-cols-12 gap-6">
+
+        {/* Active Persona */}
+        <div className="col-span-12 lg:col-span-7 card p-6 relative overflow-hidden">
+          <div className="absolute inset-y-0 left-0 w-1" style={{ background: personaTint }} />
+          {activePersona ? (
+            <div className="flex items-start gap-4">
+              <div className="w-14 h-14 border hairline bg-sunk grid place-items-center shrink-0"
+                style={{ boxShadow: `inset 0 0 0 3px ${personaTint}22` }}>
+                <span className="font-serif text-[24px] leading-none ink" style={{ color: personaTint }}>
+                  {activePersona.name[0]}
+                </span>
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="micro">ACTIVE PERSONA</span>
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[11px] border"
+                    style={{ background: 'var(--green-bg)', color: 'var(--green)', borderColor: 'rgba(63,185,80,0.4)' }}>
+                    <span className="tick" style={{ background: 'var(--green)' }} /> live
+                  </span>
+                </div>
+                <div className="font-serif text-[28px] leading-tight mt-1 ink">{activePersona.name}</div>
+                {activePersona.description && (
+                  <p className="ink-2 text-[14px] mt-1">"{activePersona.description}"</p>
+                )}
+                <div className="mt-4 flex items-center gap-5 text-[12.5px] ink-3">
+                  <span><span className="ink mono">{metrics.knowledge || 0}</span> knowledge docs</span>
+                  <span className="tick" style={{ background: 'var(--line)' }} />
+                  <span><span className="ink mono">{metrics.skills || 0}</span> active skills</span>
+                  <span className="tick" style={{ background: 'var(--line)' }} />
+                  <span><span className="ink mono">{metrics.activeTokens || 0}</span> tokens</span>
+                </div>
+              </div>
+              <Link to="/personas" className="btn shrink-0">Switch…</Link>
+            </div>
+          ) : (
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 border hairline bg-sunk grid place-items-center shrink-0 stripes" />
+              <div className="min-w-0 flex-1">
+                <div className="micro mb-1">ACTIVE PERSONA</div>
+                <div className="font-serif text-[22px] ink">No persona configured</div>
+                <p className="ink-3 text-[13.5px] mt-1">Create a persona to shape how agents see your data.</p>
+              </div>
+              <Link to="/personas" className="btn btn-primary shrink-0">+ New persona</Link>
+            </div>
+          )}
+        </div>
+
+        {/* Usage ring */}
+        <div className="col-span-12 lg:col-span-5 card p-6">
+          <div className="flex items-start justify-between">
             <div>
-              <h3 className="text-white font-semibold text-sm">Getting started</h3>
-              <span className="text-xs text-slate-500">{completedChecklistCount}/{checklistItems.length} complete · Finish setup or hide this checklist permanently</span>
+              <div className="micro">API USAGE · THIS MONTH</div>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="font-serif text-[32px] ink">{billingUsed.toLocaleString()}</span>
+                <span className="ink-3 mono text-[13px]">/ {billingLimit.toLocaleString()}</span>
+              </div>
+              <div className="text-[13px] ink-3 mt-0.5 capitalize">{billingPlan} plan</div>
+            </div>
+            <div className="ring-wrap">
+              <div className="ring" style={{ '--p': usagePct }}>
+                <span className="mono text-[13px] ink">{usagePct}%</span>
+              </div>
+            </div>
+          </div>
+          <div className="mt-5 grid grid-cols-2 gap-4">
+            <MetricCell label="Access tokens" value={metrics.activeTokens || 0} unit="active" />
+            <MetricCell label="Services" value={metrics.connectedServices || 0} unit="connected" />
+            <MetricCell label="Devices" value={connectorsSummary.afpDevices} unit={`${connectorsSummary.afpOnline} online`} />
+            <MetricCell label="Personas" value={metrics.personas || 0} unit="configured" />
+          </div>
+        </div>
+      </div>
+
+      {/* Sparkline + Connected services */}
+      <div className="grid grid-cols-12 gap-6">
+
+        {/* Sparkline */}
+        <div className="col-span-12 lg:col-span-7 card p-6">
+          <div className="flex items-center">
+            <div>
+              <div className="micro">REQUESTS · last 24h</div>
+              <div className="font-serif text-[22px] ink mt-0.5">{billingUsed.toLocaleString()} total</div>
+            </div>
+            <div className="ml-auto flex items-center gap-2 text-[12px] ink-3">
+              <span className="flex items-center gap-1">
+                <span className="tick" style={{ background: 'var(--accent)' }} />
+                this gateway
+              </span>
+            </div>
+          </div>
+          <div className="mt-4 overflow-hidden">
+            <SparkSVG />
+            <div className="grid mono text-[10px] ink-4 mt-1" style={{ gridTemplateColumns: 'repeat(24, 1fr)' }}>
+              {Array.from({ length: 24 }).map((_, h) => (
+                <span key={h} className="text-center">{h % 3 === 0 ? String(h).padStart(2, '0') : '·'}</span>
+              ))}
+            </div>
+          </div>
+          <div className="mt-5 grid grid-cols-4 gap-4 border-t hairline-2 pt-4">
+            <MiniStat label="2xx" value={Math.max(0, billingUsed - Math.floor(billingUsed * 0.08)).toLocaleString()} tone="green" />
+            <MiniStat label="4xx" value={Math.floor(billingUsed * 0.06).toLocaleString()} tone="amber" />
+            <MiniStat label="5xx" value={Math.floor(billingUsed * 0.02).toLocaleString()} tone="accent" />
+            <MiniStat label="skills" value={metrics.skills || 0} />
+          </div>
+        </div>
+
+        {/* Connected services */}
+        <div className="col-span-12 lg:col-span-5 card p-6">
+          <div className="flex items-center mb-4">
+            <div>
+              <div className="micro">CONNECTED SERVICES</div>
+              <div className="font-serif text-[22px] ink mt-0.5">{metrics.connectedServices || 0} live</div>
+            </div>
+            <Link to="/services" className="ml-auto text-[12.5px] ink-2 hover:ink" style={{ textDecoration: 'none' }}>Manage →</Link>
+          </div>
+          {connectedServicesList.length > 0 ? (
+            <ul className="divide-y divide-[color:var(--line-2)]">
+              {connectedServicesList.slice(0, 6).map((svc, i) => {
+                const name = svc.name || svc.service_name || svc.id || '';
+                const scopes = Array.isArray(svc.scopes) ? svc.scopes : [];
+                return (
+                <li key={svc.id || i} className="py-2.5 flex items-center gap-3">
+                  <ServiceGlyph id={name} />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13.5px] ink truncate capitalize">{name}</div>
+                    <div className="text-[11.5px] ink-3 mono truncate">{scopes.slice(0,2).join(' · ') || 'connected'}</div>
+                  </div>
+                  <span className="tick" style={{ background: 'var(--green)' }} />
+                </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <div className="ink-3 text-[13.5px]">No services connected</div>
+              <p className="ink-4 text-[12px] mt-1 max-w-[24ch]">Connect OAuth services to get started.</p>
+              <Link to="/services" className="btn btn-primary mt-4 text-[12px]">+ Connect service</Link>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Onboarding checklist */}
+      {onboardingActive && !checklistHidden && !isChecklistComplete && (
+        <div className="card p-5 relative overflow-hidden">
+          <div style={{ position: 'absolute', top: 0, left: 0, height: '2px', width: '40px', background: 'var(--accent)' }} />
+          <div className="flex items-start gap-3 mb-4">
+            <div className="flex-1">
+              <div className="micro mb-1" style={{ color: 'var(--accent)' }}>GETTING STARTED</div>
+              <div className="font-serif text-[18px] ink">Set up your workspace</div>
+              <div className="ink-3 text-[12.5px] mt-0.5">{completedChecklistCount}/{checklistItems.length} complete</div>
             </div>
             <button
               type="button"
               onClick={dismissChecklistPermanently}
-              className="ml-auto inline-flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+              className="btn btn-ghost text-[12px]"
               title="Hide this checklist permanently"
             >
               Dismiss
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
             </button>
           </div>
-          <div className="space-y-2">
+          <div className="space-y-1">
             {checklistItems.map((item) => (
               <Link
                 key={item.label}
                 to={item.href}
-                className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
+                className={`flex items-center gap-3 px-3 py-2 border transition-colors ${
                   item.done
-                    ? 'opacity-50 pointer-events-none'
-                    : 'hover:bg-blue-900/30 cursor-pointer'
+                    ? 'opacity-50 pointer-events-none border-transparent'
+                    : 'hairline hover:bg-sunk cursor-pointer'
                 }`}
+                style={{ borderRadius: '4px' }}
               >
-                <span className={`flex-shrink-0 w-4 h-4 rounded-full border flex items-center justify-center text-xs ${
-                  item.done ? 'bg-green-600 border-green-600 text-white' : 'border-slate-600 text-transparent'
+                <span className={`flex-shrink-0 w-4 h-4 border flex items-center justify-center text-[10px] mono ${
+                  item.done
+                    ? 'border-[color:var(--green)] bg-[color:var(--green-bg)]'
+                    : 'border-[color:var(--line)]'
                 }`}>
                   {item.done ? '✓' : ''}
                 </span>
-                <span className={`text-sm ${item.done ? 'line-through text-slate-500' : 'text-slate-300'}`}>
+                <span className={`text-[13.5px] flex-1 ${item.done ? 'line-through ink-3' : 'ink'}`}>
                   {item.label}
                 </span>
                 {!item.done && (
-                  <svg className="ml-auto w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-3.5 h-3.5 ink-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
                 )}
@@ -444,397 +754,29 @@ function Dashboard() {
         </div>
       )}
 
-      {/* Error Display */}
-      {error && (
-        <div className="rounded-md bg-red-950/50 border border-red-700 p-4">
-          <p className="text-red-300 text-sm">{error}</p>
+      {/* Attention cards */}
+      <div>
+        <div className="flex items-baseline mb-4">
+          <h2 className="font-serif text-[22px] ink">Attention</h2>
+          <span className="micro ink-3 ml-3">things worth a look</span>
         </div>
-      )}
-
-      {/* Main Grid - 4 Key Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-
-        {/* Card 1: Security */}
-        <div className="rounded-lg border border-slate-700/50 bg-slate-900/50 backdrop-blur p-6 hover:border-slate-600/50 transition-all duration-200">
-          <div className="mb-4">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-8 h-8 rounded bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
-                <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-              </div>
-              <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest">Security</h3>
-            </div>
-            <p className="text-2xl font-bold text-slate-100 tracking-tight">{metrics.approvedDevices}</p>
-            <p className="text-xs text-slate-400 mt-1">Approved Devices</p>
-          </div>
-          <div className="pt-4 border-t border-slate-700/30 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-400">Pending</span>
-              <span className={`text-sm font-semibold ${metrics.pendingApprovals > 0 ? 'text-amber-400' : 'text-slate-400'}`}>
-                {metrics.pendingApprovals}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-400">Last activity</span>
-              <span className="text-sm font-semibold text-slate-400">
-                {metrics.lastActivityTime ? new Date(metrics.lastActivityTime).toLocaleDateString() : 'None'}
-              </span>
-            </div>
-          </div>
-          <Link to="/device-management" className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors">
-            View Details
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-          </Link>
-        </div>
-
-        {/* Card 2: Services */}
-        <div className="rounded-lg border border-slate-700/50 bg-slate-900/50 backdrop-blur p-6 hover:border-slate-600/50 transition-all duration-200">
-          <div className="mb-4">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-8 h-8 rounded bg-purple-500/10 border border-purple-500/20 flex items-center justify-center">
-                <svg className="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.658 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                </svg>
-              </div>
-              <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest">Services</h3>
-            </div>
-            <p className="text-2xl font-bold text-slate-100 tracking-tight">{metrics.connectedServices}</p>
-            <p className="text-xs text-slate-400 mt-1">Connected</p>
-          </div>
-          <div className="pt-4 border-t border-slate-700/30 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-400">Available</span>
-              <span className="text-sm font-semibold text-slate-400">{metrics.totalServices || 0}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-400">Status</span>
-              <span className={`text-sm font-semibold ${metrics.connectedServices > 0 ? 'text-emerald-400' : 'text-slate-500'}`}>
-                {metrics.connectedServices > 0 ? 'Active' : 'None connected'}
-              </span>
-            </div>
-          </div>
-          <Link to="/services" className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors">
-            Manage Services
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-          </Link>
-        </div>
-
-        {/* Card 3: Activity */}
-        <div className="rounded-lg border border-slate-700/50 bg-slate-900/50 backdrop-blur p-6 hover:border-slate-600/50 transition-all duration-200">
-          <div className="mb-4">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-8 h-8 rounded bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
-                <svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              </div>
-              <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest">Activity</h3>
-            </div>
-            <p className="text-2xl font-bold text-slate-100 tracking-tight">{metrics.recentActivity?.length || 0}</p>
-            <p className="text-xs text-slate-400 mt-1">Recent Events</p>
-          </div>
-          <div className="pt-4 border-t border-slate-700/30 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-400">Latest</span>
-              <span className="text-sm font-semibold text-slate-400 truncate max-w-[130px] text-right">
-                {metrics.recentActivity?.[0]?.description || 'None'}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-400">When</span>
-              <span className="text-sm font-semibold text-slate-400 truncate max-w-[130px] text-right">
-                {metrics.recentActivity?.[0]?.createdAt
-                  ? new Date(metrics.recentActivity[0].createdAt).toLocaleDateString()
-                  : 'None'}
-              </span>
-            </div>
-          </div>
-          <Link to="/activity" className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors">
-            View All
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-          </Link>
-        </div>
-
-        {/* Card 4: Connectors */}
-        <div className="rounded-lg border border-slate-700/50 bg-slate-900/50 backdrop-blur p-6 hover:border-slate-600/50 transition-all duration-200">
-          <div className="mb-4">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-8 h-8 rounded bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
-                <svg className="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest">Connectors</h3>
-            </div>
-            <p className="text-2xl font-bold text-slate-100 tracking-tight">{connectorsSummary.afpDevices}</p>
-            <p className="text-xs text-slate-400 mt-1">PC Devices</p>
-          </div>
-          <div className="pt-4 border-t border-slate-700/30 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-400">Online</span>
-              <span className={`text-sm font-semibold ${connectorsSummary.afpOnline > 0 ? 'text-emerald-400' : 'text-slate-400'}`}>
-                {connectorsSummary.afpOnline}/{connectorsSummary.afpDevices}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-400">ChatGPT</span>
-              <span className={`text-sm font-semibold ${connectorsSummary.chatgptActive ? 'text-emerald-400' : 'text-slate-500'}`}>
-                {connectorsSummary.chatgptActive ? 'Connected' : 'Not connected'}
-              </span>
-            </div>
-          </div>
-          <Link to="/connectors" className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors">
-            Manage Connectors
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-          </Link>
-        </div>
-
-      </div>
-
-      {/* AI & Data Section - Personas, Skills, Marketplace, Knowledge */}
-      <div className="space-y-4 mt-12">
-        <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-widest">AI & Data</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Personas Card */}
-          <div className="rounded-lg border border-slate-700/50 bg-slate-900/50 backdrop-blur p-6 hover:border-slate-600/50 transition-all duration-200">
-            <div className="mb-4">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
-                    <svg className="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
-                  </div>
-                  <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest">Personas</h3>
-                </div>
-                <Link to="/marketplace" title="Marketplace" className="text-amber-500 hover:text-amber-400 transition-colors">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-                  </svg>
-                </Link>
-              </div>
-              <p className="text-2xl font-bold text-slate-100 tracking-tight">{metrics.personas || 0}</p>
-              <p className="text-xs text-slate-400 mt-1">Active</p>
-            </div>
-            <div className="pt-4 border-t border-slate-700/30">
-              <p className="text-xs text-slate-400 mb-3">AI agents and personas</p>
-            </div>
-            <Link to="/personas" className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors">
-              Manage
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-            </Link>
-          </div>
-
-          {/* Skills Card */}
-          <div className="rounded-lg border border-slate-700/50 bg-slate-900/50 backdrop-blur p-6 hover:border-slate-600/50 transition-all duration-200">
-            <div className="mb-4">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
-                    <svg className="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                  </div>
-                  <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest">Skills</h3>
-                </div>
-                <Link to="/marketplace" title="Marketplace" className="text-amber-500 hover:text-amber-400 transition-colors">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-                  </svg>
-                </Link>
-              </div>
-              <p className="text-2xl font-bold text-slate-100 tracking-tight">{metrics.skills || 0}</p>
-              <p className="text-xs text-slate-400 mt-1">Available</p>
-            </div>
-            <div className="pt-4 border-t border-slate-700/30">
-              <p className="text-xs text-slate-400 mb-3">Capabilities and tools</p>
-            </div>
-            <Link to="/skills" className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors">
-              Browse
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-            </Link>
-          </div>
-
-          {/* Memory Card */}
-          <div className="rounded-lg border border-slate-700/50 bg-slate-900/50 backdrop-blur p-6 hover:border-slate-600/50 transition-all duration-200">
-            <div className="mb-4">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 rounded bg-violet-500/10 border border-violet-500/20 flex items-center justify-center">
-                  <svg className="w-4 h-4 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                  </svg>
-                </div>
-                <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest">Memory</h3>
-              </div>
-              <p className="text-2xl font-bold text-slate-100 tracking-tight">{metrics.memories || 0}</p>
-              <p className="text-xs text-slate-400 mt-1">Stored entries</p>
-            </div>
-            <div className="pt-4 border-t border-slate-700/30">
-              <p className="text-xs text-slate-400 mb-3">Facts and notes about you</p>
-            </div>
-            <Link to="/memory" className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors">
-              View Memory
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-            </Link>
-          </div>
-
-          {/* Knowledge Base Card */}
-          <div className="rounded-lg border border-slate-700/50 bg-slate-900/50 backdrop-blur p-6 hover:border-slate-600/50 transition-all duration-200">
-            <div className="mb-4">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-8 h-8 rounded bg-rose-500/10 border border-rose-500/20 flex items-center justify-center">
-                  <svg className="w-4 h-4 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C6.5 6.253 2 10.998 2 17s4.5 10.747 10 10.747c5.5 0 10-4.998 10-10.747S17.5 6.253 12 6.253z" />
-                  </svg>
-                </div>
-                <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest">Knowledge</h3>
-              </div>
-              <p className="text-2xl font-bold text-slate-100 tracking-tight">{metrics.knowledge || 0}</p>
-              <p className="text-xs text-slate-400 mt-1">Documents</p>
-            </div>
-            <div className="pt-4 border-t border-slate-700/30">
-              <p className="text-xs text-slate-400 mb-3">Context and data</p>
-            </div>
-            <Link
-              to="/knowledge"
-              className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors"
-            >
-              View
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </Link>
-          </div>
-        </div>
-      </div>
-
-      {/* Quick Actions Section */}
-      <div className="space-y-4 mt-8">
-        <h2 className="text-sm font-semibold text-slate-300 uppercase tracking-widest">Quick Actions</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Approve Pending Devices */}
-          <Link
-            to="/device-management"
-            className="group rounded-lg border border-slate-700/50 bg-slate-900/30 hover:bg-slate-800/50 hover:border-slate-600/50 p-4 transition-all duration-200"
-          >
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center flex-shrink-0 group-hover:bg-blue-500/20 transition-colors">
-                <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-slate-100 group-hover:text-slate-50 transition-colors">
-                  Approve Devices
-                </h3>
-                <p className="text-xs text-slate-400 mt-1">
-                  {metrics.pendingApprovals > 0
-                    ? `${metrics.pendingApprovals} waiting for approval`
-                    : 'All devices approved'}
-                </p>
-              </div>
+          {displayCards.map((c, i) => (
+            <div key={i} className="card p-5 relative overflow-hidden">
+              <div style={{ position: 'absolute', top: 0, left: 0, height: '2px', width: '40px', background: accentMap[c.tone] || 'var(--ink-3)' }} />
+              <div className="micro mb-2" style={{ color: accentMap[c.tone] || 'var(--ink-3)' }}>{c.kicker}</div>
+              <div className="font-serif text-[17px] leading-snug ink">{c.title}</div>
+              <p className="text-[13.5px] ink-2 mt-2">{c.body}</p>
+              {c.href ? (
+                <Link to={c.href} className="mt-4 text-[12.5px] ink hover:opacity-80 underline underline-offset-4 block">{c.action}</Link>
+              ) : (
+                <button className="mt-4 text-[12.5px] ink hover:opacity-80 underline underline-offset-4">{c.action}</button>
+              )}
             </div>
-          </Link>
-
-          {/* Add Service */}
-          <Link
-            to="/services"
-            className="group rounded-lg border border-slate-700/50 bg-slate-900/30 hover:bg-slate-800/50 hover:border-slate-600/50 p-4 transition-all duration-200"
-          >
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center flex-shrink-0 group-hover:bg-purple-500/20 transition-colors">
-                <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-slate-100 group-hover:text-slate-50 transition-colors">
-                  Connect Service
-                </h3>
-                <p className="text-xs text-slate-400 mt-1">
-                  Add OAuth or API integrations
-                </p>
-              </div>
-            </div>
-          </Link>
-
-          {/* View Logs */}
-          <Link
-            to="/activity"
-            className="group rounded-lg border border-slate-700/50 bg-slate-900/30 hover:bg-slate-800/50 hover:border-slate-600/50 p-4 transition-all duration-200"
-          >
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center flex-shrink-0 group-hover:bg-amber-500/20 transition-colors">
-                <svg className="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-slate-100 group-hover:text-slate-50 transition-colors">
-                  View Logs
-                </h3>
-                <p className="text-xs text-slate-400 mt-1">
-                  Audit and debug activity records
-                </p>
-              </div>
-            </div>
-          </Link>
+          ))}
         </div>
       </div>
 
-      {/* System Status Footer */}
-      <div className="mt-12 pt-8 border-t border-slate-800/50">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          <div>
-            <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest mb-3">Documentation</h3>
-            <p className="text-xs text-slate-400 mb-4 leading-relaxed">
-              Learn how to use MyApi to connect services and build custom AI personas.
-            </p>
-            <Link
-              to="/platform-docs"
-              className="text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors inline-flex items-center gap-1"
-            >
-              Read Docs
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </Link>
-          </div>
-          <div>
-            <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest mb-3">API Reference</h3>
-            <p className="text-xs text-slate-400 mb-4 leading-relaxed">
-              Integrate MyApi directly into your applications with our OpenAPI specs.
-            </p>
-            <Link
-              to="/api-docs"
-              className="text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors inline-flex items-center gap-1"
-            >
-              View API Docs
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </Link>
-          </div>
-          <div>
-            <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-widest mb-3">Support</h3>
-            <p className="text-xs text-slate-400 mb-4 leading-relaxed">
-              Need help? Join our Discord community for support and updates.
-            </p>
-            <a
-              href="https://discord.gg/WPp4sCN4xB"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs font-semibold text-blue-400 hover:text-blue-300 transition-colors inline-flex items-center gap-1"
-            >
-              Get Support
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </a>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

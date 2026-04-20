@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { useSkillStore } from '../stores/skillStore';
@@ -13,6 +13,13 @@ const CATEGORIES = [
   { value: 'productivity', label: 'Productivity' },
   { value: 'custom', label: 'Custom' },
 ];
+
+const GLYPH_PALETTE = ['#3F6FD8','#D84A4A','#2E8A5F','#C96A1F','#6E4AB0','#1F8DA8','#5A5A5A','#B0326E'];
+
+function glyphColor(id) {
+  const hash = [...(id || 'x')].reduce((a, c) => a + c.charCodeAt(0), 0);
+  return GLYPH_PALETTE[hash % GLYPH_PALETTE.length];
+}
 
 function CreateEditModal({ isEdit, skill, onSave, onClose, masterToken }) {
   const [form, setForm] = useState({
@@ -206,6 +213,22 @@ function Skills() {
   const [publishingId, setPublishingId] = useState(null);
   const [generatingTokenId, setGeneratingTokenId] = useState(null);
   const [deleteUsage, setDeleteUsage] = useState({ personas: [], total: 0 });
+  const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+
+  const filteredSkills = useMemo(() => {
+    let list = [...skills];
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter((s) =>
+        (s.name || '').toLowerCase().includes(q) ||
+        (s.description || '').toLowerCase().includes(q) ||
+        (s.author || '').toLowerCase().includes(q)
+      );
+    }
+    if (categoryFilter !== 'all') list = list.filter((s) => s.category === categoryFilter);
+    return list;
+  }, [skills, searchQuery, categoryFilter]);
 
   useEffect(() => {
     fetchSkills();
@@ -409,166 +432,177 @@ function Skills() {
 
   if (isLoading && skills.length === 0) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+      <div className="flex items-center justify-center h-64">
+        <div className="w-8 h-8 border-2 border-[color:var(--line)] border-t-[color:var(--accent)] rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-white">Skills</h1>
-          <p className="text-slate-400 mt-1">Create and manage agent skills</p>
+      {/* Section head */}
+      <div className="flex items-start gap-6 mb-6">
+        <div className="flex-1 min-w-0">
+          <div className="micro mb-2">AI BRAIN · SKILLS</div>
+          <h1 className="font-serif text-[34px] leading-[1.05] tracking-tight ink font-medium">Capability modules agents can invoke.</h1>
+          <p className="mt-2 text-[15px] ink-2 max-w-[60ch]">Composable, reusable actions. Each skill wraps one or more service calls behind a natural-language intent.</p>
         </div>
-        <button
-          onClick={openCreateModal}
-          className="ui-button-primary whitespace-nowrap"
-        >
-          Create Skill
-        </button>
+        <div className="flex items-center gap-2 pt-1">
+          <button className="btn btn-primary" onClick={openCreateModal}>+ Create skill</button>
+        </div>
       </div>
 
       {/* Errors */}
       {(error || fetchError) && (
-        <div className="bg-red-900 bg-opacity-30 border border-red-700 rounded-lg p-4 text-red-200 flex items-start justify-between gap-4">
-          <div>
-            <p className="font-medium">Error</p>
-            <p className="text-sm mt-1">{error || fetchError}</p>
-          </div>
-          <button onClick={clearError} className="text-red-200 hover:text-red-100">✕</button>
+        <div className="rounded" style={{ background: 'var(--red-bg)', color: 'var(--red)', padding: '12px 16px', fontSize: '13px' }}>
+          {error || fetchError}
+        </div>
+      )}
+
+      {/* Search / filter */}
+      {skills.length > 0 && (
+        <div className="flex flex-col sm:flex-row gap-3">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search skills..."
+            className="ui-input flex-1"
+          />
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="ui-input"
+          >
+            <option value="all">All categories</option>
+            {CATEGORIES.map((c) => (
+              <option key={c.value} value={c.value}>{c.label}</option>
+            ))}
+          </select>
         </div>
       )}
 
       {/* Skills grid */}
       {skills.length === 0 ? (
         <div className="text-center py-16">
-                    <h2 className="text-2xl font-bold text-white mb-2">No Skills Yet</h2>
-          <p className="text-slate-400 mb-6">Create your first agent skill to get started</p>
-          <button
-            onClick={openCreateModal}
-            className="ui-button-primary px-6 py-3"
-          >
-            Create your first skill
-          </button>
+          <h2 className="text-[22px] font-medium ink mb-2">No skills yet</h2>
+          <p className="ink-3 mb-6 text-[14px]">Create your first agent skill to get started.</p>
+          <button className="btn btn-primary" onClick={openCreateModal}>+ Create your first skill</button>
+        </div>
+      ) : filteredSkills.length === 0 ? (
+        <div className="text-center py-16">
+          <p className="ink-3 text-[14px]">No skills match your search.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {skills.map((skill) => (
-            <article
-              key={skill.id}
-              className={`ui-card p-5 sm:p-6 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-slate-950/40 ${
-                skill.active
-                  ? 'border-emerald-500/70 shadow-lg shadow-emerald-900/20'
-                  : 'hover:border-slate-600/80'
-              }`}
-            >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <h3 className="text-xl font-semibold text-white truncate">{skill.name}</h3>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <span className="ui-badge">{categoryLabel(skill.category)}</span>
-                    {skill.version && <span className="ui-badge">v{skill.version}</span>}
-                    <span className={skill.active ? 'ui-badge-success' : 'ui-badge'}>
-                      {skill.active ? 'Active' : 'Inactive'}
-                    </span>
-                    {skill?.config_json?.scanner?.safe_to_use && (
-                      <span className="ui-badge-success">Safe to use</span>
-                    )}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredSkills.map((skill) => {
+            const serviceId = skill.service || skill.category || 'skill';
+            const color = glyphColor(serviceId);
+            return (
+              <div key={skill.id} className="card p-5">
+                {/* Row 1: name + status chip */}
+                <div className="flex items-center gap-2">
+                  <span className="ink font-medium">{skill.name}</span>
+                  {skill.active ? (
+                    <span style={{
+                      background: 'var(--green-bg)',
+                      color: 'var(--green)',
+                      borderColor: 'rgba(63,185,80,0.4)',
+                      borderRadius: '3px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '1px 6px',
+                      fontSize: '11px',
+                      border: '1px solid',
+                    }}>active</span>
+                  ) : (
+                    <span style={{
+                      background: 'var(--bg-sunk)',
+                      color: 'var(--ink-3)',
+                      borderColor: 'var(--line)',
+                      borderRadius: '3px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '1px 6px',
+                      fontSize: '11px',
+                      border: '1px solid',
+                    }}>disabled</span>
+                  )}
+                </div>
+
+                {/* Row 2: service glyph + service name + calls count */}
+                <div className="mt-3 flex items-center gap-2">
+                  <div style={{
+                    width: 22, height: 22, display: 'grid', placeItems: 'center',
+                    border: '1px solid var(--line)', background: 'var(--bg-raised)',
+                    borderRadius: '2px',
+                  }}>
+                    <span style={{
+                      fontFamily: 'JetBrains Mono, monospace',
+                      fontSize: '10px', fontWeight: 600, color,
+                    }}>{serviceId[0].toUpperCase()}</span>
                   </div>
+                  <span className="text-[12.5px] ink-2 capitalize">{serviceId}</span>
+                  <span className="ml-auto mono text-[12px] ink-3">{skill.calls || 0} calls</span>
                 </div>
-              </div>
 
-              <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2 rounded-lg border border-slate-700/60 bg-slate-900/40 px-3 py-2">
-                <div>
-                  <p className="text-[11px] uppercase tracking-wide text-slate-500">Author</p>
-                  <p className="text-sm text-slate-200 truncate">{skill.author || 'Unknown'}</p>
-                </div>
-                <div>
-                  <p className="text-[11px] uppercase tracking-wide text-slate-500">Updated</p>
-                  <p className="text-sm text-slate-200">{formatUpdatedDate(skill.updated_at || skill.created_at)}</p>
-                </div>
-                <div>
-                  <p className="text-[11px] uppercase tracking-wide text-slate-500">Status</p>
-                  <p className={`text-sm font-medium ${skill.active ? 'text-emerald-300' : 'text-slate-300'}`}>
-                    {skill.active ? 'Currently active' : 'Not active'}
-                  </p>
-                </div>
-              </div>
+                {/* Row 3: stripes placeholder */}
+                <div className="mt-4 stripes h-8 border hairline-2" />
 
-              {skill.description && (
-                <p className="mt-4 text-sm leading-relaxed text-slate-300 line-clamp-3">{skill.description}</p>
-              )}
+                {/* Skill token display if present */}
+                {skillTokens[skill.id] && (
+                  <div className="mt-3" style={{
+                    background: 'var(--bg-sunk)',
+                    border: '1px solid var(--line)',
+                    borderRadius: '4px',
+                    padding: '8px 10px',
+                  }}>
+                    <p className="text-[11px] ink-3 mb-1">Skill token — copy now</p>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 text-[11px] mono ink-2 break-all">{skillTokens[skill.id].token}</code>
+                      <button onClick={() => handleCopyToken(skill.id)} className="btn text-[11px]">
+                        {skillTokens[skill.id].copied ? 'Copied' : 'Copy'}
+                      </button>
+                    </div>
+                  </div>
+                )}
 
-              {skillTokens[skill.id] && (
-                <div className="mt-4 rounded-lg border border-slate-700/70 bg-slate-900/70 p-3">
-                  <p className="text-xs text-slate-400 mb-2">Skill Token — copy it now</p>
-                  <div className="flex items-center gap-2">
-                    <code className="flex-1 text-xs text-green-300 font-mono break-all bg-slate-800 p-2 rounded-md">
-                      {skillTokens[skill.id].token}
-                    </code>
-                    <button
-                      onClick={() => handleCopyToken(skill.id)}
-                      className="ui-button-secondary px-3 py-1.5 text-xs"
-                    >
-                      {skillTokens[skill.id].copied ? 'Copied' : 'Copy'}
+                {/* Row 4: action buttons */}
+                <div className="mt-4 flex gap-2 flex-wrap">
+                  <button className="btn text-[12px]" onClick={() => openEditModal(skill)}>Edit</button>
+                  <button
+                    className="btn btn-ghost text-[12px]"
+                    onClick={() => handlePublish(skill)}
+                    disabled={publishingId === skill.id}
+                  >
+                    {publishingId === skill.id ? 'Publishing...' : 'Publish to marketplace'}
+                  </button>
+                  <button className="btn text-[12px]" onClick={() => openDetailModal(skill)}>View</button>
+                  <button
+                    className="btn text-[12px]"
+                    onClick={() => handleGenerateToken(skill)}
+                    disabled={generatingTokenId === skill.id}
+                  >
+                    {generatingTokenId === skill.id ? 'Generating...' : 'Get token'}
+                  </button>
+                  {!skill.active && (
+                    <button className="btn text-[12px]" onClick={() => handleActivate(skill.id)}>
+                      Activate
                     </button>
-                  </div>
-                </div>
-              )}
-
-              <div className="mt-5 space-y-2 border-t border-slate-700/70 pt-4">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  )}
                   <button
-                    onClick={() => openDetailModal(skill)}
-                    className="ui-button-secondary w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60"
-                  >
-                    View
-                  </button>
-                  <button
-                    onClick={() => openEditModal(skill)}
-                    className="ui-button-secondary w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60"
-                  >
-                    Edit
-                  </button>
-                  <button
+                    className="btn text-[12px]"
+                    style={{ color: 'var(--red)' }}
                     onClick={() => openDeleteConfirmation(skill.id)}
-                    className="ui-button-danger w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/60"
                   >
                     Delete
                   </button>
                 </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <button
-                    onClick={() => handlePublish(skill)}
-                    disabled={publishingId === skill.id}
-                    className="ui-button-primary w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60"
-                  >
-                    {publishingId === skill.id ? 'Publishing...' : 'Publish'}
-                  </button>
-                  <button
-                    onClick={() => handleGenerateToken(skill)}
-                    disabled={generatingTokenId === skill.id}
-                    className="ui-button w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/60"
-                  >
-                    {generatingTokenId === skill.id ? 'Generating...' : 'Get Token'}
-                  </button>
-                </div>
-
-                {!skill.active && (
-                  <button
-                    onClick={() => handleActivate(skill.id)}
-                    className="ui-button-secondary w-full border-emerald-600/60 text-emerald-300 hover:bg-emerald-700/20 hover:text-emerald-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60"
-                  >
-                    Set as active
-                  </button>
-                )}
               </div>
-            </article>
-          ))}
+            );
+          })}
         </div>
       )}
 

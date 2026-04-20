@@ -130,7 +130,9 @@ function ServiceConnectors() {
       const matchesCategory = selectedCategory === 'all' || s.category === selectedCategory;
       const matchesStatus = selectedStatus === 'all'
         || (selectedStatus === 'connected' && s.status === 'connected')
-        || (selectedStatus === 'available' && s.status !== 'connected');
+        || (selectedStatus === 'pending' && s.status === 'pending')
+        || (selectedStatus === 'error' && s.status === 'error')
+        || (selectedStatus === 'available' && s.status !== 'connected' && s.status !== 'pending' && s.status !== 'error');
       return matchesSearch && matchesCategory && matchesStatus && s.label;
     });
     // Sort: connected first, then by label
@@ -141,106 +143,305 @@ function ServiceConnectors() {
     });
   }, [services, searchQuery, selectedCategory, selectedStatus]);
 
-  const connectedServices = filteredServices.filter(s => s.status === 'connected');
-  const availableServices = filteredServices.filter(s => s.status !== 'connected');
   const connectedTotal = services.filter(s => s.status === 'connected').length;
-  const showSectionHeaders = connectedServices.length > 0 && availableServices.length > 0;
+
+  // Status tab definitions
+  const statusTabs = [
+    { key: 'all', label: 'All', count: services.length },
+    { key: 'connected', label: 'Connected', count: services.filter(s => s.status === 'connected').length },
+    { key: 'pending', label: 'Pending', count: services.filter(s => s.status === 'pending').length },
+    { key: 'error', label: 'Needs attention', count: services.filter(s => s.status === 'error').length },
+    { key: 'available', label: 'Available', count: services.filter(s => s.status !== 'connected' && s.status !== 'pending' && s.status !== 'error').length },
+  ];
+
+  // Status chip renderer
+  const StatusChip = ({ status }) => {
+    const map = {
+      connected:    { color: 'var(--green)',   bg: 'var(--green-bg)',  label: 'connected' },
+      pending:      { color: 'var(--amber)',    bg: 'color-mix(in srgb, var(--amber) 12%, transparent)', label: 'pending' },
+      error:        { color: 'var(--accent)',   bg: 'var(--accent-bg)', label: 'needs attention' },
+      disconnected: { color: 'var(--ink-3)',    bg: 'transparent',      label: 'not connected' },
+    };
+    const s = map[status] || map.disconnected;
+    const isOutline = status === 'disconnected';
+    return (
+      <span style={{
+        display: 'inline-flex', alignItems: 'center', gap: '5px',
+        fontSize: '11px', fontWeight: 500, lineHeight: 1,
+        padding: '3px 8px', borderRadius: '4px',
+        color: s.color,
+        background: isOutline ? 'transparent' : s.bg,
+        border: `1px solid ${isOutline ? 'var(--line)' : s.bg === 'transparent' ? 'var(--line)' : s.color + '33'}`,
+      }}>
+        <span style={{
+          width: 6, height: 6, borderRadius: '50%',
+          background: s.color, flexShrink: 0,
+        }} />
+        {s.label}
+      </span>
+    );
+  };
+
+  // Exact reference ServiceGlyph: bg-raised square, border, colored mono letter
+  const Glyph = ({ name, label }) => {
+    const palette = ['#3F6FD8','#D84A4A','#2E8A5F','#C96A1F','#6E4AB0','#1F8DA8','#5A5A5A','#B0326E'];
+    const hash = [...(name || '')].reduce((a, c) => a + c.charCodeAt(0), 0);
+    const color = palette[hash % palette.length];
+    const letter = ((label || name || '?').charAt(0)).toUpperCase();
+    return (
+      <div className="shrink-0 grid place-items-center border hairline bg-raised"
+        style={{ width: 36, height: 36, color }}>
+        <span className="mono text-[11px] font-semibold" style={{ color }}>{letter}</span>
+      </div>
+    );
+  };
+
+  // Exact reference Chip: square corners, inline-flex, border
+  const Chip = ({ tone = 'default', mono: isMono = false, children }) => {
+    const toneMap = {
+      default: { bg: 'var(--bg-sunk)',           color: 'var(--ink-2)',  border: 'var(--line)' },
+      green:   { bg: 'var(--green-bg)',           color: 'var(--green)', border: 'rgba(63,185,80,0.4)' },
+      amber:   { bg: 'rgba(210,153,34,0.16)',     color: 'var(--amber)', border: 'rgba(210,153,34,0.4)' },
+      accent:  { bg: 'var(--accent-bg)',          color: 'var(--accent)',border: 'rgba(68,147,248,0.4)' },
+      outline: { bg: 'transparent',              color: 'var(--ink-2)', border: 'var(--line)' },
+    };
+    const m = toneMap[tone] || toneMap.default;
+    return (
+      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[11px] border${isMono ? ' mono' : ''}`}
+        style={{ background: m.bg, color: m.color, borderColor: m.border }}>
+        {children}
+      </span>
+    );
+  };
+
+  // Exact reference StatusDot
+  const StatusDot = ({ s }) => {
+    const c = {
+      connected: 'var(--green)', active: 'var(--green)',
+      pending: 'var(--amber)', error: 'var(--red)', revoked: 'var(--red)',
+      disconnected: 'var(--ink-4)',
+    }[s] || 'var(--ink-4)';
+    return <span className="tick" style={{ background: c }} />;
+  };
+
+  // Service card — exact match to reference ServiceCard
+  const InlineServiceCard = ({ service }) => {
+    const scopes = service.scopes || [];
+    const isConnected = service.status === 'connected';
+    const isError = service.status === 'error';
+    const isPending = service.status === 'pending';
+    const isNotConfigured = service.notConfigured;
+
+    const statusMap = {
+      connected:    { chip: 'green',   label: 'connected' },
+      pending:      { chip: 'amber',   label: 'pending auth' },
+      error:        { chip: 'accent',  label: 'needs attention' },
+      disconnected: { chip: 'outline', label: 'not connected' },
+    };
+    const st = statusMap[service.status] || statusMap.disconnected;
+
+    return (
+      <div className="card p-5 flex flex-col">
+        <div className="flex items-start gap-3">
+          <Glyph name={service.name} label={service.label} />
+          <div className="flex-1 min-w-0">
+            <span className="ink text-[15px] font-medium">{service.label}</span>
+            <div className="text-[11.5px] ink-3 mt-0.5">{service.category_label || service.category || 'Integration'}</div>
+          </div>
+          <Chip tone={st.chip}><StatusDot s={service.status} />{st.label}</Chip>
+        </div>
+
+        <div className="flex-1 mt-4">
+          {scopes.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {scopes.slice(0, 4).map(sc => <Chip key={sc} tone="default" mono>{sc}</Chip>)}
+              {scopes.length > 4 && <span className="ink-4 text-[10.5px] px-1">{scopes.length - 4}+</span>}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="mt-4 pt-4 border-t hairline-2 flex items-center gap-3 text-[12px] ink-3">
+          {isConnected ? (
+            <>
+              <span className="mono ink-2">{(service.callCount ?? service.calls ?? 0).toLocaleString()}</span>
+              <span>calls · {service.connectedAt ? new Date(service.connectedAt).toLocaleDateString() : service.last_used || 'never'}</span>
+              <button type="button" onClick={() => setConfigService(service)} className="ml-auto ink-2 hover:ink" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px' }}>Manage →</button>
+              <button type="button" onClick={() => openRevokeModal(service.name)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px', color: 'var(--red)' }}>Disconnect</button>
+            </>
+          ) : isError ? (
+            <>
+              <span className="accent">auth failed</span>
+              <button type="button" onClick={() => handleConnect(service)} className="ml-auto btn btn-accent text-[12px] px-2 py-1">Reconnect</button>
+            </>
+          ) : isPending ? (
+            <>
+              <span className="ink-3">waiting for callback</span>
+              <button type="button" className="ml-auto ink-2 hover:ink" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px' }}>Copy OAuth URL</button>
+            </>
+          ) : (
+            <>
+              <span className="ink-3">{isNotConfigured ? 'Not configured' : 'OAuth 2.0 · scoped'}</span>
+              <button type="button" onClick={() => handleConnect(service)} disabled={isNotConfigured} className="ml-auto btn text-[12px] px-2 py-1" style={{ opacity: isNotConfigured ? 0.45 : 1, cursor: isNotConfigured ? 'not-allowed' : 'pointer' }} title={isNotConfigured ? `${service.label} requires server-side configuration` : undefined}>Connect</button>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-8">
 
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
+      {/* Section head */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
         <div>
-          <h1 className="text-lg font-semibold text-white tracking-tight">Services & Integrations</h1>
-          <p className="mt-1 text-sm text-slate-500 max-w-lg leading-relaxed">
-            Connect your accounts once — tokens stored encrypted, usable by any agent.
+          <div className="micro" style={{ marginBottom: '8px' }}>GATEWAY · SERVICES</div>
+          <h1 className="font-serif ink" style={{ fontSize: '28px', fontWeight: 500, letterSpacing: '-0.02em', lineHeight: 1.2, margin: 0 }}>
+            Connect once. Forward scoped.
+          </h1>
+          <p className="ink-2" style={{ marginTop: '8px', fontSize: '15px', maxWidth: '520px', lineHeight: 1.55 }}>
+            Raw credentials stay encrypted in the vault. Agents never see them — they proxy through MyApi and receive only the scopes you grant.
           </p>
         </div>
-        <div className="flex items-center gap-3 pt-0.5">
-          {connectedTotal > 0 ? (
-            <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+        {connectedTotal > 0 && (
+          <div style={{ paddingTop: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px',
+              fontSize: '12px', fontWeight: 500,
+              padding: '5px 10px', borderRadius: '4px',
+              color: 'var(--green)', background: 'var(--green-bg)',
+              border: '1px solid color-mix(in srgb, var(--green) 25%, transparent)',
+            }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--green)', flexShrink: 0 }} />
               {connectedTotal} connected
             </span>
-          ) : null}
-          <span className="text-xs text-slate-600">{services.length} services</span>
-        </div>
+            <span className="ink-4" style={{ fontSize: '12px' }}>{services.length} total</span>
+          </div>
+        )}
       </div>
 
       {/* OAuth success banner */}
       {oauthSuccessService && (
-        <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 px-4 py-3 flex items-center gap-3">
-          <svg className="w-4 h-4 text-emerald-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+        <div style={{
+          border: '1px solid color-mix(in srgb, var(--green) 30%, transparent)',
+          background: 'var(--green-bg)', borderRadius: '6px',
+          padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '10px',
+        }}>
+          <svg style={{ width: 15, height: 15, color: 'var(--green)', flexShrink: 0 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
           </svg>
-          <p className="text-sm text-emerald-300 flex-1">
-            <span className="font-semibold capitalize">{oauthSuccessService}</span> connected successfully.
+          <p style={{ fontSize: '13px', color: 'var(--green)', flex: 1 }}>
+            <strong style={{ textTransform: 'capitalize' }}>{oauthSuccessService}</strong> connected successfully.
           </p>
-          <button type="button" onClick={() => setOauthSuccessService(null)}
-            className="text-emerald-500/40 hover:text-emerald-400 transition-colors" aria-label="Dismiss">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <button type="button" onClick={() => setOauthSuccessService(null)} aria-label="Dismiss"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--green)', opacity: 0.5, padding: '2px' }}>
+            <svg style={{ width: 14, height: 14 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
       )}
 
-      {/* Filters */}
-      <div className="space-y-2">
-        <div className="flex flex-col sm:flex-row gap-2">
-          {/* Search */}
-          <div className="relative flex-1">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      {/* Alerts */}
+      {connectError && (
+        <div style={{
+          border: '1px solid color-mix(in srgb, var(--amber) 30%, transparent)',
+          background: 'color-mix(in srgb, var(--amber) 8%, transparent)',
+          borderRadius: '6px', padding: '12px 16px',
+          display: 'flex', alignItems: 'flex-start', gap: '10px',
+        }} role="alert">
+          <svg style={{ width: 15, height: 15, color: 'var(--amber)', flexShrink: 0, marginTop: '1px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+          </svg>
+          <p style={{ fontSize: '13px', color: 'var(--amber)', flex: 1 }}>{connectError}</p>
+          <button onClick={() => setConnectError(null)} aria-label="Dismiss"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--amber)', opacity: 0.5, padding: '2px' }}>
+            <svg style={{ width: 14, height: 14 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+      )}
+      {error && !connectError && (
+        <div style={{
+          border: '1px solid color-mix(in srgb, var(--red) 30%, transparent)',
+          background: 'var(--red-bg)', borderRadius: '6px',
+          padding: '12px 16px', display: 'flex', alignItems: 'flex-start', gap: '10px',
+        }} role="alert">
+          <svg style={{ width: 15, height: 15, color: 'var(--red)', flexShrink: 0, marginTop: '1px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+          <p style={{ fontSize: '13px', color: 'var(--red)', flex: 1 }}>{error}</p>
+          <button onClick={() => setError(null)} aria-label="Dismiss"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--red)', opacity: 0.5, padding: '2px' }}>
+            <svg style={{ width: 14, height: 14 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+      )}
+
+      {/* Tab bar + search */}
+      <div>
+        <div className="hairline" style={{ display: 'flex', alignItems: 'center', gap: 0, borderBottom: '1px solid var(--line)' }}>
+          {statusTabs.map(tab => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setSelectedStatus(tab.key)}
+              style={{
+                padding: '8px 12px', fontSize: '13px', background: 'none', cursor: 'pointer',
+                borderTop: 'none', borderLeft: 'none', borderRight: 'none',
+                borderBottom: selectedStatus === tab.key ? '2px solid var(--ink)' : '2px solid transparent',
+                marginBottom: '-1px',
+                color: selectedStatus === tab.key ? 'var(--ink)' : 'var(--ink-3)',
+                fontWeight: selectedStatus === tab.key ? 500 : 400,
+                transition: 'color 0.15s',
+              }}
+            >
+              {tab.label}
+              {tab.count > 0 && (
+                <span className="mono ink-4" style={{ fontSize: '11px', marginLeft: '5px' }}>{tab.count}</span>
+              )}
+            </button>
+          ))}
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px', paddingBottom: '8px' }}>
+            <svg className="ink-4" style={{ width: 13, height: 13, flexShrink: 0 }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
             <input
               type="search"
-              placeholder="Search services…"
+              placeholder="Filter…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-white placeholder-slate-600 focus:border-slate-600 focus:outline-none transition-colors"
+              className="ink-2"
+              style={{
+                background: 'transparent', border: 'none', outline: 'none',
+                width: '140px', fontSize: '12.5px', color: 'var(--ink-2)',
+              }}
               aria-label="Search services"
             />
-          </div>
-
-          {/* Status filter */}
-          <div className="flex gap-1 p-1 bg-slate-900 border border-slate-800 rounded-lg shrink-0">
-            {[
-              { key: 'all', label: 'All' },
-              { key: 'connected', label: 'Connected' },
-              { key: 'available', label: 'Available' },
-            ].map((s) => (
-              <button key={s.key} type="button" onClick={() => setSelectedStatus(s.key)}
-                className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-                  selectedStatus === s.key
-                    ? 'bg-slate-700 text-slate-100'
-                    : 'text-slate-500 hover:text-slate-300'
-                }`}>
-                {s.label}
-              </button>
-            ))}
           </div>
         </div>
 
         {/* Category chips */}
         {categories.length > 0 && (
-          <div className="flex gap-1.5 overflow-x-auto pb-0.5 flex-wrap">
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', paddingTop: '12px' }}>
             <button type="button" onClick={() => setSelectedCategory('all')}
-              className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors whitespace-nowrap ${
-                selectedCategory === 'all'
-                  ? 'bg-slate-700 text-slate-100 border-slate-600'
-                  : 'text-slate-500 border-slate-800 hover:border-slate-700 hover:text-slate-300'
-              }`}>
+              style={{
+                padding: '3px 10px', borderRadius: '3px', fontSize: '11px', fontWeight: 500,
+                background: selectedCategory === 'all' ? 'var(--bg-hover)' : 'transparent',
+                color: selectedCategory === 'all' ? 'var(--ink)' : 'var(--ink-3)',
+                border: `1px solid ${selectedCategory === 'all' ? 'var(--line-2)' : 'var(--line)'}`,
+                cursor: 'pointer', whiteSpace: 'nowrap', transition: 'color 0.15s',
+              }}>
               All
             </button>
             {categories.map((cat) => (
               <button type="button" key={cat.name} onClick={() => setSelectedCategory(cat.name)}
-                className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors whitespace-nowrap ${
-                  selectedCategory === cat.name
-                    ? 'bg-slate-700 text-slate-100 border-slate-600'
-                    : 'text-slate-500 border-slate-800 hover:border-slate-700 hover:text-slate-300'
-                }`}>
+                style={{
+                  padding: '3px 10px', borderRadius: '3px', fontSize: '11px', fontWeight: 500,
+                  background: selectedCategory === cat.name ? 'var(--bg-hover)' : 'transparent',
+                  color: selectedCategory === cat.name ? 'var(--ink)' : 'var(--ink-3)',
+                  border: `1px solid ${selectedCategory === cat.name ? 'var(--line-2)' : 'var(--line)'}`,
+                  cursor: 'pointer', whiteSpace: 'nowrap', transition: 'color 0.15s',
+                }}>
                 {cat.label}
               </button>
             ))}
@@ -248,92 +449,40 @@ function ServiceConnectors() {
         )}
       </div>
 
-      {/* Alerts */}
-      {connectError && (
-        <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3 flex items-start gap-3" role="alert">
-          <svg className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-          </svg>
-          <p className="text-sm text-amber-300 flex-1">{connectError}</p>
-          <button onClick={() => setConnectError(null)} className="text-amber-500/40 hover:text-amber-300 transition-colors" aria-label="Dismiss">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-          </button>
-        </div>
-      )}
-      {error && !connectError && (
-        <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3 flex items-start gap-3" role="alert">
-          <svg className="w-4 h-4 text-red-400 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-          <p className="text-sm text-red-300 flex-1">{error}</p>
-          <button onClick={() => setError(null)} className="text-red-500/40 hover:text-red-300 transition-colors" aria-label="Dismiss">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-          </button>
-        </div>
-      )}
-
-      {/* Service list */}
+      {/* Service grid */}
       {isLoading ? (
-        <div className="flex items-center justify-center py-20" role="status" aria-live="polite">
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-7 h-7 rounded-full border-2 border-slate-800 border-t-blue-500 animate-spin" />
-            <p className="text-xs text-slate-600">Loading services…</p>
-          </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', padding: '64px 0' }} role="status" aria-live="polite">
+          <div style={{
+            width: 24, height: 24, borderRadius: '50%',
+            border: '2px solid var(--line-2)', borderTopColor: 'var(--accent)',
+            animation: 'spin 0.7s linear infinite',
+          }} />
+          <p className="ink-4" style={{ fontSize: '12px' }}>Loading services…</p>
         </div>
 
       ) : filteredServices.length === 0 ? (
-        <div className="rounded-xl border border-slate-800 border-dashed py-14 text-center">
-          <p className="text-sm text-slate-500">No services match your filters.</p>
+        <div style={{
+          border: '1px dashed var(--line)', borderRadius: '6px',
+          padding: '56px 24px', textAlign: 'center',
+        }}>
+          <p className="ink-3" style={{ fontSize: '14px' }}>No services match your filters.</p>
           <button type="button"
             onClick={() => { setSearchQuery(''); setSelectedCategory('all'); setSelectedStatus('all'); }}
-            className="mt-3 text-xs text-blue-400 hover:text-blue-300 transition-colors">
+            className="ink-2"
+            style={{
+              marginTop: '12px', fontSize: '12px', background: 'none',
+              border: 'none', cursor: 'pointer', textDecoration: 'underline',
+              textDecorationColor: 'var(--line-2)',
+            }}>
             Clear filters
           </button>
         </div>
 
       ) : (
-        <div className="space-y-1.5">
-          {/* Connected group */}
-          {connectedServices.length > 0 && (
-            <>
-              {showSectionHeaders && (
-                <p className="text-[11px] font-semibold text-slate-600 uppercase tracking-widest px-1 pb-1">
-                  Connected · {connectedServices.length}
-                </p>
-              )}
-              {connectedServices.map((service) => (
-                <ServiceCard
-                  key={service.name}
-                  service={service}
-                  onConnect={handleConnect}
-                  onRevoke={() => openRevokeModal(service.name)}
-                  onConfigure={() => setConfigService(service)}
-                />
-              ))}
-            </>
-          )}
-
-          {/* Spacer between groups */}
-          {showSectionHeaders && <div className="pt-2" />}
-
-          {/* Available group */}
-          {availableServices.length > 0 && (
-            <>
-              {showSectionHeaders && (
-                <p className="text-[11px] font-semibold text-slate-600 uppercase tracking-widest px-1 pb-1">
-                  Available · {availableServices.length}
-                </p>
-              )}
-              {availableServices.map((service) => (
-                <ServiceCard
-                  key={service.name}
-                  service={service}
-                  onConnect={handleConnect}
-                  onRevoke={() => openRevokeModal(service.name)}
-                />
-              ))}
-            </>
-          )}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredServices.map((service) => (
+            <InlineServiceCard key={service.name} service={service} />
+          ))}
         </div>
       )}
 
@@ -347,27 +496,40 @@ function ServiceConnectors() {
 
       {/* Disconnect confirm modal */}
       {showRevokeModal && revokeServiceId && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-6 shadow-2xl">
-            <h2 className="text-base font-semibold text-white mb-1">Disconnect service?</h2>
-            <p className="text-sm text-slate-400 mb-5">
-              <span className="font-semibold text-slate-200 capitalize">{revokeServiceId}</span> will be disconnected.
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: '16px',
+        }}>
+          <div style={{
+            background: 'var(--bg-raised)', border: '1px solid var(--line)',
+            borderRadius: '8px', maxWidth: '360px', width: '100%', padding: '24px',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+          }}>
+            <h2 className="ink" style={{ fontSize: '15px', fontWeight: 600, margin: '0 0 6px' }}>Disconnect service?</h2>
+            <p className="ink-2" style={{ fontSize: '13px', margin: '0 0 20px', lineHeight: 1.55 }}>
+              <strong className="ink" style={{ textTransform: 'capitalize' }}>{revokeServiceId}</strong> will be disconnected.
               Agents using this connection will lose access.
             </p>
             {error && (
-              <div className="mb-4 p-3 bg-red-900/20 border border-red-700/30 rounded-lg">
-                <p className="text-xs text-red-300">{error}</p>
+              <div style={{
+                marginBottom: '16px', padding: '10px 12px',
+                background: 'var(--red-bg)', border: '1px solid color-mix(in srgb, var(--red) 30%, transparent)',
+                borderRadius: '4px',
+              }}>
+                <p style={{ fontSize: '12px', color: 'var(--red)', margin: 0 }}>{error}</p>
               </div>
             )}
-            <div className="flex gap-2">
+            <div style={{ display: 'flex', gap: '8px' }}>
               <button onClick={closeRevokeModal} disabled={isRevoking}
-                className="flex-1 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm text-slate-300 font-medium rounded-lg transition-colors disabled:opacity-50">
+                className="ui-button"
+                style={{ flex: 1, justifyContent: 'center', opacity: isRevoking ? 0.5 : 1 }}>
                 {error ? 'Close' : 'Cancel'}
               </button>
               <button
                 onClick={() => handleRevoke(services.find((s) => s.name === revokeServiceId))}
                 disabled={isRevoking}
-                className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-500 text-sm text-white font-semibold rounded-lg transition-colors disabled:opacity-50">
+                className="ui-button-danger"
+                style={{ flex: 1, justifyContent: 'center', opacity: isRevoking ? 0.5 : 1 }}>
                 {isRevoking ? 'Disconnecting…' : 'Disconnect'}
               </button>
             </div>
@@ -376,7 +538,7 @@ function ServiceConnectors() {
       )}
 
       {/* Toasts */}
-      <div className="fixed bottom-4 right-4 space-y-2 z-50">
+      <div style={{ position: 'fixed', bottom: '16px', right: '16px', display: 'flex', flexDirection: 'column', gap: '8px', zIndex: 50 }}>
         {toasts.map((toast) => (
           <Toast key={toast.id} id={toast.id} message={toast.message} type={toast.type} onClose={() => removeToast(toast.id)} />
         ))}

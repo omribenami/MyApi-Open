@@ -165,9 +165,12 @@ const TeamSettings = () => {
 
   return (
     <div className="team-settings">
-      <div className="team-settings-header">
-        <h1>Team Settings</h1>
-        <p className="workspace-context">Workspace: <strong>{currentWorkspace.name}</strong></p>
+      <div className="flex items-start gap-6 mb-8">
+        <div className="flex-1 min-w-0">
+          <div className="micro mb-2">WORKSPACE</div>
+          <h1 className="font-serif text-[34px] leading-[1.05] tracking-tight ink font-medium">Team Settings</h1>
+          <p className="mt-2 text-[15px] ink-2 max-w-[60ch]">Manage members, roles, and invitations — <span className="mono" style={{ color: 'var(--ink)' }}>{currentWorkspace.name}</span>.</p>
+        </div>
       </div>
 
       {error && <div className="error-banner">{error}</div>}

@@ -25,10 +25,9 @@ function sourceBadgeClass(source) {
 }
 
 function SourceBadge({ source }) {
-  const label = source || 'user';
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full border ${sourceBadgeClass(label)} whitespace-nowrap`}>
-      {label}
+    <span style={{ fontFamily: 'JetBrains Mono,monospace', fontSize: '10.5px', padding: '1px 6px', border: '1px solid var(--line)', background: 'var(--bg-sunk)', color: 'var(--ink-3)', borderRadius: '3px' }}>
+      {source || 'user'}
     </span>
   );
 }
@@ -59,15 +58,15 @@ function EditModal({ mem, onClose, onSave }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="w-full max-w-4xl max-h-[90vh] bg-slate-900 border border-slate-700 rounded-xl shadow-2xl flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)' }}>
+      <div className="w-full max-w-4xl max-h-[90vh] flex flex-col" style={{ background: 'var(--bg-raised)', border: '1px solid var(--line)', borderRadius: '6px' }}>
         {/* Header */}
-        <div className="flex-shrink-0 flex items-center justify-between px-5 py-4 border-b border-slate-800">
+        <div className="flex-shrink-0 flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--line-2)' }}>
           <div className="flex items-center gap-3">
-            <span className="text-sm font-medium text-slate-200">Edit Memory</span>
+            <span className="text-[13px] font-medium ink">Edit Memory</span>
             <SourceBadge source={mem.source} />
           </div>
-          <span className="text-xs text-slate-500">{formatDate(mem.created_at)}</span>
+          <span className="text-[12px] ink-4">{formatDate(mem.created_at)}</span>
         </div>
 
         {/* Editor — scrollable */}
@@ -77,24 +76,25 @@ function EditModal({ mem, onClose, onSave }) {
             value={draft}
             onChange={e => setDraft(e.target.value)}
             onKeyDown={handleKeyDown}
-            className="w-full h-full min-h-[400px] bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-sm text-slate-200 font-mono resize-none focus:outline-none focus:border-blue-500 leading-relaxed"
+            className="ui-input w-full font-mono resize-none leading-relaxed"
+            rows={6}
             style={{ minHeight: '400px' }}
           />
-          <p className="mt-1.5 text-xs text-slate-600">⌘↵ to save · Esc to cancel</p>
+          <p className="mt-1.5 text-[12px] ink-4">⌘↵ to save · Esc to cancel</p>
         </div>
 
         {/* Footer */}
-        <div className="flex gap-2 px-5 py-4 border-t border-slate-800">
+        <div className="flex gap-2 px-5 py-4" style={{ borderTop: '1px solid var(--line-2)' }}>
           <button
             onClick={handleSave}
             disabled={saving || !draft.trim() || draft === mem.content}
-            className="px-4 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50 transition-colors font-medium"
+            className="btn btn-primary text-[13px]"
           >
             {saving ? 'Saving…' : 'Save changes'}
           </button>
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+            className="btn text-[13px]"
           >
             Cancel
           </button>
@@ -111,59 +111,59 @@ function MemoryRow({ mem, onDelete, onEdit }) {
     : mem.content;
 
   return (
-    <tr className="group border-b border-slate-800 last:border-0 hover:bg-slate-800/30 transition-colors">
+    <div className="p-5 grid grid-cols-12 gap-4 items-start group" style={{ borderTop: '1px solid var(--line-2)' }}>
       {/* Timestamp */}
-      <td className="px-4 py-3 align-top whitespace-nowrap">
-        <span className="text-xs text-slate-500 tabular-nums">{formatDate(mem.created_at)}</span>
-      </td>
+      <div className="col-span-2">
+        <span className="micro tabular-nums">{formatDate(mem.created_at)}</span>
+      </div>
 
       {/* Content */}
-      <td className="px-4 py-3 align-top">
+      <div className="col-span-8">
         <div
           className="cursor-pointer"
           onClick={() => onEdit(mem)}
           title="Click to edit"
         >
-          <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap hover:text-slate-100 transition-colors">
+          <p className="ink text-[14px] leading-relaxed whitespace-pre-wrap">
             {preview}
           </p>
           {isLong && (
-            <span className="text-xs text-blue-400/70 hover:text-blue-400 mt-0.5 inline-block">
+            <span className="text-[12px] mt-0.5 inline-block" style={{ color: 'var(--accent)' }}>
               View / edit full content
             </span>
           )}
         </div>
-      </td>
-
-      {/* Source */}
-      <td className="px-4 py-3 align-top">
-        <SourceBadge source={mem.source} />
-      </td>
+        <div className="mt-1.5">
+          <SourceBadge source={mem.source} />
+        </div>
+      </div>
 
       {/* Actions */}
-      <td className="px-4 py-3 align-top">
-        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            onClick={() => onEdit(mem)}
-            className="p-1.5 rounded text-slate-500 hover:text-blue-400 hover:bg-blue-400/10 transition-colors"
-            title="Edit"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-            </svg>
-          </button>
-          <button
-            onClick={() => onDelete(mem.id)}
-            className="p-1.5 rounded text-slate-500 hover:text-red-400 hover:bg-red-400/10 transition-colors"
-            title="Delete"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-            </svg>
-          </button>
-        </div>
-      </td>
-    </tr>
+      <div className="col-span-2 flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+        <button
+          onClick={() => onEdit(mem)}
+          className="p-1.5 rounded ink-4 transition-colors"
+          style={{ background: 'transparent' }}
+          onMouseEnter={e => { e.currentTarget.style.color = 'var(--accent)'; e.currentTarget.style.background = 'var(--accent-bg)'; }}
+          onMouseLeave={e => { e.currentTarget.style.color = ''; e.currentTarget.style.background = 'transparent'; }}
+          title="Edit"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+          </svg>
+        </button>
+        <button
+          onClick={() => onDelete(mem.id)}
+          className="btn btn-ghost text-[12px] p-1.5 rounded"
+          style={{ color: 'var(--red)' }}
+          title="Forget"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -272,15 +272,13 @@ export default function Memory() {
       )}
 
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-100">Memory</h1>
-          <p className="mt-1 text-slate-400 text-sm max-w-2xl">
-            Long-term memory shared with every AI assistant connected to your account.
-            AI agents (ChatGPT, Claude, etc.) can add memories automatically — they appear here with their source badge.
-          </p>
+      <div className="flex items-start gap-6 mb-8">
+        <div className="flex-1 min-w-0">
+          <div className="micro mb-2">AI BRAIN · MEMORY</div>
+          <h1 className="font-serif text-[34px] leading-[1.05] tracking-tight ink font-medium">What every persona has learned.</h1>
+          <p className="mt-2 text-[15px] ink-2 max-w-[60ch]">Long-lived facts agents have stored about you. Each memory is scoped to a persona and can be forgotten one at a time.</p>
         </div>
-        <div className="flex gap-2 flex-shrink-0">
+        <div className="flex items-center gap-2 pt-1">
           <input
             ref={fileRef}
             type="file"
@@ -291,7 +289,7 @@ export default function Memory() {
           <button
             onClick={() => fileRef.current?.click()}
             disabled={importing}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg bg-slate-800 border border-slate-700 hover:border-slate-600 text-slate-300 hover:text-slate-100 transition-colors disabled:opacity-50"
+            className="btn text-[13px] flex items-center gap-1.5"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
@@ -300,7 +298,7 @@ export default function Memory() {
           </button>
           <button
             onClick={() => { setAdding(true); setNewContent(''); }}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium transition-colors"
+            className="btn btn-primary text-[13px] flex items-center gap-1.5"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -312,8 +310,8 @@ export default function Memory() {
 
       {/* Add form */}
       {adding && (
-        <div className="bg-slate-900 border border-blue-500/30 rounded-xl p-4 space-y-3">
-          <p className="text-xs text-slate-500">Write a memory or paste a full MEMORY.md document. Markdown supported.</p>
+        <div className="card p-4 space-y-3" style={{ border: '1px solid var(--accent)', borderRadius: '6px' }}>
+          <p className="text-[12px] ink-4">Write a memory or paste a full MEMORY.md document. Markdown supported.</p>
           <textarea
             autoFocus
             value={newContent}
@@ -324,67 +322,63 @@ export default function Memory() {
             }}
             rows={5}
             placeholder="e.g. User prefers concise responses. Timezone is UTC+2."
-            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 font-mono resize-y focus:outline-none focus:border-blue-500"
+            className="ui-input w-full font-mono resize-y text-[13px]"
           />
           <div className="flex gap-2 items-center">
             <button
               onClick={handleAdd}
               disabled={saving || !newContent.trim()}
-              className="px-4 py-1.5 text-sm rounded-lg bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50 transition-colors"
+              className="btn btn-primary text-[13px]"
             >
               {saving ? 'Saving…' : 'Save'}
             </button>
             <button
               onClick={() => { setAdding(false); setNewContent(''); }}
-              className="px-4 py-1.5 text-sm rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors"
+              className="btn text-[13px]"
             >
               Cancel
             </button>
-            <span className="text-xs text-slate-600">⌘↵ to save · Esc to cancel</span>
+            <span className="text-[12px] ink-4">⌘↵ to save · Esc to cancel</span>
           </div>
         </div>
       )}
 
-      {/* Table */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="bg-slate-800/50 border-b border-slate-800">
-              <th className="px-4 py-2.5 text-left text-xs text-slate-500 font-medium whitespace-nowrap w-44">Added</th>
-              <th className="px-4 py-2.5 text-left text-xs text-slate-500 font-medium">Content</th>
-              <th className="px-4 py-2.5 text-left text-xs text-slate-500 font-medium whitespace-nowrap w-28">Source</th>
-              <th className="px-4 py-2.5 w-20"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={4} className="px-4 py-10 text-center text-sm text-slate-500">Loading…</td></tr>
-            ) : error ? (
-              <tr><td colSpan={4} className="px-4 py-10 text-center text-sm text-red-400">{error}</td></tr>
-            ) : memories.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="px-4 py-12 text-center">
-                  <p className="text-slate-400 text-sm">No memories yet.</p>
-                  <p className="text-slate-600 text-xs mt-1">Add one manually, upload a MEMORY.md file, or let a connected AI create them automatically.</p>
-                </td>
-              </tr>
-            ) : (
-              memories.map(mem => (
-                <MemoryRow key={mem.id} mem={mem} onDelete={handleDelete} onEdit={setEditingMem} />
-              ))
-            )}
-          </tbody>
-        </table>
+      {/* Memory list */}
+      <div className="card divide-y" style={{ padding: 0, overflow: 'hidden' }}>
+        {/* Table header */}
+        <div className="p-3 px-5 grid grid-cols-12 gap-4" style={{ background: 'var(--bg-sunk)', borderBottom: '1px solid var(--line)' }}>
+          <div className="col-span-2 micro">Added</div>
+          <div className="col-span-8 micro">Content</div>
+          <div className="col-span-2"></div>
+        </div>
+
+        {loading ? (
+          <div className="p-10 text-center text-[13px] ink-3">Loading…</div>
+        ) : error ? (
+          <div className="p-10 text-center text-[13px]" style={{ color: 'var(--red)' }}>{error}</div>
+        ) : memories.length === 0 ? (
+          <div className="p-12 text-center">
+            <p className="ink-2 text-[14px]">No memories yet.</p>
+            <p className="ink-4 text-[12px] mt-1">Add one manually, upload a MEMORY.md file, or let a connected AI create them automatically.</p>
+          </div>
+        ) : (
+          memories.map(mem => (
+            <MemoryRow key={mem.id} mem={mem} onDelete={handleDelete} onEdit={setEditingMem} />
+          ))
+        )}
       </div>
 
       {/* Footer */}
       {memories.length > 0 && (
         <div className="flex justify-between items-center">
-          <p className="text-xs text-slate-600">{memories.length} {memories.length === 1 ? 'entry' : 'entries'}</p>
+          <p className="text-[12px] ink-4">{memories.length} {memories.length === 1 ? 'entry' : 'entries'}</p>
           <button
             onClick={handleClearAll}
             disabled={clearing}
-            className="text-xs text-slate-600 hover:text-red-400 transition-colors disabled:opacity-50"
+            className="text-[12px] ink-4 transition-colors disabled:opacity-50"
+            style={{ background: 'none', border: 'none' }}
+            onMouseEnter={e => { e.currentTarget.style.color = 'var(--red)'; }}
+            onMouseLeave={e => { e.currentTarget.style.color = ''; }}
           >
             {clearing ? 'Clearing…' : 'Clear all memories'}
           </button>

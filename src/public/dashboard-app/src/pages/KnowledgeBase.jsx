@@ -9,7 +9,7 @@ const SOURCE_COLORS = {
   memory: 'bg-purple-600 bg-opacity-20 text-purple-300 border-purple-700',
   persona: 'bg-green-600 bg-opacity-20 text-green-300 border-green-700',
   'user-profile': 'bg-blue-600 bg-opacity-20 text-blue-300 border-blue-700',
-  general: 'bg-slate-600 bg-opacity-20 text-slate-300 border-slate-600',
+  general: 'bg-opacity-10 ink-3 border-opacity-20',
   notes: 'bg-yellow-600 bg-opacity-20 text-yellow-300 border-yellow-700',
 };
 
@@ -20,100 +20,10 @@ function getSourceColor(source) {
 function SourceBadge({ source }) {
   return (
     <span
-      className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium border ${getSourceColor(source)}`}
+      className={`inline-block px-2 py-0.5 rounded text-xs font-medium border ${getSourceColor(source)}`}
     >
       {source}
     </span>
-  );
-}
-
-function DocumentCard({ doc, onDelete, onEdit }) {
-  const wordCount = doc.metadata?.wordCount || 0;
-  const section = doc.metadata?.section;
-  const chunkIndex = doc.metadata?.chunkIndex;
-
-  return (
-    <div 
-      onClick={() => onEdit && onEdit(doc)}
-      className="bg-slate-800 border border-slate-700 hover:border-slate-600 rounded-xl p-5 flex flex-col gap-3 transition-all duration-200 group cursor-pointer"
-    >
-      {/* Top row */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-white text-sm leading-snug line-clamp-2 group-hover:text-blue-300 transition-colors">
-            {doc.title}
-          </h3>
-          {section && section !== 'General' && (
-            <p className="text-xs text-slate-500 mt-0.5 truncate">
-              § {section}
-            </p>
-          )}
-        </div>
-        <button
-          onClick={(e) => { e.stopPropagation(); onDelete(doc.id); }}
-          className="flex-shrink-0 text-slate-600 hover:text-red-400 transition-colors p-1 rounded hover:bg-red-900 hover:bg-opacity-20 opacity-0 group-hover:opacity-100"
-          title="Delete document"
-        >
-          🗑️
-        </button>
-      </div>
-
-      {/* Source badge */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <SourceBadge source={doc.source} />
-        {chunkIndex !== undefined && (
-          <span className="text-xs text-slate-600">chunk #{chunkIndex + 1}</span>
-        )}
-      </div>
-
-      {/* Footer */}
-      <div className="flex items-center justify-between text-xs text-slate-600 pt-2 border-t border-slate-700 mt-auto">
-        <span>
-          {wordCount > 0 ? `${wordCount} words` : '—'}
-        </span>
-        <span>{new Date(doc.createdAt).toLocaleDateString()}</span>
-      </div>
-    </div>
-  );
-}
-
-function DocumentRow({ doc, onDelete, onEdit }) {
-  const wordCount = doc.metadata?.wordCount || 0;
-  const section = doc.metadata?.section;
-
-  return (
-    <div 
-      onClick={() => onEdit && onEdit(doc)}
-      className="bg-slate-800 border border-slate-700 hover:border-slate-600 rounded-lg px-5 py-3.5 flex items-center gap-4 transition-colors group cursor-pointer"
-    >
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-3">
-          <span className="font-medium text-white text-sm truncate group-hover:text-blue-300 transition-colors">
-            {doc.title}
-          </span>
-          {section && section !== 'General' && (
-            <span className="text-xs text-slate-500 hidden sm:inline">§ {section}</span>
-          )}
-        </div>
-      </div>
-
-      <SourceBadge source={doc.source} />
-
-      <span className="text-xs text-slate-500 hidden md:inline w-16 text-right">
-        {wordCount > 0 ? `${wordCount}w` : '—'}
-      </span>
-      <span className="text-xs text-slate-500 hidden lg:inline w-24 text-right">
-        {new Date(doc.createdAt).toLocaleDateString()}
-      </span>
-
-      <button
-        onClick={(e) => { e.stopPropagation(); onDelete(doc.id); }}
-        className="flex-shrink-0 text-slate-600 hover:text-red-400 transition-colors p-1 rounded hover:bg-red-900 hover:bg-opacity-20 opacity-0 group-hover:opacity-100"
-        title="Delete document"
-      >
-        🗑️
-      </button>
-    </div>
   );
 }
 
@@ -336,252 +246,213 @@ function KnowledgeBase() {
     }
   };
 
+  const handleImport = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.txt,.md,.pdf,text/plain,text/markdown,application/pdf';
+    input.onchange = (e) => {
+      const file = e.target.files?.[0];
+      if (file) handleUpload(file);
+    };
+    input.click();
+  };
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-white">Knowledge Base</h1>
-          <p className="mt-1 text-slate-400">
-            Manage documents that inform AI context and memory
-          </p>
+    <div className="space-y-8">
+      {/* Section head */}
+      <div className="flex items-start gap-6 mb-6">
+        <div className="flex-1 min-w-0">
+          <div className="micro mb-2">AI BRAIN · KNOWLEDGE</div>
+          <h1 className="font-serif text-[34px] leading-[1.05] tracking-tight ink font-medium">Documents agents can reason over.</h1>
+          <p className="mt-2 text-[15px] ink-2 max-w-[60ch]">Attach documents to specific personas. Everything is markdown-first, encrypted at rest, and versioned.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-          <label className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg transition-colors cursor-pointer disabled:opacity-60">
-            <span>⬆</span>
-            Upload File
-            <input
-              type="file"
-              accept=".txt,.md,.pdf,text/plain,text/markdown,application/pdf"
-              className="hidden"
-              disabled={uploading}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) handleUpload(file);
-                e.target.value = '';
-              }}
-            />
-          </label>
-          <button
-            onClick={openCreateModal}
-            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
-          >
-            <span>+</span>
-            New Document
-          </button>
+        <div className="flex items-center gap-2 pt-1">
+          <button className="btn" onClick={handleImport}>&#x2197; Import</button>
+          <button className="btn btn-primary" onClick={openCreateModal}>+ New document</button>
         </div>
       </div>
 
       {/* Alerts */}
       {error && (
-        <div className="rounded-lg bg-red-900 bg-opacity-30 border border-red-700 p-4 flex items-center justify-between gap-4">
+        <div className="rounded p-4 flex items-center justify-between gap-4" style={{ background: 'var(--red-bg)', border: '1px solid var(--red)', opacity: 0.9 }}>
           <div className="flex items-center gap-2">
-            <span className="text-red-400 text-lg">✕</span>
-            <p className="text-sm text-red-200">{error}</p>
+            <span style={{ color: 'var(--red)' }} className="text-lg">✕</span>
+            <p className="text-sm" style={{ color: 'var(--red)' }}>{error}</p>
           </div>
-          <button onClick={clearError} className="text-red-400 hover:text-red-300 text-sm flex-shrink-0">
+          <button onClick={clearError} className="text-sm flex-shrink-0" style={{ color: 'var(--red)' }}>
             Dismiss
           </button>
         </div>
       )}
 
       {success && (
-        <div className="rounded-lg bg-green-900 bg-opacity-30 border border-green-700 p-4 flex items-center justify-between gap-4">
+        <div className="rounded p-4 flex items-center justify-between gap-4" style={{ background: 'var(--green-bg)', border: '1px solid var(--green)', opacity: 0.9 }}>
           <div className="flex items-center gap-2">
-            <span className="text-green-400 text-lg">✓</span>
-            <p className="text-sm text-green-200">{success}</p>
+            <span style={{ color: 'var(--green)' }} className="text-lg">✓</span>
+            <p className="text-sm" style={{ color: 'var(--green)' }}>{success}</p>
           </div>
-          <button onClick={clearSuccess} className="text-green-400 hover:text-green-300 text-sm flex-shrink-0">
+          <button onClick={clearSuccess} className="text-sm flex-shrink-0" style={{ color: 'var(--green)' }}>
             Dismiss
           </button>
         </div>
       )}
 
       {uploading && (
-        <div className="rounded-lg bg-slate-800 border border-slate-700 p-4">
-          <div className="flex items-center justify-between text-sm text-slate-300 mb-2">
+        <div className="rounded bg-raised hairline p-4">
+          <div className="flex items-center justify-between text-sm ink-2 mb-2">
             <span>Uploading document…</span>
             <span>{uploadProgress}%</span>
           </div>
-          <div className="w-full h-2 bg-slate-700 rounded overflow-hidden">
-            <div className="h-full bg-emerald-500 transition-all" style={{ width: `${uploadProgress}%` }} />
+          <div className="w-full h-2 rounded overflow-hidden bg-sunk">
+            <div className="h-full transition-all" style={{ width: `${uploadProgress}%`, background: 'var(--green)' }} />
           </div>
         </div>
       )}
 
-      {/* Stats bar */}
-      {!isLoading && documents.length > 0 && (
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { label: 'Total Documents', value: stats.total, icon: '📄' },
-            { label: 'Sources', value: stats.sources, icon: '🗂️' },
-            { label: 'Total Words', value: stats.words.toLocaleString(), icon: '📝' },
-          ].map((stat) => (
-            <div
-              key={stat.label}
-              className="bg-slate-800 border border-slate-700 rounded-lg p-4 text-center"
-            >
-              <div className="text-2xl mb-1">{stat.icon}</div>
-              <div className="text-xl font-bold text-white">{stat.value}</div>
-              <div className="text-xs text-slate-500 mt-0.5">{stat.label}</div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Loading */}
+      {/* Loading spinner */}
       {isLoading && (
-        <div className="flex justify-center items-center py-20">
-          <div className="text-center">
-            <div className="inline-block animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500 mb-4"></div>
-            <p className="text-slate-400">Loading knowledge base...</p>
-          </div>
+        <div className="flex justify-center h-32 items-center">
+          <div className="w-8 h-8 border-2 border-[color:var(--line)] border-t-[color:var(--accent)] rounded-full animate-spin" />
         </div>
       )}
 
-      {/* Controls: search, sort, filter, view toggle */}
-      {!isLoading && documents.length > 0 && (
-        <div className="flex flex-col sm:flex-row gap-3">
-          {/* Search */}
+      {/* Search / filter bar */}
+      {!isLoading && (
+        <div className="flex items-center gap-3 mb-4">
           <input
-            type="text"
+            className="ui-input"
+            style={{ maxWidth: '280px' }}
+            placeholder="Search documents…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search documents..."
-            className="flex-1 px-4 py-2 rounded-lg border border-slate-700 bg-slate-900 text-white placeholder-slate-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-opacity-30 outline-none text-sm"
           />
-
-          {/* Source filter */}
-          <select
-            value={filterSource}
-            onChange={(e) => setFilterSource(e.target.value)}
-            className="px-3 py-2 rounded-lg border border-slate-700 bg-slate-900 text-white focus:border-blue-500 outline-none text-sm"
-          >
-            <option value="all">All Sources</option>
-            {uniqueSources.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-
-          {/* Sort */}
-          <select
-            value={`${sortBy}_${sortOrder}`}
-            onChange={(e) => {
-              const [by, order] = e.target.value.split('_');
-              setSortBy(by);
-              setSortOrder(order);
-            }}
-            className="px-3 py-2 rounded-lg border border-slate-700 bg-slate-900 text-white focus:border-blue-500 outline-none text-sm"
-          >
-            <option value="createdAt_desc">Newest first</option>
-            <option value="createdAt_asc">Oldest first</option>
-            <option value="title_asc">Title A–Z</option>
-            <option value="title_desc">Title Z–A</option>
-            <option value="source_asc">Source A–Z</option>
-          </select>
-
-          {/* View toggle */}
-          <div className="flex items-center gap-1 bg-slate-800 border border-slate-700 rounded-lg p-1">
-            <button
-              onClick={() => setViewMode('grid')}
-              title="Grid view"
-              className={`px-3 py-1 rounded text-sm transition-colors ${
-                viewMode === 'grid'
-                  ? 'bg-blue-600 text-white'
-                  : 'text-slate-400 hover:text-white'
-              }`}
+          {uniqueSources.length > 0 && (
+            <select
+              value={filterSource}
+              onChange={(e) => setFilterSource(e.target.value)}
+              className="ui-input text-sm"
+              style={{ maxWidth: '180px' }}
             >
-              ⊞
-            </button>
-            <button
-              onClick={() => setViewMode('list')}
-              title="List view"
-              className={`px-3 py-1 rounded text-sm transition-colors ${
-                viewMode === 'list'
-                  ? 'bg-blue-600 text-white'
-                  : 'text-slate-400 hover:text-white'
-              }`}
+              <option value="all">All sources</option>
+              {uniqueSources.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          )}
+          {documents.length > 0 && (
+            <select
+              value={`${sortBy}_${sortOrder}`}
+              onChange={(e) => {
+                const [by, order] = e.target.value.split('_');
+                setSortBy(by);
+                setSortOrder(order);
+              }}
+              className="ui-input text-sm"
+              style={{ maxWidth: '160px' }}
             >
-              ☰
-            </button>
-          </div>
+              <option value="createdAt_desc">Newest first</option>
+              <option value="createdAt_asc">Oldest first</option>
+              <option value="title_asc">Title A–Z</option>
+              <option value="title_desc">Title Z–A</option>
+              <option value="source_asc">Source A–Z</option>
+            </select>
+          )}
         </div>
       )}
 
-      {/* Documents */}
-      {!isLoading && displayDocuments.length > 0 && (
-        <div>
-          <p className="text-sm text-slate-500 mb-3">
-            Showing {displayDocuments.length} of {documents.length} document{documents.length !== 1 ? 's' : ''}
-          </p>
+      {/* Table */}
+      {!isLoading && (
+        <div className="card overflow-hidden">
+          {/* Column header */}
+          <div className="grid grid-cols-12 px-5 py-2 border-b hairline bg-sunk micro">
+            <span className="col-span-5">Title</span>
+            <span className="col-span-3">Attached to</span>
+            <span className="col-span-2">Size</span>
+            <span className="col-span-2 text-right">Updated</span>
+          </div>
 
-          {viewMode === 'grid' ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {displayDocuments.map((doc) => (
-                <DocumentCard key={doc.id} doc={doc} onDelete={handleDelete} onEdit={() => handleOpenDocument(doc)} />
-              ))}
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {/* List header */}
-              <div className="hidden lg:flex items-center gap-4 px-5 py-2 text-xs text-slate-600 uppercase tracking-wide">
-                <span className="flex-1">Title</span>
-                <span>Source</span>
-                <span className="w-16 text-right">Words</span>
-                <span className="w-24 text-right">Created</span>
-                <span className="w-8"></span>
+          {/* Rows */}
+          {displayDocuments.map((doc) => {
+            const kind = doc.type || doc.source || 'md';
+            const kindShort = kind.slice(0, 3).toLowerCase();
+            const isPdf = kindShort === 'pdf';
+            const wordCount = doc.metadata?.wordCount || doc.word_count || 0;
+            const updated = doc.updated_at || doc.createdAt || doc.created_at;
+
+            return (
+              <div
+                key={doc.id}
+                className="grid grid-cols-12 px-5 py-3.5 border-b hairline items-center cursor-pointer group hover:bg-sunk transition-colors"
+                onClick={() => handleOpenDocument(doc)}
+              >
+                {/* col-span-5: type glyph + title + id */}
+                <div className="col-span-5 flex items-center gap-3 min-w-0">
+                  <span
+                    className={`w-8 h-8 border hairline bg-sunk grid place-items-center mono text-[10px] shrink-0 ${isPdf ? 'accent' : 'ink-3'}`}
+                  >
+                    {kindShort}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="ink text-[14px] truncate">{doc.title}</div>
+                    <div className="mono text-[11.5px] ink-3">{doc.id?.slice(0, 8) || '—'}</div>
+                  </div>
+                </div>
+
+                {/* col-span-3: persona chips */}
+                <div className="col-span-3 flex flex-wrap gap-1">
+                  {doc.persona_id || doc.personaId ? (
+                    <span style={{ background: 'transparent', color: 'var(--ink-2)', borderColor: 'var(--line)', display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '1px 6px', fontSize: '11px', border: '1px solid', borderRadius: '3px' }}>
+                      {doc.persona_name || doc.persona_id || 'persona'}
+                    </span>
+                  ) : (
+                    <span className="text-[11.5px] ink-4 italic">unattached</span>
+                  )}
+                </div>
+
+                {/* col-span-2: size */}
+                <div className="col-span-2 mono text-[12px] ink-2">
+                  {wordCount > 0 ? `${wordCount.toLocaleString()} words` : doc.size || '—'}
+                </div>
+
+                {/* col-span-2: updated + delete on hover */}
+                <div className="col-span-2 text-right text-[12.5px] ink-3 flex items-center justify-end gap-2">
+                  <span>{updated ? new Date(updated).toLocaleDateString() : '—'}</span>
+                  <button
+                    className="btn btn-ghost text-[11px] px-1.5 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={(e) => { e.stopPropagation(); handleDelete(doc.id); }}
+                    title="Delete document"
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
-              {displayDocuments.map((doc) => (
-                <DocumentRow key={doc.id} doc={doc} onDelete={handleDelete} onEdit={() => handleOpenDocument(doc)} />
-              ))}
+            );
+          })}
+
+          {/* No search results */}
+          {documents.length > 0 && displayDocuments.length === 0 && (
+            <div className="px-5 py-12 text-center">
+              <div className="ink-3 text-[13px]">No documents match your search.</div>
+              <button
+                className="btn mt-4"
+                onClick={() => { setSearchQuery(''); setFilterSource('all'); }}
+              >
+                Clear filters
+              </button>
+            </div>
+          )}
+
+          {/* Empty state inside table */}
+          {documents.length === 0 && !isLoading && (
+            <div className="px-5 py-12 text-center">
+              <div className="ink-3 text-[13px]">No documents yet.</div>
+              <button className="btn btn-primary mt-4" onClick={openCreateModal}>+ New document</button>
             </div>
           )}
         </div>
       )}
 
-      {/* No search results */}
-      {!isLoading && documents.length > 0 && displayDocuments.length === 0 && (
-        <div className="rounded-xl bg-slate-800 border border-slate-700 p-10 text-center">
-          <div className="text-4xl mb-3">🔍</div>
-          <h3 className="text-lg font-semibold text-white mb-1">No documents found</h3>
-          <p className="text-slate-400 text-sm">
-            Try adjusting your search or filter
-          </p>
-          <button
-            onClick={() => {
-              setSearchQuery('');
-              setFilterSource('all');
-            }}
-            className="mt-4 px-4 py-2 text-sm text-blue-400 hover:text-blue-300 border border-blue-700 rounded-lg hover:bg-blue-900 hover:bg-opacity-20 transition-colors"
-          >
-            Clear filters
-          </button>
-        </div>
-      )}
-
-      {/* Empty state */}
-      {!isLoading && documents.length === 0 && (
-        <div className="rounded-xl bg-slate-800 border-2 border-dashed border-slate-700 p-14 text-center">
-          <div className="text-6xl mb-4">🧠</div>
-          <h3 className="text-xl font-semibold text-white mb-2">
-            Knowledge Base is empty
-          </h3>
-          <p className="text-slate-400 mb-6 max-w-sm mx-auto">
-            Add documents to help the AI understand your context, preferences, and memory.
-          </p>
-          <button
-            onClick={openCreateModal}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
-          >
-            <span>+</span>
-            Add Your First Document
-          </button>
-        </div>
-      )}
-
-      {/* Modals & Overlays */}
+      {/* Modals */}
       <CreateDocumentModal />
       <DocumentEditor />
       <DeleteDocumentConfirmation />

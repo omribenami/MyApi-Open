@@ -1,560 +1,763 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MyApi — Your Data. Your AI. Your API.</title>
-  <meta name="description" content="MyApi is a personal API platform that gives AI agents authenticated access to your identity, services, knowledge base, and personas — all under your control." />
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    :root {
-      --bg:       #0b0f1a;
-      --surface:  #111827;
-      --surface2: #161e2e;
-      --border:   #1e2d40;
-      --text:     #e2e8f0;
-      --muted:    #64748b;
-      --accent:   #3b82f6;
-      --accent-h: #2563eb;
-      --green:    #22c55e;
-      --purple:   #a855f7;
-    }
-
-    html { scroll-behavior: smooth; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
-    a { color: var(--accent); text-decoration: none; }
-    a:hover { color: var(--accent-h); }
-
-    /* NAV */
-    nav {
-      position: sticky; top: 0; z-index: 50;
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 0 2rem; height: 64px;
-      background: rgba(11,15,26,0.85); backdrop-filter: blur(12px);
-      border-bottom: 1px solid var(--border);
-    }
-    .nav-logo { font-size: 1.25rem; font-weight: 700; color: var(--text); letter-spacing: -0.02em; }
-    .nav-logo span { color: var(--accent); }
-    .nav-links { display: flex; gap: .75rem; align-items: center; }
-    .nav-links > a { color: var(--muted); font-size: 0.9rem; transition: color .15s; padding: 0 .5rem; }
-    .nav-links > a:hover { color: var(--text); }
-
-    .btn {
-      display: inline-flex; align-items: center; gap: .4rem;
-      padding: .5rem 1.25rem; border-radius: 8px;
-      font-size: .875rem; font-weight: 600; font-family: inherit;
-      transition: background .15s, border-color .15s, color .15s;
-      cursor: pointer; border: none;
-    }
-    .btn-primary { background: var(--accent); color: #fff; }
-    .btn-primary:hover { background: var(--accent-h); }
-    .btn-outline { background: transparent; color: var(--text); border: 1px solid var(--border); }
-    .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
-    .btn-lg { padding: .75rem 2rem; font-size: 1rem; border-radius: 10px; }
-
-    /* HERO */
-    .hero { text-align: center; padding: 7rem 2rem 5rem; max-width: 820px; margin: 0 auto; }
-    .hero-badge {
-      display: inline-flex; align-items: center; gap: .5rem;
-      padding: .3rem .9rem; border-radius: 999px;
-      background: rgba(59,130,246,.12); border: 1px solid rgba(59,130,246,.3);
-      color: #93c5fd; font-size: .8rem; font-weight: 500; margin-bottom: 1.5rem;
-    }
-    .hero h1 { font-size: clamp(2.4rem, 6vw, 4rem); font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; margin-bottom: 1.25rem; }
-    .hero h1 em { font-style: normal; color: var(--accent); }
-    .hero p { font-size: 1.15rem; color: var(--muted); max-width: 560px; margin: 0 auto 2.5rem; }
-    .hero-cta { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
-
-    /* STATS */
-    .stats {
-      display: flex; justify-content: center; gap: 3rem; flex-wrap: wrap;
-      padding: 2.5rem 2rem; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
-      margin: 0 2rem;
-    }
-    .stat { text-align: center; }
-    .stat-num { font-size: 2rem; font-weight: 800; color: var(--text); }
-    .stat-label { font-size: .8rem; color: var(--muted); margin-top: .2rem; }
-
-    /* SECTIONS */
-    .section { padding: 5rem 2rem; max-width: 1100px; margin: 0 auto; }
-    .section-tag { font-size: .75rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); margin-bottom: .75rem; }
-    .section h2 { font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: .75rem; }
-    .section > p { color: var(--muted); max-width: 540px; margin-bottom: 3rem; }
-
-    .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem; }
-    .feature-card {
-      background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
-      padding: 1.75rem; transition: border-color .2s, transform .2s;
-    }
-    .feature-card:hover { border-color: var(--accent); transform: translateY(-2px); }
-    .feature-icon { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; margin-bottom: 1rem; }
-    .feature-card h3 { font-size: 1rem; font-weight: 600; margin-bottom: .4rem; }
-    .feature-card p { font-size: .875rem; color: var(--muted); }
-
-    .how-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.5rem; }
-    .step { display: flex; gap: 1rem; align-items: flex-start; }
-    .step-num { flex-shrink: 0; width: 32px; height: 32px; border-radius: 8px; background: rgba(59,130,246,.15); color: var(--accent); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .9rem; }
-    .step h4 { font-size: .9rem; font-weight: 600; margin-bottom: .3rem; }
-    .step p { font-size: .825rem; color: var(--muted); }
-
-    /* PRICING */
-    .pricing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.25rem; }
-    .plan { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 2rem; display: flex; flex-direction: column; gap: 1rem; position: relative; }
-    .plan.featured { border-color: var(--accent); }
-    .plan-badge { position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: var(--accent); color: #fff; font-size: .7rem; font-weight: 700; padding: .2rem .75rem; border-radius: 999px; letter-spacing: .05em; text-transform: uppercase; white-space: nowrap; }
-    .plan-name { font-size: .8rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
-    .plan-price { font-size: 2.5rem; font-weight: 800; letter-spacing: -0.03em; }
-    .plan-price span { font-size: 1rem; color: var(--muted); font-weight: 400; }
-    .plan-desc { font-size: .875rem; color: var(--muted); }
-    .plan-features { list-style: none; display: flex; flex-direction: column; gap: .5rem; flex: 1; }
-    .plan-features li { font-size: .875rem; display: flex; align-items: flex-start; gap: .5rem; }
-    .plan-features li::before { content: '✓'; color: var(--green); font-weight: 700; flex-shrink: 0; margin-top: .05rem; }
-    .plan .btn { width: 100%; justify-content: center; margin-top: .5rem; }
-
-    /* SERVICES */
-    .services-strip { padding: 3rem 2rem; text-align: center; border-top: 1px solid var(--border); }
-    .services-strip p { color: var(--muted); font-size: .875rem; margin-bottom: 1.5rem; }
-    .services-logos { display: flex; flex-wrap: wrap; justify-content: center; gap: .75rem; max-width: 800px; margin: 0 auto; }
-    .service-pill { padding: .3rem .9rem; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); font-size: .8rem; color: var(--muted); white-space: nowrap; }
-
-    /* CTA BANNER */
-    .cta-banner { margin: 4rem 2rem; border-radius: 16px; background: linear-gradient(135deg, rgba(59,130,246,.15) 0%, rgba(168,85,247,.1) 100%); border: 1px solid rgba(59,130,246,.3); padding: 4rem 2rem; text-align: center; }
-    .cta-banner h2 { font-size: 2rem; font-weight: 700; margin-bottom: .75rem; }
-    .cta-banner p { color: var(--muted); margin-bottom: 2rem; }
-
-    footer { border-top: 1px solid var(--border); padding: 2rem; text-align: center; color: var(--muted); font-size: .8rem; }
-    footer a { color: var(--muted); }
-    footer a:hover { color: var(--text); }
-    .footer-link { background: none; border: none; color: var(--muted); font-size: inherit; font-family: inherit; cursor: pointer; padding: 0; }
-    .footer-link:hover { color: var(--text); }
-
-    /* ── AUTH MODAL ─────────────────────────────────────────────────────── */
-    .modal-overlay {
-      position: fixed; inset: 0; z-index: 200;
-      background: rgba(7,10,18,.78);
-      backdrop-filter: blur(6px);
-      display: flex; align-items: center; justify-content: center;
-      padding: 1rem;
-      opacity: 0; pointer-events: none;
-      transition: opacity .2s ease;
-    }
-    .modal-overlay.open { opacity: 1; pointer-events: auto; }
-
-    .modal {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      padding: 2.25rem 2rem 2rem;
-      width: 100%; max-width: 400px;
-      position: relative;
-      box-shadow: 0 24px 64px rgba(0,0,0,.6);
-      transform: translateY(10px) scale(.98);
-      transition: transform .2s ease;
-    }
-    .modal-overlay.open .modal { transform: translateY(0) scale(1); }
-
-    .modal-close {
-      position: absolute; top: 1.1rem; right: 1.1rem;
-      background: none; border: none; color: var(--muted);
-      font-size: 1.1rem; cursor: pointer; padding: .25rem .45rem;
-      border-radius: 6px; line-height: 1; font-family: inherit;
-      transition: color .15s, background .15s;
-    }
-    .modal-close:hover { color: var(--text); background: rgba(255,255,255,.06); }
-
-    .modal-logo { font-size: 1.1rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 1.5rem; }
-    .modal-logo span { color: var(--accent); }
-
-    .modal-heading { margin-bottom: 1.5rem; }
-    .modal-heading h3 { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.02em; }
-    .modal-heading p { font-size: .875rem; color: var(--muted); margin-top: .3rem; }
-
-    .oauth-btn {
-      display: flex; align-items: center; gap: .75rem;
-      width: 100%; padding: .75rem 1rem;
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 10px; color: var(--text);
-      font-size: .875rem; font-weight: 500; font-family: inherit;
-      cursor: pointer; text-decoration: none;
-      transition: background .15s, border-color .15s;
-      margin-bottom: .6rem;
-    }
-    .oauth-btn:hover { background: #1a2236; border-color: #2a3f5f; color: var(--text); }
-    .oauth-btn svg { flex-shrink: 0; }
-    .oauth-btn-label { flex: 1; text-align: left; }
-
-    .modal-switch { text-align: center; font-size: .85rem; color: var(--muted); margin-top: 1.25rem; }
-    .switch-btn {
-      background: none; border: none; color: var(--accent);
-      font-size: inherit; cursor: pointer; font-family: inherit;
-      padding: 0; font-weight: 500;
-    }
-    .switch-btn:hover { color: var(--accent-h); }
-
-    .modal-terms { text-align: center; font-size: .75rem; color: var(--muted); margin-top: .75rem; line-height: 1.5; }
-    .modal-terms a { color: var(--muted); text-decoration: underline; text-underline-offset: 2px; }
-    .modal-terms a:hover { color: var(--text); }
-
-    /* Waitlist sub-view inside the auth modal. Shown only when the modal is in
-       signup mode AND the beta is full — sign-in (login mode) always shows OAuth. */
-    .modal-signup-view { display: block; }
-    .modal-waitlist-view { display: none; }
-    .modal.waitlist-mode .modal-signup-view { display: none; }
-    .modal.waitlist-mode .modal-waitlist-view { display: block; }
-    .waitlist-input {
-      width: 100%; padding: .7rem .9rem;
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 10px; color: var(--text);
-      font-size: .9rem; font-family: inherit;
-      margin-bottom: .6rem;
-    }
-    .waitlist-input:focus { outline: none; border-color: var(--accent); }
-    .waitlist-submit {
-      width: 100%; padding: .75rem 1rem;
-      background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
-      color: #fff; border: none; border-radius: 10px;
-      font-size: .9rem; font-weight: 600; font-family: inherit;
-      cursor: pointer;
-    }
-    .waitlist-submit:disabled { opacity: .6; cursor: default; }
-    .waitlist-status { font-size: .85rem; margin-top: .75rem; }
-    .waitlist-status.success { color: #34d399; }
-    .waitlist-status.error { color: #f87171; }
-
-    /* When BETA is off, hide beta-only chrome (badge + Discord banner, "Soon" buttons). */
-    body.beta-off .beta-only { display: none !important; }
-    /* Inverse: only visible when BETA is off (real checkout CTAs). */
-    .beta-off-only { display: none; }
-    body.beta-off .beta-off-only { display: inline-flex; }
-    /* Block-level beta-off-only (e.g. plan price div) */
-    body.beta-off .beta-off-only.plan-price { display: block; }
-
-    @media (max-width: 640px) {
-      .nav-links > a { display: none; }
-      .stats { gap: 1.5rem; }
-      .modal { padding: 1.75rem 1.25rem 1.5rem; }
-    }
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=1440" />
+<title>MyApi — the personal API gateway for AI agents</title>
+<meta name="description" content="Connect Gmail, GitHub, Slack and 10+ services to MyApi once. Hand scoped, revocable tokens to Claude, your agents, or any AI copilot." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --bg:#0d1117; --bg-sunk:#010409; --bg-raised:#151b23; --bg-hover:#1c2229;
+    --ink:#f0f6fc; --ink-2:#9198a1; --ink-3:#6e7681; --ink-4:#484f58;
+    --line:#2a313c; --line-2:#1f252d;
+    --accent:#4493f8; --accent-2:#1f6feb; --accent-bg:rgba(56,139,253,0.15);
+    --green:#3fb950; --green-bg:rgba(46,160,67,0.15);
+    --red:#f85149; --red-bg:rgba(248,81,73,0.15);
+    --amber:#d29922; --violet:#bc8cff;
+  }
+  html,body{background:var(--bg);color:var(--ink);font-family:'Inter',ui-sans-serif,system-ui,-apple-system,sans-serif;}
+  ::selection{background:var(--accent-2);color:#fff;}
+  .ink{color:var(--ink);} .ink-2{color:var(--ink-2);} .ink-3{color:var(--ink-3);} .ink-4{color:var(--ink-4);}
+  .accent{color:var(--accent);}
+  .hairline{border-color:var(--line);} .hairline-2{border-color:var(--line-2);}
+  .bg-raised{background:var(--bg-raised);} .bg-sunk{background:var(--bg-sunk);}
+  .mono{font-family:'JetBrains Mono',ui-monospace,monospace;}
+  .micro{font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);}
+  .headline{background:linear-gradient(180deg,#f0f6fc 0%,#a7b3c1 100%);-webkit-background-clip:text;background-clip:text;color:transparent;}
+  .btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;font-size:14px;font-weight:500;border:1px solid var(--line);background:var(--bg-raised);color:var(--ink);border-radius:6px;transition:background .1s,border-color .1s;cursor:pointer;text-decoration:none;}
+  .btn:hover{background:var(--bg-hover);border-color:rgba(139,148,158,0.5);color:var(--ink);}
+  .btn-primary{background:var(--accent-2);color:#fff;border-color:rgba(240,246,252,0.1);}
+  .btn-primary:hover{background:#388bfd;color:#fff;}
+  .btn-ghost{background:transparent;border-color:transparent;color:var(--ink-2);}
+  .btn-ghost:hover{color:var(--ink);background:var(--bg-raised);}
+  .card{background:var(--bg-raised);border:1px solid var(--line);border-radius:8px;}
+  .grid-bg{background-image:radial-gradient(circle at 1px 1px,rgba(255,255,255,0.04) 1px,transparent 1.5px);background-size:22px 22px;}
+  .hero-glow{background:radial-gradient(1100px 600px at 50% -100px,rgba(56,139,253,0.18),transparent 60%),radial-gradient(800px 500px at 90% 120px,rgba(188,140,255,0.08),transparent 60%);}
+  @keyframes dash{to{stroke-dashoffset:-40;}}
+  .flow-line{stroke-dasharray:4 4;animation:dash 1.6s linear infinite;}
+  @keyframes livepulse{0%{box-shadow:0 0 0 0 rgba(63,185,80,0.6);}70%{box-shadow:0 0 0 6px rgba(63,185,80,0);}100%{box-shadow:0 0 0 0 rgba(63,185,80,0);}}
+  .live-dot{animation:livepulse 1.6s ease-out infinite;}
+  .term{background:var(--bg-sunk);border:1px solid var(--line);border-radius:8px;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12.5px;overflow:hidden;}
+  .term-dot{width:10px;height:10px;border-radius:50%;display:inline-block;}
+  .thin-scroll::-webkit-scrollbar{width:8px;}
+  .thin-scroll::-webkit-scrollbar-thumb{background:var(--line);border-radius:999px;}
+  a.nav{color:var(--ink-2);text-decoration:none;} a.nav:hover{color:var(--ink);}
+  .tok-c{color:var(--ink-3);font-style:italic;} .tok-k{color:var(--violet);} .tok-s{color:#a5d6ff;}
+  .tok-n{color:#ffa657;} .tok-m{color:var(--green);} .tok-p{color:var(--accent);} .tok-e{color:var(--red);}
+  .tick{width:6px;height:6px;border-radius:50%;display:inline-block;}
+  details[open] summary .chev{transform:rotate(90deg);}
+  summary::-webkit-details-marker{display:none;}
+  .chev{transition:transform .15s;}
+  .svc-chip{width:24px;height:24px;display:inline-grid;place-items:center;border-radius:4px;font-weight:600;color:#fff;font-size:11px;font-family:'JetBrains Mono',monospace;}
+  /* signin dropdown */
+  #signin-dropdown{display:none;position:absolute;top:calc(100% + 8px);right:0;width:288px;z-index:100;}
+  #signin-dropdown.open{display:block;}
+  .oauth-btn{display:flex;align-items:center;gap:10px;width:100%;padding:9px 14px;font-size:13.5px;font-weight:500;border:1px solid var(--line);background:var(--bg-raised);color:var(--ink);border-radius:6px;text-decoration:none;transition:background .1s;}
+  .oauth-btn:hover{background:var(--bg-hover);}
+  /* plan disabled */
+  .plan-after{opacity:0.5;pointer-events:none;}
+  /* auth tabs in dropdown */
+  .auth-tab{flex:1;padding:9px 14px;font-size:13px;font-weight:500;background:transparent;border:none;color:var(--ink-3);cursor:pointer;transition:background .1s,color .1s;}
+  .auth-tab:hover{background:var(--bg-hover);color:var(--ink);}
+  .auth-tab-active{background:var(--bg-sunk)!important;color:var(--ink)!important;border-bottom:2px solid var(--accent);}
+  /* live signal row highlight */
+  @keyframes rowflicker{0%,100%{background:rgba(56,139,253,0.08);}50%{background:rgba(56,139,253,0.2);}}
+  .signal-highlight{animation:rowflicker 1.8s ease-in-out infinite;border-left:2px solid rgba(68,147,248,0.45);padding-left:14px !important;}
+</style>
 </head>
-<body>
+<body class="min-h-screen antialiased text-[15px]">
 
-  <!-- ── AUTH MODAL ──────────────────────────────────────────────────────────── -->
-  <div id="auth-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title">
-    <div class="modal">
-      <button class="modal-close" id="modal-close-btn" aria-label="Close">✕</button>
-
-      <div class="modal-logo">My<span>Api</span></div>
-
-      <div class="modal-signup-view">
-      <div class="modal-heading">
-        <h3 id="modal-title">Welcome back</h3>
-        <p id="modal-subtitle">Sign in to continue to MyApi.</p>
-      </div>
-
-      <button class="oauth-btn" id="oauth-google" data-action="oauth" data-service="google">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-        </svg>
-        <span class="oauth-btn-label" id="google-label">Continue with Google</span>
-      </button>
-
-      <button class="oauth-btn" id="oauth-github" data-action="oauth" data-service="github">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-          <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
-        </svg>
-        <span class="oauth-btn-label" id="github-label">Continue with GitHub</span>
-      </button>
-
-      <button class="oauth-btn" id="oauth-facebook" data-action="oauth" data-service="facebook">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="#1877F2" aria-hidden="true">
-          <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-        </svg>
-        <span class="oauth-btn-label" id="facebook-label">Continue with Facebook</span>
-      </button>
-
-      <div class="modal-switch" id="modal-switch-row">
-        <span class="switch-text">Don't have an account? </span><button class="switch-btn" data-action="set-mode" data-mode="signup">Create one free</button>
-      </div>
-
-      <p class="modal-terms">
-        By continuing you agree to our
-        <a href="/terms">Terms</a> and <a href="/privacy">Privacy Policy</a>.
-      </p>
-      </div>
-
-      <div class="modal-waitlist-view">
-        <div class="modal-heading">
-          <h3>We're at capacity</h3>
-          <p>MyApi is in closed beta and all seats are taken. Drop your email and we'll notify you the moment a spot opens up.</p>
-        </div>
-        <form id="waitlist-form" autocomplete="off">
-          <input
-            type="email"
-            id="waitlist-email"
-            class="waitlist-input"
-            placeholder="you@example.com"
-            required
-            autocomplete="email"
-            inputmode="email"
-          />
-          <button type="submit" class="waitlist-submit" id="waitlist-submit">Join the waitlist</button>
-          <p class="waitlist-status" id="waitlist-status" role="status" aria-live="polite"></p>
-        </form>
-        <p class="modal-terms" style="margin-top:1rem;">
-          Prefer Discord? <a href="https://discord.gg/WPp4sCN4xB" target="_blank" rel="noopener noreferrer">Ask for early access there</a>.
-        </p>
-      </div>
-    </div>
-  </div>
-
-  <!-- NAV -->
-  <nav>
-    <div class="nav-logo">My<span>Api</span></div>
-    <div class="nav-links">
-      <a href="#features">Features</a>
-      <a href="#pricing">Pricing</a>
-      <button class="btn btn-outline" data-action="open-modal" data-mode="login">Sign in</button>
-      <button class="btn btn-primary beta-only" data-action="open-modal" data-mode="signup">Get started</button>
-      <button class="btn btn-primary beta-off-only" data-action="open-modal" data-mode="signup">Get started</button>
-    </div>
-  </nav>
-
-  <!-- HERO -->
-  <section class="hero">
-    <div class="hero-badge beta-only">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
-      Now in Beta — Starter plan is free
-    </div>
-    <h1>Your Data.<br><em>Your AI.</em> Your API.</h1>
-    <p>MyApi is a personal API platform that gives AI agents secure, scoped access to your identity, services, knowledge base, and personas — all under your control.</p>
-    <div class="hero-cta">
-      <button class="btn btn-primary btn-lg beta-only" data-action="open-modal" data-mode="signup">Start →</button>
-      <button class="btn btn-primary btn-lg beta-off-only" data-action="open-modal" data-mode="signup">Get started →</button>
-      <a href="#features" class="btn btn-outline btn-lg">See how it works</a>
-    </div>
-  </section>
-
-  <!-- STATS -->
-  <div class="stats">
-    <div class="stat"><div class="stat-num">+30</div><div class="stat-label">Integrations &amp; growing</div></div>
-    <div class="stat"><div class="stat-num">AES-256</div><div class="stat-label">Vault encryption</div></div>
-    <div class="stat"><div class="stat-num">OpenAPI</div><div class="stat-label">Agent-ready spec</div></div>
-    <div class="stat"><div class="stat-num">AGPL-3.0</div><div class="stat-label">Open source</div></div>
-  </div>
-
-  <!-- FEATURES -->
-  <section class="section" id="features">
-    <div class="section-tag">Platform</div>
-    <h2>Everything AI needs to know about you</h2>
-    <p>One authenticated API gives any AI agent access to your complete context — no copy-pasting credentials, no per-AI setup.</p>
-    <div class="features-grid">
-      <div class="feature-card">
-        <div class="feature-icon" style="background:rgba(59,130,246,.15)">🧠</div>
-        <h3>Personas</h3>
-        <p>Define multiple AI personas with custom instructions, tone, documents, and skills. Each persona is a scoped API bundle — combining identity, a knowledge base, and attached skills into a single deployable context. Switch between them instantly.</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon" style="background:rgba(34,197,94,.12)">🔌</div>
-        <h3>Connected Services</h3>
-        <p>OAuth-connect GitHub, Slack, Gmail, Notion, and +30 more — and growing. AI agents proxy calls through your account without ever touching your credentials.</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon" style="background:rgba(168,85,247,.12)">📚</div>
-        <h3>Knowledge Base</h3>
-        <p>Upload documents, notes, and files. AI pulls relevant context from your KB automatically on every request.</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon" style="background:rgba(251,146,60,.12)">🔑</div>
-        <h3>Token Vault</h3>
-        <p>Store API keys and secrets encrypted with AES-256-GCM. Share scoped guest tokens with specific AI agents.</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon" style="background:rgba(236,72,153,.12)">🧩</div>
-        <h3>Skills Marketplace</h3>
-        <p>Install, publish, and share AI skills. Every skill is automatically scanned by the built-in skill scanner, assigned a safety score, and runs with declared permissions — keeping malicious content out of your agents.</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon" style="background:rgba(6,182,212,.12)">🖥️</div>
-        <h3>AFP — API File Protocol</h3>
-        <p>Install a background daemon on any computer. AI agents get secure, sandboxed access to its files and shell — without exposing your network. <span style="color:#a78bfa;font-size:.8em;font-weight:600;">Pro &amp; Enterprise</span></p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon" style="background:rgba(20,184,166,.12)">⚡</div>
-        <h3>Universal AI Compatibility</h3>
-        <p>Any AI that reaches your API gets a structured, self-describing context — no custom prompt engineering required. Your platform auto-discovers capabilities and instructs the agent on how to use them.</p>
-      </div>
-      <div class="feature-card">
-        <div class="feature-icon" style="background:rgba(239,68,68,.12)">🛡️</div>
-        <h3>AI Access Control</h3>
-        <p>Every AI agent that connects with a token must receive your explicit approval before it gains access to your account. You decide what each agent can see and do — no silent access, ever.</p>
-      </div>
-    </div>
-  </section>
-
-  <!-- HOW IT WORKS -->
-  <section class="section" id="how">
-    <div class="section-tag">How it works</div>
-    <h2>From zero to AI-powered in minutes</h2>
-    <p>No complex setup. Connect once, use everywhere.</p>
-    <div class="how-grid">
-      <div class="step">
-        <div class="step-num">1</div>
-        <div><h4>Sign up &amp; set your identity</h4><p>Fill in your profile, upload a photo, describe your role and expertise.</p></div>
-      </div>
-      <div class="step">
-        <div class="step-num">2</div>
-        <div><h4>Connect your services</h4><p>OAuth-authorize GitHub, Slack, Gmail, and more in one dashboard.</p></div>
-      </div>
-      <div class="step">
-        <div class="step-num">3</div>
-        <div><h4>Create a persona or token</h4><p>Define how AI should represent you, then generate a scoped API token.</p></div>
-      </div>
-      <div class="step">
-        <div class="step-num">4</div>
-        <div><h4>Plug in your AI</h4><p>Add your token to any agentic AI — OpenClaw, Hermes, Claude Code — or any HTTP-capable AI. Your API handles the rest.</p></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- SERVICES STRIP -->
-  <div class="services-strip">
-    <p>Connects to the tools you already use</p>
-    <div class="services-logos">
-      <span class="service-pill">GitHub</span>
-      <span class="service-pill">Google / Gmail</span>
-      <span class="service-pill">Slack</span>
-      <span class="service-pill">Discord</span>
-      <span class="service-pill">Notion</span>
-      <span class="service-pill">LinkedIn</span>
-      <span class="service-pill">Jira</span>
-      <span class="service-pill">Zoom</span>
-      <span class="service-pill">HubSpot</span>
-      <span class="service-pill">Dropbox</span>
-      <span class="service-pill">Figma</span>
-      <span class="service-pill">Asana</span>
-      <span class="service-pill">Airtable</span>
-      <span class="service-pill">Microsoft 365</span>
-      <span class="service-pill">TikTok</span>
-      <span class="service-pill">Twitter / X</span>
-      <span class="service-pill">+ 15 more</span>
-    </div>
-  </div>
-
-  <!-- PRICING -->
-  <section class="section" id="pricing">
-    <div class="section-tag">Pricing</div>
-    <h2>Simple, transparent plans</h2>
-    <p class="beta-only">Starter plan is free during beta. Paid plans are available after launch.</p>
-    <p class="beta-off-only" style="display:none">All plans billed from month one. No free tier — pick the plan that fits.</p>
-
-    <!-- Discord beta banner -->
-    <div class="beta-only" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;padding:1.1rem 1.5rem;border-radius:12px;background:rgba(88,101,242,.1);border:1px solid rgba(88,101,242,.3);margin-bottom:2rem;">
-      <div style="display:flex;align-items:center;gap:.75rem;">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="#a5b4fc" aria-hidden="true"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
-        <div>
-          <p style="font-size:.9rem;font-weight:600;color:#e2e8f0;margin:0;">Want to beta test Pro?</p>
-          <p style="font-size:.8rem;color:#94a3b8;margin:.1rem 0 0;">Join our Discord and reach out — we'll get you set up.</p>
+<!-- NAV -->
+<header class="sticky top-0 z-30 border-b hairline" style="background:rgba(13,17,23,0.9);backdrop-filter:blur(8px);">
+  <div class="max-w-[1200px] mx-auto px-6 h-14 flex items-center gap-8">
+    <a href="#" class="flex items-center gap-2 text-[15px] font-semibold" style="color:var(--ink);text-decoration:none;">
+      <svg width="26" height="26" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="logo-bg-nav" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#4A8CFF"/>
+            <stop offset="100%" stop-color="#6058FF"/>
+          </linearGradient>
+        </defs>
+        <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#logo-bg-nav)"/>
+        <path d="M36 14 L25 31 H34 L30 50 L44 29 H35 L36 14 Z" fill="none" stroke="#FFFFFF" stroke-width="3.6" stroke-linejoin="round" stroke-linecap="round"/>
+      </svg>
+      <span>MyApi</span>
+      <span class="mono text-[10.5px] ink-3 border hairline px-1.5 py-0.5 rounded">v2.0</span>
+    </a>
+    <nav class="hidden md:flex items-center gap-6 text-[13.5px]">
+      <a href="#product"  class="nav">Product</a>
+      <a href="#how"      class="nav">How it works</a>
+      <a href="#agents"   class="nav">For agents</a>
+      <a href="#security" class="nav">Security</a>
+      <a href="#pricing"  class="nav">Pricing</a>
+      <a href="https://github.com/omribenami/MyApi-Open" target="_blank" rel="noopener" class="nav">Docs</a>
+    </nav>
+    <div class="ml-auto flex items-center gap-2">
+      <!-- Sign in dropdown -->
+      <div class="relative hidden sm:block" id="signin-wrap">
+        <button id="signin-trigger" class="btn btn-ghost">Sign in</button>
+        <div id="signin-dropdown" class="card shadow-2xl" style="width:296px;padding:0;overflow:hidden">
+          <div class="flex border-b hairline">
+            <button class="auth-tab auth-tab-active" data-mode="login">Sign in</button>
+            <button class="auth-tab" style="color:var(--ink-3)" data-mode="signup">Sign up</button>
+          </div>
+          <div class="p-5">
+            <div class="micro mb-4" id="auth-heading">SIGN IN WITH</div>
+            <div class="space-y-2">
+              <a href="/api/v1/oauth/authorize/google?mode=login&force_prompt=1" data-base="/api/v1/oauth/authorize/google" data-provider="Google" class="oauth-btn auth-oauth">
+                <svg width="18" height="18" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+                <span class="oauth-label">Continue with Google</span>
+              </a>
+              <a href="/api/v1/oauth/authorize/github?mode=login&force_prompt=1" data-base="/api/v1/oauth/authorize/github" data-provider="GitHub" class="oauth-btn auth-oauth">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="var(--ink)"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                <span class="oauth-label">Continue with GitHub</span>
+              </a>
+              <a href="/api/v1/oauth/authorize/facebook?mode=login&force_prompt=1" data-base="/api/v1/oauth/authorize/facebook" data-provider="Facebook" class="oauth-btn auth-oauth">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                <span class="oauth-label">Continue with Facebook</span>
+              </a>
+            </div>
+            <div class="mt-4 pt-4 border-t hairline text-center text-[12px] ink-3" id="auth-footer-text">
+              No account? <a href="#" class="auth-switch nav" data-to="signup" style="color:var(--accent)">Sign up free →</a>
+            </div>
+          </div>
         </div>
       </div>
-      <a href="https://discord.gg/WPp4sCN4xB" target="_blank" rel="noopener noreferrer"
-        style="display:inline-flex;align-items:center;gap:.5rem;padding:.55rem 1.1rem;border-radius:8px;background:rgba(88,101,242,.2);border:1px solid rgba(88,101,242,.4);color:#a5b4fc;font-size:.85rem;font-weight:600;text-decoration:none;white-space:nowrap;">
-        Join Discord →
-      </a>
+      <a href="/dashboard/"       class="btn">Open dashboard</a>
+      <a href="/dashboard/signup" class="btn btn-primary">Start</a>
     </div>
-
-    <div class="pricing-grid">
-
-      <!-- Starter -->
-      <div class="plan">
-        <div class="plan-name">Starter</div>
-        <!-- Beta: free (was $15) -->
-        <div class="plan-price beta-only"><span style="font-size:0.5em;vertical-align:middle;margin-right:6px;color:#94a3b8;font-weight:500;text-decoration:line-through;">$15</span>Free<span style="font-size:0.5em;vertical-align:middle;margin-left:6px;color:#a78bfa;font-weight:600;">During beta</span></div>
-        <!-- Non-beta: $10/mo -->
-        <div class="plan-price beta-off-only" style="display:none">$10<span>/mo</span></div>
-        <div class="plan-desc">Perfect for personal use and getting started.</div>
-        <ul class="plan-features">
-          <li>2 AI personas</li>
-          <li>3 connected services</li>
-          <li>1,000 API calls / mo</li>
-          <li>Knowledge base</li>
-          <li>Long-term memory</li>
-        </ul>
-        <button class="btn btn-outline beta-only" data-action="open-modal" data-mode="signup">Get started</button>
-        <button class="btn btn-outline beta-off-only" data-action="open-modal" data-mode="signup">Get started</button>
-      </div>
-
-      <!-- Pro -->
-      <div class="plan featured">
-        <div class="plan-badge">Most popular</div>
-        <div class="plan-name">Pro</div>
-        <div class="plan-price">$29<span>/mo</span></div>
-        <div class="plan-desc">For power users who need unlimited access.</div>
-        <ul class="plan-features">
-          <li>5 AI personas</li>
-          <li>Unlimited services</li>
-          <li>100,000 API calls / mo</li>
-          <li>Skills marketplace access</li>
-          <li>Guest token sharing</li>
-          <li>AFP — API File Protocol</li>
-          <li>Priority support</li>
-        </ul>
-        <button class="btn btn-primary beta-only" disabled style="opacity:0.5;cursor:default;pointer-events:none;">Soon</button>
-        <button class="btn btn-primary beta-off-only" data-action="open-modal" data-mode="signup">Get started</button>
-      </div>
-
-      <!-- Enterprise -->
-      <div class="plan">
-        <div class="plan-name">Enterprise</div>
-        <div class="plan-price">$99<span>/mo</span></div>
-        <div class="plan-desc">Teams and organizations with advanced needs.</div>
-        <ul class="plan-features">
-          <li>20 AI personas</li>
-          <li>Unlimited everything</li>
-          <li>Team workspaces</li>
-          <li>AFP — API File Protocol</li>
-          <li>Audit logs &amp; compliance</li>
-          <li>RBAC &amp; SSO</li>
-          <li>Dedicated support</li>
-        </ul>
-        <button class="btn btn-outline beta-only" disabled style="opacity:0.5;cursor:default;pointer-events:none;">Soon</button>
-        <button class="btn btn-outline beta-off-only" data-action="open-modal" data-mode="signup">Get started</button>
-      </div>
-
-    </div>
-  </section>
-
-  <!-- VIDEO + CTA -->
-  <div style="margin: 4rem 2rem; text-align: center;">
-    <div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:14px;border:1px solid var(--border);max-width:860px;margin:0 auto 2.5rem;">
-      <iframe
-        src="https://www.youtube.com/embed/JIy3FrCWHGo"
-        title="MyApi — See how it works"
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-        allowfullscreen
-        style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;border-radius:14px;">
-      </iframe>
-    </div>
-    <p style="color:var(--muted);margin-bottom:2rem;" class="beta-only">Join the beta — Starter plan is free. No surprises.</p>
-    <p style="color:var(--muted);margin-bottom:2rem;display:none;" class="beta-off-only">All plans billed from month one. No surprises.</p>
-    <button class="btn btn-primary btn-lg" data-action="open-modal" data-mode="signup">Create your account →</button>
   </div>
+</header>
 
-  <!-- FOOTER -->
-  <footer>
-    <p>© 2026 MyApi · <button class="footer-link" data-action="open-modal" data-mode="login">Dashboard</button> · <a href="/api/v1/">API</a> · <a href="/openapi.json">OpenAPI spec</a> · <a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Use</a> · Open source under AGPL-3.0</p>
-    <p style="margin-top:.75rem;">
-      <a href="https://discord.gg/WPp4sCN4xB" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:.4rem;color:#a5b4fc;font-size:.8rem;font-weight:500;">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
-        Join our Discord
-      </a>
+<!-- HERO -->
+<section class="relative hero-glow border-b hairline">
+  <div class="absolute inset-0 grid-bg pointer-events-none"></div>
+  <div class="max-w-[1200px] mx-auto px-6 pt-20 pb-24 relative">
+    <div class="flex items-center gap-2 micro mb-5">
+      <span class="live-dot tick" style="background:var(--green)"></span>
+      <span>PERSONAL API PLATFORM · OPEN BETA</span>
+    </div>
+    <h1 class="text-[64px] leading-[1.04] tracking-tight font-semibold headline max-w-[15ch]">
+      One gateway between your data and every AI agent.
+    </h1>
+    <p class="mt-6 text-[18px] ink-2 max-w-[64ch] leading-relaxed">
+      Connect Gmail, GitHub, Slack, Twitter — 10+ services — to MyApi once. Hand scoped, revocable tokens to Claude, your own agents, or any AI copilot. Every request is logged, redacted, and yours to revoke.
     </p>
-  </footer>
+    <div class="mt-8 flex flex-wrap items-center gap-3">
+      <a href="/dashboard/signup" class="btn btn-primary" style="padding:10px 16px;font-size:14px;">Start for free</a>
+      <a href="#how" class="btn" style="padding:10px 16px;font-size:14px;">See how it works <span class="ink-3">→</span></a>
+    </div>
+    <div class="mt-5 flex flex-wrap items-center gap-6 ink-3 text-[12.5px]">
+      <span class="flex items-center gap-1.5"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12l5 5L20 7"/></svg> Self-host or cloud</span>
+      <span class="flex items-center gap-1.5"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12l5 5L20 7"/></svg> Ed25519 keypair auth</span>
+      <span class="flex items-center gap-1.5"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12l5 5L20 7"/></svg> AES-256-GCM vault</span>
+      <span class="flex items-center gap-1.5"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12l5 5L20 7"/></svg> Apache-2.0 core</span>
+    </div>
 
-  <script src="/landing/landing.js"></script>
+    <!-- Hero demo: 3-box layout -->
+    <div class="mt-16 grid grid-cols-12 gap-4">
 
+      <!-- Box 1: Connected services -->
+      <div class="col-span-12 lg:col-span-3 card overflow-hidden flex flex-col">
+        <div class="px-4 py-2.5 border-b hairline flex items-center gap-2">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          <span class="text-[13px] ink font-medium">Connected services</span>
+        </div>
+        <div class="flex-1 divide-y divide-[color:var(--line-2)] text-[12.5px]">
+          <div class="px-4 py-2.5 flex items-center gap-3">
+            <span class="svc-chip" style="background:#30363d">G</span>
+            <span class="ink flex-1">GitHub</span>
+            <span class="mono text-[10.5px]" style="color:var(--green)">● connected</span>
+          </div>
+          <div class="px-4 py-2.5 flex items-center gap-3">
+            <span class="svc-chip" style="background:#4285F4">G</span>
+            <span class="ink flex-1">Google</span>
+            <span class="mono text-[10.5px]" style="color:var(--green)">● connected</span>
+          </div>
+          <div class="px-4 py-2.5 flex items-center gap-3">
+            <span class="svc-chip" style="background:#36C5F0">S</span>
+            <span class="ink flex-1">Slack</span>
+            <span class="mono text-[10.5px]" id="slack-chip-status" style="color:var(--amber)">◌ linking…</span>
+          </div>
+          <div class="px-4 py-2.5 flex items-center gap-3" style="opacity:0.45">
+            <span class="svc-chip" style="background:#5865F2">D</span>
+            <span class="ink flex-1">Discord</span>
+            <span class="mono text-[10.5px] ink-4">○ connect →</span>
+          </div>
+          <div class="px-4 py-2.5 flex items-center gap-3" style="opacity:0.45">
+            <span class="svc-chip" style="background:#111827">𝕏</span>
+            <span class="ink flex-1">Twitter / X</span>
+            <span class="mono text-[10.5px] ink-4">○ connect →</span>
+          </div>
+        </div>
+        <div class="px-4 py-2 border-t hairline mono text-[10.5px] ink-3">OAuth 2.1 + PKCE · AES-256 vault · 11 services</div>
+      </div>
+
+      <!-- Box 2: Agent session terminal -->
+      <div class="col-span-12 lg:col-span-5 term shadow-2xl flex flex-col">
+        <div class="px-4 py-2.5 border-b hairline flex items-center gap-2 flex-shrink-0">
+          <span class="term-dot" style="background:#f85149"></span>
+          <span class="term-dot" style="background:#d29922"></span>
+          <span class="term-dot" style="background:#3fb950"></span>
+          <span class="ml-3 ink-3 text-[12px] mono">agent session</span>
+          <span class="ml-auto ink-4 text-[11px] mono">tok_01HF9…Q4yL · services:github:read personas:read</span>
+        </div>
+<pre class="p-5 whitespace-pre-wrap leading-[1.65] text-[12.5px] flex-1"><span class="ink-3">user </span> <span class="ink">"What are my open GitHub issues?"</span>
+
+<span class="tok-c">→ resolving identity via MyApi gateway…</span>
+     <span class="tok-m">GET</span> <span class="tok-p">/api/v1/personas</span>               <span class="ink-4">·</span> <span class="tok-n">8ms</span>  <span class="ink-4">· persona: navigator</span>
+
+<span class="tok-c">→ proxying request to GitHub…</span>
+     <span class="tok-m">GET</span> <span class="tok-p">/api/v1/services/github/issues</span>  <span class="ink-4">·</span> <span class="tok-n">54ms</span> <span class="ink-4">· proxied · 3 results</span>
+
+<span class="ink-3">agent</span> <span class="ink">"You have 3 open issues:"</span>
+      <span class="tok-s">#127</span> <span class="ink-2">· fix auth token expiry ·</span> <span class="tok-m">assigned to you</span>
+      <span class="tok-s">#134</span> <span class="ink-2">· dark mode support · open</span>
+      <span class="tok-s">#141</span> <span class="ink-2">· update onboarding · open</span>
+
+<span class="tok-m">✓</span> <span class="ink-3">2 requests logged · 0 escalations · raw token never left vault</span></pre>
+      </div>
+
+      <!-- Box 3: Live Signal -->
+      <div class="col-span-12 lg:col-span-4 card overflow-hidden flex flex-col">
+        <div class="px-4 py-2.5 border-b hairline flex items-center gap-2">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          <span class="text-[13px] ink font-medium">Live Signal</span>
+          <span class="live-dot tick ml-1" style="background:var(--green)"></span>
+          <a href="/dashboard/activity" class="ml-auto text-[11.5px] nav">dashboard →</a>
+        </div>
+        <div id="live-signal-feed" class="flex-1 divide-y divide-[color:var(--line-2)] overflow-y-auto thin-scroll" style="max-height:310px;"></div>
+        <div class="px-4 py-2 border-t hairline mono text-[10.5px] ink-3">audit log · real-time · JSONL export</div>
+      </div>
+
+    </div>
+
+    <div class="mt-16 pt-8 border-t hairline flex flex-wrap items-center gap-x-10 gap-y-4">
+      <span class="micro">CONNECTS</span>
+      <div class="flex flex-wrap gap-6 text-[14px] ink-3">
+        <span>GitHub</span><span>Google</span><span>Slack</span><span>Discord</span>
+        <span>Twitter / X</span><span>LinkedIn</span><span>Instagram</span><span>Facebook</span>
+        <span>Reddit</span><span>WhatsApp</span><span>TikTok</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PROBLEM -->
+<section id="product" class="border-b hairline">
+  <div class="max-w-[1200px] mx-auto px-6 py-24 grid grid-cols-12 gap-10">
+    <div class="col-span-12 md:col-span-5">
+      <div class="micro mb-3">THE PROBLEM</div>
+      <h2 class="text-[34px] leading-[1.15] font-semibold tracking-tight">
+        Every agent wants<br/>your <span class="accent">keys.</span> Few deserve<br/>the full set.
+      </h2>
+      <p class="mt-5 ink-2 text-[15.5px] leading-relaxed">
+        Today you paste OAuth tokens into ChatGPT, hand API keys to Claude, copy Slack webhooks into Zapier. Each tool ends up with more access than it needs, for longer than you remember.
+      </p>
+      <p class="mt-4 ink-2 text-[15.5px] leading-relaxed">
+        MyApi is the one place credentials live. Agents ask <em>it</em> — under scopes you defined, under a persona you chose, under a log only you can read.
+      </p>
+    </div>
+    <div class="col-span-12 md:col-span-7 grid grid-cols-2 gap-4">
+      <div class="card p-5">
+        <div class="flex items-center gap-2 mb-3">
+          <span class="grid place-items-center rounded-full" style="width:22px;height:22px;background:var(--red-bg);color:var(--red);font-size:12px;">✕</span>
+          <span class="micro" style="color:var(--red)">WITHOUT MYAPI</span>
+        </div>
+        <ul class="space-y-2.5 text-[13.5px] ink-2">
+          <li>5 agents, 5 copies of your OAuth tokens.</li>
+          <li>No idea which tool touched your account last.</li>
+          <li>Revoking means rotating everywhere.</li>
+          <li>Agent sees the full account every call.</li>
+          <li>Audit? Hope your provider kept logs.</li>
+        </ul>
+      </div>
+      <div class="card p-5" style="border-color:rgba(63,185,80,0.35)">
+        <div class="flex items-center gap-2 mb-3">
+          <span class="grid place-items-center rounded-full" style="width:22px;height:22px;background:var(--green-bg);color:var(--green);font-size:12px;">✓</span>
+          <span class="micro" style="color:var(--green)">WITH MYAPI</span>
+        </div>
+        <ul class="space-y-2.5 text-[13.5px] ink-2">
+          <li>One vault. Agents never see raw tokens.</li>
+          <li>Every request: agent, scope, path, ms.</li>
+          <li>Revoke in one click. Upstream untouched.</li>
+          <li>Identity and memory data is filtered before agents see it.</li>
+          <li>Append-only audit. Export any time.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="how" class="border-b hairline">
+  <div class="max-w-[1200px] mx-auto px-6 py-24">
+    <div class="flex items-end gap-6 mb-12 flex-wrap">
+      <div>
+        <div class="micro mb-3">HOW IT WORKS</div>
+        <h2 class="text-[34px] leading-[1.15] font-semibold tracking-tight max-w-[20ch]">A gateway, a brain, and a vault.</h2>
+      </div>
+      <p class="ml-auto ink-2 max-w-[44ch] text-[14.5px]">Three pieces. You run the vault. Agents hit the gateway. The brain gives them a consistent voice.</p>
+    </div>
+
+    <div class="card p-8 relative overflow-hidden">
+      <svg class="absolute inset-0 w-full h-full pointer-events-none" preserveAspectRatio="none" viewBox="0 0 1000 320">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/>
+          </marker>
+        </defs>
+        <path d="M 210 160 L 400 160" stroke="var(--accent)" stroke-width="1.5" class="flow-line" fill="none" marker-end="url(#arrow)"/>
+        <path d="M 600 160 L 790 160" stroke="var(--accent)" stroke-width="1.5" class="flow-line" fill="none" marker-end="url(#arrow)"/>
+      </svg>
+
+      <div class="relative grid grid-cols-3 gap-8 items-center">
+        <div>
+          <div class="micro mb-2">AGENTS</div>
+          <div class="space-y-2" id="diagram-agents"></div>
+        </div>
+        <div class="relative">
+          <div class="card p-6 bg-sunk" style="border-color:rgba(68,147,248,0.35)">
+            <div class="flex items-center gap-2 mb-3">
+              <svg width="22" height="22" viewBox="0 0 64 64" class="flex-shrink-0">
+                <defs>
+                  <linearGradient id="logo-bg-diag" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#4A8CFF"/>
+                    <stop offset="100%" stop-color="#6058FF"/>
+                  </linearGradient>
+                </defs>
+                <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#logo-bg-diag)"/>
+                <path d="M36 14 L25 31 H34 L30 50 L44 29 H35 L36 14 Z" fill="none" stroke="#FFFFFF" stroke-width="3.6" stroke-linejoin="round" stroke-linecap="round"/>
+              </svg>
+              <span class="ink font-semibold">MyApi gateway</span>
+            </div>
+            <ul class="space-y-2 text-[12.5px] mono ink-2">
+              <li class="flex"><span class="w-20 ink-3">authn</span><span>Ed25519 / Bearer</span></li>
+              <li class="flex"><span class="w-20 ink-3">scope</span><span>persona · skill · svc</span></li>
+              <li class="flex"><span class="w-20 ink-3">filter</span><span>brain / memory only</span></li>
+              <li class="flex"><span class="w-20 ink-3">audit</span><span>append-only log</span></li>
+              <li class="flex"><span class="w-20 ink-3">vault</span><span>AES-256-GCM</span></li>
+            </ul>
+            <div class="mt-3 pt-3 border-t hairline-2 mono text-[11.5px] ink-3 flex items-center">
+              <span class="live-dot tick mr-1.5" style="background:var(--green)"></span>
+              live · p95 &lt;200ms
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="micro mb-2">SERVICES</div>
+          <div class="space-y-2" id="diagram-services"></div>
+        </div>
+      </div>
+
+      <div class="relative mt-10 pt-6 border-t hairline-2 grid grid-cols-3 gap-8 text-[12.5px] ink-2">
+        <div><span class="micro">1.</span> Agent signs a request with its token.</div>
+        <div><span class="micro">2.</span> Gateway checks scope, applies policy, forwards.</div>
+        <div><span class="micro">3.</span> Response is logged and returned to the agent.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRIMITIVES -->
+<section class="border-b hairline">
+  <div class="max-w-[1200px] mx-auto px-6 py-24">
+    <div class="mb-10">
+      <div class="micro mb-3">PRIMITIVES</div>
+      <h2 class="text-[34px] leading-[1.15] font-semibold tracking-tight">The pieces you configure.</h2>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="features-grid"></div>
+  </div>
+</section>
+
+<!-- FOR AGENTS -->
+<section id="agents" class="border-b hairline">
+  <div class="max-w-[1200px] mx-auto px-6 py-24 grid grid-cols-12 gap-10">
+    <div class="col-span-12 md:col-span-5">
+      <div class="micro mb-3">FOR AGENT BUILDERS</div>
+      <h2 class="text-[34px] leading-[1.15] font-semibold tracking-tight">
+        Ship without<br/>hoarding anyone's<br/><span class="accent">keys.</span>
+      </h2>
+      <p class="mt-5 ink-2 text-[15.5px] leading-relaxed">
+        Standard REST API with Bearer token auth. Issue a scoped token per agent, make HTTP calls to the gateway — MyApi proxies the downstream service and keeps credentials out of your agent's hands.
+      </p>
+      <div class="mt-8 flex gap-2">
+        <a href="https://github.com/omribenami/MyApi-Open" target="_blank" rel="noopener" class="btn">Read the docs →</a>
+        <a href="https://github.com/omribenami/MyApi-Open" target="_blank" rel="noopener" class="btn btn-ghost">View on GitHub</a>
+      </div>
+    </div>
+    <div class="col-span-12 md:col-span-7">
+      <div class="term shadow-xl">
+        <div class="px-4 py-2 border-b hairline flex items-center gap-2">
+          <span class="ink-3 text-[11.5px] mono">agent.js</span>
+          <span class="ml-auto ink-4 text-[11px] mono">javascript</span>
+        </div>
+<pre class="p-5 whitespace-pre-wrap leading-[1.7] text-[12.5px]"><span class="tok-c">// MYAPI_TOKEN is the scoped token you issued to this agent.</span>
+<span class="tok-k">const</span> BASE = <span class="tok-s">'https://your-myapi.host'</span>;
+<span class="tok-k">const</span> hdrs = { Authorization: <span class="tok-s">`Bearer ${process.env.MYAPI_TOKEN}`</span> };
+
+<span class="tok-c">// Who am I? Persona + memory loaded from MyApi.</span>
+<span class="tok-k">const</span> persona = <span class="tok-k">await</span> fetch(<span class="tok-s">`${BASE}/api/v1/personas`</span>,       { headers: hdrs }).then(r => r.json());
+<span class="tok-k">const</span> memory  = <span class="tok-k">await</span> fetch(<span class="tok-s">`${BASE}/api/v1/memory`</span>,          { headers: hdrs }).then(r => r.json());
+
+<span class="tok-c">// Read a connected service — proxied, raw token never leaves the vault.</span>
+<span class="tok-k">const</span> issues = <span class="tok-k">await</span> fetch(<span class="tok-s">`${BASE}/api/v1/services/github/issues`</span>, { headers: hdrs }).then(r => r.json());
+
+<span class="tok-c">// Write a memory for next time.</span>
+<span class="tok-k">await</span> fetch(<span class="tok-s">`${BASE}/api/v1/memory`</span>, {
+  method: <span class="tok-s">'POST'</span>, headers: { ...hdrs, <span class="tok-s">'Content-Type'</span>: <span class="tok-s">'application/json'</span> },
+  body: JSON.stringify({ content: <span class="tok-s">'User prefers concise summaries.'</span> })
+});</pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SECURITY -->
+<section id="security" class="border-b hairline">
+  <div class="max-w-[1200px] mx-auto px-6 py-24">
+    <div class="flex items-end gap-6 mb-12 flex-wrap">
+      <div>
+        <div class="micro mb-3">SECURITY &amp; PRIVACY</div>
+        <h2 class="text-[34px] leading-[1.15] font-semibold tracking-tight max-w-[22ch]">Privacy-first, or it isn't a personal API.</h2>
+      </div>
+      <p class="ml-auto max-w-[46ch] ink-2 text-[14.5px]">Defaults matter more than features. MyApi ships closed; you open it, scope by scope.</p>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" id="security-grid"></div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section id="pricing" class="border-b hairline">
+  <div class="max-w-[1200px] mx-auto px-6 py-24">
+    <div class="text-center mb-4">
+      <div class="micro mb-3">PRICING</div>
+      <h2 class="text-[34px] leading-[1.15] font-semibold tracking-tight">Free during beta.</h2>
+      <p class="mt-3 ink-2 max-w-[52ch] mx-auto text-[14.5px]">We're in open beta. Sign up today, use everything for free while we build.</p>
+    </div>
+    <div class="flex items-center justify-center gap-2 mb-12">
+      <span class="live-dot tick" style="background:var(--green)"></span>
+      <span class="text-[13px] ink-2">Open beta is active — <span style="color:var(--green)">all features unlocked</span></span>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-[860px] mx-auto" id="pricing-grid"></div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section class="border-b hairline">
+  <div class="max-w-[900px] mx-auto px-6 py-24">
+    <div class="micro mb-3 text-center">FAQ</div>
+    <h2 class="text-[30px] font-semibold tracking-tight text-center mb-10">Questions, answered.</h2>
+    <div class="card divide-y divide-[color:var(--line-2)]" id="faq-list"></div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section id="get" class="border-b hairline">
+  <div class="max-w-[1200px] mx-auto px-6 py-28 text-center">
+    <h2 class="text-[48px] leading-[1.05] font-semibold tracking-tight headline max-w-[22ch] mx-auto">
+      Give every agent the access it needs. Not a byte more.
+    </h2>
+    <div class="mt-8 flex items-center justify-center gap-3 flex-wrap">
+      <a href="/dashboard/signup" class="btn btn-primary" style="padding:12px 20px;font-size:15px;">Start free</a>
+      <a href="/dashboard/"       class="btn"             style="padding:12px 20px;font-size:15px;">Open dashboard →</a>
+      <div class="ink-3 text-[13px] mono ml-2">or: <a href="https://github.com/omribenami/MyApi-Open" target="_blank" rel="noopener" style="color:var(--accent)">github.com/omribenami/MyApi-Open</a> to install locally</div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="max-w-[1200px] mx-auto px-6 py-10">
+    <div class="flex flex-wrap items-center justify-between gap-6">
+      <!-- Brand -->
+      <div class="flex items-center gap-2 ink font-semibold">
+        <svg width="22" height="22" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="logo-bg-footer" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#4A8CFF"/>
+              <stop offset="100%" stop-color="#6058FF"/>
+            </linearGradient>
+          </defs>
+          <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#logo-bg-footer)"/>
+          <path d="M36 14 L25 31 H34 L30 50 L44 29 H35 L36 14 Z" fill="none" stroke="#FFFFFF" stroke-width="3.6" stroke-linejoin="round" stroke-linecap="round"/>
+        </svg>
+        <span>MyApi</span>
+        <span class="ink-4 font-normal text-[12px]">© 2026</span>
+      </div>
+      <!-- Links -->
+      <nav class="flex flex-wrap items-center gap-x-6 gap-y-2 text-[13px]">
+        <a href="/dashboard/platform-docs" class="nav">Platform docs</a>
+        <a href="/dashboard/api-docs"      class="nav">API docs</a>
+        <a href="https://github.com/omribenami/MyApi-Open" target="_blank" rel="noopener" class="nav">GitHub</a>
+        <a href="/legal/privacy.html"      class="nav">Privacy</a>
+        <a href="/legal/terms.html"        class="nav">Terms</a>
+        <a href="https://discord.gg/WPp4sCN4xB" target="_blank" rel="noopener" class="nav">Discord</a>
+      </nav>
+    </div>
+    <p class="mt-6 ink-4 text-[12px]">The privacy-first personal API platform for AI agents. Apache-2.0 core.</p>
+  </div>
+</footer>
+
+<script>
+// ---------- Signin dropdown ----------
+(function(){
+  var trigger = document.getElementById('signin-trigger');
+  var dropdown = document.getElementById('signin-dropdown');
+  if (!trigger || !dropdown) return;
+  trigger.addEventListener('click', function(e) {
+    e.stopPropagation();
+    dropdown.classList.toggle('open');
+  });
+  document.addEventListener('click', function(e) {
+    var wrap = document.getElementById('signin-wrap');
+    if (wrap && !wrap.contains(e.target)) dropdown.classList.remove('open');
+  });
+  // Auth mode tab switching
+  function setMode(mode) {
+    dropdown.querySelectorAll('.auth-tab').forEach(function(t) {
+      if (t.dataset.mode === mode) {
+        t.classList.add('auth-tab-active'); t.style.color = '';
+      } else {
+        t.classList.remove('auth-tab-active'); t.style.color = 'var(--ink-3)';
+      }
+    });
+    var heading = document.getElementById('auth-heading');
+    if (heading) heading.textContent = mode === 'login' ? 'SIGN IN WITH' : 'SIGN UP WITH';
+    dropdown.querySelectorAll('.auth-oauth').forEach(function(btn) {
+      btn.href = btn.dataset.base + '?mode=' + mode + '&force_prompt=1';
+      var label = btn.querySelector('.oauth-label');
+      if (label) label.textContent = (mode === 'login' ? 'Continue with ' : 'Sign up with ') + btn.dataset.provider;
+    });
+    var footer = document.getElementById('auth-footer-text');
+    if (footer) {
+      footer.innerHTML = mode === 'login'
+        ? 'No account? <a href="#" class="auth-switch nav" data-to="signup" style="color:var(--accent)">Sign up free \u2192</a>'
+        : 'Have an account? <a href="#" class="auth-switch nav" data-to="login" style="color:var(--accent)">Sign in \u2192</a>';
+      footer.querySelectorAll('.auth-switch').forEach(function(l) {
+        l.addEventListener('click', function(e) { e.preventDefault(); setMode(this.dataset.to); });
+      });
+    }
+  }
+  dropdown.querySelectorAll('.auth-tab').forEach(function(tab) {
+    tab.addEventListener('click', function() { setMode(this.dataset.mode); });
+  });
+  var footer0 = document.getElementById('auth-footer-text');
+  if (footer0) footer0.querySelectorAll('.auth-switch').forEach(function(l) {
+    l.addEventListener('click', function(e) { e.preventDefault(); setMode(this.dataset.to); });
+  });
+})();
+
+// ---------- Live Signal ----------
+(function(){
+  var feed = document.getElementById('live-signal-feed');
+  if (!feed) return;
+  // Rows matching the terminal scenario — these flicker
+  var highlighted = [
+    {method:'GET',  path:'/api/v1/personas',               agent:'agent-session', ms:8,  note:'persona: navigator'},
+    {method:'GET',  path:'/api/v1/services/github/issues', agent:'agent-session', ms:54, note:'3 results · proxied'},
+  ];
+  var others = [
+    {method:'GET',  path:'/api/v1/memory',                    agent:'Claude Code',  ms:19, note:'7 items'},
+    {method:'POST', path:'/api/v1/memory',                    agent:'Claude Code',  ms:22, note:'new entry saved'},
+    {method:'GET',  path:'/api/v1/services/google/profile',   agent:'Hermes',       ms:31, note:'proxied'},
+    {method:'GET',  path:'/api/v1/knowledge',                 agent:'OpenClaw',     ms:12, note:'2 docs returned'},
+    {method:'GET',  path:'/api/v1/services/slack/channels',   agent:'AFP daemon',   ms:48, note:'proxied'},
+    {method:'DEL',  path:'/api/v1/tokens/tok_\u2026s5f0',    agent:'navigator',    ms:6,  note:'revoked'},
+    {method:'GET',  path:'/api/v1/audit',                     agent:'navigator',    ms:14, note:'last 20 entries'},
+    {method:'POST', path:'/api/v1/services/github/issues',    agent:'Claude Code',  ms:67, note:'created #142'},
+  ];
+  var mc = {GET:'color:var(--ink-2)',POST:'color:var(--accent)',DEL:'color:var(--red)',PUT:'color:var(--amber)'};
+  function makeRow(item, isH, time) {
+    var d = document.createElement('div');
+    d.className = 'px-4 py-2' + (isH ? ' signal-highlight' : '');
+    d.innerHTML =
+      '<div class="flex items-center gap-2">' +
+        '<span class="mono font-medium" style="' + (mc[item.method]||mc.GET) + ';min-width:34px;font-size:11px">' + item.method + '</span>' +
+        '<span class="ink mono" style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px">' + item.path + '</span>' +
+        '<span class="ml-auto mono ink-4" style="font-size:10.5px;white-space:nowrap">' + (time||'just now') + '</span>' +
+      '</div>' +
+      '<div class="flex items-center gap-1.5 mt-0.5 mono" style="font-size:10.5px;color:var(--ink-3)">' +
+        '<span style="color:var(--ink-2)">' + item.agent + '</span><span>\u00b7</span>' +
+        '<span>' + item.ms + 'ms</span><span>\u00b7</span>' +
+        '<span>' + item.note + '</span>' +
+      '</div>';
+    return d;
+  }
+  // Initial state: highlighted rows first (they flicker), then others
+  highlighted.forEach(function(item) { feed.appendChild(makeRow(item, true, 'just now')); });
+  others.forEach(function(item, i) { feed.appendChild(makeRow(item, false, (i+2)+'m ago')); });
+  // Slack chip animation
+  var slackEl = document.getElementById('slack-chip-status');
+  if (slackEl) setTimeout(function() {
+    slackEl.style.color = 'var(--green)'; slackEl.textContent = '● connected';
+  }, 2200);
+  // Stream new rows
+  var idx = 0;
+  var all = highlighted.concat(others);
+  setInterval(function() {
+    var item = all[idx % all.length];
+    var isH = idx % all.length < highlighted.length;
+    var newRow = makeRow(item, isH, 'just now');
+    if (feed.firstChild) {
+      var prev = feed.firstChild.querySelector('.ml-auto');
+      if (prev && prev.textContent === 'just now') prev.textContent = '1m ago';
+    }
+    feed.insertBefore(newRow, feed.firstChild);
+    while (feed.children.length > 14) feed.removeChild(feed.lastChild);
+    idx++;
+  }, 3200);
+})();
+
+// ---------- Diagram rows ----------
+(function(){
+  const agentData = [
+    {n:'Claude Code',  m:'Ed25519 · admin:*'},
+    {n:'OpenClaw',     m:'Bearer · knowledge:read'},
+    {n:'Hermes',       m:'Bearer · google:read'},
+    {n:'iOS Shortcut', m:'Bearer · basic'},
+    {n:'AFP daemon',   m:'Ed25519 · afp:shell'},
+  ];
+  const agentEl = document.getElementById('diagram-agents');
+  if (agentEl) agentEl.innerHTML = agentData.map(a => `
+    <div class="card px-3 py-2 flex items-center gap-3">
+      <span class="tick" style="background:var(--green)"></span>
+      <div class="min-w-0 flex-1">
+        <div class="text-[12.5px] ink truncate">${a.n}</div>
+        <div class="mono text-[10.5px] ink-4 truncate">${a.m}</div>
+      </div>
+    </div>`).join('');
+
+  const tints = {github:'#30363d',google:'#4285F4',slack:'#36C5F0',discord:'#5865F2',twitter:'#111827'};
+  const svcs = [
+    {id:'github',  n:'GitHub',   s:'issues · repos'},
+    {id:'google',  n:'Google',   s:'gmail · drive'},
+    {id:'slack',   n:'Slack',    s:'channels · chat'},
+    {id:'discord', n:'Discord',  s:'servers · messages'},
+    {id:'twitter', n:'Twitter/X',s:'posts · dm'},
+  ];
+  const svcEl = document.getElementById('diagram-services');
+  if (svcEl) svcEl.innerHTML = svcs.map(s => `
+    <div class="card px-3 py-2 flex items-center gap-3">
+      <span class="svc-chip" style="background:${tints[s.id]}">${s.n[0]}</span>
+      <div class="min-w-0 flex-1">
+        <div class="text-[12.5px] ink truncate">${s.n}</div>
+        <div class="mono text-[10.5px] ink-4 truncate">${s.s}</div>
+      </div>
+    </div>`).join('');
+})();
+
+// ---------- Features, security, pricing, FAQ, footer ----------
+(function(){
+  const feats = [
+    {t:'Personas',       b:'Define the voice, system prompt, knowledge, and refusal rules for every agent. Switch persona without touching a token.'},
+    {t:'Access tokens',  b:'Bearer or Ed25519 ASC. Each token carries a persona, a scope, and an agent identity. Revoke one without rotating anything else.'},
+    {t:'Services',       b:'11 integrations. OAuth once — MyApi proxies every downstream call on the agent\'s behalf. Raw tokens never leave the vault.'},
+    {t:'Token vault',    b:'AES-256-GCM with 600k PBKDF2 iterations. Customer-managed keys on Enterprise. Agents never see plaintext credentials.'},
+    {t:'Knowledge base', b:'Markdown documents attached to personas. Versioned, redacted, and returned to agents via the /brain/knowledge-base endpoint.'},
+    {t:'Skills',         b:'Composable capability modules. Package one or more API calls behind a named intent and share via the marketplace.'},
+    {t:'Devices',        b:'Browsers, CLIs, daemons and mobile shortcuts need explicit approval before they can talk to your workspace.'},
+    {t:'Audit log',      b:'Append-only, streamable, exportable. Query by agent, path, scope, status, and latency. Download as JSONL.'},
+    {t:'Self-host or cloud', b:'Docker compose, or managed cloud. Same Node.js binary either way. Apache-2.0 core — no lock-in.'},
+  ];
+  const fg = document.getElementById('features-grid');
+  if (fg) fg.innerHTML = feats.map(f => `
+    <div class="card p-5">
+      <div class="mono text-[11.5px] ink-3 mb-2">${'// ' + f.t.toUpperCase()}</div>
+      <div class="ink text-[16px] font-semibold mb-2">${f.t}</div>
+      <p class="ink-2 text-[13.5px] leading-relaxed">${f.b}</p>
+    </div>`).join('');
+
+  const secs = [
+    {k:'AT REST',      t:'AES-256-GCM vault',       b:'600k PBKDF2-SHA256 iterations. Customer-managed keys available on Enterprise.'},
+    {k:'IN TRANSIT',   t:'Ed25519 signatures',      b:'Every ASC request is signed; bearer tokens are salted and bcrypt-hashed before storage.'},
+    {k:'AT REASONING', t:'Brain data filtering',    b:'Sensitive fields are stripped from identity and memory responses before agents receive them. Service proxy calls pass through unmodified.'},
+    {k:'ALWAYS',       t:'Append-only audit',       b:'No row ever mutates. Export any time, in JSONL.'},
+    {k:'STANDARDS',    t:'OAuth 2.1 + PKCE',        b:'For every third-party connection. OAuth tokens never leave the vault.'},
+    {k:'SUPPLY CHAIN', t:'Open-source core',        b:'Self-host the gateway. Inspect every line. Apache-2.0.'},
+    {k:'OPEN SOURCE',  t:'Apache-2.0',              b:'Gateway, vault, audit log are all open-source. No hidden logic.'},
+    {k:'COMPLIANCE',   t:'Designed for GDPR',       b:'Data stays in your infrastructure when self-hosted. Enterprise adds DPA on request.'},
+  ];
+  const sg = document.getElementById('security-grid');
+  if (sg) sg.innerHTML = secs.map(s => `
+    <div class="card p-5">
+      <div class="micro mb-2">${s.k}</div>
+      <div class="ink text-[15px] font-semibold mb-1.5">${s.t}</div>
+      <p class="ink-2 text-[13px] leading-relaxed">${s.b}</p>
+    </div>`).join('');
+
+  const plans = [
+    {
+      n:'Free Beta', badge:'OPEN BETA', active:true,
+      priceOld:'$15', price:'$0', meta:'Free during beta · no card needed',
+      f:['Unlimited requests during beta','All 11 connected services','Personas, memory, knowledge base','Skills & marketplace','Devices & audit log','Community support'],
+      cta:'Start free now', href:'/dashboard/signup', accent:true
+    },
+    {
+      n:'Pro', afterBeta:true,
+      price:'$29', meta:'per month · after beta',
+      f:['100,000 requests / month','Unlimited services','Priority support','Custom domains'],
+      cta:'After the Beta', href:'#'
+    },
+    {
+      n:'Enterprise', afterBeta:true,
+      price:'$99', meta:'per month · after beta',
+      f:['Unlimited requests','SSO & RBAC','SLA guarantee','Dedicated account manager'],
+      cta:'After the Beta', href:'#'
+    },
+  ];
+  const pg = document.getElementById('pricing-grid');
+  if (pg) pg.innerHTML = plans.map(p => {
+    const activeStyle = p.active ? 'border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset;' : '';
+    const wrapStyle = p.afterBeta ? 'opacity:0.55;' : '';
+    return `<div class="card p-6 flex flex-col" style="${activeStyle}${wrapStyle}">
+      ${p.badge ? `<div class="micro mb-2" style="color:var(--accent)">${p.badge}</div>` : ''}
+      ${p.afterBeta ? `<div class="micro mb-2" style="color:var(--ink-3)">COMING AFTER BETA</div>` : ''}
+      <div class="text-[18px] ink font-semibold">${p.n}</div>
+      <div class="mt-2 flex items-baseline gap-2">
+        ${p.priceOld ? `<span class="text-[22px] ink-4 font-semibold line-through">${p.priceOld}</span>` : ''}
+        <span class="text-[34px] font-semibold" style="color:${p.active ? 'var(--accent)' : 'var(--ink)'}">${p.price}</span>
+        ${p.price.startsWith('$') ? '<span class="ink-3 text-[13px]">/mo</span>' : ''}
+      </div>
+      <div class="text-[12px] ink-3 mono">${p.meta}</div>
+      <ul class="mt-4 space-y-1.5 flex-1" style="list-style:none">
+        ${p.f.map(x => `<li class="flex gap-2 text-[13px] ink-2"><span class="ink-3 shrink-0">✓</span><span>${x}</span></li>`).join('')}
+      </ul>
+      <a href="${p.href}" class="mt-5 btn" style="${p.active ? 'background:var(--accent-2);color:#fff;border-color:rgba(240,246,252,0.1);' : 'cursor:not-allowed;opacity:0.7;'}">${p.cta}</a>
+    </div>`;
+  }).join('');
+
+  const faqs = [
+    {q:'Is it really free during beta?',
+     a:'Yes. During open beta every feature is free — no credit card required, no hidden limits. When we exit beta we\'ll give everyone plenty of notice before any billing starts.'},
+    {q:'Do you see my data?',
+     a:'No. Self-host the gateway and your data never leaves your infrastructure. On the cloud tier, payloads transit through the gateway but are never stored; only request metadata (path, status, latency, agent) is logged.'},
+    {q:"What's ASC?",
+     a:'Agent Signed Credentials. Instead of a bearer token, each agent holds an Ed25519 keypair. Requests are signed with the private key; the gateway verifies against the public key on file. Much harder to exfiltrate than a static bearer string.'},
+    {q:"Can I add a service you don't support?",
+     a:"Not yet in the UI — but the gateway architecture supports custom connectors. Vote or open a request on GitHub and we'll prioritise based on demand."},
+    {q:'How do personas interact with agents?',
+     a:"A token carries a persona. When an agent calls the gateway, it receives the persona's system prompt and attached knowledge in the response context — giving every agent a consistent voice without you having to configure each one separately."},
+    {q:'What happens when I revoke a token?',
+     a:'The token is invalidated immediately and subsequent requests return 401. Your upstream OAuth connections are untouched — other agents keep working. You can also rotate any vault credential without re-authorizing any agent.'},
+    {q:'Is the core really Apache-2.0?',
+     a:'Yes. The gateway, vault, audit log, and all core logic are Apache-2.0 on GitHub. The managed cloud control plane is proprietary.'},
+  ];
+  const fl = document.getElementById('faq-list');
+  if (fl) fl.innerHTML = faqs.map((f, i) => `
+    <details ${i === 0 ? 'open' : ''} class="group">
+      <summary class="flex items-center gap-3 px-5 py-4 cursor-pointer list-none">
+        <span class="chev ink-3 text-[12px]">▶</span>
+        <span class="ink text-[15px] font-medium">${f.q}</span>
+      </summary>
+      <div class="px-5 pb-5 ink-2 text-[13.5px] leading-relaxed" style="padding-left:38px">${f.a}</div>
+    </details>`).join('');
+
+})();
+</script>
 </body>
 </html>

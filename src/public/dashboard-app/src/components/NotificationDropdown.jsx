@@ -111,91 +111,99 @@ function NotificationDropdown({ open, onClose }) {
   return (
     <div
       ref={dropdownRef}
-      className="rounded-xl border border-slate-700 bg-slate-900 shadow-2xl flex flex-col z-50 overflow-hidden"
-      style={isMobile ? {
-        // Mobile: full screen width with padding, positioned below navbar
-        position: 'fixed',
-        top: '64px',
-        left: '8px',
-        right: '8px',
-        width: 'auto',
-        maxHeight: '500px',
-        maxWidth: 'calc(100vw - 16px)',
-      } : {
-        // Desktop: right-aligned to bell icon, constrained width
-        position: 'absolute',
-        top: '100%',
-        right: '0px',
-        width: '384px',
-        maxHeight: '500px',
-        marginTop: '8px',
+      className="card thin-scroll"
+      style={{
+        ...(isMobile ? {
+          position: 'fixed', top: '56px', left: '8px', right: '8px',
+          width: 'auto', maxWidth: 'calc(100vw - 16px)',
+        } : {
+          position: 'absolute', top: '100%', right: '0px',
+          width: '360px', marginTop: '8px',
+        }),
+        maxHeight: '480px',
+        display: 'flex', flexDirection: 'column',
+        zIndex: 50,
+        boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+        overflow: 'hidden',
       }}
     >
       {/* Header */}
-      <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between bg-slate-900 rounded-t-xl flex-shrink-0">
-        <h3 className="text-sm font-semibold text-white">Notifications</h3>
+      <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--line-2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+        <span className="micro">Notifications</span>
         <button
           onClick={onClose}
-          className="text-slate-400 hover:text-white transition-colors"
+          className="ink-3"
+          style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: '2px' }}
         >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
         </button>
       </div>
 
       {/* Notifications list */}
-      <div className="overflow-y-auto flex-1 min-h-0">
+      <div style={{ overflowY: 'auto', flex: 1, minHeight: 0 }}>
         {isLoading && !notifications.length ? (
-          <div className="px-4 py-8 text-center text-slate-500">
-            <p className="text-sm">Loading notifications...</p>
+          <div style={{ padding: '32px 16px', textAlign: 'center' }} className="ink-3 text-[13px]">
+            Loading...
           </div>
         ) : error ? (
-          <div className="px-4 py-8 text-center text-red-400">
-            <p className="text-sm">{error}</p>
+          <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--red)' }} className="text-[13px]">
+            {error}
           </div>
         ) : notifications.length === 0 ? (
-          <div className="px-4 py-8 text-center text-slate-500">
-            <p className="text-sm">No notifications</p>
+          <div style={{ padding: '32px 16px', textAlign: 'center' }} className="ink-3 text-[13px]">
+            No notifications
           </div>
         ) : (
-          <div className="divide-y divide-slate-800">
+          <div className="divide-y divide-[color:var(--line-2)]">
             {notifications.map((notification) => (
               <div
                 key={notification.id}
-                className={`px-4 py-3 hover:bg-slate-800 transition-colors ${
-                  !notification.read_at ? 'bg-slate-800/50' : ''
-                }`}
+                style={{
+                  padding: '10px 16px',
+                  background: !notification.read_at ? 'var(--bg-sunk)' : 'transparent',
+                  cursor: 'default',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+                onMouseLeave={e => e.currentTarget.style.background = !notification.read_at ? 'var(--bg-sunk)' : 'transparent'}
               >
-                <div className="flex gap-3">
-                  <div className="text-slate-400 flex-shrink-0 mt-1">
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <div className="ink-3 shrink-0" style={{ marginTop: '2px' }}>
                     {getNotificationIcon(notification.type)}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-white truncate">
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p className="ink text-[13px] font-medium" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {notification.title || notification.type.replace(/_/g, ' ')}
                     </p>
-                    <p className="text-xs text-slate-400 line-clamp-2 mt-1">
+                    <p className="ink-2 text-[12px] mt-0.5" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                       {notification.message}
                     </p>
-                    <p className="text-xs text-slate-500 mt-1">
+                    <p className="mono ink-4 text-[11px] mt-0.5">
                       {formatTime(notification.created_at)}
                     </p>
                   </div>
-                  <div className="flex gap-1 flex-shrink-0">
+                  <div style={{ display: 'flex', gap: '2px', flexShrink: 0, alignItems: 'flex-start' }}>
                     {!notification.read_at && (
-                      <button
-                        onClick={() => handleMarkAsRead(notification.id)}
-                        className="p-1 rounded hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition-colors"
-                        title="Mark as read"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                      </button>
+                      <>
+                        <span className="tick shrink-0 mt-1.5" style={{ background: 'var(--accent)' }} />
+                        <button
+                          onClick={() => handleMarkAsRead(notification.id)}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '3px', color: 'var(--ink-3)' }}
+                          onMouseEnter={e => e.currentTarget.style.color = 'var(--ink)'}
+                          onMouseLeave={e => e.currentTarget.style.color = 'var(--ink-3)'}
+                          title="Mark as read"
+                        >
+                          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                        </button>
+                      </>
                     )}
                     <button
                       onClick={() => handleDelete(notification.id)}
-                      className="p-1 rounded hover:bg-slate-700 text-slate-400 hover:text-red-400 transition-colors"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '3px', color: 'var(--ink-3)' }}
+                      onMouseEnter={e => e.currentTarget.style.color = 'var(--ink)'}
+                      onMouseLeave={e => e.currentTarget.style.color = 'var(--ink-3)'}
                       title="Delete"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                      <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                     </button>
                   </div>
                 </div>
@@ -207,11 +215,12 @@ function NotificationDropdown({ open, onClose }) {
 
       {/* Load more button */}
       {notifications.length > 0 && hasMore && (
-        <div className="px-4 py-2 border-t border-slate-800 bg-slate-900 rounded-b-xl flex-shrink-0">
+        <div style={{ padding: '8px 12px', borderTop: '1px solid var(--line-2)', flexShrink: 0 }}>
           <button
             onClick={handleLoadMore}
             disabled={isLoading}
-            className="w-full px-3 py-2 text-xs font-medium text-blue-400 hover:text-blue-300 disabled:text-slate-500 disabled:cursor-not-allowed transition-colors rounded hover:bg-slate-800"
+            className="w-full btn btn-ghost text-[12px]"
+            style={{ width: '100%', justifyContent: 'center', opacity: isLoading ? 0.5 : 1 }}
           >
             {isLoading ? 'Loading...' : 'Load more'}
           </button>

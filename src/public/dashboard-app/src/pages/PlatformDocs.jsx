@@ -61,46 +61,51 @@ const NAV_GROUPS = [
 function Section({ id, title, children }) {
   return (
     <section id={id} className="scroll-mt-24 space-y-4">
-      <h2 className="text-2xl font-bold text-white border-b border-slate-800 pb-3">{title}</h2>
-      <div className="text-slate-300 leading-relaxed space-y-4 text-sm sm:text-base">{children}</div>
+      <h2 className="text-2xl font-semibold pb-3 ink" style={{ borderBottom: '1px solid var(--line)' }}>{title}</h2>
+      <div className="leading-relaxed space-y-4 text-sm sm:text-base ink-2">{children}</div>
     </section>
   );
 }
 
 function Block({ title, accent, children }) {
   return (
-    <div className={`bg-slate-950/50 border rounded-lg p-4 sm:p-5 ${accent ? `border-l-2 border-l-${accent}-500 border-slate-800` : 'border-slate-800'}`}>
-      {title && <h3 className="text-white font-semibold mb-2 text-sm sm:text-base">{title}</h3>}
-      <div className="text-slate-300 text-sm space-y-2">{children}</div>
+    <div className="ui-card p-4 sm:p-5" style={accent ? { borderLeft: '3px solid var(--accent)' } : {}}>
+      {title && <h3 className="font-semibold mb-2 text-sm sm:text-base ink">{title}</h3>}
+      <div className="text-sm space-y-2 ink-2">{children}</div>
     </div>
   );
 }
 
 function Callout({ type = 'info', children }) {
-  const styles = {
-    info:    'border-blue-500/40 bg-blue-500/10 text-blue-200',
-    tip:     'border-green-500/40 bg-green-500/10 text-green-200',
-    warning: 'border-amber-500/40 bg-amber-500/10 text-amber-200',
+  const containerStyles = {
+    info:    { background: 'var(--accent-bg)', border: '1px solid var(--accent)', borderRadius: '6px' },
+    tip:     { background: 'var(--green-bg)', border: '1px solid var(--green)', borderRadius: '6px' },
+    warning: { background: 'var(--amber-bg, #fffbeb)', border: '1px solid var(--amber)', borderRadius: '6px' },
+  };
+  const labelStyles = {
+    info:    { color: 'var(--accent)', background: 'var(--accent-bg)', border: '1px solid var(--accent)' },
+    tip:     { color: 'var(--green)', background: 'var(--green-bg)', border: '1px solid var(--green)' },
+    warning: { color: 'var(--amber)', background: 'var(--amber-bg, #fffbeb)', border: '1px solid var(--amber)' },
+  };
+  const textStyles = {
+    info:    { color: 'var(--accent)' },
+    tip:     { color: 'var(--green)' },
+    warning: { color: 'var(--amber)' },
   };
   const labels = { info: 'Note', tip: 'Tip', warning: 'Warning' };
-  const labelColors = {
-    info:    'text-blue-400 bg-blue-500/20',
-    tip:     'text-green-400 bg-green-500/20',
-    warning: 'text-amber-400 bg-amber-500/20',
-  };
   return (
-    <div className={`border rounded-lg p-4 text-sm flex gap-3 ${styles[type]}`}>
-      <span className={`text-xs font-bold px-1.5 py-0.5 rounded flex-shrink-0 h-max mt-0.5 ${labelColors[type]}`}>
+    <div className="p-4 text-sm flex gap-3" style={containerStyles[type]}>
+      <span className="text-xs font-bold px-1.5 py-0.5 rounded flex-shrink-0 h-max mt-0.5" style={labelStyles[type]}>
         {labels[type]}
       </span>
-      <div className="leading-relaxed">{children}</div>
+      <div className="leading-relaxed" style={textStyles[type]}>{children}</div>
     </div>
   );
 }
 
 function CodeSnip({ children }) {
   return (
-    <pre className="bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 font-mono text-xs text-slate-300 overflow-x-auto whitespace-pre leading-relaxed">
+    <pre className="px-4 py-3 font-mono text-xs overflow-x-auto whitespace-pre leading-relaxed ink-2" style={{ background: 'var(--bg-sunk)', border: '1px solid var(--line)', borderRadius: '6px' }}>
       {children}
     </pre>
   );
@@ -108,12 +113,12 @@ function CodeSnip({ children }) {
 
 function DocsTable({ headers, rows }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-800">
+    <div className="overflow-x-auto" style={{ border: '1px solid var(--line)', borderRadius: '6px' }}>
       <table className="w-full text-sm">
         <thead>
-          <tr className="bg-slate-800/60">
+          <tr style={{ background: 'var(--bg-sunk)' }}>
             {headers.map((h, i) => (
-              <th key={i} className="text-left py-2.5 px-4 text-xs uppercase tracking-wide text-slate-400 font-semibold">
+              <th key={i} className="text-left py-2.5 px-4 text-xs uppercase tracking-wide font-semibold ink-3">
                 {h}
               </th>
             ))}
@@ -121,9 +126,9 @@ function DocsTable({ headers, rows }) {
         </thead>
         <tbody>
           {rows.map((row, i) => (
-            <tr key={i} className={`border-t border-slate-800/50 ${i % 2 === 1 ? 'bg-slate-950/40' : ''}`}>
+            <tr key={i} style={{ borderTop: '1px solid var(--line)', background: i % 2 === 1 ? 'var(--bg-sunk)' : 'transparent' }}>
               {row.map((cell, j) => (
-                <td key={j} className="py-2.5 px-4 text-slate-300 align-top">
+                <td key={j} className="py-2.5 px-4 align-top ink-2">
                   {cell}
                 </td>
               ))}
@@ -160,8 +165,8 @@ function PlatformDocs() {
   return (
     <div className="max-w-7xl mx-auto">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white">Platform Documentation</h1>
-        <p className="text-slate-400 mt-2">
+        <h1 className="font-serif text-[28px] font-medium tracking-tight ink">Platform Documentation</h1>
+        <p className="ink-3 mt-2">
           Everything you need to know about MyApi — what each feature does, how to use it, and real-world examples.
         </p>
       </div>
@@ -169,12 +174,12 @@ function PlatformDocs() {
       <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6">
 
         {/* ── Sidebar nav ── */}
-        <aside className="lg:sticky lg:top-24 h-max bg-slate-900 border border-slate-800 rounded-xl p-4">
-          <p className="text-xs uppercase tracking-wide text-slate-500 mb-3 px-1">Contents</p>
+        <aside className="lg:sticky lg:top-24 h-max ui-card p-4">
+          <p className="micro mb-3 px-1">Contents</p>
           <nav className="space-y-3">
             {NAV_GROUPS.map((group) => (
               <div key={group.label}>
-                <p className="text-xs uppercase tracking-wide text-slate-600 font-semibold px-3 mb-1">
+                <p className="text-xs uppercase tracking-wide font-semibold px-3 mb-1 ink-4">
                   {group.label}
                 </p>
                 <div className="space-y-0.5">
@@ -182,11 +187,12 @@ function PlatformDocs() {
                     <a
                       key={item.id}
                       href={`#${item.id}`}
-                      className={`block px-3 py-1.5 rounded-md text-sm transition-colors ${
+                      className="block px-3 py-1.5 rounded text-sm transition-colors"
+                      style={
                         activeId === item.id
-                          ? 'text-blue-400 bg-slate-800 font-medium'
-                          : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                      }`}
+                          ? { background: 'var(--accent-bg)', color: 'var(--accent)', fontWeight: 500 }
+                          : { color: 'var(--ink-3)' }
+                      }
                     >
                       {item.title}
                     </a>
@@ -198,7 +204,7 @@ function PlatformDocs() {
         </aside>
 
         {/* ── Content ── */}
-        <main className="space-y-12 bg-slate-900 border border-slate-800 rounded-xl p-6 sm:p-8 min-w-0">
+        <main className="space-y-12 ui-card p-6 sm:p-8 min-w-0">
 
           {/* ── What is MyApi ── */}
           <Section id="what-is-myapi" title="What is MyApi?">
@@ -214,7 +220,7 @@ function PlatformDocs() {
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
                   <p className="text-red-400 font-medium mb-2 text-xs uppercase tracking-wide">Without MyApi</p>
-                  <ul className="list-disc pl-4 space-y-1 text-slate-400">
+                  <ul className="list-disc pl-4 space-y-1 ink-3">
                     <li>Raw credentials pasted into every AI tool — one leak = full exposure</li>
                     <li>No way to revoke a single agent's access without rotating everything</li>
                     <li>Tokens sitting in environment variables, readable by anyone with server access</li>
@@ -254,27 +260,27 @@ function PlatformDocs() {
 
             <Block title="Typical workflow">
               <ol className="list-decimal pl-5 space-y-2">
-                <li><span className="text-white font-medium">Connect your services</span> — link Google, GitHub, Slack, or any of the 45+ supported integrations via OAuth</li>
-                <li><span className="text-white font-medium">Build your personas</span> — create AI identities tailored to different roles (engineer, assistant, support agent)</li>
-                <li><span className="text-white font-medium">Add knowledge and memory</span> — attach documents and long-term context that personas can draw on</li>
-                <li><span className="text-white font-medium">Issue a guest token</span> — create a scoped key for each agent or app, with only the permissions they need</li>
-                <li><span className="text-white font-medium">Monitor and adjust</span> — watch the activity log, approve new devices, revoke access at any time</li>
+                <li><span className="ink font-medium">Connect your services</span> — link Google, GitHub, Slack, or any of the 45+ supported integrations via OAuth</li>
+                <li><span className="ink font-medium">Build your personas</span> — create AI identities tailored to different roles (engineer, assistant, support agent)</li>
+                <li><span className="ink font-medium">Add knowledge and memory</span> — attach documents and long-term context that personas can draw on</li>
+                <li><span className="ink font-medium">Issue a guest token</span> — create a scoped key for each agent or app, with only the permissions they need</li>
+                <li><span className="ink font-medium">Monitor and adjust</span> — watch the activity log, approve new devices, revoke access at any time</li>
               </ol>
             </Block>
 
             <Block title="Who is it for">
               <div className="grid sm:grid-cols-3 gap-4">
-                <div className="bg-slate-900 rounded-lg p-3 border border-slate-800">
-                  <p className="text-white font-semibold mb-1">AI developers</p>
-                  <p className="text-slate-400 text-xs">Building agents that need real user data — get a unified proxy to 45+ services with one token</p>
+                <div className="ui-card p-3">
+                  <p className="font-semibold mb-1 ink">AI developers</p>
+                  <p className="text-xs ink-3">Building agents that need real user data — get a unified proxy to 45+ services with one token</p>
                 </div>
-                <div className="bg-slate-900 rounded-lg p-3 border border-slate-800">
-                  <p className="text-white font-semibold mb-1">Power users</p>
-                  <p className="text-slate-400 text-xs">Automating your digital life — centralize credentials, build personas, and audit everything</p>
+                <div className="ui-card p-3">
+                  <p className="font-semibold mb-1 ink">Power users</p>
+                  <p className="text-xs ink-3">Automating your digital life — centralize credentials, build personas, and audit everything</p>
                 </div>
-                <div className="bg-slate-900 rounded-lg p-3 border border-slate-800">
-                  <p className="text-white font-semibold mb-1">Teams</p>
-                  <p className="text-slate-400 text-xs">Sharing controlled AI access across a workspace with role-based permissions and audit trails</p>
+                <div className="ui-card p-3">
+                  <p className="font-semibold mb-1 ink">Teams</p>
+                  <p className="text-xs ink-3">Sharing controlled AI access across a workspace with role-based permissions and audit trails</p>
                 </div>
               </div>
             </Block>
@@ -286,26 +292,26 @@ function PlatformDocs() {
 
             <Block title="Step 1 — Connect a service">
               <ol className="list-decimal pl-5 space-y-1">
-                <li>Go to <span className="text-white font-medium">Services</span> in the sidebar</li>
+                <li>Go to <span className="ink font-medium">Services</span> in the sidebar</li>
                 <li>Find the service you want (e.g. Google, GitHub)</li>
-                <li>Click <span className="text-white font-medium">Connect</span> — you'll be taken through OAuth</li>
+                <li>Click <span className="ink font-medium">Connect</span> — you'll be taken through OAuth</li>
                 <li>After approving, you'll see the service listed as <span className="text-green-400">Connected</span></li>
               </ol>
             </Block>
 
             <Block title="Step 2 — Create a persona">
               <ol className="list-decimal pl-5 space-y-1">
-                <li>Go to <span className="text-white font-medium">Personas</span> in the AI Brain section</li>
-                <li>Click <span className="text-white font-medium">Create New Persona</span></li>
+                <li>Go to <span className="ink font-medium">Personas</span> in the AI Brain section</li>
+                <li>Click <span className="ink font-medium">Create New Persona</span></li>
                 <li>Give it a name and describe its role and personality in the soul content field</li>
-                <li>Click <span className="text-white font-medium">Set as Active</span> to make it the default for API calls</li>
+                <li>Click <span className="ink font-medium">Set as Active</span> to make it the default for API calls</li>
               </ol>
             </Block>
 
             <Block title="Step 3 — Issue a guest token">
               <ol className="list-decimal pl-5 space-y-1">
-                <li>Go to <span className="text-white font-medium">Access Tokens</span></li>
-                <li>Click <span className="text-white font-medium">Create Guest Token</span></li>
+                <li>Go to <span className="ink font-medium">Access Tokens</span></li>
+                <li>Click <span className="ink font-medium">Create Guest Token</span></li>
                 <li>Choose a label (e.g. "My Claude Agent") and select the scopes you want to allow</li>
                 <li>Copy the token — it won't be shown again</li>
               </ol>
@@ -332,7 +338,7 @@ function PlatformDocs() {
             <p>
               Your identity profile is the foundation of every interaction MyApi enables. It's a structured record of
               who you are — your name, role, timezone, interests, and professional context. This information is
-              assembled into a <span className="text-white font-medium">USER.md</span> document that gets injected
+              assembled into a <span className="ink font-medium">USER.md</span> document that gets injected
               into AI context automatically, so agents always have accurate background about you.
             </p>
 
@@ -380,18 +386,18 @@ function PlatformDocs() {
                   ['jarvis', <span className="px-2 py-0.5 rounded-full text-xs bg-orange-500/20 text-orange-300 border border-orange-500/30">jarvis</span>, 'Written by a Jarvis / local AI agent'],
                   ['gemini', <span className="px-2 py-0.5 rounded-full text-xs bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">gemini</span>, 'Written by a Gemini agent'],
                   ['github copilot', <span className="px-2 py-0.5 rounded-full text-xs bg-gray-500/20 text-gray-300 border border-gray-500/30">copilot</span>, 'Written by a GitHub Copilot extension'],
-                  ['api', <span className="px-2 py-0.5 rounded-full text-xs bg-slate-600/30 text-slate-400 border border-slate-600/30">api</span>, 'Written programmatically via the API'],
+                  ['api', <span className="px-2 py-0.5 rounded-full text-xs ink-3" style={{ background: 'var(--bg-sunk)', border: '1px solid var(--line)' }}>api</span>, 'Written programmatically via the API'],
                 ]}
               />
             </Block>
 
             <Block title="How to use memory">
               <ul className="list-disc pl-5 space-y-1">
-                <li>Create a memory from the <span className="text-white font-medium">Memory</span> page — paste any text and save</li>
+                <li>Create a memory from the <span className="ink font-medium">Memory</span> page — paste any text and save</li>
                 <li>Browse entries by source or scroll through the feed</li>
                 <li>Click any entry to edit it inline</li>
                 <li>Delete entries that are no longer relevant</li>
-                <li>Agents can write new memories via <code className="bg-slate-800 px-1 rounded text-xs font-mono">POST /api/v1/memory</code></li>
+                <li>Agents can write new memories via <code className="mono px-1 rounded text-xs">POST /api/v1/memory</code></li>
               </ul>
             </Block>
 
@@ -416,9 +422,9 @@ function PlatformDocs() {
 
             <Block title="Creating a persona">
               <ol className="list-decimal pl-5 space-y-1">
-                <li>Click <span className="text-white font-medium">Create New Persona</span> on the Personas page</li>
+                <li>Click <span className="ink font-medium">Create New Persona</span> on the Personas page</li>
                 <li>Give it a name (e.g. "Senior Engineer") and a short description</li>
-                <li>Write the <span className="text-white font-medium">soul content</span> — describe the persona's role, tone, expertise, and how it should respond</li>
+                <li>Write the <span className="ink font-medium">soul content</span> — describe the persona's role, tone, expertise, and how it should respond</li>
                 <li>Toggle it <span className="text-green-400">Active</span> when you want it to be the default for API calls</li>
               </ol>
             </Block>
@@ -426,15 +432,15 @@ function PlatformDocs() {
             <Block title="Attaching resources">
               <p>Personas become more powerful when you connect them to context:</p>
               <ul className="list-disc pl-5 space-y-1 mt-2">
-                <li><span className="text-white font-medium">Knowledge documents</span> — attach SOPs, specs, or reference material so the persona can answer from your actual context</li>
-                <li><span className="text-white font-medium">Skills</span> — attach capability modules that define what the persona can do (see the Skills section)</li>
+                <li><span className="ink font-medium">Knowledge documents</span> — attach SOPs, specs, or reference material so the persona can answer from your actual context</li>
+                <li><span className="ink font-medium">Skills</span> — attach capability modules that define what the persona can do (see the Skills section)</li>
               </ul>
-              <p className="mt-2 text-slate-400 text-xs">A persona only sees the documents and skills explicitly attached to it — other personas' context stays isolated.</p>
+              <p className="mt-2 ink-3 text-xs">A persona only sees the documents and skills explicitly attached to it — other personas' context stays isolated.</p>
             </Block>
 
             <Block title="Setting the active persona">
               <p>
-                Only one persona is "active" at a time. When an AI agent calls <code className="bg-slate-800 px-1 rounded text-xs font-mono">GET /api/v1/gateway/context</code>,
+                Only one persona is "active" at a time. When an AI agent calls <code className="mono px-1 rounded text-xs">GET /api/v1/gateway/context</code>,
                 the response includes the active persona's soul content, attached knowledge, and assembled user context.
                 You can switch the active persona from the persona detail view.
               </p>
@@ -447,9 +453,9 @@ function PlatformDocs() {
                   { name: '"Support Agent"', desc: 'Friendly tone, product knowledge base attached, empathetic communication style' },
                   { name: '"Personal Assistant"', desc: 'Broad context, calendar access, preference-aware, casual tone' },
                 ].map(p => (
-                  <div key={p.name} className="bg-slate-900 rounded-lg p-3 border border-slate-800">
-                    <p className="text-white font-semibold text-xs mb-1">{p.name}</p>
-                    <p className="text-slate-400 text-xs">{p.desc}</p>
+                  <div key={p.name} className="ui-card p-3">
+                    <p className="font-semibold text-xs mb-1 ink">{p.name}</p>
+                    <p className="text-xs ink-3">{p.desc}</p>
                   </div>
                 ))}
               </div>
@@ -477,7 +483,7 @@ function PlatformDocs() {
             <Block title="Supported formats">
               <ul className="list-disc pl-5 space-y-1">
                 <li>Type or paste text directly in the dashboard editor</li>
-                <li>Upload <span className="text-white font-medium">.txt</span>, <span className="text-white font-medium">.md</span>, or <span className="text-white font-medium">.pdf</span> files</li>
+                <li>Upload <span className="ink font-medium">.txt</span>, <span className="ink font-medium">.md</span>, or <span className="ink font-medium">.pdf</span> files</li>
                 <li>Documents are stored and searchable immediately after creation</li>
               </ul>
             </Block>
@@ -519,10 +525,10 @@ function PlatformDocs() {
 
             <Block title="Creating a skill">
               <ol className="list-decimal pl-5 space-y-1">
-                <li>Go to <span className="text-white font-medium">Skills</span> in the sidebar</li>
-                <li>Click <span className="text-white font-medium">Create Skill</span> and give it a name, description, and category</li>
+                <li>Go to <span className="ink font-medium">Skills</span> in the sidebar</li>
+                <li>Click <span className="ink font-medium">Create Skill</span> and give it a name, description, and category</li>
                 <li>Optionally paste a script or configuration JSON</li>
-                <li>Use <span className="text-white font-medium">Scan Repository</span> to auto-discover metadata from a GitHub URL</li>
+                <li>Use <span className="ink font-medium">Scan Repository</span> to auto-discover metadata from a GitHub URL</li>
                 <li>Attach the skill to one or more personas</li>
               </ol>
             </Block>
@@ -535,13 +541,13 @@ function PlatformDocs() {
                 <li>Browse and search listings by type and category</li>
                 <li>Install a listing with one click — it appears in your library immediately</li>
                 <li>Rate and review listings you've used</li>
-                <li>Publish your own skills publicly (see <span className="text-white font-medium">My Listings</span> in the sidebar)</li>
+                <li>Publish your own skills publicly (see <span className="ink font-medium">My Listings</span> in the sidebar)</li>
               </ul>
             </Block>
 
             <Block title="Publishing your skills">
               <p>
-                To publish a skill to the marketplace, go to <span className="text-white font-medium">My Listings</span> and
+                To publish a skill to the marketplace, go to <span className="ink font-medium">My Listings</span> and
                 create a listing. You can set a description, category, license (MIT, Apache 2.0, GPL, etc.), tags,
                 and optionally a price. Published skills can be updated or unpublished at any time.
               </p>
@@ -587,9 +593,9 @@ function PlatformDocs() {
 
             <Block title="Connecting a service">
               <ol className="list-decimal pl-5 space-y-1">
-                <li>Go to <span className="text-white font-medium">Services</span> in the sidebar</li>
+                <li>Go to <span className="ink font-medium">Services</span> in the sidebar</li>
                 <li>Search or filter to find the service you want</li>
-                <li>Click <span className="text-white font-medium">Connect</span> — you'll be redirected to the provider's OAuth consent page</li>
+                <li>Click <span className="ink font-medium">Connect</span> — you'll be redirected to the provider's OAuth consent page</li>
                 <li>Approve the requested permissions</li>
                 <li>You'll be returned to MyApi with the service showing as <span className="text-green-400">Connected</span></li>
               </ol>
@@ -597,7 +603,7 @@ function PlatformDocs() {
 
             <Block title="What agents can do with it">
               <p>
-                After connection, any agent with a <span className="text-white font-medium">services:write</span> scoped
+                After connection, any agent with a <span className="ink font-medium">services:write</span> scoped
                 token can call the service through the proxy endpoint. MyApi handles authentication transparently —
                 the agent sends a request describing what it wants, and MyApi forwards it with your OAuth token
                 attached. No credentials are ever exposed to the agent.
@@ -606,7 +612,7 @@ function PlatformDocs() {
 
             <Block title="Revoking access">
               <p>
-                Click <span className="text-white font-medium">Disconnect</span> on any service to immediately revoke
+                Click <span className="ink font-medium">Disconnect</span> on any service to immediately revoke
                 MyApi's access. The OAuth token is deleted and all future proxy calls to that service will fail.
                 This does not affect the service itself — you remain logged in to Google, GitHub, etc.
               </p>
@@ -632,7 +638,7 @@ function PlatformDocs() {
 
             <Block title="Installing AFP">
               <p>
-                Go to <span className="text-white font-medium">Connectors</span> in the sidebar and download the AFP
+                Go to <span className="ink font-medium">Connectors</span> in the sidebar and download the AFP
                 desktop app or daemon binary for your platform (Windows, macOS, or Linux). The installer guides
                 you through connecting it to your MyApi instance via OAuth — no token pasting required.
               </p>
@@ -665,7 +671,7 @@ function PlatformDocs() {
                 like a password: don't paste it into third-party tools directly. Instead, create a guest
                 token with the minimum scopes needed.
               </p>
-              <p className="mt-2 text-slate-400 text-xs">You can regenerate your master token at any time. Existing guest tokens are not affected.</p>
+              <p className="mt-2 ink-3 text-xs">You can regenerate your master token at any time. Existing guest tokens are not affected.</p>
             </Block>
 
             <Block title="Guest tokens">
@@ -734,7 +740,7 @@ function PlatformDocs() {
 
             <Block title="API URL discovery">
               <p>
-                When adding a token, you can paste the provider's website URL and click <span className="text-white font-medium">Discover API</span>.
+                When adding a token, you can paste the provider's website URL and click <span className="ink font-medium">Discover API</span>.
                 MyApi will analyze the site and attempt to identify the API base URL and authentication scheme,
                 saving you from looking it up manually.
               </p>
@@ -769,22 +775,22 @@ function PlatformDocs() {
                 <li>A new device makes its first request to MyApi</li>
                 <li>MyApi fingerprints the device (browser, IP, User-Agent) and creates a pending approval</li>
                 <li>You receive a notification in the dashboard (and optionally by email)</li>
-                <li>You approve or reject from the <span className="text-white font-medium">Device Management</span> page</li>
+                <li>You approve or reject from the <span className="ink font-medium">Device Management</span> page</li>
                 <li>Approved devices proceed; rejected devices are blocked</li>
               </ol>
             </Block>
 
             <Block title="Approved vs. pending">
               <p>
-                The Device Management page has two tabs: <span className="text-white font-medium">Approved</span> (devices you've already cleared)
-                and <span className="text-white font-medium">Pending</span> (requests waiting for your decision).
+                The Device Management page has two tabs: <span className="ink font-medium">Approved</span> (devices you've already cleared)
+                and <span className="ink font-medium">Pending</span> (requests waiting for your decision).
                 You can rename approved devices to keep track of them, and revoke access at any time.
               </p>
             </Block>
 
             <Block title="Revoking a device">
               <p>
-                Click <span className="text-white font-medium">Revoke</span> on any approved device to immediately
+                Click <span className="ink font-medium">Revoke</span> on any approved device to immediately
                 block all future requests from it. Any in-flight requests using that device's token will also
                 be rejected. The device can request approval again if it tries to reconnect.
               </p>
@@ -821,8 +827,8 @@ function PlatformDocs() {
 
             <Block title="Inviting members">
               <ol className="list-decimal pl-5 space-y-1">
-                <li>Go to <span className="text-white font-medium">Team Settings</span> in the sidebar</li>
-                <li>Click <span className="text-white font-medium">Invite Member</span></li>
+                <li>Go to <span className="ink font-medium">Team Settings</span> in the sidebar</li>
+                <li>Click <span className="ink font-medium">Invite Member</span></li>
                 <li>Enter their email and select a role</li>
                 <li>They'll receive an invitation email and can join from the link</li>
               </ol>
@@ -855,11 +861,11 @@ function PlatformDocs() {
             <Block title="Filtering the log">
               <p>Use the filter controls to narrow down the log by:</p>
               <ul className="list-disc pl-5 space-y-1 mt-2">
-                <li><span className="text-white font-medium">Action type</span> — token_used, service_proxy, device_approved, etc.</li>
-                <li><span className="text-white font-medium">Resource type</span> — token, service, persona, device, skill</li>
-                <li><span className="text-white font-medium">Result</span> — success, failure, or pending</li>
-                <li><span className="text-white font-medium">Date range</span> — last 24 hours, 7 days, 30 days, or all time</li>
-                <li><span className="text-white font-medium">Search</span> — free-text search across log entries</li>
+                <li><span className="ink font-medium">Action type</span> — token_used, service_proxy, device_approved, etc.</li>
+                <li><span className="ink font-medium">Resource type</span> — token, service, persona, device, skill</li>
+                <li><span className="ink font-medium">Result</span> — success, failure, or pending</li>
+                <li><span className="ink font-medium">Date range</span> — last 24 hours, 7 days, 30 days, or all time</li>
+                <li><span className="ink font-medium">Search</span> — free-text search across log entries</li>
               </ul>
             </Block>
 
@@ -880,7 +886,7 @@ function PlatformDocs() {
 
             <Block title="Export">
               <p>
-                The activity log is included in any data export. Go to <span className="text-white font-medium">Settings → Export Data</span> to
+                The activity log is included in any data export. Go to <span className="ink font-medium">Settings → Export Data</span> to
                 download a full export package (JSON or ZIP) that includes an audit summary.
               </p>
             </Block>
@@ -891,15 +897,15 @@ function PlatformDocs() {
             <p>
               ASC (Agentic Secure Connection) is MyApi's cryptographic authentication method for AI agents.
               Instead of an agent holding a raw Bearer token that could be stolen from an environment variable
-              or intercepted in transit, the agent holds an <span className="text-white font-medium">Ed25519 private key</span> and
+              or intercepted in transit, the agent holds an <span className="ink font-medium">Ed25519 private key</span> and
               signs every request. MyApi verifies the signature — no raw secret ever crosses the wire.
             </p>
 
             <Block title="Why ASC matters">
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
-                  <p className="text-slate-400 font-medium mb-2 text-xs uppercase tracking-wide">Standard Bearer token</p>
-                  <ul className="list-disc pl-4 space-y-1 text-slate-400 text-xs">
+                  <p className="ink-3 font-medium mb-2 text-xs uppercase tracking-wide">Standard Bearer token</p>
+                  <ul className="list-disc pl-4 space-y-1 ink-3 text-xs">
                     <li>Token stored in environment variable — readable by anyone with server access</li>
                     <li>If intercepted, attacker can replay it indefinitely</li>
                     <li>No proof the request came from the intended agent</li>
@@ -919,29 +925,29 @@ function PlatformDocs() {
             <Block title="How it works">
               <ol className="list-decimal pl-5 space-y-2">
                 <li>
-                  <span className="text-white font-medium">Agent generates a keypair</span> — an Ed25519 public/private key pair is created locally on the agent's machine. The private key never leaves.
+                  <span className="ink font-medium">Agent generates a keypair</span> — an Ed25519 public/private key pair is created locally on the agent's machine. The private key never leaves.
                 </li>
                 <li>
-                  <span className="text-white font-medium">Register the public key</span> — the agent calls <code className="bg-slate-800 px-1 rounded text-xs font-mono">POST /api/v1/agentic/asc/register</code> with its base64-encoded public key.
+                  <span className="ink font-medium">Register the public key</span> — the agent calls <code className="mono px-1 rounded text-xs">POST /api/v1/agentic/asc/register</code> with its base64-encoded public key.
                 </li>
                 <li>
-                  <span className="text-white font-medium">Approve in the dashboard</span> — the key appears as a pending device in Device Management. You approve it once.
+                  <span className="ink font-medium">Approve in the dashboard</span> — the key appears as a pending device in Device Management. You approve it once.
                 </li>
                 <li>
-                  <span className="text-white font-medium">Sign every request</span> — the agent signs a message of <code className="bg-slate-800 px-1 rounded text-xs font-mono">"timestamp:token_id"</code> and includes three headers:
+                  <span className="ink font-medium">Sign every request</span> — the agent signs a message of <code className="mono px-1 rounded text-xs">"timestamp:token_id"</code> and includes three headers:
                   <CodeSnip>{`X-Agent-PublicKey:  <base64 Ed25519 public key>
 X-Agent-Signature: <base64 signature of "timestamp:token_id">
 X-Agent-Timestamp: <unix timestamp in seconds>`}</CodeSnip>
                 </li>
                 <li>
-                  <span className="text-white font-medium">MyApi verifies</span> — the signature is checked against the registered public key. The timestamp must be within 60 seconds of server time to prevent replay attacks.
+                  <span className="ink font-medium">MyApi verifies</span> — the signature is checked against the registered public key. The timestamp must be within 60 seconds of server time to prevent replay attacks.
                 </li>
               </ol>
             </Block>
 
             <Block title="Replay protection">
               <p>
-                The timestamp in every signed message must be within <span className="text-white font-medium">60 seconds</span> of the server's
+                The timestamp in every signed message must be within <span className="ink font-medium">60 seconds</span> of the server's
                 clock. If someone intercepts a valid request and tries to replay it 61 seconds later, MyApi
                 rejects it outright. This means a stolen signature packet has a maximum useful lifetime of
                 one minute — and only against the exact same endpoint with the same token.
@@ -957,7 +963,7 @@ Content-Type: application/json
   "public_key": "<base64-encoded Ed25519 public key>",
   "label": "My Production Agent"
 }`}</CodeSnip>
-              <p className="mt-3 text-slate-400 text-xs">
+              <p className="mt-3 ink-3 text-xs">
                 Accepts both raw (32-byte) and SPKI DER (44-byte) Ed25519 public keys, base64-encoded.
                 The registered key appears in Device Management where you approve it before the agent can use it.
               </p>
@@ -989,32 +995,32 @@ Content-Type: application/json
                   ['Audit summary', 'High-level summary of account activity'],
                 ]}
               />
-              <p className="mt-3 text-slate-400 text-xs">Token secrets are never exported — credentials stay protected. Service OAuth tokens are excluded by design.</p>
+              <p className="mt-3 ink-3 text-xs">Token secrets are never exported — credentials stay protected. Service OAuth tokens are excluded by design.</p>
             </Block>
 
             <Block title="Export formats">
               <ul className="list-disc pl-5 space-y-2">
                 <li>
-                  <span className="text-white font-medium">JSON (v2)</span> — a single structured file, easy to read or process programmatically. Useful for inspecting your data or building integrations.
+                  <span className="ink font-medium">JSON (v2)</span> — a single structured file, easy to read or process programmatically. Useful for inspecting your data or building integrations.
                 </li>
                 <li>
-                  <span className="text-white font-medium">ZIP (v3 portable package)</span> — a structured archive with separate files per section, a <code className="bg-slate-800 px-1 rounded text-xs font-mono">manifest.json</code>, and a <code className="bg-slate-800 px-1 rounded text-xs font-mono">checksums.sha256</code> for integrity verification. This is the format used for import.
+                  <span className="ink font-medium">ZIP (v3 portable package)</span> — a structured archive with separate files per section, a <code className="mono px-1 rounded text-xs">manifest.json</code>, and a <code className="mono px-1 rounded text-xs">checksums.sha256</code> for integrity verification. This is the format used for import.
                 </li>
               </ul>
             </Block>
 
             <Block title="How to export">
               <ol className="list-decimal pl-5 space-y-1">
-                <li>Go to <span className="text-white font-medium">Settings → Export Data</span></li>
+                <li>Go to <span className="ink font-medium">Settings → Export Data</span></li>
                 <li>Choose your format (JSON or ZIP)</li>
-                <li>Click <span className="text-white font-medium">Download</span> — the file is generated and downloaded immediately</li>
+                <li>Click <span className="ink font-medium">Download</span> — the file is generated and downloaded immediately</li>
               </ol>
-              <p className="mt-2 text-slate-400 text-xs">Or via the API: <code className="bg-slate-800 px-1 rounded font-mono text-xs">GET /api/v1/export?format=zip&mode=portable</code></p>
+              <p className="mt-2 ink-3 text-xs">Or via the API: <code className="mono px-1 rounded text-xs">GET /api/v1/export?format=zip&mode=portable</code></p>
             </Block>
 
             <Block title="How to import">
               <ol className="list-decimal pl-5 space-y-1">
-                <li>Go to <span className="text-white font-medium">Settings → Import Data</span></li>
+                <li>Go to <span className="ink font-medium">Settings → Import Data</span></li>
                 <li>Upload a ZIP export file (v3 format)</li>
                 <li>MyApi validates the archive and shows you what will be imported</li>
                 <li>Confirm — personas, knowledge docs, and skills are restored</li>
@@ -1057,13 +1063,13 @@ Content-Type: application/json
   "method": "GET",
   "query": { "maxResults": 10 }
 }`}</CodeSnip>
-              <p className="mt-3 text-slate-400 text-xs">Replace <code className="bg-slate-800 px-1 rounded font-mono">{`{service}`}</code> with any connected service ID: <code className="bg-slate-800 px-1 rounded font-mono">google</code>, <code className="bg-slate-800 px-1 rounded font-mono">github</code>, <code className="bg-slate-800 px-1 rounded font-mono">slack</code>, etc.</p>
+              <p className="mt-3 ink-3 text-xs">Replace <code className="mono px-1 rounded">{`{service}`}</code> with any connected service ID: <code className="mono px-1 rounded">google</code>, <code className="mono px-1 rounded">github</code>, <code className="mono px-1 rounded">slack</code>, etc.</p>
             </Block>
 
             <Block title="First access — the approval flow">
               <p className="mb-3">
                 The first time an agent makes a request, MyApi fingerprints the device and puts it in a pending
-                approval state. The agent receives a <span className="text-white font-medium">403</span> with guidance:
+                approval state. The agent receives a <span className="ink font-medium">403</span> with guidance:
               </p>
               <CodeSnip>{`{
   "error": "Access pending approval",
@@ -1097,7 +1103,7 @@ Authorization: Bearer YOUR_TOKEN`}</CodeSnip>
               </p>
               <CodeSnip>{`GET /api/v1/gateway/context
 Authorization: Bearer YOUR_TOKEN`}</CodeSnip>
-              <p className="mt-3 text-slate-400 text-xs">Returns the active persona's soul content, attached knowledge summary, user identity, and recent memory — assembled and ready to use as a system prompt.</p>
+              <p className="mt-3 ink-3 text-xs">Returns the active persona's soul content, attached knowledge summary, user identity, and recent memory — assembled and ready to use as a system prompt.</p>
             </Block>
 
             <Callout type="tip">

@@ -60,19 +60,16 @@ function Field({ label, hint, required, children }) {
   return (
     <div>
       <div className="flex items-baseline gap-2 mb-1.5">
-        <label className="text-sm font-medium text-slate-200">
+        <label className="text-[12.5px] ink font-medium">
           {label}
-          {required && <span className="text-red-400 ml-0.5">*</span>}
+          {required && <span style={{ color: 'var(--red)' }} className="ml-0.5">*</span>}
         </label>
-        {hint && <span className="text-xs text-slate-500">{hint}</span>}
+        {hint && <span className="micro" style={{ textTransform: 'none', letterSpacing: 'normal' }}>{hint}</span>}
       </div>
       {children}
     </div>
   );
 }
-
-const inputCls = 'w-full px-3 py-2 bg-slate-800/80 border border-slate-700 rounded-lg text-sm text-slate-100 placeholder-slate-600 focus:border-blue-500 focus:outline-none focus:bg-slate-800 transition-colors';
-const textareaCls = `${inputCls} resize-none`;
 
 function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
   const [tab, setTab] = useState('identity');
@@ -271,25 +268,42 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
     !skillSearch || (s.name || '').toLowerCase().includes(skillSearch.toLowerCase())
   );
 
+  /* ── shared input style ── */
+  const inputStyle = {
+    width: '100%',
+    background: 'var(--bg-sunk)',
+    border: '1px solid var(--line)',
+    borderRadius: '6px',
+    padding: '6px 12px',
+    fontSize: '13.5px',
+    color: 'var(--ink)',
+    outline: 'none',
+  };
+  const textareaStyle = { ...inputStyle, resize: 'none' };
+
   return (
     <div className="space-y-0">
       {/* Tab bar */}
-      <div className="flex gap-0.5 border-b border-slate-700/60 overflow-x-auto mb-5">
+      <div className="flex gap-0 overflow-x-auto mb-5" style={{ borderBottom: '1px solid var(--line)' }}>
         {TABS.map(t => (
           <button
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
-            className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors -mb-px ${
-              tab === t.id
-                ? 'text-blue-400 border-blue-500'
-                : 'text-slate-500 border-transparent hover:text-slate-300'
-            }`}
+            className="flex items-center gap-1.5 px-3 py-2.5 text-[13px] font-medium whitespace-nowrap transition-colors"
+            style={{
+              borderBottom: tab === t.id ? '2px solid var(--accent)' : '2px solid transparent',
+              marginBottom: '-1px',
+              color: tab === t.id ? 'var(--accent)' : 'var(--ink-3)',
+            }}
           >
-            <span className={tab === t.id ? 'text-blue-400' : 'text-slate-600'}>{t.icon}</span>
+            <span style={{ color: tab === t.id ? 'var(--accent)' : 'var(--ink-4)' }}>{t.icon}</span>
             {t.label}
             {t.id === 'knowledge' && (formData.attachedDocuments.length > 0 || formData.attachedSkills.length > 0) && (
-              <span className="ml-0.5 px-1.5 py-0.5 rounded text-[10px] bg-blue-500/20 text-blue-400 font-medium">
+              <span
+                className="ml-0.5 px-1.5 py-0.5 text-[10px] font-medium"
+                style={{ background: 'var(--accent-bg)', color: 'var(--accent)', borderRadius: '3px' }}
+              >
                 {formData.attachedDocuments.length + formData.attachedSkills.length}
               </span>
             )}
@@ -308,7 +322,7 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
                 value={formData.name}
                 onChange={e => set('name', e.target.value)}
                 placeholder="e.g., Dr. Ada Lovelace, Senior Coder"
-                className={inputCls}
+                style={inputStyle}
                 autoFocus
               />
             </Field>
@@ -319,7 +333,7 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
                 value={formData.title}
                 onChange={e => set('title', e.target.value)}
                 placeholder="e.g., Senior Full-Stack Developer"
-                className={inputCls}
+                style={inputStyle}
               />
             </Field>
 
@@ -330,7 +344,7 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
                   value={formData.field}
                   onChange={e => set('field', e.target.value)}
                   placeholder="e.g., Software Engineering"
-                  className={inputCls}
+                  style={inputStyle}
                 />
               </Field>
               <Field label="Experience">
@@ -339,7 +353,7 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
                   value={formData.yearsExperience}
                   onChange={e => set('yearsExperience', e.target.value)}
                   placeholder="e.g., 15 years"
-                  className={inputCls}
+                  style={inputStyle}
                 />
               </Field>
             </div>
@@ -350,7 +364,7 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
                 onChange={e => set('achievement', e.target.value)}
                 placeholder="e.g., Founded 3 startups, authored 2 technical books"
                 rows={3}
-                className={textareaCls}
+                style={textareaStyle}
               />
             </Field>
 
@@ -360,7 +374,7 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
                 onChange={e => set('coreGoal', e.target.value)}
                 placeholder="e.g., review code with brutal honesty but high technical accuracy"
                 rows={3}
-                className={textareaCls}
+                style={textareaStyle}
               />
             </Field>
           </div>
@@ -375,7 +389,7 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
                 value={formData.tone}
                 onChange={e => set('tone', e.target.value)}
                 placeholder="e.g., Cynical, tired, but secretly helpful"
-                className={inputCls}
+                style={inputStyle}
               />
             </Field>
 
@@ -385,7 +399,7 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
                 value={formData.communicationStyle}
                 onChange={e => set('communicationStyle', e.target.value)}
                 placeholder="e.g., Short, direct, and slightly condescending"
-                className={inputCls}
+                style={inputStyle}
               />
             </Field>
 
@@ -395,7 +409,7 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
                 value={formData.traits}
                 onChange={e => set('traits', e.target.value)}
                 placeholder="e.g., Impatient, brilliant, caffeinated"
-                className={inputCls}
+                style={inputStyle}
               />
             </Field>
 
@@ -405,7 +419,7 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
                 onChange={e => set('vocabulary', e.target.value)}
                 placeholder="e.g., old-school dev slang like 'spaghetti code' and 'RTFM'"
                 rows={2}
-                className={textareaCls}
+                style={textareaStyle}
               />
             </Field>
 
@@ -415,7 +429,7 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
                 onChange={e => set('avoidWords', e.target.value)}
                 placeholder="e.g., emojis, corporate jargon, buzzwords"
                 rows={2}
-                className={textareaCls}
+                style={textareaStyle}
               />
             </Field>
           </div>
@@ -430,31 +444,31 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
                 value={formData.formatting}
                 onChange={e => set('formatting', e.target.value)}
                 placeholder="e.g., Bullet points, code blocks, numbered steps"
-                className={inputCls}
+                style={inputStyle}
               />
             </Field>
 
             <div>
-              <p className="text-sm font-medium text-slate-200 mb-2">Knowledge Limit</p>
+              <p className="text-[12.5px] ink font-medium mb-2">Knowledge Limit</p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <p className="text-xs text-slate-500 mb-1.5">Avoid topic</p>
+                  <p className="micro mb-1.5" style={{ textTransform: 'none', letterSpacing: 'normal', fontSize: '12px' }}>Avoid topic</p>
                   <input
                     type="text"
                     value={formData.knowledgeLimitTopic}
                     onChange={e => set('knowledgeLimitTopic', e.target.value)}
                     placeholder="e.g., No-Code tools"
-                    className={inputCls}
+                    style={inputStyle}
                   />
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500 mb-1.5">Redirect to</p>
+                  <p className="micro mb-1.5" style={{ textTransform: 'none', letterSpacing: 'normal', fontSize: '12px' }}>Redirect to</p>
                   <input
                     type="text"
                     value={formData.knowledgeLimitRedirect}
                     onChange={e => set('knowledgeLimitRedirect', e.target.value)}
                     placeholder="e.g., Low-code frameworks"
-                    className={inputCls}
+                    style={inputStyle}
                   />
                 </div>
               </div>
@@ -466,7 +480,7 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
                 onChange={e => set('internalLogic', e.target.value)}
                 placeholder="e.g., Act like you're typing from a dark basement office"
                 rows={2}
-                className={textareaCls}
+                style={textareaStyle}
               />
             </Field>
 
@@ -476,7 +490,7 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
                 onChange={e => set('greeting', e.target.value)}
                 placeholder="e.g., 'Sup, what are we fixing today?'"
                 rows={2}
-                className={textareaCls}
+                style={textareaStyle}
               />
             </Field>
 
@@ -487,7 +501,7 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
                   onChange={e => set('doNotActions', e.target.value)}
                   placeholder={'use emojis\ngive medical advice\nbe diplomatic'}
                   rows={4}
-                  className={textareaCls}
+                  style={textareaStyle}
                 />
               </Field>
               <Field label="ALWAYS Actions" hint="one per line">
@@ -496,7 +510,7 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
                   onChange={e => set('alwaysActions', e.target.value)}
                   placeholder={'ask a follow-up question\nprovide code examples\nstay technical'}
                   rows={4}
-                  className={textareaCls}
+                  style={textareaStyle}
                 />
               </Field>
             </div>
@@ -510,19 +524,19 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
             <div>
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <h3 className="text-sm font-medium text-slate-200">Knowledge Base Documents</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">Attach documents for context-aware responses</p>
+                  <h3 className="text-[13.5px] font-medium ink">Knowledge Base Documents</h3>
+                  <p className="text-[12px] ink-3 mt-0.5">Attach documents for context-aware responses</p>
                 </div>
                 {formData.attachedDocuments.length > 0 && (
-                  <span className="text-xs text-blue-400 font-medium">
+                  <span className="text-[12px] font-medium" style={{ color: 'var(--accent)' }}>
                     {formData.attachedDocuments.length} selected
                   </span>
                 )}
               </div>
 
               {availableDocuments.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-slate-700 p-6 text-center">
-                  <p className="text-sm text-slate-500">No documents in your knowledge base yet.</p>
+                <div className="p-6 text-center" style={{ border: '1px dashed var(--line)', borderRadius: '6px' }}>
+                  <p className="text-[13px] ink-3">No documents in your knowledge base yet.</p>
                 </div>
               ) : (
                 <>
@@ -531,7 +545,7 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
                     value={docSearch}
                     onChange={e => setDocSearch(e.target.value)}
                     placeholder="Search documents…"
-                    className={`${inputCls} mb-2`}
+                    style={{ ...inputStyle, marginBottom: '8px' }}
                   />
                   <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
                     {filteredDocs.map(doc => {
@@ -539,27 +553,29 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
                       return (
                         <label
                           key={doc.id}
-                          className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors ${
-                            checked
-                              ? 'bg-blue-500/10 border border-blue-500/25'
-                              : 'bg-slate-800/60 border border-slate-800 hover:border-slate-700'
-                          }`}
+                          className="flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors"
+                          style={{
+                            borderRadius: '6px',
+                            background: checked ? 'var(--accent-bg)' : 'var(--bg-sunk)',
+                            border: checked ? '1px solid rgba(68,147,248,0.3)' : '1px solid var(--line)',
+                          }}
                         >
                           <input
                             type="checkbox"
                             checked={checked}
                             onChange={() => toggleDoc(doc.id)}
-                            className="w-4 h-4 accent-blue-500 flex-shrink-0"
+                            className="w-4 h-4 flex-shrink-0"
+                            style={{ accentColor: 'var(--accent)' }}
                           />
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-slate-200 truncate">{doc.title}</p>
-                            {doc.source && <p className="text-xs text-slate-500 truncate">{doc.source}</p>}
+                            <p className="text-[13px] font-medium ink truncate">{doc.title}</p>
+                            {doc.source && <p className="text-[11.5px] ink-3 truncate">{doc.source}</p>}
                           </div>
                         </label>
                       );
                     })}
                     {filteredDocs.length === 0 && (
-                      <p className="text-xs text-slate-600 py-3 text-center">No matches</p>
+                      <p className="text-[12px] ink-4 py-3 text-center">No matches</p>
                     )}
                   </div>
                 </>
@@ -567,22 +583,22 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
             </div>
 
             {/* Skills */}
-            <div className="pt-4 border-t border-slate-800">
+            <div className="pt-4" style={{ borderTop: '1px solid var(--line-2)' }}>
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <h3 className="text-sm font-medium text-slate-200">Skills</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">Persona-scoped tokens will include these skills in context</p>
+                  <h3 className="text-[13.5px] font-medium ink">Skills</h3>
+                  <p className="text-[12px] ink-3 mt-0.5">Persona-scoped tokens will include these skills in context</p>
                 </div>
                 {formData.attachedSkills.length > 0 && (
-                  <span className="text-xs text-violet-400 font-medium">
+                  <span className="text-[12px] font-medium" style={{ color: 'var(--accent)' }}>
                     {formData.attachedSkills.length} selected
                   </span>
                 )}
               </div>
 
               {availableSkills.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-slate-700 p-6 text-center">
-                  <p className="text-sm text-slate-500">No skills found.</p>
+                <div className="p-6 text-center" style={{ border: '1px dashed var(--line)', borderRadius: '6px' }}>
+                  <p className="text-[13px] ink-3">No skills found.</p>
                 </div>
               ) : (
                 <>
@@ -591,7 +607,7 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
                     value={skillSearch}
                     onChange={e => setSkillSearch(e.target.value)}
                     placeholder="Search skills…"
-                    className={`${inputCls} mb-2`}
+                    style={{ ...inputStyle, marginBottom: '8px' }}
                   />
                   <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
                     {filteredSkills.map(skill => {
@@ -599,27 +615,29 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
                       return (
                         <label
                           key={skill.id}
-                          className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-colors ${
-                            checked
-                              ? 'bg-violet-500/10 border border-violet-500/25'
-                              : 'bg-slate-800/60 border border-slate-800 hover:border-slate-700'
-                          }`}
+                          className="flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors"
+                          style={{
+                            borderRadius: '6px',
+                            background: checked ? 'var(--accent-bg)' : 'var(--bg-sunk)',
+                            border: checked ? '1px solid rgba(68,147,248,0.3)' : '1px solid var(--line)',
+                          }}
                         >
                           <input
                             type="checkbox"
                             checked={checked}
                             onChange={() => toggleSkill(skill.id)}
-                            className="w-4 h-4 accent-violet-500 flex-shrink-0"
+                            className="w-4 h-4 flex-shrink-0"
+                            style={{ accentColor: 'var(--accent)' }}
                           />
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-slate-200 truncate">{skill.name}</p>
-                            <p className="text-xs text-slate-500 truncate">{skill.category || 'custom'}</p>
+                            <p className="text-[13px] font-medium ink truncate">{skill.name}</p>
+                            <p className="text-[11.5px] ink-3 truncate">{skill.category || 'custom'}</p>
                           </div>
                         </label>
                       );
                     })}
                     {filteredSkills.length === 0 && (
-                      <p className="text-xs text-slate-600 py-3 text-center">No matches</p>
+                      <p className="text-[12px] ink-4 py-3 text-center">No matches</p>
                     )}
                   </div>
                 </>
@@ -631,17 +649,19 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
         {/* ── PREVIEW ── */}
         {tab === 'preview' && (
           <div className="space-y-4">
-            <div className="bg-slate-950/60 border border-slate-800 rounded-xl overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
-                <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Generated System Prompt</p>
+            <div style={{ background: 'var(--bg-sunk)', border: '1px solid var(--line)', borderRadius: '6px', overflow: 'hidden' }}>
+              <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid var(--line)' }}>
+                <p className="micro">GENERATED SYSTEM PROMPT</p>
                 <button
                   type="button"
                   onClick={copyPrompt}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                    promptCopied
-                      ? 'bg-green-500/20 text-green-400'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-                  }`}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] font-medium transition-colors"
+                  style={{
+                    borderRadius: '6px',
+                    background: promptCopied ? 'var(--green-bg)' : 'transparent',
+                    color: promptCopied ? 'var(--green)' : 'var(--ink-3)',
+                    border: '1px solid ' + (promptCopied ? 'rgba(63,185,80,0.3)' : 'transparent'),
+                  }}
                 >
                   {promptCopied ? (
                     <>
@@ -662,21 +682,21 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
                 </button>
               </div>
               <div className="p-4 max-h-72 overflow-y-auto">
-                <pre className="whitespace-pre-wrap text-xs text-slate-300 font-mono leading-relaxed">
+                <pre className="whitespace-pre-wrap text-[12px] ink-2 mono leading-relaxed">
                   {generateSystemPrompt() || '(Complete the Identity tab to generate your system prompt)'}
                 </pre>
               </div>
             </div>
 
             {(formData.attachedDocuments.length > 0 || formData.attachedSkills.length > 0) && (
-              <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4">
-                <p className="text-xs font-medium text-slate-400 uppercase tracking-wider mb-3">Attached Resources</p>
+              <div className="p-4" style={{ background: 'var(--bg-sunk)', border: '1px solid var(--line)', borderRadius: '6px' }}>
+                <p className="micro mb-3">ATTACHED RESOURCES</p>
                 <div className="space-y-1.5">
                   {formData.attachedDocuments.map(id => {
                     const doc = availableDocuments.find(d => d.id === id);
                     return doc ? (
-                      <div key={id} className="flex items-center gap-2 text-xs text-slate-400">
-                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-blue-400 flex-shrink-0">
+                      <div key={id} className="flex items-center gap-2 text-[12px] ink-3">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--accent)', flexShrink: 0 }}>
                           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                           <polyline points="14 2 14 8 20 8"/>
                         </svg>
@@ -687,8 +707,8 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
                   {formData.attachedSkills.map(id => {
                     const skill = availableSkills.find(s => s.id === id);
                     return skill ? (
-                      <div key={id} className="flex items-center gap-2 text-xs text-slate-400">
-                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-violet-400 flex-shrink-0">
+                      <div key={id} className="flex items-center gap-2 text-[12px] ink-3">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--accent)', flexShrink: 0 }}>
                           <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
                         </svg>
                         <span className="truncate">{skill.name}</span>
@@ -703,8 +723,8 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
 
         {/* Error */}
         {error && (
-          <div className="bg-red-950/30 border border-red-800/50 rounded-lg px-4 py-3">
-            <p className="text-sm text-red-300">{error}</p>
+          <div className="px-4 py-3" style={{ background: 'var(--red-bg)', border: '1px solid rgba(248,81,73,0.4)', borderRadius: '6px' }}>
+            <p className="text-[13px]" style={{ color: 'var(--red)' }}>{error}</p>
           </div>
         )}
 
@@ -713,7 +733,7 @@ function EnhancedPersonaBuilder({ onSave, isLoading, initialData = null }) {
           <button
             type="submit"
             disabled={isLoading}
-            className="flex-1 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
+            className="btn btn-primary flex-1"
           >
             {isLoading ? 'Saving…' : 'Save Persona'}
           </button>

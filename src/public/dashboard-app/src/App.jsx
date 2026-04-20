@@ -224,7 +224,8 @@ function App() {
     const isAuthorizePath = window.location.pathname.includes('/authorize');
     const isLoginPath = window.location.pathname.endsWith('/login');
     const isSignupPath = window.location.pathname.endsWith('/signup');
-    if (!urlParams.has('oauth_status') && !isAuthorizePath && !isLoginPath && !isSignupPath) {
+    const isDocsPath = window.location.pathname.includes('/platform-docs') || window.location.pathname.includes('/api-docs');
+    if (!urlParams.has('oauth_status') && !isAuthorizePath && !isLoginPath && !isSignupPath && !isDocsPath) {
       window.location.replace('/');
       return null;
     }
@@ -247,6 +248,8 @@ function App() {
               <Route path="/authorize" element={<OAuthAuthorize />} />
               <Route path="/login" element={<LogIn />} />
               <Route path="/signup" element={<SignUp />} />
+              <Route path="/platform-docs" element={<PlatformDocs />} />
+              <Route path="/api-docs" element={<ApiDocs />} />
               <Route path="/" element={<Login />} />
               <Route path="*" element={
                 <div className="min-h-screen grid place-items-center bg-slate-950 text-slate-300">
@@ -362,22 +365,8 @@ function App() {
                 </ProtectedRoute>
               }
             />
-            <Route
-              path="/platform-docs"
-              element={
-                <ProtectedRoute>
-                  <PlatformDocs />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/api-docs"
-              element={
-                <ProtectedRoute>
-                  <ApiDocs />
-                </ProtectedRoute>
-              }
-            />
+            <Route path="/platform-docs" element={<PlatformDocs />} />
+            <Route path="/api-docs" element={<ApiDocs />} />
             <Route
               path="/skills"
               element={

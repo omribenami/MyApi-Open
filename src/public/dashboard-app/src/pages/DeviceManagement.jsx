@@ -153,54 +153,66 @@ const DeviceManagement = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-white tracking-tight">Device Management</h1>
-          <p className="text-sm text-slate-400 mt-1">Control which devices and agents can access your MyApi tokens</p>
-        </div>
+      <div>
+        <div className="micro mb-2">DEVICES · MANAGEMENT</div>
+        <h1 className="font-serif text-[28px] font-medium tracking-tight ink">Device Management.</h1>
+        <p className="ink-3 text-sm mt-1">Control which devices and agents can access your MyApi tokens</p>
       </div>
 
       {/* Toast */}
       {toast && (
-        <div className={`fixed top-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded-lg shadow-xl border text-sm font-medium transition-all ${
-          toast.type === 'error'
-            ? 'bg-red-950 border-red-700 text-red-200'
-            : 'bg-emerald-950 border-emerald-700 text-emerald-200'
-        }`}>
-          <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${toast.type === 'error' ? 'bg-red-400' : 'bg-emerald-400'}`} />
+        <div
+          className="fixed top-4 right-4 z-50 flex items-center gap-3 px-4 py-3 rounded shadow-xl text-sm font-medium"
+          style={{
+            background: toast.type === 'error' ? 'var(--red-bg)' : 'var(--green-bg)',
+            border: `1px solid ${toast.type === 'error' ? 'var(--red)' : 'var(--green)'}`,
+            color: toast.type === 'error' ? 'var(--red)' : 'var(--green)',
+          }}
+        >
+          <span
+            className="w-1.5 h-1.5 flex-shrink-0"
+            style={{ background: toast.type === 'error' ? 'var(--red)' : 'var(--green)', borderRadius: '2px' }}
+          />
           {toast.text}
         </div>
       )}
 
       {/* Error */}
       {error && (
-        <div className="flex items-center justify-between gap-4 px-4 py-3 rounded-lg border border-red-700/60 bg-red-950/40 text-red-300 text-sm">
+        <div
+          className="flex items-center justify-between gap-4 px-4 py-3 rounded text-sm"
+          style={{ background: 'var(--red-bg)', border: '1px solid var(--red)', color: 'var(--red)' }}
+        >
           <span>{error}</span>
-          <button onClick={() => setError(null)} className="text-red-400 hover:text-red-200 flex-shrink-0">
+          <button onClick={() => setError(null)} className="flex-shrink-0 opacity-70 hover:opacity-100">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
           </button>
         </div>
       )}
 
       {/* Tabs */}
-      <div className="flex gap-0 border-b border-slate-800">
+      <div className="flex gap-0" style={{ borderBottom: '1px solid var(--line)' }}>
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={`relative px-5 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
               activeTab === tab.id
-                ? 'border-blue-500 text-white'
-                : 'border-transparent text-slate-400 hover:text-slate-300'
+                ? 'border-[color:var(--ink)] ink'
+                : 'border-transparent ink-3 hover:ink-2'
             }`}
           >
             {tab.label}
             {tab.count !== undefined && (
-              <span className={`ml-2 px-1.5 py-0.5 rounded text-xs font-mono ${
-                tab.badge
-                  ? 'bg-amber-500/20 text-amber-300 border border-amber-600/40'
-                  : 'bg-slate-700 text-slate-400'
-              }`}>
+              <span
+                className="ml-2 px-1.5 py-0.5 text-xs mono"
+                style={{
+                  borderRadius: '3px',
+                  background: tab.badge ? 'var(--amber-bg, rgba(210,153,34,0.15))' : 'var(--bg-sunk)',
+                  color: tab.badge ? 'var(--amber)' : 'var(--ink-4)',
+                  border: tab.badge ? '1px solid var(--amber)' : '1px solid var(--line)',
+                }}
+              >
                 {tab.count}
               </span>
             )}
@@ -211,32 +223,32 @@ const DeviceManagement = () => {
       {/* Content */}
       {loading ? (
         <div className="flex items-center justify-center py-16">
-          <div className="w-5 h-5 border-2 border-slate-600 border-t-blue-500 rounded-full animate-spin" />
+          <div className="w-5 h-5 border-2 border-t-[color:var(--accent)] rounded-full animate-spin" style={{ borderColor: 'var(--line)', borderTopColor: 'var(--accent)' }} />
         </div>
       ) : activeTab === 'approved' ? (
         <div>
           {approvedDevices.length === 0 ? (
-            <div className="text-center py-16 text-slate-500 text-sm">No approved devices yet</div>
+            <div className="text-center py-16 ink-4 text-sm">No approved devices yet</div>
           ) : (
-            <div className="rounded-lg border border-slate-800 overflow-hidden">
+            <div className="rounded overflow-hidden" style={{ border: '1px solid var(--line)' }}>
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-800 bg-slate-900/60">
-                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Device</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider hidden md:table-cell">Fingerprint / ID</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider hidden lg:table-cell">IP Address</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider hidden lg:table-cell">Approved</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider hidden sm:table-cell">Last Used</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Scope</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-slate-400 uppercase tracking-wider">Actions</th>
+                  <tr className="bg-sunk" style={{ borderBottom: '1px solid var(--line)' }}>
+                    <th className="px-4 py-3 text-left micro">Device</th>
+                    <th className="px-4 py-3 text-left micro hidden md:table-cell">Fingerprint / ID</th>
+                    <th className="px-4 py-3 text-left micro hidden lg:table-cell">IP Address</th>
+                    <th className="px-4 py-3 text-left micro hidden lg:table-cell">Approved</th>
+                    <th className="px-4 py-3 text-left micro hidden sm:table-cell">Last Used</th>
+                    <th className="px-4 py-3 text-left micro">Scope</th>
+                    <th className="px-4 py-3 text-right micro">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/70">
+                <tbody>
                   {approvedDevices.map((device) => {
                     const isASC = device.info?.type === 'asc';
                     const fp = device.info?.key_fingerprint || device.fingerprint || '';
                     return (
-                      <tr key={device.id} className="bg-slate-900/20 hover:bg-slate-800/30 transition-colors">
+                      <tr key={device.id} className="row row-cell">
                         {/* Device name */}
                         <td className="px-4 py-3.5">
                           {renameMode === device.id ? (
@@ -250,28 +262,34 @@ const DeviceManagement = () => {
                                   if (e.key === 'Enter') handleRenameDevice(device.id);
                                   if (e.key === 'Escape') { setRenameMode(null); setNewDeviceName(''); }
                                 }}
-                                className="w-36 bg-slate-800 border border-slate-600 rounded px-2 py-1 text-white text-xs focus:border-blue-500 focus:outline-none"
+                                className="ui-input w-36 text-xs"
                               />
-                              <button onClick={() => handleRenameDevice(device.id)} className="text-blue-400 hover:text-blue-300 text-xs font-medium">Save</button>
-                              <button onClick={() => { setRenameMode(null); setNewDeviceName(''); }} className="text-slate-500 hover:text-slate-300 text-xs">Cancel</button>
+                              <button onClick={() => handleRenameDevice(device.id)} className="text-xs font-medium accent">Save</button>
+                              <button onClick={() => { setRenameMode(null); setNewDeviceName(''); }} className="text-xs ink-4">Cancel</button>
                             </div>
                           ) : (
                             <div className="flex items-center gap-2.5">
                               {/* Device icon */}
-                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${isASC ? 'bg-blue-900/50 border border-blue-700/50' : 'bg-slate-800 border border-slate-700'}`}>
+                              <div
+                                className="w-8 h-8 rounded flex items-center justify-center flex-shrink-0"
+                                style={{
+                                  background: isASC ? 'var(--accent-bg)' : 'var(--bg-sunk)',
+                                  border: '1px solid var(--line)',
+                                }}
+                              >
                                 {isASC ? (
-                                  <svg className="w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <svg className="w-4 h-4 accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
                                   </svg>
                                 ) : (
-                                  <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <svg className="w-4 h-4 ink-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
                                   </svg>
                                 )}
                               </div>
                               <div>
-                                <div className="text-white font-medium leading-tight">{device.name}</div>
-                                <div className="text-xs text-slate-500 mt-0.5">
+                                <div className="ink font-medium leading-tight">{device.name}</div>
+                                <div className="text-xs ink-4 mt-0.5">
                                   {isASC ? 'Ed25519 · ASC' : `${device.info?.os || ''}${device.info?.browser ? ` · ${device.info.browser}` : ''}`}
                                 </div>
                               </div>
@@ -281,24 +299,27 @@ const DeviceManagement = () => {
 
                         {/* Fingerprint */}
                         <td className="px-4 py-3.5 hidden md:table-cell">
-                          <code className="text-xs font-mono text-slate-400 bg-slate-800/60 px-2 py-1 rounded">
-                            {fp ? maskFingerprint(fp) : <span className="text-slate-600">—</span>}
+                          <code
+                            className="text-xs mono px-2 py-1 rounded ink-3"
+                            style={{ background: 'var(--bg-sunk)' }}
+                          >
+                            {fp ? maskFingerprint(fp) : <span className="ink-4">—</span>}
                           </code>
                         </td>
 
                         {/* IP */}
                         <td className="px-4 py-3.5 hidden lg:table-cell">
-                          <code className="text-xs font-mono text-slate-300">{device.ip || '—'}</code>
+                          <code className="text-xs mono ink-2">{device.ip || '—'}</code>
                         </td>
 
                         {/* Approved */}
                         <td className="px-4 py-3.5 hidden lg:table-cell">
-                          <span className="text-xs text-slate-400">{fmtDate(device.approvedAt)}</span>
+                          <span className="text-xs ink-3">{fmtDate(device.approvedAt)}</span>
                         </td>
 
                         {/* Last used */}
                         <td className="px-4 py-3.5 hidden sm:table-cell">
-                          <span className="text-xs text-slate-400">{fmtRelative(device.lastUsedAt)}</span>
+                          <span className="text-xs ink-3">{fmtRelative(device.lastUsedAt)}</span>
                         </td>
 
                         {/* Scope selector */}
@@ -308,20 +329,21 @@ const DeviceManagement = () => {
                               value={device.scope || 'full'}
                               onChange={(e) => handleScopeChange(device.id, e.target.value)}
                               disabled={updatingScope === device.id}
-                              className={`appearance-none text-xs font-medium pl-2 pr-6 py-1 rounded border cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 ${
-                                (device.scope || 'full') === 'read'
-                                  ? 'bg-slate-800 border-slate-600 text-slate-300'
-                                  : 'bg-blue-900/30 border-blue-700/50 text-blue-300'
-                              }`}
+                              className="appearance-none text-xs font-medium pl-2 pr-6 py-1 rounded cursor-pointer transition-colors focus:outline-none disabled:opacity-50"
+                              style={{
+                                background: 'var(--bg-raised)',
+                                border: '1px solid var(--line)',
+                                color: (device.scope || 'full') === 'read' ? 'var(--ink-3)' : 'var(--accent)',
+                              }}
                             >
                               <option value="full">Full</option>
                               <option value="read">Read</option>
                             </select>
                             <div className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2">
                               {updatingScope === device.id ? (
-                                <div className="w-3 h-3 border border-slate-500 border-t-blue-400 rounded-full animate-spin" />
+                                <div className="w-3 h-3 border border-t-[color:var(--accent)] rounded-full animate-spin" style={{ borderColor: 'var(--line)', borderTopColor: 'var(--accent)' }} />
                               ) : (
-                                <svg className="w-3 h-3 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <svg className="w-3 h-3 ink-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/>
                                 </svg>
                               )}
@@ -334,13 +356,13 @@ const DeviceManagement = () => {
                           <div className="flex items-center justify-end gap-1">
                             <button
                               onClick={() => { setRenameMode(device.id); setNewDeviceName(device.name); }}
-                              className="px-2.5 py-1.5 rounded text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
+                              className="ui-button px-2.5 py-1.5 text-xs"
                             >
                               Rename
                             </button>
                             <button
                               onClick={() => handleRevokeDevice(device.id)}
-                              className="px-2.5 py-1.5 rounded text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 transition-colors"
+                              className="ui-button-danger px-2.5 py-1.5 text-xs"
                             >
                               Revoke
                             </button>
@@ -357,50 +379,60 @@ const DeviceManagement = () => {
       ) : activeTab === 'pending' ? (
         <div>
           {pendingApprovals.length === 0 ? (
-            <div className="text-center py-16 text-slate-500 text-sm">No pending approvals</div>
+            <div className="text-center py-16 ink-4 text-sm">No pending approvals</div>
           ) : (
-            <div className="rounded-lg border border-slate-800 overflow-hidden">
+            <div className="rounded overflow-hidden" style={{ border: '1px solid var(--line)' }}>
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-800 bg-slate-900/60">
-                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Request</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider hidden md:table-cell">Fingerprint</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider hidden sm:table-cell">IP</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider hidden lg:table-cell">Expires</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Name</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-slate-400 uppercase tracking-wider">Actions</th>
+                  <tr className="bg-sunk" style={{ borderBottom: '1px solid var(--line)' }}>
+                    <th className="px-4 py-3 text-left micro">Request</th>
+                    <th className="px-4 py-3 text-left micro hidden md:table-cell">Fingerprint</th>
+                    <th className="px-4 py-3 text-left micro hidden sm:table-cell">IP</th>
+                    <th className="px-4 py-3 text-left micro hidden lg:table-cell">Expires</th>
+                    <th className="px-4 py-3 text-left micro">Name</th>
+                    <th className="px-4 py-3 text-right micro">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/70">
+                <tbody>
                   {pendingApprovals.map((approval) => {
                     const isASC = approval.deviceInfo?.type === 'asc';
                     const fp = approval.deviceInfo?.key_fingerprint || '';
                     const expired = approval.expiresAt && new Date(approval.expiresAt) < new Date();
                     return (
-                      <tr key={approval.id} className="bg-amber-950/10 hover:bg-amber-950/20 transition-colors">
+                      <tr key={approval.id} className="row row-cell" style={{ background: 'var(--amber-bg, rgba(210,153,34,0.06))' }}>
                         <td className="px-4 py-3.5">
                           <div className="flex items-center gap-2.5">
-                            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${expired ? 'bg-red-500' : 'bg-amber-400 animate-pulse'}`} />
+                            <span
+                              className="w-2 h-2 flex-shrink-0"
+                              style={{
+                                borderRadius: '2px',
+                                background: expired ? 'var(--red)' : 'var(--amber)',
+                                animation: expired ? 'none' : 'pulse 2s infinite',
+                              }}
+                            />
                             <div>
-                              <div className="text-white font-medium leading-tight">
+                              <div className="ink font-medium leading-tight">
                                 {isASC ? (approval.deviceInfo?.name || 'ASC Key') : 'New Device'}
                               </div>
-                              <div className="text-xs text-slate-500 mt-0.5">
+                              <div className="text-xs ink-4 mt-0.5">
                                 {isASC ? 'Ed25519 · ASC' : `${approval.deviceInfo?.os || 'Unknown'} · ${approval.deviceInfo?.browser || 'Unknown'}`}
                               </div>
                             </div>
                           </div>
                         </td>
                         <td className="px-4 py-3.5 hidden md:table-cell">
-                          <code className="text-xs font-mono text-slate-400 bg-slate-800/60 px-2 py-1 rounded">
-                            {fp ? maskFingerprint(fp) : <span className="text-slate-600">—</span>}
+                          <code
+                            className="text-xs mono px-2 py-1 rounded ink-3"
+                            style={{ background: 'var(--bg-sunk)' }}
+                          >
+                            {fp ? maskFingerprint(fp) : <span className="ink-4">—</span>}
                           </code>
                         </td>
                         <td className="px-4 py-3.5 hidden sm:table-cell">
-                          <code className="text-xs font-mono text-slate-300">{approval.ip || '—'}</code>
+                          <code className="text-xs mono ink-2">{approval.ip || '—'}</code>
                         </td>
                         <td className="px-4 py-3.5 hidden lg:table-cell">
-                          <span className={`text-xs ${expired ? 'text-red-400' : 'text-slate-400'}`}>
+                          <span className="text-xs" style={{ color: expired ? 'var(--red)' : 'var(--ink-3)' }}>
                             {expired ? 'Expired' : fmtRelative(approval.expiresAt)}
                           </span>
                         </td>
@@ -410,7 +442,7 @@ const DeviceManagement = () => {
                             placeholder={isASC ? 'Agent name…' : 'Device name…'}
                             value={approvalNames[approval.id] || ''}
                             onChange={(e) => setApprovalNames((prev) => ({ ...prev, [approval.id]: e.target.value }))}
-                            className="w-36 bg-slate-800 border border-slate-700 rounded px-2.5 py-1.5 text-white text-xs placeholder-slate-600 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            className="ui-input w-36 text-xs"
                           />
                         </td>
                         <td className="px-4 py-3.5 text-right">
@@ -418,13 +450,14 @@ const DeviceManagement = () => {
                             <button
                               onClick={() => handleApproveDevice(approval.id)}
                               disabled={expired}
-                              className="px-2.5 py-1.5 rounded text-xs font-medium text-emerald-400 hover:text-emerald-300 hover:bg-emerald-900/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                              className="px-2.5 py-1.5 rounded text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                              style={{ color: 'var(--green)', background: 'var(--green-bg)', border: '1px solid var(--green)' }}
                             >
                               Approve
                             </button>
                             <button
                               onClick={() => handleDenyDevice(approval.id)}
-                              className="px-2.5 py-1.5 rounded text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 transition-colors"
+                              className="ui-button-danger px-2.5 py-1.5 text-xs"
                             >
                               Deny
                             </button>
@@ -442,39 +475,45 @@ const DeviceManagement = () => {
         /* Activity Log */
         <div>
           {activityLog.length === 0 ? (
-            <div className="text-center py-16 text-slate-500 text-sm">No device activity yet</div>
+            <div className="text-center py-16 ink-4 text-sm">No device activity yet</div>
           ) : (
-            <div className="rounded-lg border border-slate-800 overflow-hidden">
+            <div className="rounded overflow-hidden" style={{ border: '1px solid var(--line)' }}>
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-800 bg-slate-900/60">
-                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Event</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider hidden sm:table-cell">Device</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider hidden md:table-cell">IP</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Time</th>
+                  <tr className="bg-sunk" style={{ borderBottom: '1px solid var(--line)' }}>
+                    <th className="px-4 py-3 text-left micro">Event</th>
+                    <th className="px-4 py-3 text-left micro hidden sm:table-cell">Device</th>
+                    <th className="px-4 py-3 text-left micro hidden md:table-cell">IP</th>
+                    <th className="px-4 py-3 text-left micro">Time</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/70">
+                <tbody>
                   {activityLog.map((event) => {
                     const approved = event.action === 'approval' || event.action === 'approved';
                     return (
-                      <tr key={event.id} className="bg-slate-900/20 hover:bg-slate-800/30 transition-colors">
+                      <tr key={event.id} className="row row-cell">
                         <td className="px-4 py-3.5">
                           <div className="flex items-center gap-2.5">
-                            <span className={`inline-flex items-center justify-center w-5 h-5 rounded-full text-xs flex-shrink-0 ${approved ? 'bg-emerald-900/60 text-emerald-400' : 'bg-red-900/60 text-red-400'}`}>
+                            <span
+                              className="inline-flex items-center justify-center w-5 h-5 rounded text-xs flex-shrink-0 font-medium"
+                              style={{
+                                background: approved ? 'var(--green-bg)' : 'var(--red-bg)',
+                                color: approved ? 'var(--green)' : 'var(--red)',
+                              }}
+                            >
                               {approved ? '✓' : '✕'}
                             </span>
-                            <span className="text-slate-300 font-medium capitalize">{event.action}</span>
+                            <span className="ink-2 font-medium capitalize">{event.action}</span>
                           </div>
                         </td>
                         <td className="px-4 py-3.5 hidden sm:table-cell">
-                          <span className="text-slate-300">{event.deviceName || '—'}</span>
+                          <span className="ink-2">{event.deviceName || '—'}</span>
                         </td>
                         <td className="px-4 py-3.5 hidden md:table-cell">
-                          <code className="text-xs font-mono text-slate-400">{event.ip || '—'}</code>
+                          <code className="text-xs mono ink-3">{event.ip || '—'}</code>
                         </td>
                         <td className="px-4 py-3.5">
-                          <span className="text-xs text-slate-500">{fmtRelative(event.timestamp)}</span>
+                          <span className="text-xs ink-4">{fmtRelative(event.timestamp)}</span>
                         </td>
                       </tr>
                     );
