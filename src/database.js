@@ -1850,8 +1850,8 @@ function getAuditLogs(limit = 50, offset = 0) {
     action: row.action,
     resource: row.resource,
     endpoint: row.endpoint || row.api_endpoint || null,
-    method: row.http_method || row.api_method || null,
-    statusCode: row.status_code || null,
+    method: row.method || row.http_method || row.api_method || null,
+    statusCode: row.status_code || row.status || null,
     scope: row.scope,
     ip: row.ip,
     details: row.details ? JSON.parse(row.details) : null

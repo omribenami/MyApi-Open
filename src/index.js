@@ -6546,7 +6546,7 @@ app.get("/api/v1/gateway/context", authenticate, (req, res) => {
 app.get("/api/v1/audit", authenticate, (req, res) => {
   if (!isMaster(req)) return res.status(403).json({ error: "Only master token can view audit log" });
   const page = parseInt(req.query.page) || 1;
-  const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+  const limit = Math.min(parseInt(req.query.limit) || 50, 500);
   const offset = (page - 1) * limit;
   const { logs, total } = getAuditLogs(limit, offset);
   res.json({ data: logs, meta: { total, page, limit } });

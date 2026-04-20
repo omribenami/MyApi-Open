@@ -333,11 +333,12 @@ function LiveSignalRail({ masterToken }) {
           <div className="px-4 py-8 text-center ink-3 text-[12.5px]">Waiting for requests…</div>
         )}
         {entries.map((entry, i) => {
-          const method = (entry.method || entry.http_method || entry.action || 'GET').replace(/[^A-Z]/gi,'').toUpperCase() || 'GET';
-          const path   = entry.path || entry.endpoint || entry.resource_type || entry.url || entry.action || '';
+          const rawMethod = (entry.method || entry.http_method || '').toUpperCase();
+          const method = ['GET','POST','PUT','PATCH','DELETE','HEAD','OPTIONS'].includes(rawMethod) ? rawMethod : '—';
+          const path   = entry.endpoint || entry.path || entry.resource_type || entry.url || entry.action || '';
           const scope  = entry.scope || entry.token_scope || '';
-          const agent  = entry.ip_address || entry.ip || entry.user_id || 'api';
-          const status = entry.status_code || entry.statusCode || entry.http_status || '';
+          const agent  = entry.ip || entry.ip_address || entry.user_id || 'api';
+          const status = entry.statusCode || entry.status_code || entry.http_status || '';
           const ms     = entry.duration_ms || entry.ms || '';
           const ts     = entry.created_at || entry.timestamp || '';
 
