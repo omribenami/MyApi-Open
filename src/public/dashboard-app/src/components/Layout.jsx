@@ -242,20 +242,35 @@ function SignalTile({ label, value, unit, trend, muted }) {
 // ── Live Signal Rail ──────────────────────────────────────────────────
 function LiveSignalRail({ masterToken }) {
   const [paused, setPaused] = useState(false);
-  const [entries, setEntries] = useState([]);
+  const [entries, setEntries] = useState([]);       // shown in list (40)
+  const [allEntries, setAllEntries] = useState([]); // larger window for rpm/errors
+  const [callsToday, setCallsToday] = useState(null);
   const pausedRef = useRef(false);
   pausedRef.current = paused;
 
   const fetchAudit = useCallback(async () => {
     if (!masterToken) return;
+    const headers = { 'Authorization': `Bearer ${masterToken}` };
     try {
-      const res = await fetch('/api/v1/audit?limit=40', {
-        headers: { 'Authorization': `Bearer ${masterToken}` },
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      const list = Array.isArray(data) ? data : (data.entries || data.logs || data.data || []);
-      setEntries(list);
+      // fetch 40 for display and 500 for accurate stats
+      const [listRes, statsRes, usageRes] = await Promise.all([
+        fetch('/api/v1/audit?limit=40', { headers }),
+        fetch('/api/v1/audit?limit=500', { headers }),
+        fetch('/api/v1/billing/usage?range=1d', { headers }),
+      ]);
+      if (listRes.ok) {
+        const d = await listRes.json();
+        setEntries(Array.isArray(d) ? d : (d.entries || d.logs || d.data || []));
+      }
+      if (statsRes.ok) {
+        const d = await statsRes.json();
+        setAllEntries(Array.isArray(d) ? d : (d.entries || d.logs || d.data || []));
+      }
+      if (usageRes.ok) {
+        const d = await usageRes.json();
+        const total = d?.data?.totals?.monthlyApiCalls ?? d?.totals?.monthlyApiCalls ?? null;
+        if (total !== null) setCallsToday(Number(total));
+      }
     } catch {
       // silently ignore
     }
@@ -269,18 +284,16 @@ function LiveSignalRail({ masterToken }) {
 
   const stats = useMemo(() => {
     const nowSec = Date.now() / 1000;
-    // timestamp is unix seconds in audit_log
-    const rpm = entries.filter(e => {
+    const rpm = allEntries.filter(e => {
       const ts = e.timestamp || (e.created_at ? new Date(e.created_at).getTime() / 1000 : 0);
       return ts > 0 && (nowSec - ts) < 60;
     }).length;
-    const calls = entries.length;
-    const errors = entries.filter(e => {
+    const errors = allEntries.filter(e => {
       const code = Number(e.status_code || e.statusCode || e.status || 0);
       return code >= 400;
     }).length;
-    return { rpm, calls, errors };
-  }, [entries]);
+    return { rpm, errors };
+  }, [allEntries]);
 
   const fmtTime = (ts) => {
     try { return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }); }
@@ -307,7 +320,7 @@ function LiveSignalRail({ masterToken }) {
       {/* Stats row */}
       <div className="px-4 py-3 border-b hairline grid grid-cols-3 gap-3" style={{ flexShrink:0 }}>
         <SignalTile label="rpm"    value={stats.rpm}    trend="last 60s" />
-        <SignalTile label="calls"  value={stats.calls}  trend="shown" />
+        <SignalTile label="calls"  value={callsToday !== null ? callsToday : entries.length} trend={callsToday !== null ? 'today' : 'shown'} />
         <SignalTile label="errors" value={stats.errors} trend="4xx · 5xx" muted />
       </div>
 
