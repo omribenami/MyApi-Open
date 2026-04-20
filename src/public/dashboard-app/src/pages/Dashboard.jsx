@@ -42,6 +42,7 @@ function Dashboard() {
   const [billingUsed, setBillingUsed] = useState(0);
   const [billingLimit, setBillingLimit] = useState(1000);
   const [billingPlan, setBillingPlan] = useState('free');
+  const [dailyUsage, setDailyUsage] = useState([]);
   const [connectedServicesList, setConnectedServicesList] = useState([]);
 
   const dismissChecklistPermanently = () => {
@@ -155,6 +156,9 @@ function Dashboard() {
         const u = billingUsageRes.data?.data || billingUsageRes.data;
         if (u?.totals?.monthlyApiCalls !== undefined) {
           setBillingUsed(Number(u.totals.monthlyApiCalls) || 0);
+        }
+        if (Array.isArray(u?.daily) && u.daily.length > 0) {
+          setDailyUsage(u.daily);
         }
       }
 
@@ -370,13 +374,20 @@ function Dashboard() {
   const usagePct = (!isUnlimited && billingLimit > 0) ? Math.round((billingUsed / billingLimit) * 100) : 0;
   const dayLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }).toLowerCase();
 
-  const sparkData = Array.from({ length: 24 }, (_, i) => {
-    const base = (billingUsed || 200) / 24;
-    return Math.max(0, Math.round(base + (Math.sin(i * 0.8) * base * 0.4)));
-  });
+  const sparkData = dailyUsage.length > 0
+    ? dailyUsage.map(d => Number(d.api_calls || 0))
+    : [];
 
   const SparkSVG = () => {
-    const data = sparkData, w = 560, h = 64;
+    const w = 560, h = 64;
+    if (sparkData.length < 2) {
+      return (
+        <svg className="spark w-full" width={w} height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
+          <line x1="0" y1={h - 2} x2={w} y2={h - 2} stroke="var(--line)" strokeWidth="1" />
+        </svg>
+      );
+    }
+    const data = sparkData;
     const max = Math.max(...data) || 1;
     const step = w / (data.length - 1);
     const pts = data.map((v, i) => [i * step, h - (v / max) * (h - 4) - 2]);
