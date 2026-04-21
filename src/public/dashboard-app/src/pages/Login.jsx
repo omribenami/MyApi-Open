@@ -36,7 +36,7 @@ function Login() {
   const [profileData, setProfileData] = useState({
     displayName: '', email: '', username: '', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
   });
-  const [oauthSignupNonce, setOauthSignupNonce] = useState('');
+  const [oauthSignupNonce, _setOauthSignupNonce] = useState('');
   const [signupCompleting, setSignupCompleting] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const { setMasterToken, setUser, isAuthenticated } = useAuthStore();
