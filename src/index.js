@@ -7531,6 +7531,18 @@ app.post('/api/v1/auth/2fa/verify', authenticate, (req, res) => {
   }
 });
 
+app.post('/api/v1/onboarding/complete', authenticate, (req, res) => {
+  try {
+    const userId = req?.user?.id || req?.tokenMeta?.ownerId;
+    if (!userId) return res.status(401).json({ error: 'Not authenticated' });
+    clearUserOnboarding(userId);
+    if (req.session?.user) req.session.user.needsOnboarding = false;
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/v1/auth/2fa/disable', authenticate, (req, res) => {
   try {
     const userId = req?.user?.id || req?.tokenMeta?.ownerId;

@@ -24,6 +24,9 @@ function initDatabase(dbPath) {
 function runSecurityMigrations() {
   // Add suspension columns to both token tables (idempotent — ignore if already exist)
   const alterStmts = [
+    // audit_log column backfill (older DBs missing token_id)
+    `ALTER TABLE audit_log ADD COLUMN token_id TEXT`,
+    // Token suspension
     `ALTER TABLE tokens ADD COLUMN suspended_at INTEGER`,
     `ALTER TABLE tokens ADD COLUMN suspension_reason TEXT`,
     `ALTER TABLE access_tokens ADD COLUMN suspended_at TEXT`,
@@ -145,6 +148,11 @@ function createTables() {
       source_message_id TEXT
     )
   `);
+
+  // Backfill columns that older DBs may be missing
+  try { db.exec(`ALTER TABLE audit_log ADD COLUMN token_id TEXT`); } catch (_) {}
+  try { db.exec(`ALTER TABLE audit_log ADD COLUMN token_type TEXT`); } catch (_) {}
+  try { db.exec(`ALTER TABLE audit_log ADD COLUMN user_agent TEXT`); } catch (_) {}
 
   // Create indexes
   db.exec(`

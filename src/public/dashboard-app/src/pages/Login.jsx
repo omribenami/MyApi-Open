@@ -87,10 +87,15 @@ function Login() {
               if (sessionUser?.bootstrap?.masterToken) {
                 setMasterToken(sessionUser.bootstrap.masterToken);
               }
-              setUser(sessionUser.user || sessionUser);
-              const pending = sessionStorage.getItem('pendingOAuthReturn');
-              if (pending) { sessionStorage.removeItem('pendingOAuthReturn'); window.location.href = pending; }
-              else { window.history.replaceState({}, document.title, '/dashboard/'); window.location.href = '/dashboard/'; }
+              const su = sessionUser.user || sessionUser;
+              setUser(su);
+              if (su?.needsOnboarding) {
+                window.location.href = '/dashboard/onboarding';
+              } else {
+                const pending = sessionStorage.getItem('pendingOAuthReturn');
+                if (pending) { sessionStorage.removeItem('pendingOAuthReturn'); window.location.href = pending; }
+                else { window.history.replaceState({}, document.title, '/dashboard/'); window.location.href = '/dashboard/'; }
+              }
             }
           })
           .catch(() => {
@@ -115,19 +120,34 @@ function Login() {
             }
           });
       } else if (callback.status === 'signup_required') {
-        setIsSignup(true);
-        setSignupStep(2);
+        // Auto-complete signup using OAuth data then redirect to onboarding wizard.
         fetch('/api/v1/auth/oauth-signup/pending', { credentials: 'include' })
           .then((res) => (res.ok ? res.json() : null))
-          .then((payload) => {
+          .then(async (payload) => {
             const data = payload?.data || {};
-            setProfileData((prev) => ({
-              ...prev,
-              displayName: data.name || prev.displayName,
-              email: data.email || prev.email,
-              username: data.recommendedUsername || prev.username,
-            }));
-            setOauthSignupNonce(data.nonce || '');
+            const nonce = data.nonce || '';
+            if (!nonce) { window.history.replaceState({}, document.title, '/dashboard/'); return; }
+            const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+            const r = await fetch('/api/v1/auth/oauth-signup/complete', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ oauthSignupConfirm: true, oauthSignupNonce: nonce, displayName: data.name || '', email: data.email || '', username: data.recommendedUsername || '', timezone: tz, termsAccepted: true }),
+            });
+            const result = await r.json().catch(() => ({}));
+            if (r.ok) {
+              if (result?.data?.bootstrap?.masterToken) setMasterToken(result.data.bootstrap.masterToken);
+              if (result?.data?.user) setUser(result.data.user);
+              try { localStorage.removeItem('myapi_onboarding_dismissed'); } catch (_) { /* ignore */ }
+              window.location.href = '/dashboard/onboarding';
+            } else {
+              if (result?.code === 'BETA_FULL') {
+                const em = encodeURIComponent(result.email || data.email || '');
+                window.location.href = `/?beta=full${em ? `&email=${em}` : ''}`;
+              } else {
+                window.history.replaceState({}, document.title, '/dashboard/');
+              }
+            }
           })
           .catch(() => {});
         window.history.replaceState({}, document.title, '/dashboard/');
@@ -243,9 +263,8 @@ function Login() {
 
       if (result?.data?.bootstrap?.masterToken) setMasterToken(result.data.bootstrap.masterToken);
       if (result?.data?.user) setUser(result.data.user);
-      // New user — always show the onboarding modal on first landing
       try { localStorage.removeItem('myapi_onboarding_dismissed'); } catch (_) { /* localStorage unavailable */ }
-      window.location.href = '/dashboard/';
+      window.location.href = '/dashboard/onboarding';
     } catch (err) {
       setError(err.message || 'Failed to complete signup');
       setSignupCompleting(false);

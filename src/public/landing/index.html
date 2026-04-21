@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=1440" />
 <title>MyApi — the personal API gateway for AI agents</title>
-<meta name="description" content="Connect Gmail, GitHub, Slack and 10+ services to MyApi once. Hand scoped, revocable tokens to Claude, your agents, or any AI copilot." />
+<meta name="description" content="Connect Gmail, GitHub, Slack and 30+ services to MyApi once. Hand scoped, revocable tokens to Claude, your agents, or any AI copilot." />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -99,7 +99,7 @@
     <div class="ml-auto flex items-center gap-2">
       <!-- Sign in dropdown -->
       <div class="relative hidden sm:block" id="signin-wrap">
-        <button id="signin-trigger" class="btn btn-ghost">Sign in</button>
+        <button id="signin-trigger" class="btn btn-primary">Sign in</button>
         <div id="signin-dropdown" class="card shadow-2xl" style="width:296px;padding:0;overflow:hidden">
           <div class="flex border-b hairline">
             <button class="auth-tab auth-tab-active" data-mode="login">Sign in</button>
@@ -121,14 +121,9 @@
                 <span class="oauth-label">Continue with Facebook</span>
               </a>
             </div>
-            <div class="mt-4 pt-4 border-t hairline text-center text-[12px] ink-3" id="auth-footer-text">
-              No account? <a href="#" class="auth-switch nav" data-to="signup" style="color:var(--accent)">Sign up free →</a>
-            </div>
           </div>
         </div>
       </div>
-      <a href="/dashboard/"       class="btn">Open dashboard</a>
-      <a href="/dashboard/signup" class="btn btn-primary">Start</a>
     </div>
   </div>
 </header>
@@ -145,10 +140,10 @@
       One gateway between your data and every AI agent.
     </h1>
     <p class="mt-6 text-[18px] ink-2 max-w-[64ch] leading-relaxed">
-      Connect Gmail, GitHub, Slack, Twitter — 10+ services — to MyApi once. Hand scoped, revocable tokens to Claude, your own agents, or any AI copilot. Every request is logged, redacted, and yours to revoke.
+      Connect Gmail, GitHub, Slack, Twitter — 30+ services — to MyApi once. Hand scoped, revocable tokens to Claude, your own agents, or any AI copilot. Every request is logged, redacted, and yours to revoke.
     </p>
     <div class="mt-8 flex flex-wrap items-center gap-3">
-      <a href="/dashboard/signup" class="btn btn-primary" style="padding:10px 16px;font-size:14px;">Start for free</a>
+      <button onclick="openSigninDropdown('signup')" class="btn btn-primary" style="padding:10px 16px;font-size:14px;">Start for free</button>
       <a href="#how" class="btn" style="padding:10px 16px;font-size:14px;">See how it works <span class="ink-3">→</span></a>
     </div>
     <div class="mt-5 flex flex-wrap items-center gap-6 ink-3 text-[12.5px]">
@@ -463,7 +458,7 @@
       Give every agent the access it needs. Not a byte more.
     </h2>
     <div class="mt-8 flex items-center justify-center gap-3 flex-wrap">
-      <a href="/dashboard/signup" class="btn btn-primary" style="padding:12px 20px;font-size:15px;">Start free</a>
+      <button onclick="openSigninDropdown('signup')" class="btn btn-primary" style="padding:12px 20px;font-size:15px;">Start free</button>
       <a href="/dashboard/"       class="btn"             style="padding:12px 20px;font-size:15px;">Open dashboard →</a>
       <div class="ink-3 text-[13px] mono ml-2">or: <a href="https://github.com/omribenami/MyApi-Open" target="_blank" rel="noopener" style="color:var(--accent)">github.com/omribenami/MyApi-Open</a> to install locally</div>
     </div>
@@ -508,7 +503,12 @@
 (function(){
   var trigger = document.getElementById('signin-trigger');
   var dropdown = document.getElementById('signin-dropdown');
-  if (!trigger || !dropdown) return;
+
+  if (!trigger || !dropdown) {
+    // Mobile fallback — dropdown hidden, send to login page
+    window.openSigninDropdown = function() { window.location.href = '/dashboard/login'; };
+    return;
+  }
   trigger.addEventListener('click', function(e) {
     e.stopPropagation();
     dropdown.classList.toggle('open');
@@ -529,26 +529,36 @@
     var heading = document.getElementById('auth-heading');
     if (heading) heading.textContent = mode === 'login' ? 'SIGN IN WITH' : 'SIGN UP WITH';
     dropdown.querySelectorAll('.auth-oauth').forEach(function(btn) {
-      btn.href = btn.dataset.base + '?mode=' + mode + '&force_prompt=1';
+      var extra = mode === 'signup' ? '&returnTo=/dashboard/onboarding' : '';
+      btn.href = btn.dataset.base + '?mode=' + mode + '&force_prompt=1' + extra;
       var label = btn.querySelector('.oauth-label');
       if (label) label.textContent = (mode === 'login' ? 'Continue with ' : 'Sign up with ') + btn.dataset.provider;
     });
-    var footer = document.getElementById('auth-footer-text');
-    if (footer) {
-      footer.innerHTML = mode === 'login'
-        ? 'No account? <a href="#" class="auth-switch nav" data-to="signup" style="color:var(--accent)">Sign up free \u2192</a>'
-        : 'Have an account? <a href="#" class="auth-switch nav" data-to="login" style="color:var(--accent)">Sign in \u2192</a>';
-      footer.querySelectorAll('.auth-switch').forEach(function(l) {
-        l.addEventListener('click', function(e) { e.preventDefault(); setMode(this.dataset.to); });
-      });
-    }
   }
+  window.openSigninDropdown = function(mode) {
+    var wrap = document.getElementById('signin-wrap');
+    if (!wrap || wrap.offsetParent === null) {
+      window.location.href = '/dashboard/login' + (mode === 'signup' ? '?mode=signup' : '');
+      return;
+    }
+    var delay = 0;
+    if (window.scrollY > 80) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      delay = 400;
+    }
+    // Defer past the current click-bubble cycle so the document close-handler
+    // (which fires on the same click) doesn't immediately shut it again.
+    setTimeout(function() {
+      dropdown.classList.add('open');
+      if (mode) setMode(mode);
+      // Pulse the signin button briefly to draw the eye
+      trigger.style.transition = 'box-shadow 0.15s';
+      trigger.style.boxShadow = '0 0 0 3px rgba(68,147,248,0.55)';
+      setTimeout(function() { trigger.style.boxShadow = ''; }, 600);
+    }, delay);
+  };
   dropdown.querySelectorAll('.auth-tab').forEach(function(tab) {
     tab.addEventListener('click', function() { setMode(this.dataset.mode); });
-  });
-  var footer0 = document.getElementById('auth-footer-text');
-  if (footer0) footer0.querySelectorAll('.auth-switch').forEach(function(l) {
-    l.addEventListener('click', function(e) { e.preventDefault(); setMode(this.dataset.to); });
   });
 })();
 
@@ -727,7 +737,10 @@
       <ul class="mt-4 space-y-1.5 flex-1" style="list-style:none">
         ${p.f.map(x => `<li class="flex gap-2 text-[13px] ink-2"><span class="ink-3 shrink-0">✓</span><span>${x}</span></li>`).join('')}
       </ul>
-      <a href="${p.href}" class="mt-5 btn" style="${p.active ? 'background:var(--accent-2);color:#fff;border-color:rgba(240,246,252,0.1);' : 'cursor:not-allowed;opacity:0.7;'}">${p.cta}</a>
+      ${p.active
+        ? `<button onclick="openSigninDropdown('signup')" class="mt-5 btn" style="background:var(--accent-2);color:#fff;border-color:rgba(240,246,252,0.1);">${p.cta}</button>`
+        : `<a href="${p.href}" class="mt-5 btn" style="cursor:not-allowed;opacity:0.7;">${p.cta}</a>`
+      }
     </div>`;
   }).join('');
 

@@ -67,7 +67,7 @@ function App() {
   const forceUnauthenticated = useAuthStore((state) => state.forceUnauthenticated);
   const fetchWorkspaces = useAuthStore((state) => state.fetchWorkspaces);
   const user = useAuthStore((state) => state.user);
-  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [_showOnboarding, setShowOnboarding] = useState(false);
   const [showSessionExpired, setShowSessionExpired] = useState(false);
 
   // Initialize auth store on mount
@@ -82,18 +82,23 @@ function App() {
     }
   }, [isAuthenticated, fetchWorkspaces]);
 
-  // New users enter onboarding mode immediately.
+  // New users go to the onboarding wizard instead of the old modal.
   useEffect(() => {
     if (isAuthenticated && user?.needsOnboarding) {
-      restartOnboarding();
-      setShowOnboarding(true);
+      const onOnboarding = window.location.pathname.includes('/onboarding');
+      if (!onOnboarding) {
+        window.location.replace('/dashboard/onboarding');
+      }
     }
   }, [isAuthenticated, user?.needsOnboarding]);
 
-  // If onboarding mode is still active and the modal was not dismissed, reopen it.
+  // Legacy: if onboarding mode flag is set and modal not yet dismissed, redirect to wizard.
   useEffect(() => {
     if (isAuthenticated && isOnboardingActive() && !wasModalDismissed()) {
-      setShowOnboarding(true);
+      const onOnboarding = window.location.pathname.includes('/onboarding');
+      if (!onOnboarding) {
+        window.location.replace('/dashboard/onboarding');
+      }
     }
   }, [isAuthenticated]);
 
@@ -117,15 +122,29 @@ function App() {
 
     // For service-connect flows, redirect to the intended destination with OAuth params
     // so the target page (e.g. ServiceConnectors) can show the success state.
-    if (oauthStatus === 'connected' && oauthMode === 'connect' && nextUrl) {
+    if (oauthStatus === 'connected' && (oauthMode === 'connect' || oauthMode === 'signup') && nextUrl) {
       const decoded = decodeURIComponent(nextUrl);
       // Only allow internal redirects under /dashboard/ to prevent open redirects
       if (decoded.startsWith('/dashboard/') || decoded === '/dashboard') {
+        if (oauthMode === 'signup' && decoded === '/dashboard/') {
+          // Signup with no specific returnTo — check needsOnboarding via /auth/me
+          fetch('/api/v1/auth/me', { credentials: 'include' })
+            .then(r => r.ok ? r.json() : null)
+            .then(result => {
+              if (result?.user?.needsOnboarding) {
+                window.location.replace('/dashboard/onboarding');
+              } else {
+                window.location.replace('/dashboard/');
+              }
+            })
+            .catch(() => window.location.replace('/dashboard/'));
+          return;
+        }
         const target = new URL(decoded, window.location.origin);
         const oauthService = urlParams.get('oauth_service');
         if (oauthService) target.searchParams.set('oauth_service', oauthService);
         target.searchParams.set('oauth_status', 'connected');
-        target.searchParams.set('mode', 'connect');
+        target.searchParams.set('mode', oauthMode);
         window.location.replace(target.toString());
         return;
       }
@@ -158,10 +177,11 @@ function App() {
               setMasterToken(sessionUser.bootstrap.masterToken);
             }
             setUser(sessionUser.user);
-            // If login was initiated from an OAuth consent page (e.g. agent-auth installer),
-            // redirect back there instead of dropping the user on the dashboard home.
+            // New users go to the onboarding wizard; returning users go to dashboard or next URL.
             const nextUrl = urlParams.get('next');
-            if (nextUrl && (nextUrl.startsWith('/dashboard/') || nextUrl === '/dashboard')) {
+            if (sessionUser.user?.needsOnboarding) {
+              window.location.replace('/dashboard/onboarding');
+            } else if (nextUrl && (nextUrl.startsWith('/dashboard/') || nextUrl === '/dashboard')) {
               window.location.replace(nextUrl);
             } else {
               window.history.replaceState({}, document.title, '/dashboard/');
@@ -237,9 +257,7 @@ function App() {
         <SessionExpiredOverlay onDismiss={() => setShowSessionExpired(false)} />
       )}
       <Router basename="/dashboard">
-        {isAuthenticated && showOnboarding && (
-          <OnboardingModal onClose={() => setShowOnboarding(false)} />
-        )}
+        {/* Onboarding handled by /onboarding route — no modal needed */}
         <Routes>
           {/* Unauthenticated Routes — only OAuth flows reach here; all others are
               redirected to the landing page before this Router mounts */}
