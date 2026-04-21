@@ -174,9 +174,6 @@ function AccessTokens() {
   const [resourcesLoading, setResourcesLoading] = useState({});
 
   const [newlyCreated, setNewlyCreated] = useState(null);
-  const [revealedTokens, setRevealedTokens] = useState({});
-  const [visibleTokenIds, setVisibleTokenIds] = useState({});
-  const [_copiedTokenId, setCopiedTokenId] = useState(null);
   const [regeneratingTokenId, setRegeneratingTokenId] = useState(null);
   const [publishingTokenId, setPublishingTokenId] = useState(null);
 
@@ -430,31 +427,17 @@ function AccessTokens() {
   // ── Guest token actions ──────────────────────────────────────────────────────
   const getTokenKey = (t) => t?.id || t?.tokenId;
 
-  const regenerateAndStore = async (token) => {
-    const key = getTokenKey(token);
-    const res = await fetch(`/api/v1/tokens/${key}/regenerate`, { method: 'POST', headers: { Authorization: `Bearer ${masterToken}` } });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || 'Failed to regenerate');
-    const raw = data?.data?.token || null;
-    if (raw) {
-      setRevealedTokens((p) => ({ ...p, [key]: raw }));
-      setVisibleTokenIds((p) => ({ ...p, [key]: true }));
-    }
-    return raw;
-  };
-
-  const handleCopyGuestToken = async (token) => {
-    const key = getTokenKey(token); clearError();
-    let raw = revealedTokens[key];
-    if (!raw) { try { raw = await regenerateAndStore(token); } catch (err) { setError(err.message); return; } }
-    if (await copyText(raw)) { setCopiedTokenId(key); setTimeout(() => setCopiedTokenId(null), 1800); }
-  };
-
   const handleRegenerateToken = async (token) => {
     const key = getTokenKey(token);
     setRegeneratingTokenId(key); clearError();
-    try { await regenerateAndStore(token); await fetchTokens(masterToken); }
-    catch (err) { setError(err.message || 'Failed to regenerate'); }
+    try {
+      const res = await fetch(`/api/v1/tokens/${key}/regenerate`, { method: 'POST', headers: { Authorization: `Bearer ${masterToken}` } });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to regenerate');
+      const raw = data?.data?.token || null;
+      if (raw) setNewlyCreated({ token: raw, label: token.label || token.name, expiresAt: token.expiresAt });
+      await fetchTokens(masterToken);
+    } catch (err) { setError(err.message || 'Failed to regenerate'); }
     finally { setRegeneratingTokenId(null); }
   };
 
@@ -530,10 +513,6 @@ function AccessTokens() {
     const created = await createToken(masterToken, payload);
     if (created) {
       setNewlyCreated(created);
-      if (created.id && created.token) {
-        setRevealedTokens((p) => ({ ...p, [created.id]: created.token }));
-        setVisibleTokenIds((p) => ({ ...p, [created.id]: true }));
-      }
       if (form.publishOnCreate && created.id) {
         try {
           await fetch(`/api/v1/tokens/${created.id}/make-shareable`, {
@@ -723,8 +702,6 @@ function AccessTokens() {
               <tbody>
                 {guestTokens.map((token) => {
                   const key = getTokenKey(token);
-                  const rawToken = revealedTokens[key];
-                  const isRevealed = rawToken && visibleTokenIds[key];
                   const expiry = getExpiry(token.expiresAt);
                   const isPublished = token.isShareable || token.is_shareable;
                   const svcScope = hasServiceScope(token.scopes);
@@ -752,7 +729,7 @@ function AccessTokens() {
                   })();
 
                   const maskedKey = (() => {
-                    const src = rawToken || key || '';
+                    const src = key || '';
                     if (!src) return '—';
                     const last4 = src.slice(-4);
                     const prefix = src.startsWith('tok_') ? 'tok_' : src.slice(0, 4);
@@ -778,21 +755,9 @@ function AccessTokens() {
                       </td>
                       {/* Secret Key */}
                       <td className="px-4 py-2.5 whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          <code className="mono text-[11px] ink-3 bg-sunk px-2 py-0.5 rounded hairline">
-                            {isRevealed ? (rawToken || maskedKey) : maskedKey}
-                          </code>
-                          <button
-                            onClick={async () => {
-                              if (!rawToken) { await handleRegenerateToken(token); return; }
-                              setVisibleTokenIds((p) => ({ ...p, [key]: !p[key] }));
-                            }}
-                            title={rawToken ? (isRevealed ? 'Hide' : 'Reveal') : 'Rotate to reveal'}
-                            className="ink-4 hover:ink-2 transition-colors"
-                          >
-                            <EyeIcon className="w-3.5 h-3.5" off={isRevealed}/>
-                          </button>
-                        </div>
+                        <code className="mono text-[11px] ink-3 bg-sunk px-2 py-0.5 rounded hairline">
+                          {maskedKey}
+                        </code>
                       </td>
                       {/* Created */}
                       <td className="px-4 py-2.5 whitespace-nowrap hidden lg:table-cell">
@@ -821,10 +786,6 @@ function AccessTokens() {
                             className="p-1.5 rounded ink-4 hover:accent transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                           >
                             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-                          </button>
-                          {/* Copy */}
-                          <button onClick={() => handleCopyGuestToken(token)} title="Copy key" className="p-1.5 rounded ink-4 hover:ink transition-colors">
-                            <CopyIcon className="w-3.5 h-3.5"/>
                           </button>
                           {/* Rotate */}
                           <button onClick={() => handleRegenerateToken(token)} disabled={isRegen} title="Rotate key" className="p-1.5 rounded ink-4 hover:ink transition-colors disabled:opacity-30">
