@@ -92,6 +92,7 @@ describe('OAuth-first signup/login flow', () => {
         timezone: 'UTC',
         userMd: 'I build APIs.',
         soulMd: 'I value clarity.',
+        termsAccepted: true,
       });
 
     expect(completeRes.status).toBe(200);
@@ -122,6 +123,7 @@ describe('OAuth-first signup/login flow', () => {
         username: 'skipflow',
         email: 'skipflow@example.com',
         timezone: 'UTC',
+        termsAccepted: true,
       });
 
     expect(completeRes.status).toBe(200);

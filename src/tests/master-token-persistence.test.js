@@ -90,7 +90,7 @@ describe('Master Token Persistence', () => {
       const raw = 'myapi_' + crypto.randomBytes(32).toString('hex');
       const bcrypt = require('bcrypt');
       const hash = bcrypt.hashSync(raw, 4); // low cost for test speed
-      dbModule.createAccessToken(hash, user.id, 'full', 'Master Token', null, null, null, raw);
+      dbModule.createAccessToken(hash, user.id, 'full', 'Master Token', null, null, null, raw, 'master');
 
       const first = dbModule.getExistingMasterToken(user.id);
       const second = dbModule.getExistingMasterToken(user.id);
@@ -120,7 +120,7 @@ describe('Master Token Persistence', () => {
       const raw = 'myapi_' + crypto.randomBytes(32).toString('hex');
       const bcrypt = require('bcrypt');
       const hash = bcrypt.hashSync(raw, 4); // low cost for test speed (production uses 10)
-      const tokenId = dbModule.createAccessToken(hash, user.id, 'full', 'Master Token', null, null, null, raw);
+      const tokenId = dbModule.createAccessToken(hash, user.id, 'full', 'Master Token', null, null, null, raw, 'master');
 
       // Snapshot tokens before login
       const before = dbModule.db
