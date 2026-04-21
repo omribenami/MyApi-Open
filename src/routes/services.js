@@ -119,6 +119,32 @@ const SERVICE_METHODS = {
         messageId: { type: 'string', description: 'Message ID from messages.list', optional: false }
       },
       returns: 'full message object with body, headers, attachments, labels'
+    },
+    {
+      name: 'gmail.messages.send',
+      description: 'Send an email via Gmail',
+      method: 'POST',
+      endpoint: '/services/google/gmail/send',
+      scope: 'services:write or services:google:write or master',
+      parameters: {
+        to: { type: 'string', description: 'Recipient email address', optional: false },
+        subject: { type: 'string', description: 'Email subject', optional: false },
+        body: { type: 'string', description: 'Plain text email body', optional: false },
+        cc: { type: 'string', description: 'CC email address(es)', optional: true },
+        bcc: { type: 'string', description: 'BCC email address(es)', optional: true },
+      },
+      returns: 'messageId and threadId of sent message'
+    },
+    {
+      name: 'gmail.messages.trash',
+      description: 'Move a Gmail message to Trash',
+      method: 'DELETE',
+      endpoint: '/services/google/gmail/messages/:messageId',
+      scope: 'services:write or services:google:write or master',
+      parameters: {
+        messageId: { type: 'string', description: 'Message ID to trash', optional: false }
+      },
+      returns: 'messageId and trashed: true'
     }
   ],
   github: [],
@@ -512,6 +538,34 @@ const SERVICE_METHODS = {
     });
   }
 
+  // Helper: POST/DELETE to Gmail API
+  function gmailRequest(accessToken, method, path, body) {
+    return new Promise((resolve, reject) => {
+      const url = new URL('https://gmail.googleapis.com' + path);
+      const payload = body ? JSON.stringify(body) : null;
+      const options = {
+        hostname: url.hostname,
+        path: url.pathname + url.search,
+        method,
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          ...(payload ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) } : {}),
+        },
+      };
+      const req = https.request(options, (res) => {
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+          try { resolve({ status: res.statusCode, body: data ? JSON.parse(data) : {} }); }
+          catch { resolve({ status: res.statusCode, body: data }); }
+        });
+      });
+      req.on('error', reject);
+      if (payload) req.write(payload);
+      req.end();
+    });
+  }
+
   // GET /api/v1/services/google/gmail/messages
   // Query params: maxResults (default 5, max 20), q (Gmail search query), pageToken
   router.get('/google/gmail/messages', requireAuth, requireServiceScope('google', 'read'), async (req, res) => {
@@ -644,6 +698,63 @@ const SERVICE_METHODS = {
     } catch (error) {
       logger.error('[Gmail] Error fetching message:', error);
       res.status(500).json({ error: 'Failed to fetch Gmail message', message: error.message });
+    }
+  });
+
+  // POST /api/v1/services/google/gmail/send
+  // Body: { to, subject, body, cc?, bcc? }
+  router.post('/google/gmail/send', requireAuth, requireServiceScope('google', 'write'), async (req, res) => {
+    try {
+      const userId = resolveUserId(req);
+      const accessToken = await getGoogleAccessToken(userId);
+      if (!accessToken) return res.status(403).json({ error: 'Google not connected' });
+
+      const { to, subject, body: emailBody, cc, bcc } = req.body;
+      if (!to || !subject || !emailBody) {
+        return res.status(400).json({ error: 'Missing required fields: to, subject, body' });
+      }
+
+      const lines = [
+        `To: ${to}`,
+        ...(cc ? [`Cc: ${cc}`] : []),
+        ...(bcc ? [`Bcc: ${bcc}`] : []),
+        `Subject: ${subject}`,
+        'Content-Type: text/plain; charset=utf-8',
+        'MIME-Version: 1.0',
+        '',
+        emailBody,
+      ];
+      const raw = Buffer.from(lines.join('\r\n')).toString('base64url');
+
+      const r = await gmailRequest(accessToken, 'POST', '/gmail/v1/users/me/messages/send', { raw });
+      if (r.status !== 200) {
+        return res.status(r.status).json({ error: 'Gmail send failed', details: r.body });
+      }
+
+      res.json({ success: true, messageId: r.body.id, threadId: r.body.threadId });
+    } catch (error) {
+      logger.error('[Gmail] Error sending message:', error);
+      res.status(500).json({ error: 'Failed to send Gmail message', message: error.message });
+    }
+  });
+
+  // DELETE /api/v1/services/google/gmail/messages/:messageId
+  // Moves message to Trash (not permanent delete)
+  router.delete('/google/gmail/messages/:messageId', requireAuth, requireServiceScope('google', 'write'), async (req, res) => {
+    try {
+      const userId = resolveUserId(req);
+      const accessToken = await getGoogleAccessToken(userId);
+      if (!accessToken) return res.status(403).json({ error: 'Google not connected' });
+
+      const r = await gmailRequest(accessToken, 'POST', `/gmail/v1/users/me/messages/${req.params.messageId}/trash`, null);
+      if (r.status !== 200) {
+        return res.status(r.status).json({ error: 'Gmail trash failed', details: r.body });
+      }
+
+      res.json({ success: true, messageId: r.body.id, trashed: true });
+    } catch (error) {
+      logger.error('[Gmail] Error trashing message:', error);
+      res.status(500).json({ error: 'Failed to trash Gmail message', message: error.message });
     }
   });
 

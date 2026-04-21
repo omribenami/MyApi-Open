@@ -26,7 +26,7 @@ class GoogleAdapter {
     }
 
     // Allow override via GOOGLE_SCOPE env var
-    const defaultScope = process.env.GOOGLE_SCOPE || 'https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/drive.file';
+    const defaultScope = process.env.GOOGLE_SCOPE || 'https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/drive.file';
 
     const params = {
       client_id: this.clientId,

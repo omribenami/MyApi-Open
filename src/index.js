@@ -4524,6 +4524,47 @@ app.get('/openapi.json', (req, res) => {
             },
           },
         },
+        delete: {
+          operationId: 'trashGmailMessage',
+          summary: 'Move a Gmail message to Trash',
+          description: 'Moves a Gmail message to the Trash folder (not permanent deletion).',
+          security: [{ bearerAuth: [] }],
+          parameters: [
+            { name: 'messageId', in: 'path', required: true, schema: { type: 'string' } },
+          ],
+          responses: {
+            '200': { description: 'Message trashed', content: { 'application/json': { schema: { type: 'object', properties: { success: { type: 'boolean' }, messageId: { type: 'string' }, trashed: { type: 'boolean' } } } } } },
+          },
+        },
+      },
+      '/api/v1/services/google/gmail/send': {
+        post: {
+          operationId: 'sendGmailMessage',
+          summary: 'Send an email via Gmail',
+          description: 'Send an email from the connected Gmail account.',
+          security: [{ bearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['to', 'subject', 'body'],
+                  properties: {
+                    to: { type: 'string', description: 'Recipient email address' },
+                    subject: { type: 'string', description: 'Email subject' },
+                    body: { type: 'string', description: 'Plain text email body' },
+                    cc: { type: 'string', description: 'CC email address(es)', nullable: true },
+                    bcc: { type: 'string', description: 'BCC email address(es)', nullable: true },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            '200': { description: 'Email sent', content: { 'application/json': { schema: { type: 'object', properties: { success: { type: 'boolean' }, messageId: { type: 'string' }, threadId: { type: 'string' } } } } } },
+          },
+        },
       },
 
       // ── Google Drive ──────────────────────────────────────────
@@ -6416,8 +6457,10 @@ app.get("/api/v1/gateway/context", authenticate, (req, res) => {
         description: 'Google — Gmail, Calendar, Drive',
         proxy_note: 'All Google calls go through POST /api/v1/services/google/proxy with {path, method, body}.',
         actions: [
-          { action: 'List Gmail messages',          method: 'GET',  path: '/gmail/v1/users/me/messages?maxResults=10' },
-          { action: 'Get a Gmail message',          method: 'GET',  path: '/gmail/v1/users/me/messages/{messageId}' },
+          { action: 'List Gmail messages',          method: 'GET',    path: '/gmail/v1/users/me/messages?maxResults=10' },
+          { action: 'Get a Gmail message',          method: 'GET',    path: '/gmail/v1/users/me/messages/{messageId}' },
+          { action: 'Send a Gmail message',         method: 'POST',   path: '/api/v1/services/google/gmail/send' },
+          { action: 'Trash a Gmail message',        method: 'DELETE', path: '/api/v1/services/google/gmail/messages/{messageId}' },
           { action: 'List calendar events',         method: 'GET',  path: '/calendar/v3/calendars/primary/events?maxResults=10' },
           { action: 'List Drive files',             method: 'GET',  path: '/drive/v3/files?pageSize=10' },
         ],
