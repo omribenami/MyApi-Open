@@ -13,11 +13,47 @@ function initDatabase(dbPath) {
 
   db = new Database(dbPath, { verbose: process.env.NODE_ENV === 'development' ? console.log : undefined });
   db.pragma('journal_mode = WAL');
-  
+
   // Create tables
   createTables();
-  
+  runSecurityMigrations();
+
   return db;
+}
+
+function runSecurityMigrations() {
+  // Add suspension columns to both token tables (idempotent — ignore if already exist)
+  const alterStmts = [
+    `ALTER TABLE tokens ADD COLUMN suspended_at INTEGER`,
+    `ALTER TABLE tokens ADD COLUMN suspension_reason TEXT`,
+    `ALTER TABLE access_tokens ADD COLUMN suspended_at TEXT`,
+    `ALTER TABLE access_tokens ADD COLUMN suspension_reason TEXT`,
+    `ALTER TABLE device_approvals_pending ADD COLUMN approval_type TEXT DEFAULT 'device'`,
+  ];
+  for (const sql of alterStmts) {
+    try { db.exec(sql); } catch (_) { /* column already exists */ }
+  }
+
+  // Token security baseline — one row per token, set on first authenticated request
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS token_security_baselines (
+      token_id      TEXT PRIMARY KEY,
+      baseline_asn  TEXT,
+      baseline_asn_org TEXT,
+      baseline_ua_hash TEXT,
+      created_at    TEXT NOT NULL,
+      updated_at    TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS asn_cache (
+      ip_prefix  TEXT PRIMARY KEY,
+      asn        TEXT,
+      asn_org    TEXT,
+      org_type   TEXT,
+      cached_at  TEXT NOT NULL,
+      expires_at TEXT NOT NULL
+    );
+  `);
 }
 
 function createTables() {

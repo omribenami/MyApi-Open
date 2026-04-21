@@ -4670,7 +4670,46 @@ function approvePendingDevice(approvalId, deviceName) {
     WHERE id = ?
   `).run(now, approvalId);
 
+  // Security alert approval: unsuspend the token and reset its baseline
+  if (approval.approval_type === 'security_alert') {
+    unsuspendToken(approval.token_id);
+    try {
+      db.prepare(`DELETE FROM token_security_baselines WHERE token_id = ?`).run(approval.token_id);
+    } catch (_) {}
+  }
+
   return deviceId;
+}
+
+// ─── Token Security ───────────────────────────────────────────────────────────
+
+function suspendToken(tokenId, reason) {
+  const now = new Date().toISOString();
+  const nowMs = Date.now();
+  // Try both tables; only the one that owns this token will change a row
+  db.prepare(`UPDATE access_tokens SET suspended_at = ?, suspension_reason = ? WHERE id = ? AND suspended_at IS NULL`).run(now, reason, tokenId);
+  db.prepare(`UPDATE tokens SET suspended_at = ?, suspension_reason = ? WHERE id = ? AND suspended_at IS NULL`).run(nowMs, reason, tokenId);
+}
+
+function unsuspendToken(tokenId) {
+  db.prepare(`UPDATE access_tokens SET suspended_at = NULL, suspension_reason = NULL WHERE id = ?`).run(tokenId);
+  db.prepare(`UPDATE tokens SET suspended_at = NULL, suspension_reason = NULL WHERE id = ?`).run(tokenId);
+}
+
+function getTokenSuspension(tokenId) {
+  return (
+    db.prepare(`SELECT suspended_at, suspension_reason FROM access_tokens WHERE id = ? AND suspended_at IS NOT NULL`).get(tokenId) ||
+    db.prepare(`SELECT suspended_at, suspension_reason FROM tokens WHERE id = ? AND suspended_at IS NOT NULL AND suspended_at != 0`).get(tokenId) ||
+    null
+  );
+}
+
+function getTokenOwnerId(tokenId) {
+  const row = db.prepare(`SELECT owner_id FROM access_tokens WHERE id = ?`).get(tokenId);
+  if (row?.owner_id) return row.owner_id;
+  // Fallback: primary user (master tokens are system-wide)
+  const primary = db.prepare(`SELECT id FROM users ORDER BY created_at ASC LIMIT 1`).get();
+  return primary?.id || null;
 }
 
 function denyPendingApproval(approvalId, reason = null) {
@@ -7114,4 +7153,9 @@ module.exports = {
   revokeAfpDevice,
   updateAfpDeviceStatus,
   logAfpCommand,
+  // Token Security
+  suspendToken,
+  unsuspendToken,
+  getTokenSuspension,
+  getTokenOwnerId,
 };

@@ -739,6 +739,142 @@ class EmailService {
     }
   }
 
+  async sendSecurityAlertEmail(toEmail, displayName, alert) {
+    if (!toEmail || !this.fromAddress) return;
+    const name = displayName || 'there';
+    const base = (process.env.PUBLIC_URL || process.env.BASE_URL || 'https://www.myapiai.com').replace(/\/$/, '');
+    const approveUrl = alert.approvalId
+      ? `${base}/dashboard/devices?approval=${alert.approvalId}`
+      : `${base}/dashboard/devices`;
+    const revokeUrl = `${base}/dashboard/access-tokens`;
+    const detectedAt = alert.detectedAt ? new Date(alert.detectedAt).toUTCString() : new Date().toUTCString();
+    const reasonsList = (alert.reasons || []).map(r =>
+      `<tr><td style="padding:6px 0;border-bottom:1px solid #1e293b;font-size:13px;color:#f87171;vertical-align:top;">&#9888;</td><td style="padding:6px 0 6px 10px;border-bottom:1px solid #1e293b;font-size:13px;color:#fca5a5;line-height:1.5;">${r}</td></tr>`
+    ).join('');
+
+    const html = `<!doctype html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Security Alert — MyApi</title></head>
+<body style="margin:0;padding:0;background:#020617;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#020617;padding:32px 12px;">
+  <tr><td align="center">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;">
+
+      <!-- Header -->
+      <tr><td style="background:linear-gradient(135deg,#7f1d1d 0%,#dc2626 50%,#b45309 100%);border-radius:16px 16px 0 0;padding:32px 36px;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+          <tr>
+            <td style="vertical-align:middle;">
+              <table role="presentation" cellspacing="0" cellpadding="0"><tr>
+                <td style="width:36px;height:36px;background:rgba(255,255,255,0.2);border-radius:50%;text-align:center;vertical-align:middle;">
+                  <span style="font-size:18px;line-height:36px;font-weight:900;color:#fff;">M</span>
+                </td>
+                <td style="padding-left:10px;font-size:20px;font-weight:700;color:#fff;letter-spacing:0.3px;">MyApi</td>
+              </tr></table>
+            </td>
+            <td align="right">
+              <span style="display:inline-block;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);border-radius:20px;padding:4px 14px;font-size:12px;font-weight:700;color:#fff;letter-spacing:0.5px;text-transform:uppercase;">Security Alert</span>
+            </td>
+          </tr>
+          <tr><td colspan="2" style="padding-top:28px;">
+            <p style="margin:0 0 6px 0;font-size:13px;font-weight:600;color:rgba(255,255,255,0.65);letter-spacing:1px;text-transform:uppercase;">Action required</p>
+            <h1 style="margin:0;font-size:26px;font-weight:800;color:#fff;line-height:1.25;">Suspicious activity detected</h1>
+            <p style="margin:10px 0 0;font-size:14px;color:rgba(255,255,255,0.75);">Hi ${name} — a token on your account was suspended automatically.</p>
+          </td></tr>
+        </table>
+      </td></tr>
+
+      <!-- Body -->
+      <tr><td style="background:#0f172a;border-left:1px solid #1e293b;border-right:1px solid #1e293b;padding:32px 36px 24px;">
+
+        <!-- Token info -->
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:20px;margin-bottom:24px;">
+          <tr>
+            <td>
+              <p style="margin:0 0 4px;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.8px;">Suspended Token</p>
+              <p style="margin:0 0 12px;font-size:16px;font-weight:700;color:#f1f5f9;">${alert.tokenName || 'Unknown'}</p>
+              <table role="presentation" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td style="padding-right:24px;">
+                    <p style="margin:0 0 2px;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Type</p>
+                    <p style="margin:0;font-size:13px;font-weight:600;color:#94a3b8;">${(alert.tokenType || 'token').toUpperCase()}</p>
+                  </td>
+                  <td style="padding-right:24px;">
+                    <p style="margin:0 0 2px;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Network</p>
+                    <p style="margin:0;font-size:13px;font-weight:600;color:#94a3b8;">${alert.asnInfo?.asnOrg || 'Unknown'}</p>
+                  </td>
+                  <td>
+                    <p style="margin:0 0 2px;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Detected</p>
+                    <p style="margin:0;font-size:13px;font-weight:600;color:#94a3b8;">${detectedAt}</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Reasons -->
+        <p style="margin:0 0 12px;font-size:14px;font-weight:700;color:#f1f5f9;">Why was it suspended?</p>
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:28px;">
+          ${reasonsList}
+        </table>
+
+        <p style="margin:0 0 20px;font-size:14px;color:#94a3b8;line-height:1.7;">
+          If this was you — for example, you moved the agent to a new server or changed infrastructure — you can review the details and re-approve the token below.
+          If you don't recognise this activity, revoke the token immediately.
+        </p>
+
+        <!-- CTAs -->
+        <table role="presentation" cellspacing="0" cellpadding="0" style="margin-bottom:12px;">
+          <tr>
+            <td style="padding-right:12px;">
+              <a href="${approveUrl}" style="display:inline-block;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;font-size:14px;font-weight:700;text-decoration:none;padding:12px 24px;border-radius:8px;letter-spacing:0.2px;">Review &amp; Approve</a>
+            </td>
+            <td>
+              <a href="${revokeUrl}" style="display:inline-block;background:#1e293b;border:1px solid #dc2626;color:#f87171;font-size:14px;font-weight:700;text-decoration:none;padding:12px 24px;border-radius:8px;letter-spacing:0.2px;">Revoke Token</a>
+            </td>
+          </tr>
+        </table>
+
+      </td></tr>
+
+      <!-- Footer -->
+      <tr><td style="background:#0a1628;border:1px solid #1e293b;border-top:none;border-radius:0 0 16px 16px;padding:20px 36px;">
+        <p style="margin:0 0 6px;font-size:12px;color:#475569;line-height:1.6;">
+          You received this because suspicious activity was detected on your MyApi account. If you did not expect this, revoke the token immediately and check your connected agents.
+        </p>
+        <p style="margin:0;font-size:12px;color:#334155;">
+          <a href="${base}/dashboard" style="color:#3b82f6;text-decoration:none;">Open Dashboard</a>
+          &nbsp;&middot;&nbsp;
+          <a href="${base}/dashboard/access-tokens" style="color:#3b82f6;text-decoration:none;">Manage Tokens</a>
+        </p>
+      </td></tr>
+
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>`;
+
+    await this._dispatchEmail(toEmail.trim(), `[Action Required] Security Alert — Token Suspended`, html);
+  }
+
+  async _dispatchEmail(toEmail, subject, html) {
+    const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    if (this.provider === 'resend') {
+      return this.sendEmailViaResend({ email_address: toEmail, subject, body: text, html_body: html });
+    }
+    if (this.transporter) {
+      return this.transporter.sendMail({
+        from: `${this.fromName} <${this.fromAddress}>`,
+        to: toEmail,
+        subject,
+        text,
+        html,
+      });
+    }
+  }
+
   /**
    * Test the email configuration
    */

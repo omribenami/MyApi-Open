@@ -1,5 +1,7 @@
 const logger = require('../utils/logger');
 const NotificationService = require('../services/notificationService');
+const { getDatabase } = require('../config/database');
+const { checkRequest: securityCheck } = require('../lib/tokenSecurityMonitor');
 
 // Authentication middleware
 function authenticate(tokenManager, auditLog) {
@@ -47,8 +49,50 @@ function authenticate(tokenManager, auditLog) {
         });
       }
 
+      // Check suspension before doing anything else
+      try {
+        const db = getDatabase();
+        const suspension =
+          db.prepare(`SELECT suspended_at, suspension_reason FROM access_tokens WHERE id = ? AND suspended_at IS NOT NULL`).get(tokenData.id) ||
+          db.prepare(`SELECT suspended_at, suspension_reason FROM tokens WHERE id = ? AND suspended_at IS NOT NULL AND suspended_at != 0`).get(tokenData.id);
+        if (suspension) {
+          return res.status(403).json({
+            error: 'Token Suspended',
+            message: 'This token was suspended due to suspicious activity. Check your notifications to review and re-approve.',
+            code: 'TOKEN_SUSPENDED',
+            reason: suspension.suspension_reason,
+          });
+        }
+      } catch (_) {}
+
       // Attach token data to request
       req.tokenData = tokenData;
+
+      // Security anomaly detection — blocks current request if suspicious
+      try {
+        const secResult = await securityCheck(req, tokenData.id, tokenData.type);
+        if (secResult.blocked) {
+          auditLog.log({
+            tokenId: tokenData.id,
+            tokenType: tokenData.type,
+            action: 'token_security_blocked',
+            endpoint: req.path,
+            method: req.method,
+            status: 403,
+            ipAddress: req.ip,
+            userAgent: req.get('user-agent'),
+            details: { reasons: secResult.reasons },
+          });
+          return res.status(403).json({
+            error: 'Token Suspended',
+            message: secResult.message,
+            code: 'TOKEN_SUSPENDED',
+            approvalId: secResult.approvalId,
+          });
+        }
+      } catch (e) {
+        logger.error('[Auth] Security check error:', e.message);
+      }
 
       // Log successful authentication
       auditLog.log({
