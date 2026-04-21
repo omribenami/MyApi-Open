@@ -143,7 +143,7 @@
       Connect Gmail, GitHub, Slack, Twitter — 30+ services — to MyApi once. Hand scoped, revocable tokens to Claude, your own agents, or any AI copilot. Every request is logged, redacted, and yours to revoke.
     </p>
     <div class="mt-8 flex flex-wrap items-center gap-3">
-      <button onclick="openSigninDropdown('signup')" class="btn btn-primary" style="padding:10px 16px;font-size:14px;">Start for free</button>
+      <button onclick="openSigninDropdown('signup',event)" class="btn btn-primary" style="padding:10px 16px;font-size:14px;">Start for free</button>
       <a href="#how" class="btn" style="padding:10px 16px;font-size:14px;">See how it works <span class="ink-3">→</span></a>
     </div>
     <div class="mt-5 flex flex-wrap items-center gap-6 ink-3 text-[12.5px]">
@@ -458,7 +458,7 @@
       Give every agent the access it needs. Not a byte more.
     </h2>
     <div class="mt-8 flex items-center justify-center gap-3 flex-wrap">
-      <button onclick="openSigninDropdown('signup')" class="btn btn-primary" style="padding:12px 20px;font-size:15px;">Start free</button>
+      <button onclick="openSigninDropdown('signup',event)" class="btn btn-primary" style="padding:12px 20px;font-size:15px;">Start free</button>
       <a href="/dashboard/"       class="btn"             style="padding:12px 20px;font-size:15px;">Open dashboard →</a>
       <div class="ink-3 text-[13px] mono ml-2">or: <a href="https://github.com/omribenami/MyApi-Open" target="_blank" rel="noopener" style="color:var(--accent)">github.com/omribenami/MyApi-Open</a> to install locally</div>
     </div>
@@ -535,27 +535,26 @@
       if (label) label.textContent = (mode === 'login' ? 'Continue with ' : 'Sign up with ') + btn.dataset.provider;
     });
   }
-  window.openSigninDropdown = function(mode) {
+  window.openSigninDropdown = function(mode, e) {
+    if (e) e.stopPropagation();
     var wrap = document.getElementById('signin-wrap');
     if (!wrap || wrap.offsetParent === null) {
       window.location.href = '/dashboard/login' + (mode === 'signup' ? '?mode=signup' : '');
       return;
     }
-    var delay = 0;
-    if (window.scrollY > 80) {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      delay = 400;
-    }
-    // Defer past the current click-bubble cycle so the document close-handler
-    // (which fires on the same click) doesn't immediately shut it again.
-    setTimeout(function() {
+    var open = function() {
       dropdown.classList.add('open');
       if (mode) setMode(mode);
-      // Pulse the signin button briefly to draw the eye
       trigger.style.transition = 'box-shadow 0.15s';
       trigger.style.boxShadow = '0 0 0 3px rgba(68,147,248,0.55)';
       setTimeout(function() { trigger.style.boxShadow = ''; }, 600);
-    }, delay);
+    };
+    if (window.scrollY > 80) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      setTimeout(open, 400);
+    } else {
+      open();
+    }
   };
   dropdown.querySelectorAll('.auth-tab').forEach(function(tab) {
     tab.addEventListener('click', function() { setMode(this.dataset.mode); });
@@ -738,7 +737,7 @@
         ${p.f.map(x => `<li class="flex gap-2 text-[13px] ink-2"><span class="ink-3 shrink-0">✓</span><span>${x}</span></li>`).join('')}
       </ul>
       ${p.active
-        ? `<button onclick="openSigninDropdown('signup')" class="mt-5 btn" style="background:var(--accent-2);color:#fff;border-color:rgba(240,246,252,0.1);">${p.cta}</button>`
+        ? `<button onclick="openSigninDropdown('signup',event)" class="mt-5 btn" style="background:var(--accent-2);color:#fff;border-color:rgba(240,246,252,0.1);">${p.cta}</button>`
         : `<a href="${p.href}" class="mt-5 btn" style="cursor:not-allowed;opacity:0.7;">${p.cta}</a>`
       }
     </div>`;
