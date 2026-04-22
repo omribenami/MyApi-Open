@@ -1283,6 +1283,43 @@ function initDatabase() {
   // Add afp_root column if it doesn't exist yet (safe migration)
   try { db.exec(`ALTER TABLE afp_devices ADD COLUMN afp_root TEXT`); } catch (_) {}
 
+  // Policy engine tables
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS policy_rules (
+      id TEXT PRIMARY KEY,
+      token_id TEXT,
+      host_pattern TEXT NOT NULL,
+      path_pattern TEXT NOT NULL,
+      method TEXT NOT NULL DEFAULT '*',
+      action TEXT NOT NULL CHECK(action IN ('block','manual_approval','rate_limit','allow')),
+      rate_limit_count INTEGER,
+      rate_limit_window_ms INTEGER,
+      workspace_id TEXT,
+      created_by TEXT,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_policy_rules_token ON policy_rules(token_id);
+    CREATE INDEX IF NOT EXISTS idx_policy_rules_action ON policy_rules(action);
+
+    CREATE TABLE IF NOT EXISTS pending_approvals (
+      id TEXT PRIMARY KEY,
+      token_id TEXT NOT NULL,
+      rule_id TEXT NOT NULL,
+      method TEXT NOT NULL,
+      host TEXT NOT NULL,
+      path TEXT NOT NULL,
+      headers TEXT,
+      body_preview TEXT,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','denied','expired')),
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL,
+      decided_at INTEGER,
+      decided_by TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_pending_approvals_token ON pending_approvals(token_id);
+    CREATE INDEX IF NOT EXISTS idx_pending_approvals_status ON pending_approvals(status);
+  `);
+
   // Seed initial pricing plans if table is empty
   seedDefaultPricingPlans();
 

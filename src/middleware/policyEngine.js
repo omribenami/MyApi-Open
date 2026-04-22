@@ -2,7 +2,8 @@
 // Copyright 2025 ChartDB, Inc. — Apache License 2.0
 // See NOTICES file at the project root for full attribution.
 
-const { getDatabase } = require('../config/database');
+const { db: _db } = require('../database');
+function getDatabase() { return _db; }
 const { v4: uuidv4 } = require('uuid');
 const logger = require('../utils/logger');
 

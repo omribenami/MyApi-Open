@@ -4,7 +4,8 @@
 
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
-const { getDatabase } = require('../config/database');
+const { db: _db } = require('../database');
+function getDatabase() { return _db; }
 const logger = require('../utils/logger');
 
 const router = express.Router();
