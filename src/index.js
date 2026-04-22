@@ -7412,7 +7412,7 @@ app.post('/api/v1/auth/oauth-signup/complete', async (req, res) => {
   const signupEmail = createdUser.email || body.email || null;
   const signupDisplayName = createdUser.displayName || createdUser.display_name || createdUser.username || '';
   if (signupEmail) {
-    emailService.sendWelcomeEmail(signupEmail, signupDisplayName).catch(() => {});
+    emailService.sendWelcomeEmail(signupEmail, signupDisplayName, rawMasterToken).catch(() => {});
   }
 
   delete req.session.oauth_signup;

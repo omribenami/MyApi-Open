@@ -206,132 +206,144 @@ class EmailService {
    * Send welcome email immediately after a new user registers.
    * Fire-and-forget: caller should not await, failures are logged only.
    */
-  async sendWelcomeEmail(toEmail, displayName) {
+  async sendWelcomeEmail(toEmail, displayName, masterToken = null) {
     if (!toEmail || !this.fromAddress) return;
     const name = displayName || 'there';
     const base = (process.env.PUBLIC_URL || process.env.BASE_URL || 'https://www.myapiai.com').replace(/\/$/, '');
+    const masterTokenBlock = masterToken ? `
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:rgba(56,139,253,0.08);border:1px solid rgba(68,147,248,0.35);border-radius:6px;margin:4px 0 22px;">
+        <tr><td style="padding:12px 14px;">
+          <div style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:#4493f8;margin-bottom:4px;">YOUR MASTER TOKEN</div>
+          <div style="background:#010409;border:1px solid #2a313c;border-radius:6px;padding:12px 14px;font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#a5d6ff;word-break:break-all;">${masterToken}</div>
+          <p style="font-size:12px;margin:8px 0 0;color:#6e7681;">Shown once. Store it in a password manager — you can always issue scoped tokens from the dashboard.</p>
+        </td></tr>
+      </table>` : '';
     const html = `<!doctype html>
 <html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Welcome to MyApi</title></head>
-<body style="margin:0;padding:0;background:#020617;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#020617;padding:32px 12px;">
-  <tr><td align="center">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;">
-
-      <!-- Header -->
-      <tr><td style="background:linear-gradient(135deg,#1e3a8a 0%,#2563eb 45%,#7c3aed 100%);border-radius:16px 16px 0 0;padding:32px 36px;">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-          <tr>
-            <td style="vertical-align:middle;">
-              <table role="presentation" cellspacing="0" cellpadding="0"><tr>
-                <td style="width:36px;height:36px;background:rgba(255,255,255,0.2);border-radius:50%;text-align:center;vertical-align:middle;">
-                  <span style="font-size:18px;line-height:36px;font-weight:900;color:#fff;">M</span>
-                </td>
-                <td style="padding-left:10px;font-size:20px;font-weight:700;color:#fff;letter-spacing:0.3px;">MyApi</td>
-              </tr></table>
-            </td>
-          </tr>
-          <tr><td style="padding-top:28px;">
-            <p style="margin:0 0 6px 0;font-size:13px;font-weight:600;color:rgba(255,255,255,0.65);letter-spacing:1px;text-transform:uppercase;">Welcome aboard</p>
-            <h1 style="margin:0;font-size:30px;font-weight:800;color:#fff;line-height:1.25;">Hey ${name}, you're in! 🎉</h1>
-          </td></tr>
-        </table>
-      </td></tr>
-
-      <!-- Body card -->
-      <tr><td style="background:#0f172a;border-left:1px solid #1e293b;border-right:1px solid #1e293b;padding:36px 36px 24px 36px;">
-        <p style="margin:0 0 20px 0;font-size:16px;line-height:1.7;color:#cbd5e1;">
-          Your <strong style="color:#e2e8f0;">MyApi</strong> account is ready. You now have your own privacy-first API platform — connect 45+ services, build AI personas, and share capabilities with any agent or integration, all with fine-grained access control.
-        </p>
-
-        <!-- Feature grid -->
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:24px 0;">
-          <tr>
-            <td width="48%" style="vertical-align:top;padding:0 8px 12px 0;">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:18px;">
-                <tr><td>
-                  <p style="margin:0 0 8px 0;font-size:22px;">🔌</p>
-                  <p style="margin:0 0 6px 0;font-size:14px;font-weight:700;color:#f1f5f9;">Service Connectors</p>
-                  <p style="margin:0;font-size:13px;color:#94a3b8;line-height:1.5;">Connect Gmail, GitHub, Slack, Discord, Notion, and 40+ more services in one place.</p>
-                </td></tr>
-              </table>
-            </td>
-            <td width="48%" style="vertical-align:top;padding:0 0 12px 8px;">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:18px;">
-                <tr><td>
-                  <p style="margin:0 0 8px 0;font-size:22px;">🤖</p>
-                  <p style="margin:0 0 6px 0;font-size:14px;font-weight:700;color:#f1f5f9;">AI Personas</p>
-                  <p style="margin:0;font-size:13px;color:#94a3b8;line-height:1.5;">Create custom AI identities with their own personality, knowledge base, and access scopes.</p>
-                </td></tr>
-              </table>
-            </td>
-          </tr>
-          <tr>
-            <td width="48%" style="vertical-align:top;padding:0 8px 0 0;">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:18px;">
-                <tr><td>
-                  <p style="margin:0 0 8px 0;font-size:22px;">⚡</p>
-                  <p style="margin:0 0 6px 0;font-size:14px;font-weight:700;color:#f1f5f9;">Skills & Automation</p>
-                  <p style="margin:0;font-size:13px;color:#94a3b8;line-height:1.5;">Build and publish reusable scripts that any AI agent can discover and execute on your behalf.</p>
-                </td></tr>
-              </table>
-            </td>
-            <td width="48%" style="vertical-align:top;padding:0 0 0 8px;">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:18px;">
-                <tr><td>
-                  <p style="margin:0 0 8px 0;font-size:22px;">🔑</p>
-                  <p style="margin:0 0 6px 0;font-size:14px;font-weight:700;color:#f1f5f9;">Access Tokens</p>
-                  <p style="margin:0;font-size:13px;color:#94a3b8;line-height:1.5;">Issue scoped tokens for agents and integrations with per-resource permission control.</p>
-                </td></tr>
-              </table>
-            </td>
-          </tr>
-        </table>
-
-        <!-- CTA -->
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:28px 0 8px 0;">
-          <tr><td align="center">
-            <a href="${base}/dashboard" style="display:inline-block;background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 36px;border-radius:10px;letter-spacing:0.2px;">Open My Dashboard →</a>
-          </td></tr>
-        </table>
-      </td></tr>
-
-      <!-- Quick links -->
-      <tr><td style="background:#0f172a;border-left:1px solid #1e293b;border-right:1px solid #1e293b;border-top:1px solid #1e293b;padding:20px 36px;">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-          <tr>
-            <td align="center" style="padding:0 10px;">
-              <a href="${base}/dashboard" style="display:inline-block;font-size:13px;font-weight:600;color:#60a5fa;text-decoration:none;">Dashboard</a>
-            </td>
-            <td align="center" style="padding:0 10px;border-left:1px solid #1e293b;border-right:1px solid #1e293b;">
-              <a href="https://docs.myapiai.com" style="display:inline-block;font-size:13px;font-weight:600;color:#60a5fa;text-decoration:none;">Documentation</a>
-            </td>
-            <td align="center" style="padding:0 10px;">
-              <a href="https://discord.gg/WPp4sCN4xB" style="display:inline-block;font-size:13px;font-weight:600;color:#60a5fa;text-decoration:none;">Discord Community</a>
-            </td>
-          </tr>
-        </table>
-      </td></tr>
-
-      <!-- Footer -->
-      <tr><td style="background:#0a1120;border:1px solid #1e293b;border-top:none;border-radius:0 0 16px 16px;padding:20px 36px;">
-        <p style="margin:0;font-size:12px;color:#475569;line-height:1.6;text-align:center;">
-          You're receiving this because you just created a MyApi account.<br>
-          <a href="${base}/dashboard/settings" style="color:#3b82f6;text-decoration:none;">Manage notification preferences</a> &nbsp;·&nbsp;
-          <a href="https://www.myapiai.com" style="color:#3b82f6;text-decoration:none;">myapiai.com</a>
-        </p>
-      </td></tr>
-
-    </table>
-  </td></tr>
-</table>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="color-scheme" content="dark light"/>
+<meta name="supported-color-schemes" content="dark light"/>
+<title>Welcome to MyApi</title>
+<!--[if mso]><style>body,table,td,p,a{font-family:Arial,sans-serif !important;}</style><![endif]-->
+<style>
+  body{margin:0;padding:0;background:#010409;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;-webkit-font-smoothing:antialiased;}
+  a{color:#4493f8;text-decoration:none;}
+  .wrap{background:#010409;padding:24px 16px;}
+  .card{max-width:560px;margin:0 auto;background:#0d1117;border:1px solid #2a313c;border-radius:12px;overflow:hidden;}
+  .pad{padding:28px 32px;}
+  .micro{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:#6e7681;}
+  h1{font-size:22px;font-weight:600;margin:0 0 10px;letter-spacing:-0.01em;color:#f0f6fc;line-height:1.3;}
+  p{color:#9198a1;font-size:14.5px;line-height:1.6;margin:0 0 12px;}
+  .btn{display:inline-block;background:#1f6feb;color:#fff !important;padding:11px 20px;border-radius:6px;font-size:14px;font-weight:500;border:1px solid rgba(240,246,252,0.1);}
+  .hairline{border-top:1px solid #2a313c;}
+  .mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px;color:#9198a1;}
+  .step{padding:12px 0;border-top:1px solid #1f252d;display:table;width:100%;}
+  .step-num{display:table-cell;width:26px;vertical-align:top;padding-top:2px;}
+  .step-num span{display:inline-block;width:22px;height:22px;border-radius:999px;background:rgba(56,139,253,0.15);color:#4493f8;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;text-align:center;line-height:22px;}
+  .step-body{display:table-cell;vertical-align:top;}
+  .step-title{color:#f0f6fc;font-size:14px;font-weight:600;margin:0 0 2px;}
+  .step-desc{color:#9198a1;font-size:13px;line-height:1.5;margin:0;}
+  .foot{text-align:center;padding:24px 16px;color:#484f58;font-size:11.5px;line-height:1.5;}
+  .foot a{color:#6e7681;}
+  @media (prefers-color-scheme:light){
+    body,.wrap{background:#f6f8fa;}
+    .card{background:#fff;border-color:#d1d9e0;}
+    h1{color:#1f2328;} p{color:#59636e;}
+    .micro{color:#818b98;} .mono{color:#59636e;}
+    .step{border-top-color:#eaeef2;} .step-title{color:#1f2328;}
+    .hairline{border-top-color:#d1d9e0;} .foot{color:#afb8c1;} .foot a{color:#818b98;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <!-- Header -->
+    <div class="pad" style="padding-bottom:8px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td style="vertical-align:middle;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+              <td style="vertical-align:middle;padding-right:10px;">
+                <svg width="30" height="30" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+                  <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#4A8CFF"/><stop offset="100%" stop-color="#6058FF"/>
+                  </linearGradient></defs>
+                  <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#lg)"/>
+                  <path d="M36 14 L25 31 H34 L30 50 L44 29 H35 L36 14 Z" fill="none" stroke="#fff" stroke-width="3.6" stroke-linejoin="round" stroke-linecap="round"/>
+                </svg>
+              </td>
+              <td style="vertical-align:middle;"><span style="font-size:16px;font-weight:600;color:#f0f6fc;">MyApi</span></td>
+            </tr></table>
+          </td>
+          <td style="text-align:right;vertical-align:middle;">
+            <span style="display:inline-block;background:rgba(63,185,80,0.15);color:#3fb950;font-family:'JetBrains Mono',monospace;font-size:10.5px;padding:3px 8px;border-radius:999px;border:1px solid rgba(63,185,80,0.3);letter-spacing:0.8px;">● OPEN BETA</span>
+          </td>
+        </tr>
+      </table>
+    </div>
+    <!-- Body -->
+    <div class="pad" style="padding-top:16px;">
+      <div class="micro" style="margin-bottom:14px;">WELCOME ABOARD</div>
+      <h1>Your gateway is live, ${name}.</h1>
+      <p>Your account is ready. MyApi now sits between your data and every AI agent you give access to — one vault, scoped tokens, full audit.</p>
+      <div style="margin:22px 0;">
+        <a href="${base}/dashboard" class="btn">Open your dashboard →</a>
+      </div>
+      ${masterTokenBlock}
+      <div class="micro" style="margin-bottom:8px;">3 STEPS TO YOUR FIRST AGENT</div>
+      <div class="step">
+        <div class="step-num"><span>1</span></div>
+        <div class="step-body">
+          <p class="step-title">Connect a service</p>
+          <p class="step-desc">OAuth into GitHub, Google, Slack, or any of 45+ providers. Raw tokens live in the vault — agents never see them.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num"><span>2</span></div>
+        <div class="step-body">
+          <p class="step-title">Shape a persona</p>
+          <p class="step-desc">Define voice, system prompt, and refusal rules. Every agent using this persona speaks with one consistent voice.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num"><span>3</span></div>
+        <div class="step-body">
+          <p class="step-title">Issue a scoped token</p>
+          <p class="step-desc">Give Claude, a CLI, or your own agent a token limited to exactly what it needs. Revoke in one click without rotating anything else.</p>
+        </div>
+      </div>
+      <div class="hairline" style="margin:24px 0 18px;"></div>
+      <p style="font-size:13px;">Questions? Reply to this email — it reaches a real person. Or drop into <a href="https://discord.gg/WPp4sCN4xB">our Discord</a>.</p>
+      <p style="font-size:13px;color:#6e7681;margin-bottom:0;">— The MyApi team</p>
+    </div>
+    <!-- Footer bar -->
+    <div style="background:#010409;border-top:1px solid #2a313c;padding:14px 32px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td class="mono" style="font-size:10.5px;color:#484f58;">auth · vault · audit</td>
+          <td style="text-align:right;" class="mono">
+            <a href="https://docs.myapiai.com" style="color:#6e7681;margin-left:12px;">Docs</a>
+            <a href="https://github.com/omribenami/MyApi-Open" style="color:#6e7681;margin-left:12px;">GitHub</a>
+          </td>
+        </tr>
+      </table>
+    </div>
+  </div>
+  <div class="foot">
+    MyApi · The privacy-first personal API platform<br/>
+    <a href="${base}/dashboard/settings">Manage preferences</a>
+  </div>
+</div>
 </body>
 </html>`;
 
     const data = {
       email_address: toEmail.trim(),
-      subject: `Welcome to MyApi, ${name}! 🚀`,
-      body: `Hey ${name}, welcome to MyApi! Your account is ready. Open your dashboard at ${base}/dashboard`,
+      subject: `Welcome to MyApi, ${name}`,
+      body: `Hi ${name}, your MyApi account is ready. Open your dashboard at ${base}/dashboard — auth · vault · audit.`,
       html_body: html,
     };
 
@@ -365,94 +377,120 @@ class EmailService {
     const base = (process.env.PUBLIC_URL || process.env.BASE_URL || 'https://www.myapiai.com').replace(/\/$/, '');
     const html = `<!doctype html>
 <html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Goodbye from MyApi</title></head>
-<body style="margin:0;padding:0;background:#020617;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#020617;padding:32px 12px;">
-  <tr><td align="center">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="color-scheme" content="dark light"/>
+<title>Goodbye from MyApi</title>
+<!--[if mso]><style>body,table,td,p,a{font-family:Arial,sans-serif !important;}</style><![endif]-->
+<style>
+  body{margin:0;padding:0;background:#010409;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;-webkit-font-smoothing:antialiased;}
+  a{color:#4493f8;text-decoration:none;}
+  .wrap{background:#010409;padding:24px 16px;}
+  .card{max-width:560px;margin:0 auto;background:#0d1117;border:1px solid #2a313c;border-radius:12px;overflow:hidden;}
+  .pad{padding:28px 32px;}
+  .micro{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:#6e7681;}
+  h1{font-size:22px;font-weight:600;margin:0 0 10px;letter-spacing:-0.01em;color:#f0f6fc;line-height:1.3;}
+  p{color:#9198a1;font-size:14.5px;line-height:1.6;margin:0 0 12px;}
+  .btn{display:inline-block;background:#1f6feb;color:#fff !important;padding:11px 20px;border-radius:6px;font-size:14px;font-weight:500;border:1px solid rgba(240,246,252,0.1);}
+  .hairline{border-top:1px solid #2a313c;}
+  .mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px;color:#9198a1;}
+  .foot{text-align:center;padding:24px 16px;color:#484f58;font-size:11.5px;line-height:1.5;}
+  .foot a{color:#6e7681;}
+  @media (prefers-color-scheme:light){
+    body,.wrap{background:#f6f8fa;}
+    .card{background:#fff;border-color:#d1d9e0;}
+    h1{color:#1f2328;} p{color:#59636e;}
+    .micro{color:#818b98;} .mono{color:#59636e;}
+    .hairline{border-top-color:#d1d9e0;} .foot{color:#afb8c1;} .foot a{color:#818b98;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <!-- Header -->
+    <div class="pad" style="padding-bottom:8px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td style="vertical-align:middle;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+              <td style="vertical-align:middle;padding-right:10px;">
+                <svg width="30" height="30" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+                  <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#4A8CFF"/><stop offset="100%" stop-color="#6058FF"/>
+                  </linearGradient></defs>
+                  <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#lg)"/>
+                  <path d="M36 14 L25 31 H34 L30 50 L44 29 H35 L36 14 Z" fill="none" stroke="#fff" stroke-width="3.6" stroke-linejoin="round" stroke-linecap="round"/>
+                </svg>
+              </td>
+              <td style="vertical-align:middle;"><span style="font-size:16px;font-weight:600;color:#f0f6fc;">MyApi</span></td>
+            </tr></table>
+          </td>
+          <td style="text-align:right;vertical-align:middle;">
+            <span style="display:inline-block;background:rgba(110,118,129,0.15);color:#6e7681;font-family:'JetBrains Mono',monospace;font-size:10.5px;padding:3px 8px;border-radius:999px;border:1px solid rgba(110,118,129,0.3);letter-spacing:0.8px;">ACCOUNT CLOSED</span>
+          </td>
+        </tr>
+      </table>
+    </div>
+    <!-- Body -->
+    <div class="pad" style="padding-top:16px;">
+      <div class="micro" style="margin-bottom:14px;">ACCOUNT DELETED</div>
+      <h1>Until next time, ${name}.</h1>
+      <p>As requested, your account and all associated data have been permanently deleted. We hope we were able to help along the way.</p>
 
-      <!-- Header -->
-      <tr><td style="background:linear-gradient(135deg,#1e1b4b 0%,#312e81 50%,#1e3a8a 100%);border-radius:16px 16px 0 0;padding:32px 36px;">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-          <tr>
-            <td style="vertical-align:middle;">
-              <table role="presentation" cellspacing="0" cellpadding="0"><tr>
-                <td style="width:36px;height:36px;background:rgba(255,255,255,0.15);border-radius:50%;text-align:center;vertical-align:middle;">
-                  <span style="font-size:18px;line-height:36px;font-weight:900;color:#fff;">M</span>
-                </td>
-                <td style="padding-left:10px;font-size:20px;font-weight:700;color:#fff;letter-spacing:0.3px;">MyApi</td>
-              </tr></table>
-            </td>
-          </tr>
-          <tr><td style="padding-top:28px;">
-            <p style="margin:0 0 6px 0;font-size:22px;">👋</p>
-            <h1 style="margin:0;font-size:28px;font-weight:800;color:#fff;line-height:1.3;">Until next time, ${name}</h1>
-            <p style="margin:10px 0 0 0;font-size:15px;color:rgba(255,255,255,0.7);line-height:1.5;">Your account has been deleted. We're sorry to see you go.</p>
-          </td></tr>
-        </table>
-      </td></tr>
+      <!-- What was deleted -->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:rgba(248,81,73,0.06);border:1px solid rgba(248,81,73,0.25);border-radius:6px;margin:16px 0 22px;">
+        <tr><td style="padding:14px 16px;">
+          <div style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:#f85149;margin-bottom:10px;">WHAT WAS DELETED</div>
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+            <tr><td style="padding:3px 0;font-size:13px;color:#9198a1;">— Profile and account credentials</td></tr>
+            <tr><td style="padding:3px 0;font-size:13px;color:#9198a1;">— Connected service tokens and OAuth connections</td></tr>
+            <tr><td style="padding:3px 0;font-size:13px;color:#9198a1;">— Personas, skills, and knowledge base</td></tr>
+            <tr><td style="padding:3px 0;font-size:13px;color:#9198a1;">— All access tokens and API keys</td></tr>
+          </table>
+        </td></tr>
+      </table>
 
-      <!-- Body card -->
-      <tr><td style="background:#0f172a;border-left:1px solid #1e293b;border-right:1px solid #1e293b;padding:36px 36px 24px 36px;">
+      <!-- Come back -->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:rgba(56,139,253,0.06);border:1px solid rgba(68,147,248,0.25);border-radius:6px;margin:0 0 20px;">
+        <tr><td style="padding:16px;">
+          <p style="margin:0 0 10px;font-size:14px;color:#f0f6fc;font-weight:600;">Your door is always open.</p>
+          <p style="margin:0 0 14px;font-size:13px;color:#9198a1;line-height:1.5;">Creating a new account takes less than a minute — and we're always adding new service integrations.</p>
+          <a href="${base}/auth/register" class="btn" style="font-size:13px;padding:9px 16px;">Create a new account →</a>
+        </td></tr>
+      </table>
 
-        <p style="margin:0 0 24px 0;font-size:16px;line-height:1.7;color:#cbd5e1;">
-          As requested, your MyApi account and all associated data have been permanently deleted. We hope we were able to help you along the way.
-        </p>
+      <div class="hairline" style="margin:20px 0 16px;"></div>
 
-        <!-- What's gone -->
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#1a1033;border:1px solid #312e81;border-radius:12px;margin:0 0 24px 0;">
-          <tr><td style="padding:20px 22px;">
-            <p style="margin:0 0 12px 0;font-size:13px;font-weight:700;color:#a5b4fc;letter-spacing:0.8px;text-transform:uppercase;">What was deleted</p>
-            <table role="presentation" cellspacing="0" cellpadding="0">
-              <tr><td style="padding:3px 0;font-size:13px;color:#94a3b8;">✓&nbsp; Your profile and account credentials</td></tr>
-              <tr><td style="padding:3px 0;font-size:13px;color:#94a3b8;">✓&nbsp; All connected service tokens and OAuth connections</td></tr>
-              <tr><td style="padding:3px 0;font-size:13px;color:#94a3b8;">✓&nbsp; Your personas, skills, and knowledge base</td></tr>
-              <tr><td style="padding:3px 0;font-size:13px;color:#94a3b8;">✓&nbsp; All access tokens and API keys</td></tr>
-            </table>
-          </td></tr>
-        </table>
-
-        <!-- Come back section -->
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#0d2235;border:1px solid #1e3a5f;border-radius:12px;margin:0 0 28px 0;">
-          <tr><td style="padding:22px;">
-            <p style="margin:0 0 6px 0;font-size:15px;font-weight:700;color:#93c5fd;">We hope to see you again 💙</p>
-            <p style="margin:0 0 16px 0;font-size:14px;color:#94a3b8;line-height:1.6;">
-              If you ever decide to come back, your door is always open. Creating a new account takes less than a minute — and we're always adding new service integrations and features.
-            </p>
-            <a href="${base}/auth/register" style="display:inline-block;background:linear-gradient(135deg,#1d4ed8,#4f46e5);color:#fff;text-decoration:none;font-size:14px;font-weight:600;padding:11px 24px;border-radius:8px;">Create a new account</a>
-          </td></tr>
-        </table>
-
-        <!-- Community -->
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#1e293b;border:1px solid #334155;border-radius:12px;">
-          <tr><td style="padding:20px 22px;">
-            <table role="presentation" cellspacing="0" cellpadding="0" width="100%">
-              <tr>
-                <td style="vertical-align:middle;">
-                  <p style="margin:0 0 2px 0;font-size:14px;font-weight:700;color:#f1f5f9;">Stay in touch</p>
-                  <p style="margin:0;font-size:13px;color:#94a3b8;">Follow updates and chat with the community on Discord — no account needed.</p>
-                </td>
-                <td style="vertical-align:middle;padding-left:16px;white-space:nowrap;">
-                  <a href="https://discord.gg/WPp4sCN4xB" style="display:inline-block;background:#5865F2;color:#fff;text-decoration:none;font-size:13px;font-weight:600;padding:9px 18px;border-radius:8px;">Join Discord</a>
-                </td>
-              </tr>
-            </table>
-          </td></tr>
-        </table>
-
-      </td></tr>
-
-      <!-- Footer -->
-      <tr><td style="background:#0a1120;border:1px solid #1e293b;border-top:none;border-radius:0 0 16px 16px;padding:20px 36px;">
-        <p style="margin:0;font-size:12px;color:#475569;line-height:1.6;text-align:center;">
-          This is a final confirmation of your account deletion. No further emails will be sent.<br>
-          <a href="https://www.myapiai.com" style="color:#3b82f6;text-decoration:none;">myapiai.com</a>
-        </p>
-      </td></tr>
-
-    </table>
-  </td></tr>
-</table>
+      <!-- Discord row -->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td style="vertical-align:middle;">
+            <p style="margin:0;font-size:13px;color:#9198a1;">Stay in touch on Discord — no account needed.</p>
+          </td>
+          <td style="vertical-align:middle;padding-left:16px;white-space:nowrap;">
+            <a href="https://discord.gg/WPp4sCN4xB" style="display:inline-block;background:#5865F2;color:#fff !important;text-decoration:none;font-size:13px;font-weight:500;padding:8px 16px;border-radius:6px;">Join Discord</a>
+          </td>
+        </tr>
+      </table>
+    </div>
+    <!-- Footer bar -->
+    <div style="background:#010409;border-top:1px solid #2a313c;padding:14px 32px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td class="mono" style="font-size:10.5px;color:#484f58;">auth · vault · audit</td>
+          <td style="text-align:right;" class="mono">
+            <a href="https://www.myapiai.com" style="color:#6e7681;">myapiai.com</a>
+          </td>
+        </tr>
+      </table>
+    </div>
+  </div>
+  <div class="foot">
+    This is a final confirmation of your account deletion.<br/>No further emails will be sent.
+  </div>
+</div>
 </body>
 </html>`;
 
@@ -491,34 +529,88 @@ class EmailService {
     const base = (process.env.PUBLIC_URL || process.env.BASE_URL || 'https://www.myapiai.com').replace(/\/$/, '');
     const html = `<!doctype html>
 <html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>You're on the MyApi waitlist</title></head>
-<body style="margin:0;padding:0;background:#020617;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#020617;padding:32px 12px;">
-  <tr><td align="center">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;">
-      <tr><td style="background:linear-gradient(135deg,#1e3a8a 0%,#7c3aed 100%);border-radius:16px 16px 0 0;padding:28px 32px;">
-        <p style="margin:0 0 6px 0;font-size:13px;font-weight:600;color:rgba(255,255,255,0.7);letter-spacing:1px;text-transform:uppercase;">MyApi Beta</p>
-        <h1 style="margin:0;font-size:26px;font-weight:800;color:#fff;line-height:1.3;">You're on the waitlist</h1>
-      </td></tr>
-      <tr><td style="background:#0f172a;border:1px solid #1e293b;border-top:none;border-radius:0 0 16px 16px;padding:28px 32px;">
-        <p style="margin:0 0 16px 0;font-size:15px;line-height:1.7;color:#cbd5e1;">
-          Thanks for your interest in MyApi. We're currently at capacity during the closed beta, but we'll email you as soon as a spot opens up.
-        </p>
-        <p style="margin:0 0 20px 0;font-size:15px;line-height:1.7;color:#cbd5e1;">
-          In the meantime, feel free to join the conversation on Discord — early beta testers often hear about access there first.
-        </p>
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:4px 0 8px 0;">
-          <tr><td align="center">
-            <a href="https://discord.gg/WPp4sCN4xB" style="display:inline-block;background:#5865f2;color:#fff;text-decoration:none;font-size:14px;font-weight:700;padding:12px 28px;border-radius:10px;">Join the Discord →</a>
-          </td></tr>
-        </table>
-        <p style="margin:22px 0 0 0;font-size:12px;color:#475569;line-height:1.6;text-align:center;">
-          <a href="${base}" style="color:#3b82f6;text-decoration:none;">myapiai.com</a>
-        </p>
-      </td></tr>
-    </table>
-  </td></tr>
-</table>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="color-scheme" content="dark light"/>
+<title>You're on the MyApi waitlist</title>
+<!--[if mso]><style>body,table,td,p,a{font-family:Arial,sans-serif !important;}</style><![endif]-->
+<style>
+  body{margin:0;padding:0;background:#010409;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;-webkit-font-smoothing:antialiased;}
+  a{color:#4493f8;text-decoration:none;}
+  .wrap{background:#010409;padding:24px 16px;}
+  .card{max-width:560px;margin:0 auto;background:#0d1117;border:1px solid #2a313c;border-radius:12px;overflow:hidden;}
+  .pad{padding:28px 32px;}
+  .micro{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:#6e7681;}
+  h1{font-size:22px;font-weight:600;margin:0 0 10px;letter-spacing:-0.01em;color:#f0f6fc;line-height:1.3;}
+  p{color:#9198a1;font-size:14.5px;line-height:1.6;margin:0 0 12px;}
+  .mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px;color:#9198a1;}
+  .hairline{border-top:1px solid #2a313c;}
+  .foot{text-align:center;padding:24px 16px;color:#484f58;font-size:11.5px;line-height:1.5;}
+  .foot a{color:#6e7681;}
+  @media (prefers-color-scheme:light){
+    body,.wrap{background:#f6f8fa;}
+    .card{background:#fff;border-color:#d1d9e0;}
+    h1{color:#1f2328;} p{color:#59636e;}
+    .micro{color:#818b98;} .mono{color:#59636e;}
+    .hairline{border-top-color:#d1d9e0;} .foot{color:#afb8c1;} .foot a{color:#818b98;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <!-- Header -->
+    <div class="pad" style="padding-bottom:8px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td style="vertical-align:middle;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+              <td style="vertical-align:middle;padding-right:10px;">
+                <svg width="30" height="30" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+                  <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#4A8CFF"/><stop offset="100%" stop-color="#6058FF"/>
+                  </linearGradient></defs>
+                  <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#lg)"/>
+                  <path d="M36 14 L25 31 H34 L30 50 L44 29 H35 L36 14 Z" fill="none" stroke="#fff" stroke-width="3.6" stroke-linejoin="round" stroke-linecap="round"/>
+                </svg>
+              </td>
+              <td style="vertical-align:middle;"><span style="font-size:16px;font-weight:600;color:#f0f6fc;">MyApi</span></td>
+            </tr></table>
+          </td>
+          <td style="text-align:right;vertical-align:middle;">
+            <span style="display:inline-block;background:rgba(56,139,253,0.15);color:#4493f8;font-family:'JetBrains Mono',monospace;font-size:10.5px;padding:3px 8px;border-radius:999px;border:1px solid rgba(68,147,248,0.35);letter-spacing:0.8px;">BETA</span>
+          </td>
+        </tr>
+      </table>
+    </div>
+    <!-- Body -->
+    <div class="pad" style="padding-top:16px;">
+      <div class="micro" style="margin-bottom:14px;">WAITLIST CONFIRMED</div>
+      <h1>You're on the list.</h1>
+      <p>Thanks for your interest in MyApi. We're currently at capacity during the closed beta, but we'll email you as soon as a spot opens up.</p>
+      <p>In the meantime, early beta testers often hear about access first on Discord — it's worth joining.</p>
+      <div style="margin:22px 0;">
+        <a href="https://discord.gg/WPp4sCN4xB" style="display:inline-block;background:#5865F2;color:#fff !important;padding:11px 20px;border-radius:6px;font-size:14px;font-weight:500;text-decoration:none;">Join the Discord →</a>
+      </div>
+    </div>
+    <!-- Footer bar -->
+    <div style="background:#010409;border-top:1px solid #2a313c;padding:14px 32px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td class="mono" style="font-size:10.5px;color:#484f58;">auth · vault · audit</td>
+          <td style="text-align:right;" class="mono">
+            <a href="${base}" style="color:#6e7681;">myapiai.com</a>
+          </td>
+        </tr>
+      </table>
+    </div>
+  </div>
+  <div class="foot">
+    You'll receive one more email when your spot is ready.<br/>
+    MyApi · The privacy-first personal API platform
+  </div>
+</div>
 </body>
 </html>`;
     const data = {
@@ -555,85 +647,123 @@ class EmailService {
     const base = (process.env.PUBLIC_URL || process.env.BASE_URL || 'https://www.myapiai.com').replace(/\/$/, '');
     const html = `<!doctype html>
 <html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MyApi is now open</title></head>
-<body style="margin:0;padding:0;background:#020617;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#020617;padding:32px 12px;">
-  <tr><td align="center">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="color-scheme" content="dark light"/>
+<title>MyApi is now open</title>
+<!--[if mso]><style>body,table,td,p,a{font-family:Arial,sans-serif !important;}</style><![endif]-->
+<style>
+  body{margin:0;padding:0;background:#010409;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;-webkit-font-smoothing:antialiased;}
+  a{color:#4493f8;text-decoration:none;}
+  .wrap{background:#010409;padding:24px 16px;}
+  .card{max-width:560px;margin:0 auto;background:#0d1117;border:1px solid #2a313c;border-radius:12px;overflow:hidden;}
+  .pad{padding:28px 32px;}
+  .micro{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:#6e7681;}
+  h1{font-size:22px;font-weight:600;margin:0 0 10px;letter-spacing:-0.01em;color:#f0f6fc;line-height:1.3;}
+  p{color:#9198a1;font-size:14.5px;line-height:1.6;margin:0 0 12px;}
+  .btn{display:inline-block;background:#1f6feb;color:#fff !important;padding:11px 20px;border-radius:6px;font-size:14px;font-weight:500;border:1px solid rgba(240,246,252,0.1);}
+  .hairline{border-top:1px solid #2a313c;}
+  .mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px;color:#9198a1;}
+  .step{padding:12px 0;border-top:1px solid #1f252d;display:table;width:100%;}
+  .step-num{display:table-cell;width:26px;vertical-align:top;padding-top:2px;}
+  .step-num span{display:inline-block;width:22px;height:22px;border-radius:999px;background:rgba(56,139,253,0.15);color:#4493f8;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;text-align:center;line-height:22px;}
+  .step-body{display:table-cell;vertical-align:top;}
+  .step-title{color:#f0f6fc;font-size:14px;font-weight:600;margin:0 0 2px;}
+  .step-desc{color:#9198a1;font-size:13px;line-height:1.5;margin:0;}
+  .foot{text-align:center;padding:24px 16px;color:#484f58;font-size:11.5px;line-height:1.5;}
+  .foot a{color:#6e7681;}
+  @media (prefers-color-scheme:light){
+    body,.wrap{background:#f6f8fa;}
+    .card{background:#fff;border-color:#d1d9e0;}
+    h1{color:#1f2328;} p{color:#59636e;}
+    .micro{color:#818b98;} .mono{color:#59636e;}
+    .step{border-top-color:#eaeef2;} .step-title{color:#1f2328;}
+    .hairline{border-top-color:#d1d9e0;} .foot{color:#afb8c1;} .foot a{color:#818b98;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <!-- Header -->
+    <div class="pad" style="padding-bottom:8px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td style="vertical-align:middle;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+              <td style="vertical-align:middle;padding-right:10px;">
+                <svg width="30" height="30" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+                  <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#4A8CFF"/><stop offset="100%" stop-color="#6058FF"/>
+                  </linearGradient></defs>
+                  <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#lg)"/>
+                  <path d="M36 14 L25 31 H34 L30 50 L44 29 H35 L36 14 Z" fill="none" stroke="#fff" stroke-width="3.6" stroke-linejoin="round" stroke-linecap="round"/>
+                </svg>
+              </td>
+              <td style="vertical-align:middle;"><span style="font-size:16px;font-weight:600;color:#f0f6fc;">MyApi</span></td>
+            </tr></table>
+          </td>
+          <td style="text-align:right;vertical-align:middle;">
+            <span style="display:inline-block;background:rgba(63,185,80,0.15);color:#3fb950;font-family:'JetBrains Mono',monospace;font-size:10.5px;padding:3px 8px;border-radius:999px;border:1px solid rgba(63,185,80,0.3);letter-spacing:0.8px;">● NOW OPEN</span>
+          </td>
+        </tr>
+      </table>
+    </div>
+    <!-- Body -->
+    <div class="pad" style="padding-top:16px;">
+      <div class="micro" style="margin-bottom:14px;">YOUR SPOT IS READY</div>
+      <h1>MyApi is open — come on in.</h1>
+      <p>Thanks for being patient during our closed beta. The doors are open and your spot is ready — no more waiting.</p>
+      <div style="margin:22px 0;">
+        <a href="${base}" class="btn">Create your account →</a>
+      </div>
 
-      <tr><td style="background:linear-gradient(135deg,#1e3a8a 0%,#2563eb 45%,#7c3aed 100%);border-radius:16px 16px 0 0;padding:32px 36px;">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-          <tr>
-            <td style="vertical-align:middle;">
-              <table role="presentation" cellspacing="0" cellpadding="0"><tr>
-                <td style="width:36px;height:36px;background:rgba(255,255,255,0.2);border-radius:50%;text-align:center;vertical-align:middle;">
-                  <span style="font-size:18px;line-height:36px;font-weight:900;color:#fff;">M</span>
-                </td>
-                <td style="padding-left:10px;font-size:20px;font-weight:700;color:#fff;letter-spacing:0.3px;">MyApi</td>
-              </tr></table>
-            </td>
-          </tr>
-          <tr><td style="padding-top:28px;">
-            <p style="margin:0 0 6px 0;font-size:13px;font-weight:600;color:rgba(255,255,255,0.65);letter-spacing:1px;text-transform:uppercase;">The waitlist is over</p>
-            <h1 style="margin:0;font-size:30px;font-weight:800;color:#fff;line-height:1.25;">MyApi is now open — come on in 🎉</h1>
-          </td></tr>
-        </table>
-      </td></tr>
+      <div class="micro" style="margin-bottom:8px;">WHAT YOU GET</div>
+      <div class="step">
+        <div class="step-num"><span>1</span></div>
+        <div class="step-body">
+          <p class="step-title">45+ service connectors</p>
+          <p class="step-desc">Connect GitHub, Google, Slack, Discord, Notion, and more. Credentials live in the vault — agents never see them.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num"><span>2</span></div>
+        <div class="step-body">
+          <p class="step-title">AI personas with scoped access</p>
+          <p class="step-desc">Build identities with their own voice, knowledge base, and refusal rules. Each agent stays in its lane.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num"><span>3</span></div>
+        <div class="step-body">
+          <p class="step-title">Per-agent tokens, revocable instantly</p>
+          <p class="step-desc">Issue scoped tokens for any agent or integration. One click to revoke — no secrets to rotate.</p>
+        </div>
+      </div>
 
-      <tr><td style="background:#0f172a;border-left:1px solid #1e293b;border-right:1px solid #1e293b;padding:36px 36px 28px 36px;">
-        <p style="margin:0 0 18px 0;font-size:16px;line-height:1.7;color:#cbd5e1;">
-          Thanks for being patient during our closed beta. We've officially opened the doors and your spot is ready — no more waiting.
-        </p>
-        <p style="margin:0 0 22px 0;font-size:16px;line-height:1.7;color:#cbd5e1;">
-          MyApi gives you a privacy-first personal API platform: connect 45+ services, build AI personas with scoped access, share skills, and issue per-agent tokens you can revoke at any time.
-        </p>
-
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:24px 0;">
-          <tr>
-            <td width="48%" style="vertical-align:top;padding:0 8px 12px 0;">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:18px;">
-                <tr><td>
-                  <p style="margin:0 0 8px 0;font-size:22px;">🔐</p>
-                  <p style="margin:0 0 6px 0;font-size:14px;font-weight:700;color:#f1f5f9;">Private by default</p>
-                  <p style="margin:0;font-size:13px;color:#94a3b8;line-height:1.5;">Credentials stay encrypted in your vault. Agents only see what you allow.</p>
-                </td></tr>
-              </table>
-            </td>
-            <td width="48%" style="vertical-align:top;padding:0 0 12px 8px;">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:18px;">
-                <tr><td>
-                  <p style="margin:0 0 8px 0;font-size:22px;">⚡</p>
-                  <p style="margin:0 0 6px 0;font-size:14px;font-weight:700;color:#f1f5f9;">Built for AI agents</p>
-                  <p style="margin:0;font-size:13px;color:#94a3b8;line-height:1.5;">OAuth-ready, scope-aware, and speaks OpenAPI — plug into any agent stack.</p>
-                </td></tr>
-              </table>
-            </td>
-          </tr>
-        </table>
-
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:28px 0 8px 0;">
-          <tr><td align="center">
-            <a href="${base}" style="display:inline-block;background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;text-decoration:none;font-size:15px;font-weight:700;padding:14px 36px;border-radius:10px;letter-spacing:0.2px;">Create your account →</a>
-          </td></tr>
-        </table>
-
-        <p style="margin:18px 0 0 0;font-size:13px;color:#64748b;line-height:1.6;text-align:center;">
-          Or head straight to <a href="${base}" style="color:#60a5fa;text-decoration:none;">${base.replace(/^https?:\/\//, '')}</a> and sign in.
-        </p>
-      </td></tr>
-
-      <tr><td style="background:#0a1120;border:1px solid #1e293b;border-top:none;border-radius:0 0 16px 16px;padding:20px 36px;">
-        <p style="margin:0;font-size:12px;color:#475569;line-height:1.6;text-align:center;">
-          You're receiving this because you joined the MyApi waitlist.<br>
-          <a href="${base}" style="color:#3b82f6;text-decoration:none;">myapiai.com</a>
-          &nbsp;·&nbsp;
-          <a href="https://discord.gg/WPp4sCN4xB" style="color:#3b82f6;text-decoration:none;">Discord</a>
-        </p>
-      </td></tr>
-
-    </table>
-  </td></tr>
-</table>
+      <div class="hairline" style="margin:24px 0 18px;"></div>
+      <p style="font-size:13px;">Questions? <a href="https://discord.gg/WPp4sCN4xB">Join our Discord</a> — or just reply to this email.</p>
+      <p style="font-size:13px;color:#6e7681;margin-bottom:0;">— The MyApi team</p>
+    </div>
+    <!-- Footer bar -->
+    <div style="background:#010409;border-top:1px solid #2a313c;padding:14px 32px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td class="mono" style="font-size:10.5px;color:#484f58;">auth · vault · audit</td>
+          <td style="text-align:right;" class="mono">
+            <a href="https://docs.myapiai.com" style="color:#6e7681;margin-left:12px;">Docs</a>
+            <a href="https://github.com/omribenami/MyApi-Open" style="color:#6e7681;margin-left:12px;">GitHub</a>
+          </td>
+        </tr>
+      </table>
+    </div>
+  </div>
+  <div class="foot">
+    You're receiving this because you joined the MyApi waitlist.<br/>
+    MyApi · The privacy-first personal API platform
+  </div>
+</div>
 </body>
 </html>`;
     const data = {
