@@ -878,111 +878,134 @@ class EmailService {
       : `${base}/dashboard/devices`;
     const revokeUrl = `${base}/dashboard/access-tokens`;
     const detectedAt = alert.detectedAt ? new Date(alert.detectedAt).toUTCString() : new Date().toUTCString();
-    const reasonsList = (alert.reasons || []).map(r =>
-      `<tr><td style="padding:6px 0;border-bottom:1px solid #1e293b;font-size:13px;color:#f87171;vertical-align:top;">&#9888;</td><td style="padding:6px 0 6px 10px;border-bottom:1px solid #1e293b;font-size:13px;color:#fca5a5;line-height:1.5;">${r}</td></tr>`
+    const reasonRows = (alert.reasons || []).map(r =>
+      `<tr><td style="padding:5px 0 5px 10px;font-size:13px;color:#ffa198;line-height:1.5;">— ${r}</td></tr>`
     ).join('');
 
     const html = `<!doctype html>
 <html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Security Alert — MyApi</title></head>
-<body style="margin:0;padding:0;background:#020617;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#020617;padding:32px 12px;">
-  <tr><td align="center">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="color-scheme" content="dark light"/>
+<meta name="supported-color-schemes" content="dark light"/>
+<title>Security Alert — MyApi</title>
+<!--[if mso]><style>body,table,td,p,a{font-family:Arial,sans-serif !important;}</style><![endif]-->
+<style>
+  body{margin:0;padding:0;background:#010409;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;-webkit-font-smoothing:antialiased;}
+  a{color:#4493f8;text-decoration:none;}
+  .wrap{background:#010409;padding:24px 16px;}
+  .card{max-width:560px;margin:0 auto;background:#0d1117;border:1px solid #2a313c;border-radius:12px;overflow:hidden;}
+  .pad{padding:28px 32px;}
+  .micro{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:#6e7681;}
+  h1{font-size:22px;font-weight:600;margin:0 0 10px;letter-spacing:-0.01em;color:#f0f6fc;line-height:1.3;}
+  p{color:#9198a1;font-size:14.5px;line-height:1.6;margin:0 0 12px;}
+  .btn{display:inline-block;background:#1f6feb;color:#fff !important;padding:11px 20px;border-radius:6px;font-size:14px;font-weight:500;border:1px solid rgba(240,246,252,0.1);}
+  .hairline{border-top:1px solid #2a313c;}
+  .mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px;color:#9198a1;}
+  .foot{text-align:center;padding:24px 16px;color:#484f58;font-size:11.5px;line-height:1.5;}
+  .foot a{color:#6e7681;}
+  @media (prefers-color-scheme:light){
+    body,.wrap{background:#f6f8fa;}
+    .card{background:#fff;border-color:#d1d9e0;}
+    h1{color:#1f2328;} p{color:#59636e;}
+    .micro{color:#818b98;} .mono{color:#59636e;}
+    .hairline{border-top-color:#d1d9e0;} .foot{color:#afb8c1;} .foot a{color:#818b98;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <!-- Header -->
+    <div class="pad" style="padding-bottom:8px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td style="vertical-align:middle;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+              <td style="vertical-align:middle;padding-right:10px;">
+                <svg width="30" height="30" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+                  <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#4A8CFF"/><stop offset="100%" stop-color="#6058FF"/>
+                  </linearGradient></defs>
+                  <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#lg)"/>
+                  <path d="M36 14 L25 31 H34 L30 50 L44 29 H35 L36 14 Z" fill="none" stroke="#fff" stroke-width="3.6" stroke-linejoin="round" stroke-linecap="round"/>
+                </svg>
+              </td>
+              <td style="vertical-align:middle;"><span style="font-size:16px;font-weight:600;color:#f0f6fc;">MyApi</span></td>
+            </tr></table>
+          </td>
+          <td style="text-align:right;vertical-align:middle;">
+            <span style="display:inline-block;background:rgba(248,81,73,0.15);color:#f85149;font-family:'JetBrains Mono',monospace;font-size:10.5px;padding:3px 8px;border-radius:999px;border:1px solid rgba(248,81,73,0.3);letter-spacing:0.8px;">! SECURITY ALERT</span>
+          </td>
+        </tr>
+      </table>
+    </div>
+    <!-- Body -->
+    <div class="pad" style="padding-top:16px;">
+      <div class="micro" style="margin-bottom:14px;">ACTION REQUIRED</div>
+      <h1>Suspicious activity detected, ${name}.</h1>
+      <p>A token on your account was automatically suspended. Review the details below and either approve or revoke it.</p>
 
-      <!-- Header -->
-      <tr><td style="background:linear-gradient(135deg,#7f1d1d 0%,#dc2626 50%,#b45309 100%);border-radius:16px 16px 0 0;padding:32px 36px;">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-          <tr>
-            <td style="vertical-align:middle;">
-              <table role="presentation" cellspacing="0" cellpadding="0"><tr>
-                <td style="width:36px;height:36px;background:rgba(255,255,255,0.2);border-radius:50%;text-align:center;vertical-align:middle;">
-                  <span style="font-size:18px;line-height:36px;font-weight:900;color:#fff;">M</span>
-                </td>
-                <td style="padding-left:10px;font-size:20px;font-weight:700;color:#fff;letter-spacing:0.3px;">MyApi</td>
-              </tr></table>
-            </td>
-            <td align="right">
-              <span style="display:inline-block;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);border-radius:20px;padding:4px 14px;font-size:12px;font-weight:700;color:#fff;letter-spacing:0.5px;text-transform:uppercase;">Security Alert</span>
-            </td>
-          </tr>
-          <tr><td colspan="2" style="padding-top:28px;">
-            <p style="margin:0 0 6px 0;font-size:13px;font-weight:600;color:rgba(255,255,255,0.65);letter-spacing:1px;text-transform:uppercase;">Action required</p>
-            <h1 style="margin:0;font-size:26px;font-weight:800;color:#fff;line-height:1.25;">Suspicious activity detected</h1>
-            <p style="margin:10px 0 0;font-size:14px;color:rgba(255,255,255,0.75);">Hi ${name} — a token on your account was suspended automatically.</p>
-          </td></tr>
-        </table>
-      </td></tr>
+      <!-- Token info block -->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:rgba(248,81,73,0.06);border:1px solid rgba(248,81,73,0.25);border-radius:6px;margin:4px 0 20px;">
+        <tr><td style="padding:14px 16px;">
+          <div class="micro" style="color:#f85149;margin-bottom:8px;">SUSPENDED TOKEN</div>
+          <div style="font-size:14px;font-weight:600;color:#f0f6fc;margin-bottom:10px;">${alert.tokenName || 'Unknown'}</div>
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td style="padding-right:24px;vertical-align:top;">
+                <div class="micro" style="margin-bottom:3px;">TYPE</div>
+                <div style="font-size:13px;color:#9198a1;">${(alert.tokenType || 'token').toUpperCase()}</div>
+              </td>
+              <td style="padding-right:24px;vertical-align:top;">
+                <div class="micro" style="margin-bottom:3px;">NETWORK</div>
+                <div style="font-size:13px;color:#9198a1;">${alert.asnInfo?.asnOrg || 'Unknown'}</div>
+              </td>
+              <td style="vertical-align:top;">
+                <div class="micro" style="margin-bottom:3px;">DETECTED</div>
+                <div style="font-size:13px;color:#9198a1;">${detectedAt}</div>
+              </td>
+            </tr>
+          </table>
+          ${reasonRows ? `<div style="margin-top:12px;border-top:1px solid rgba(248,81,73,0.2);padding-top:10px;"><div class="micro" style="color:#f85149;margin-bottom:6px;">REASONS</div><table role="presentation" cellpadding="0" cellspacing="0" border="0">${reasonRows}</table></div>` : ''}
+        </td></tr>
+      </table>
 
-      <!-- Body -->
-      <tr><td style="background:#0f172a;border-left:1px solid #1e293b;border-right:1px solid #1e293b;padding:32px 36px 24px;">
+      <p style="font-size:13px;">If this was you — moved the agent to a new server or changed infrastructure — review and re-approve. If you don't recognise this, revoke the token immediately.</p>
 
-        <!-- Token info -->
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:20px;margin-bottom:24px;">
-          <tr>
-            <td>
-              <p style="margin:0 0 4px;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.8px;">Suspended Token</p>
-              <p style="margin:0 0 12px;font-size:16px;font-weight:700;color:#f1f5f9;">${alert.tokenName || 'Unknown'}</p>
-              <table role="presentation" cellspacing="0" cellpadding="0">
-                <tr>
-                  <td style="padding-right:24px;">
-                    <p style="margin:0 0 2px;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Type</p>
-                    <p style="margin:0;font-size:13px;font-weight:600;color:#94a3b8;">${(alert.tokenType || 'token').toUpperCase()}</p>
-                  </td>
-                  <td style="padding-right:24px;">
-                    <p style="margin:0 0 2px;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Network</p>
-                    <p style="margin:0;font-size:13px;font-weight:600;color:#94a3b8;">${alert.asnInfo?.asnOrg || 'Unknown'}</p>
-                  </td>
-                  <td>
-                    <p style="margin:0 0 2px;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Detected</p>
-                    <p style="margin:0;font-size:13px;font-weight:600;color:#94a3b8;">${detectedAt}</p>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-        </table>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:18px 0;">
+        <tr>
+          <td style="padding-right:10px;">
+            <a href="${approveUrl}" style="display:inline-block;background:rgba(63,185,80,0.15);color:#3fb950 !important;padding:10px 18px;border-radius:6px;font-size:13px;font-weight:600;border:1px solid rgba(63,185,80,0.3);text-decoration:none;">Review &amp; Approve</a>
+          </td>
+          <td>
+            <a href="${revokeUrl}" style="display:inline-block;background:rgba(248,81,73,0.1);color:#f85149 !important;padding:10px 18px;border-radius:6px;font-size:13px;font-weight:600;border:1px solid rgba(248,81,73,0.3);text-decoration:none;">Revoke Token</a>
+          </td>
+        </tr>
+      </table>
 
-        <!-- Reasons -->
-        <p style="margin:0 0 12px;font-size:14px;font-weight:700;color:#f1f5f9;">Why was it suspended?</p>
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:28px;">
-          ${reasonsList}
-        </table>
-
-        <p style="margin:0 0 20px;font-size:14px;color:#94a3b8;line-height:1.7;">
-          If this was you — for example, you moved the agent to a new server or changed infrastructure — you can review the details and re-approve the token below.
-          If you don't recognise this activity, revoke the token immediately.
-        </p>
-
-        <!-- CTAs -->
-        <table role="presentation" cellspacing="0" cellpadding="0" style="margin-bottom:12px;">
-          <tr>
-            <td style="padding-right:12px;">
-              <a href="${approveUrl}" style="display:inline-block;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;font-size:14px;font-weight:700;text-decoration:none;padding:12px 24px;border-radius:8px;letter-spacing:0.2px;">Review &amp; Approve</a>
-            </td>
-            <td>
-              <a href="${revokeUrl}" style="display:inline-block;background:#1e293b;border:1px solid #dc2626;color:#f87171;font-size:14px;font-weight:700;text-decoration:none;padding:12px 24px;border-radius:8px;letter-spacing:0.2px;">Revoke Token</a>
-            </td>
-          </tr>
-        </table>
-
-      </td></tr>
-
-      <!-- Footer -->
-      <tr><td style="background:#0a1628;border:1px solid #1e293b;border-top:none;border-radius:0 0 16px 16px;padding:20px 36px;">
-        <p style="margin:0 0 6px;font-size:12px;color:#475569;line-height:1.6;">
-          You received this because suspicious activity was detected on your MyApi account. If you did not expect this, revoke the token immediately and check your connected agents.
-        </p>
-        <p style="margin:0;font-size:12px;color:#334155;">
-          <a href="${base}/dashboard" style="color:#3b82f6;text-decoration:none;">Open Dashboard</a>
-          &nbsp;&middot;&nbsp;
-          <a href="${base}/dashboard/access-tokens" style="color:#3b82f6;text-decoration:none;">Manage Tokens</a>
-        </p>
-      </td></tr>
-
-    </table>
-  </td></tr>
-</table>
+      <div class="hairline" style="margin:20px 0 16px;"></div>
+      <p style="font-size:12px;color:#6e7681;margin:0;">If you did not expect this, revoke the token and check your connected agents. Questions? Reply to this email.</p>
+    </div>
+    <!-- Footer bar -->
+    <div style="background:#010409;border-top:1px solid #2a313c;padding:14px 32px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td class="mono" style="font-size:10.5px;color:#484f58;">auth · vault · audit</td>
+          <td style="text-align:right;" class="mono">
+            <a href="${base}/dashboard" style="color:#6e7681;">Dashboard</a>
+            <a href="${base}/dashboard/access-tokens" style="color:#6e7681;margin-left:12px;">Tokens</a>
+          </td>
+        </tr>
+      </table>
+    </div>
+  </div>
+  <div class="foot">
+    Sent because suspicious activity was detected on your MyApi account.<br/>
+    MyApi · The privacy-first personal API platform
+  </div>
+</div>
 </body>
 </html>`;
 
@@ -1001,158 +1024,162 @@ class EmailService {
     const suspicious = details.suspiciousActivity?.suspicious;
     const warnings = details.suspiciousActivity?.warnings || [];
     const detectedAt = details.detectedAt ? new Date(details.detectedAt).toUTCString() : new Date().toUTCString();
-    const headerGradient = suspicious
-      ? '#78350f 0%,#d97706 50%,#b45309 100%'
-      : '#1e3a5f 0%,#1d4ed8 50%,#2563eb 100%';
 
-    // "What happened" plain-language explanation
     const whatHappened = details.originalDevice
-      ? `Your token <strong style="color:#e2e8f0;">"${details.tokenName || tokenKindLabel}"</strong> was previously approved for a specific device (${details.originalDevice.name || details.originalDevice.ip || 'original device'}). A <strong style="color:#e2e8f0;">different</strong> device is now trying to use the same token — this is blocked by default because each token is bound to the device that originally authorized it.`
-      : `Your token <strong style="color:#e2e8f0;">"${details.tokenName || tokenKindLabel}"</strong> was just used for the first time from a device that hasn't been approved yet. MyApi requires explicit approval for every new device that uses a token.`;
+      ? `Token <strong style="color:#f0f6fc;">"${details.tokenName || tokenKindLabel}"</strong> was previously approved for a specific device (${details.originalDevice.name || details.originalDevice.ip || 'original device'}). A different device is now trying to use it — blocked by default.`
+      : `Token <strong style="color:#f0f6fc;">"${details.tokenName || tokenKindLabel}"</strong> was used for the first time from an unapproved device. MyApi requires explicit approval for every new device.`;
 
     const whatToDoText = suspicious
-      ? `These signals suggest the token may have been ${details.originalDevice ? 'moved to a different machine or network without your knowledge' : 'obtained and used by an unknown party'}. <strong style="color:#fca5a5;">If you did not initiate this, revoke the token immediately and check your connected agents.</strong>`
-      : `If this was intentional — for example, you moved your agent to a new server, or you're testing from a cloud environment — approve it below. If you don't recognise this activity, revoke the token.`;
+      ? `These signals suggest the token may have been obtained without your knowledge. <strong style="color:#ffa198;">If you did not initiate this, revoke the token immediately.</strong>`
+      : `If intentional — you moved your agent to a new server, or you're testing from a cloud environment — approve below. Otherwise revoke the token.`;
 
-    const warningsHtml = warnings.length > 0
-      ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#1c1207;border:1px solid #78350f;border-radius:10px;margin:0 0 22px 0;">
-          <tr><td style="padding:18px 20px;">
-            <p style="margin:0 0 10px;font-size:12px;font-weight:700;color:#fbbf24;letter-spacing:0.8px;text-transform:uppercase;">Suspicious signals</p>
-            ${warnings.map(w => `<p style="margin:0 0 5px;font-size:13px;color:#fcd34d;line-height:1.5;">&#9888;&nbsp; ${w}</p>`).join('')}
+    const warningsBlock = warnings.length > 0
+      ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:rgba(210,153,34,0.08);border:1px solid rgba(210,153,34,0.3);border-radius:6px;margin:0 0 18px;">
+          <tr><td style="padding:12px 14px;">
+            <div style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:#d2a022;margin-bottom:8px;">SUSPICIOUS SIGNALS</div>
+            ${warnings.map(w => `<div style="font-size:13px;color:#e3b341;margin-bottom:4px;">— ${w}</div>`).join('')}
           </td></tr>
         </table>`
       : '';
 
-    const originalDeviceHtml = details.originalDevice
-      ? `<tr>
-          <td style="padding:14px 0 0;border-top:1px solid #1e293b;" colspan="3">
-            <p style="margin:0 0 6px;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Previously approved device</p>
-            <p style="margin:0;font-size:13px;color:#64748b;">${details.originalDevice.name || 'Unknown'} &nbsp;·&nbsp; ${details.originalDevice.ip || ''}</p>
-          </td>
-        </tr>`
-      : '';
-
-    const endpointHtml = details.endpoint
-      ? `<tr>
-          <td style="padding:14px 0 0;border-top:1px solid #1e293b;" colspan="3">
-            <p style="margin:0 0 4px;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Endpoint accessed</p>
-            <p style="margin:0;font-size:13px;font-family:monospace;color:#94a3b8;">${details.endpoint}</p>
-          </td>
-        </tr>`
-      : '';
+    const chipColor = suspicious
+      ? 'background:rgba(210,153,34,0.15);color:#d2a022;border:1px solid rgba(210,153,34,0.3);'
+      : 'background:rgba(68,147,248,0.15);color:#4493f8;border:1px solid rgba(68,147,248,0.35);';
+    const chipLabel = suspicious ? '! SECURITY WARNING' : 'APPROVAL REQUIRED';
 
     const html = `<!doctype html>
 <html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${suspicious ? 'Security Warning' : 'New Device'} — MyApi</title></head>
-<body style="margin:0;padding:0;background:#020617;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#020617;padding:32px 12px;">
-  <tr><td align="center">
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="color-scheme" content="dark light"/>
+<meta name="supported-color-schemes" content="dark light"/>
+<title>${suspicious ? 'Security Warning' : 'New Device'} — MyApi</title>
+<!--[if mso]><style>body,table,td,p,a{font-family:Arial,sans-serif !important;}</style><![endif]-->
+<style>
+  body{margin:0;padding:0;background:#010409;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;-webkit-font-smoothing:antialiased;}
+  a{color:#4493f8;text-decoration:none;}
+  .wrap{background:#010409;padding:24px 16px;}
+  .card{max-width:560px;margin:0 auto;background:#0d1117;border:1px solid #2a313c;border-radius:12px;overflow:hidden;}
+  .pad{padding:28px 32px;}
+  .micro{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:#6e7681;}
+  h1{font-size:22px;font-weight:600;margin:0 0 10px;letter-spacing:-0.01em;color:#f0f6fc;line-height:1.3;}
+  p{color:#9198a1;font-size:14.5px;line-height:1.6;margin:0 0 12px;}
+  .hairline{border-top:1px solid #2a313c;}
+  .mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px;color:#9198a1;}
+  .foot{text-align:center;padding:24px 16px;color:#484f58;font-size:11.5px;line-height:1.5;}
+  .foot a{color:#6e7681;}
+  @media (prefers-color-scheme:light){
+    body,.wrap{background:#f6f8fa;}
+    .card{background:#fff;border-color:#d1d9e0;}
+    h1{color:#1f2328;} p{color:#59636e;}
+    .micro{color:#818b98;} .mono{color:#59636e;}
+    .hairline{border-top-color:#d1d9e0;} .foot{color:#afb8c1;} .foot a{color:#818b98;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <!-- Header -->
+    <div class="pad" style="padding-bottom:8px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td style="vertical-align:middle;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+              <td style="vertical-align:middle;padding-right:10px;">
+                <svg width="30" height="30" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+                  <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#4A8CFF"/><stop offset="100%" stop-color="#6058FF"/>
+                  </linearGradient></defs>
+                  <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#lg)"/>
+                  <path d="M36 14 L25 31 H34 L30 50 L44 29 H35 L36 14 Z" fill="none" stroke="#fff" stroke-width="3.6" stroke-linejoin="round" stroke-linecap="round"/>
+                </svg>
+              </td>
+              <td style="vertical-align:middle;"><span style="font-size:16px;font-weight:600;color:#f0f6fc;">MyApi</span></td>
+            </tr></table>
+          </td>
+          <td style="text-align:right;vertical-align:middle;">
+            <span style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:10.5px;padding:3px 8px;border-radius:999px;letter-spacing:0.8px;${chipColor}">${chipLabel}</span>
+          </td>
+        </tr>
+      </table>
+    </div>
+    <!-- Body -->
+    <div class="pad" style="padding-top:16px;">
+      <div class="micro" style="margin-bottom:14px;">ACTION REQUIRED</div>
+      <h1>${suspicious ? 'Suspicious device on your token, ' : 'New device needs approval, '}${name}.</h1>
+      <p>${whatHappened}</p>
 
-      <!-- Header -->
-      <tr><td style="background:linear-gradient(135deg,${headerGradient});border-radius:16px 16px 0 0;padding:32px 36px;">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
-          <tr>
-            <td style="vertical-align:middle;">
-              <table role="presentation" cellspacing="0" cellpadding="0"><tr>
-                <td style="width:36px;height:36px;background:rgba(255,255,255,0.2);border-radius:50%;text-align:center;vertical-align:middle;">
-                  <span style="font-size:18px;line-height:36px;font-weight:900;color:#fff;">M</span>
-                </td>
-                <td style="padding-left:10px;font-size:20px;font-weight:700;color:#fff;letter-spacing:0.3px;">MyApi</td>
-              </tr></table>
-            </td>
-            <td align="right">
-              <span style="display:inline-block;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);border-radius:20px;padding:4px 14px;font-size:12px;font-weight:700;color:#fff;letter-spacing:0.5px;text-transform:uppercase;">${suspicious ? 'Security Warning' : 'Approval Required'}</span>
-            </td>
-          </tr>
-          <tr><td colspan="2" style="padding-top:28px;">
-            <p style="margin:0 0 6px;font-size:13px;font-weight:600;color:rgba(255,255,255,0.65);letter-spacing:1px;text-transform:uppercase;">Action required</p>
-            <h1 style="margin:0;font-size:26px;font-weight:800;color:#fff;line-height:1.25;">${suspicious ? 'Suspicious device trying to use your token' : 'A new device wants to use your token'}</h1>
-            <p style="margin:10px 0 0;font-size:14px;color:rgba(255,255,255,0.75);">Hi ${name} — your token was blocked until you review this.</p>
-          </td></tr>
-        </table>
-      </td></tr>
+      <!-- Device details -->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:rgba(56,139,253,0.06);border:1px solid rgba(68,147,248,0.2);border-radius:6px;margin:4px 0 18px;">
+        <tr><td style="padding:14px 16px;">
+          <div class="micro" style="margin-bottom:10px;">NEW DEVICE</div>
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+            <tr>
+              <td style="vertical-align:top;padding-right:20px;padding-bottom:10px;">
+                <div class="micro" style="margin-bottom:3px;">IP</div>
+                <div style="font-size:13px;color:#f0f6fc;font-family:'JetBrains Mono',monospace;">${details.ip || 'Unknown'}</div>
+              </td>
+              <td style="vertical-align:top;padding-right:20px;padding-bottom:10px;">
+                <div class="micro" style="margin-bottom:3px;">OS</div>
+                <div style="font-size:13px;color:#f0f6fc;">${details.os || 'Unknown'}</div>
+              </td>
+              <td style="vertical-align:top;padding-bottom:10px;">
+                <div class="micro" style="margin-bottom:3px;">BROWSER / AGENT</div>
+                <div style="font-size:13px;color:#f0f6fc;">${details.browser || 'Unknown'}</div>
+              </td>
+            </tr>
+            <tr>
+              <td colspan="3" style="border-top:1px solid #1f252d;padding-top:10px;">
+                <div class="micro" style="margin-bottom:3px;">TOKEN</div>
+                <div style="font-size:13px;color:#f0f6fc;">${details.tokenName || tokenKindLabel} <span style="color:#6e7681;">(${tokenKindLabel})</span></div>
+              </td>
+            </tr>
+            ${details.originalDevice ? `<tr><td colspan="3" style="border-top:1px solid #1f252d;padding-top:10px;"><div class="micro" style="margin-bottom:3px;">PREVIOUSLY APPROVED DEVICE</div><div style="font-size:13px;color:#9198a1;">${details.originalDevice.name || 'Unknown'} · ${details.originalDevice.ip || ''}</div></td></tr>` : ''}
+            ${details.endpoint ? `<tr><td colspan="3" style="border-top:1px solid #1f252d;padding-top:10px;"><div class="micro" style="margin-bottom:3px;">ENDPOINT</div><div style="font-size:13px;color:#9198a1;font-family:'JetBrains Mono',monospace;">${details.endpoint}</div></td></tr>` : ''}
+            <tr><td colspan="3" style="border-top:1px solid #1f252d;padding-top:10px;"><div class="micro" style="margin-bottom:3px;">DETECTED</div><div style="font-size:12px;color:#6e7681;">${detectedAt}</div></td></tr>
+          </table>
+        </td></tr>
+      </table>
 
-      <!-- Body -->
-      <tr><td style="background:#0f172a;border-left:1px solid #1e293b;border-right:1px solid #1e293b;padding:32px 36px 28px;">
+      ${warningsBlock}
 
-        <!-- What happened -->
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#0d1f3a;border:1px solid #1e3a5f;border-radius:10px;margin:0 0 22px 0;">
-          <tr><td style="padding:18px 20px;">
-            <p style="margin:0 0 8px;font-size:12px;font-weight:700;color:#60a5fa;letter-spacing:0.8px;text-transform:uppercase;">What happened</p>
-            <p style="margin:0;font-size:14px;color:#cbd5e1;line-height:1.7;">${whatHappened}</p>
-          </td></tr>
-        </table>
+      <p style="font-size:13px;">${whatToDoText}</p>
 
-        <!-- New device details -->
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:20px;margin-bottom:22px;">
-          <tr>
-            <td style="vertical-align:top;padding-right:20px;">
-              <p style="margin:0 0 4px;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">New device IP</p>
-              <p style="margin:0;font-size:14px;font-weight:600;color:#f1f5f9;">${details.ip || 'Unknown'}</p>
-            </td>
-            <td style="vertical-align:top;padding-right:20px;">
-              <p style="margin:0 0 4px;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">OS</p>
-              <p style="margin:0;font-size:14px;font-weight:600;color:#f1f5f9;">${details.os || 'Unknown'}</p>
-            </td>
-            <td style="vertical-align:top;">
-              <p style="margin:0 0 4px;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Agent / Browser</p>
-              <p style="margin:0;font-size:14px;font-weight:600;color:#f1f5f9;">${details.browser || 'Unknown'}</p>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:14px 0 0;border-top:1px solid #1e293b;" colspan="3">
-              <p style="margin:0 0 4px;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Token</p>
-              <p style="margin:0;font-size:14px;font-weight:600;color:#f1f5f9;">${details.tokenName || tokenKindLabel} <span style="font-size:12px;font-weight:400;color:#64748b;">(${tokenKindLabel})</span></p>
-            </td>
-          </tr>
-          ${originalDeviceHtml}
-          ${endpointHtml}
-          <tr>
-            <td style="padding:14px 0 0;border-top:1px solid #1e293b;" colspan="3">
-              <p style="margin:0 0 4px;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Detected at</p>
-              <p style="margin:0;font-size:13px;color:#94a3b8;">${detectedAt}</p>
-            </td>
-          </tr>
-        </table>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:18px 0;">
+        <tr>
+          <td style="padding-right:10px;">
+            <a href="${approveUrl}" style="display:inline-block;background:rgba(63,185,80,0.15);color:#3fb950 !important;padding:10px 18px;border-radius:6px;font-size:13px;font-weight:600;border:1px solid rgba(63,185,80,0.3);text-decoration:none;">Approve This Device</a>
+          </td>
+          <td>
+            <a href="${revokeUrl}" style="display:inline-block;background:rgba(248,81,73,0.1);color:#f85149 !important;padding:10px 18px;border-radius:6px;font-size:13px;font-weight:600;border:1px solid rgba(248,81,73,0.3);text-decoration:none;">Revoke Token</a>
+          </td>
+        </tr>
+      </table>
+      <p style="font-size:12px;color:#6e7681;margin:0;">Approving allows this device to continue using the token. Revoking permanently disables it.</p>
 
-        ${warningsHtml}
-
-        <!-- What to do -->
-        <p style="margin:0 0 22px;font-size:14px;color:#94a3b8;line-height:1.7;">${whatToDoText}</p>
-
-        <!-- CTAs -->
-        <table role="presentation" cellspacing="0" cellpadding="0" style="margin-bottom:8px;">
-          <tr>
-            <td style="padding-right:12px;">
-              <a href="${approveUrl}" style="display:inline-block;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;font-size:14px;font-weight:700;text-decoration:none;padding:12px 26px;border-radius:8px;letter-spacing:0.2px;">Approve This Device</a>
-            </td>
-            <td>
-              <a href="${revokeUrl}" style="display:inline-block;background:#1e293b;border:1px solid #dc2626;color:#f87171;font-size:14px;font-weight:700;text-decoration:none;padding:12px 26px;border-radius:8px;letter-spacing:0.2px;">Revoke Token</a>
-            </td>
-          </tr>
-        </table>
-        <p style="margin:12px 0 0;font-size:12px;color:#475569;">Approving allows this specific device to continue using the token. Revoking permanently disables the token.</p>
-
-      </td></tr>
-
-      <!-- Footer -->
-      <tr><td style="background:#0a1628;border:1px solid #1e293b;border-top:none;border-radius:0 0 16px 16px;padding:20px 36px;">
-        <p style="margin:0 0 8px;font-size:12px;color:#475569;line-height:1.6;">
-          This alert was sent because a new device attempted to use a token on your MyApi account. The request was automatically blocked pending your review.
-        </p>
-        <p style="margin:0;font-size:12px;color:#334155;">
-          <a href="${base}/dashboard/devices" style="color:#3b82f6;text-decoration:none;">Manage Devices</a>
-          &nbsp;&middot;&nbsp;
-          <a href="${base}/dashboard/access-tokens" style="color:#3b82f6;text-decoration:none;">Manage Tokens</a>
-          &nbsp;&middot;&nbsp;
-          <a href="${base}/dashboard" style="color:#3b82f6;text-decoration:none;">Dashboard</a>
-        </p>
-      </td></tr>
-
-    </table>
-  </td></tr>
-</table>
+      <div class="hairline" style="margin:20px 0 16px;"></div>
+      <p style="font-size:12px;color:#6e7681;margin:0;">Questions? Reply to this email.</p>
+    </div>
+    <!-- Footer bar -->
+    <div style="background:#010409;border-top:1px solid #2a313c;padding:14px 32px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td class="mono" style="font-size:10.5px;color:#484f58;">auth · vault · audit</td>
+          <td style="text-align:right;" class="mono">
+            <a href="${base}/dashboard/devices" style="color:#6e7681;">Devices</a>
+            <a href="${base}/dashboard/access-tokens" style="color:#6e7681;margin-left:12px;">Tokens</a>
+          </td>
+        </tr>
+      </table>
+    </div>
+  </div>
+  <div class="foot">
+    Sent because a new device attempted to use a token on your account.<br/>
+    MyApi · The privacy-first personal API platform
+  </div>
+</div>
 </body>
 </html>`;
 
@@ -1160,6 +1187,228 @@ class EmailService {
       ? `[Security Warning] Suspicious device attempting to use token "${details.tokenName || 'your token'}"`
       : `[Action Required] New device wants to use token "${details.tokenName || 'your token'}"`;
     await this._dispatchEmail(toEmail.trim(), subject, html);
+  }
+
+  async sendServiceConnectedEmail(toEmail, displayName, serviceName) {
+    if (!toEmail || !this.fromAddress) return;
+    const name = displayName || 'there';
+    const base = (process.env.PUBLIC_URL || process.env.BASE_URL || 'https://www.myapiai.com').replace(/\/$/, '');
+    const label = serviceName ? serviceName.charAt(0).toUpperCase() + serviceName.slice(1) : 'A service';
+
+    const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="color-scheme" content="dark light"/>
+<meta name="supported-color-schemes" content="dark light"/>
+<title>${label} connected — MyApi</title>
+<!--[if mso]><style>body,table,td,p,a{font-family:Arial,sans-serif !important;}</style><![endif]-->
+<style>
+  body{margin:0;padding:0;background:#010409;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;-webkit-font-smoothing:antialiased;}
+  a{color:#4493f8;text-decoration:none;}
+  .wrap{background:#010409;padding:24px 16px;}
+  .card{max-width:560px;margin:0 auto;background:#0d1117;border:1px solid #2a313c;border-radius:12px;overflow:hidden;}
+  .pad{padding:28px 32px;}
+  .micro{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:#6e7681;}
+  h1{font-size:22px;font-weight:600;margin:0 0 10px;letter-spacing:-0.01em;color:#f0f6fc;line-height:1.3;}
+  p{color:#9198a1;font-size:14.5px;line-height:1.6;margin:0 0 12px;}
+  .btn{display:inline-block;background:#1f6feb;color:#fff !important;padding:11px 20px;border-radius:6px;font-size:14px;font-weight:500;border:1px solid rgba(240,246,252,0.1);}
+  .hairline{border-top:1px solid #2a313c;}
+  .mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px;color:#9198a1;}
+  .foot{text-align:center;padding:24px 16px;color:#484f58;font-size:11.5px;line-height:1.5;}
+  .foot a{color:#6e7681;}
+  @media (prefers-color-scheme:light){
+    body,.wrap{background:#f6f8fa;}
+    .card{background:#fff;border-color:#d1d9e0;}
+    h1{color:#1f2328;} p{color:#59636e;}
+    .micro{color:#818b98;} .mono{color:#59636e;}
+    .hairline{border-top-color:#d1d9e0;} .foot{color:#afb8c1;} .foot a{color:#818b98;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <!-- Header -->
+    <div class="pad" style="padding-bottom:8px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td style="vertical-align:middle;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+              <td style="vertical-align:middle;padding-right:10px;">
+                <svg width="30" height="30" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+                  <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#4A8CFF"/><stop offset="100%" stop-color="#6058FF"/>
+                  </linearGradient></defs>
+                  <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#lg)"/>
+                  <path d="M36 14 L25 31 H34 L30 50 L44 29 H35 L36 14 Z" fill="none" stroke="#fff" stroke-width="3.6" stroke-linejoin="round" stroke-linecap="round"/>
+                </svg>
+              </td>
+              <td style="vertical-align:middle;"><span style="font-size:16px;font-weight:600;color:#f0f6fc;">MyApi</span></td>
+            </tr></table>
+          </td>
+          <td style="text-align:right;vertical-align:middle;">
+            <span style="display:inline-block;background:rgba(63,185,80,0.15);color:#3fb950;font-family:'JetBrains Mono',monospace;font-size:10.5px;padding:3px 8px;border-radius:999px;border:1px solid rgba(63,185,80,0.3);letter-spacing:0.8px;">● CONNECTED</span>
+          </td>
+        </tr>
+      </table>
+    </div>
+    <!-- Body -->
+    <div class="pad" style="padding-top:16px;">
+      <div class="micro" style="margin-bottom:14px;">SERVICE CONNECTED</div>
+      <h1>${label} is now in your vault.</h1>
+      <p>The OAuth token for ${label} is encrypted and stored in your vault. Your agents can use ${label} through MyApi — they'll never see the raw credential.</p>
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:rgba(63,185,80,0.06);border:1px solid rgba(63,185,80,0.2);border-radius:6px;margin:4px 0 22px;">
+        <tr><td style="padding:14px 16px;">
+          <div class="micro" style="color:#3fb950;margin-bottom:8px;">WHAT THIS MEANS</div>
+          <div style="font-size:13px;color:#9198a1;line-height:1.6;margin-bottom:6px;">— Token is AES-256-GCM encrypted at rest</div>
+          <div style="font-size:13px;color:#9198a1;line-height:1.6;margin-bottom:6px;">— Agents access ${label} via scoped proxy — never the raw token</div>
+          <div style="font-size:13px;color:#9198a1;line-height:1.6;">— Revoke access in one click without touching your ${label} account</div>
+        </td></tr>
+      </table>
+
+      <div style="margin:22px 0;">
+        <a href="${base}/dashboard/services" class="btn">Manage connected services →</a>
+      </div>
+
+      <div class="hairline" style="margin:20px 0 16px;"></div>
+      <p style="font-size:13px;color:#6e7681;margin:0;">Not you? <a href="${base}/dashboard/services">Disconnect ${label}</a> immediately and change your ${label} password.</p>
+    </div>
+    <!-- Footer bar -->
+    <div style="background:#010409;border-top:1px solid #2a313c;padding:14px 32px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td class="mono" style="font-size:10.5px;color:#484f58;">auth · vault · audit</td>
+          <td style="text-align:right;" class="mono">
+            <a href="${base}/dashboard" style="color:#6e7681;">Dashboard</a>
+            <a href="${base}/dashboard/services" style="color:#6e7681;margin-left:12px;">Services</a>
+          </td>
+        </tr>
+      </table>
+    </div>
+  </div>
+  <div class="foot">
+    Sent because a new service was connected to your MyApi account.<br/>
+    MyApi · The privacy-first personal API platform
+  </div>
+</div>
+</body>
+</html>`;
+
+    await this._dispatchEmail(toEmail.trim(), `${label} connected to your MyApi vault`, html);
+  }
+
+  async sendServiceDisconnectedEmail(toEmail, displayName, serviceName) {
+    if (!toEmail || !this.fromAddress) return;
+    const name = displayName || 'there';
+    const base = (process.env.PUBLIC_URL || process.env.BASE_URL || 'https://www.myapiai.com').replace(/\/$/, '');
+    const label = serviceName ? serviceName.charAt(0).toUpperCase() + serviceName.slice(1) : 'A service';
+
+    const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="color-scheme" content="dark light"/>
+<meta name="supported-color-schemes" content="dark light"/>
+<title>${label} disconnected — MyApi</title>
+<!--[if mso]><style>body,table,td,p,a{font-family:Arial,sans-serif !important;}</style><![endif]-->
+<style>
+  body{margin:0;padding:0;background:#010409;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;-webkit-font-smoothing:antialiased;}
+  a{color:#4493f8;text-decoration:none;}
+  .wrap{background:#010409;padding:24px 16px;}
+  .card{max-width:560px;margin:0 auto;background:#0d1117;border:1px solid #2a313c;border-radius:12px;overflow:hidden;}
+  .pad{padding:28px 32px;}
+  .micro{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:#6e7681;}
+  h1{font-size:22px;font-weight:600;margin:0 0 10px;letter-spacing:-0.01em;color:#f0f6fc;line-height:1.3;}
+  p{color:#9198a1;font-size:14.5px;line-height:1.6;margin:0 0 12px;}
+  .btn{display:inline-block;background:#1f6feb;color:#fff !important;padding:11px 20px;border-radius:6px;font-size:14px;font-weight:500;border:1px solid rgba(240,246,252,0.1);}
+  .hairline{border-top:1px solid #2a313c;}
+  .mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px;color:#9198a1;}
+  .foot{text-align:center;padding:24px 16px;color:#484f58;font-size:11.5px;line-height:1.5;}
+  .foot a{color:#6e7681;}
+  @media (prefers-color-scheme:light){
+    body,.wrap{background:#f6f8fa;}
+    .card{background:#fff;border-color:#d1d9e0;}
+    h1{color:#1f2328;} p{color:#59636e;}
+    .micro{color:#818b98;} .mono{color:#59636e;}
+    .hairline{border-top-color:#d1d9e0;} .foot{color:#afb8c1;} .foot a{color:#818b98;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <!-- Header -->
+    <div class="pad" style="padding-bottom:8px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td style="vertical-align:middle;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+              <td style="vertical-align:middle;padding-right:10px;">
+                <svg width="30" height="30" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+                  <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#4A8CFF"/><stop offset="100%" stop-color="#6058FF"/>
+                  </linearGradient></defs>
+                  <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#lg)"/>
+                  <path d="M36 14 L25 31 H34 L30 50 L44 29 H35 L36 14 Z" fill="none" stroke="#fff" stroke-width="3.6" stroke-linejoin="round" stroke-linecap="round"/>
+                </svg>
+              </td>
+              <td style="vertical-align:middle;"><span style="font-size:16px;font-weight:600;color:#f0f6fc;">MyApi</span></td>
+            </tr></table>
+          </td>
+          <td style="text-align:right;vertical-align:middle;">
+            <span style="display:inline-block;background:rgba(110,118,129,0.15);color:#6e7681;font-family:'JetBrains Mono',monospace;font-size:10.5px;padding:3px 8px;border-radius:999px;border:1px solid rgba(110,118,129,0.3);letter-spacing:0.8px;">DISCONNECTED</span>
+          </td>
+        </tr>
+      </table>
+    </div>
+    <!-- Body -->
+    <div class="pad" style="padding-top:16px;">
+      <div class="micro" style="margin-bottom:14px;">SERVICE DISCONNECTED</div>
+      <h1>Sorry to see ${label} go, ${name}.</h1>
+      <p>The ${label} OAuth token has been removed from your vault. Agents that relied on it will no longer have access until you reconnect.</p>
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:rgba(110,118,129,0.06);border:1px solid rgba(110,118,129,0.2);border-radius:6px;margin:4px 0 22px;">
+        <tr><td style="padding:14px 16px;">
+          <div class="micro" style="margin-bottom:8px;">WHAT WAS REMOVED</div>
+          <div style="font-size:13px;color:#9198a1;line-height:1.6;margin-bottom:6px;">— Encrypted ${label} token deleted from vault</div>
+          <div style="font-size:13px;color:#9198a1;line-height:1.6;margin-bottom:6px;">— Remote token revocation attempted on ${label}</div>
+          <div style="font-size:13px;color:#9198a1;line-height:1.6;">— Agents can no longer proxy ${label} requests</div>
+        </td></tr>
+      </table>
+
+      <div style="margin:22px 0;">
+        <a href="${base}/dashboard/services" class="btn">Reconnect ${label} →</a>
+      </div>
+
+      <div class="hairline" style="margin:20px 0 16px;"></div>
+      <p style="font-size:13px;color:#6e7681;margin:0;">Didn't do this? <a href="${base}/dashboard/access-tokens">Review your tokens</a> and check for unauthorized activity.</p>
+    </div>
+    <!-- Footer bar -->
+    <div style="background:#010409;border-top:1px solid #2a313c;padding:14px 32px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td class="mono" style="font-size:10.5px;color:#484f58;">auth · vault · audit</td>
+          <td style="text-align:right;" class="mono">
+            <a href="${base}/dashboard" style="color:#6e7681;">Dashboard</a>
+            <a href="${base}/dashboard/services" style="color:#6e7681;margin-left:12px;">Services</a>
+          </td>
+        </tr>
+      </table>
+    </div>
+  </div>
+  <div class="foot">
+    Sent because a service was disconnected from your MyApi account.<br/>
+    MyApi · The privacy-first personal API platform
+  </div>
+</div>
+</body>
+</html>`;
+
+    await this._dispatchEmail(toEmail.trim(), `${label} disconnected from your MyApi vault`, html);
   }
 
   async _dispatchEmail(toEmail, subject, html) {

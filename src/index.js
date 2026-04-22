@@ -8958,6 +8958,12 @@ app.get([
       tokenStoredForUser = true;
       logger.info('[OAuth Callback] token stored', { service });
 
+      // Fire-and-forget service-connected email
+      const connectOwner = getUserById(oauthOwnerId);
+      if (connectOwner?.email) {
+        emailService.sendServiceConnectedEmail(connectOwner.email, connectOwner.display_name || connectOwner.username, service).catch(() => {});
+      }
+
       // CRITICAL: Ensure req.session.user is populated for subsequent API calls
       // This is absolutely essential for /api/v1/oauth/status to find the user
       if (!req.session.user && oauthOwnerId) {
@@ -9357,6 +9363,12 @@ app.post("/api/v1/oauth/disconnect/:service", authenticate, async (req, res) => 
     // Delete token from database (always do this)
     revokeOAuthToken(service, userId);
     tokenCache.delete(`${service}:${userId}`);
+
+    // Fire-and-forget service-disconnected email
+    const disconnectOwner = getUserById(userId);
+    if (disconnectOwner?.email) {
+      emailService.sendServiceDisconnectedEmail(disconnectOwner.email, disconnectOwner.display_name || disconnectOwner.username, service).catch(() => {});
+    }
 
     // Update OAuth status
     updateOAuthStatus(service, "disconnected");
