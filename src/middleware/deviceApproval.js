@@ -339,7 +339,7 @@ function deviceApprovalMiddleware(req, res, next) {
         result: 'pending',
         ipAddress: currentFingerprint.summary.ipAddress,
       });
-      
+
       // Emit alert event for new device approval request (legacy WebSocket)
       if (globalAlertEmitter) {
         globalAlertEmitter.emit('device:pending_approval', {
@@ -365,6 +365,31 @@ function deviceApprovalMiddleware(req, res, next) {
         fingerprint: { ipAddress: a.ip_address }
       }))
     );
+
+    // Email notification for new device — fire-and-forget, after suspiciousAnalysis is ready
+    if (isNewApproval) {
+      try {
+        const userRow = db.db.prepare('SELECT email, display_name, username FROM users WHERE id = ?').get(userId);
+        if (userRow?.email) {
+          const EmailService = require('../services/emailService');
+          EmailService.sendNewDeviceApprovalEmail(
+            userRow.email,
+            userRow.display_name || userRow.username || 'there',
+            {
+              tokenName,
+              tokenKind,
+              ip: currentFingerprint.summary.ipAddress,
+              os: currentFingerprint.summary.os,
+              browser: currentFingerprint.summary.browser,
+              approvalId,
+              suspiciousActivity: suspiciousAnalysis,
+            }
+          ).catch(err => console.error('[DeviceApproval] Email failed:', err.message));
+        }
+      } catch (err) {
+        console.error('[DeviceApproval] Email dispatch error:', err.message);
+      }
+    }
 
     // Log the approval request
     db.createAuditLog({
