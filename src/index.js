@@ -278,6 +278,7 @@ const {
   executeRetentionCleanup,
   upsertOAuthServerClient,
   createApprovedDevice,
+  createNotification,
 } = require("./database");
 const DeviceFingerprint = require('./utils/deviceFingerprint');
 
@@ -9513,6 +9514,44 @@ app.get("/api/v1/keys/status", authenticate, adminOnly, (req, res) => {
   } catch (err) {
     console.error("Key status error:", err);
     res.status(500).json({ error: "Failed to get key status" });
+  }
+});
+
+// POST /api/v1/admin/broadcast-notification — push a message to all users
+app.post('/api/v1/admin/broadcast-notification', authenticate, async (req, res) => {
+  if (!isMaster(req)) return res.status(403).json({ error: 'Insufficient scope' });
+  const { title, message, target = 'both' } = req.body || {};
+  if (!title || typeof title !== 'string' || title.trim().length === 0) {
+    return res.status(400).json({ error: 'title is required' });
+  }
+  if (!message || typeof message !== 'string' || message.trim().length === 0) {
+    return res.status(400).json({ error: 'message is required' });
+  }
+  if (title.length > 80) return res.status(400).json({ error: 'title must be 80 characters or fewer' });
+  if (message.length > 300) return res.status(400).json({ error: 'message must be 300 characters or fewer' });
+  if (!['bell', 'attention', 'both'].includes(target)) {
+    return res.status(400).json({ error: 'target must be bell, attention, or both' });
+  }
+
+  try {
+    const users = getUsers();
+    let sent = 0;
+    for (const user of users) {
+      if (user.status === 'deleted') continue;
+      const ws = getWorkspaces(user.id);
+      const wsId = (Array.isArray(ws) ? ws[0]?.id : ws?.id) || 'system';
+      if (target === 'bell' || target === 'both') {
+        createNotification(wsId, user.id, 'admin_bell_broadcast', title.trim(), message.trim(), { sentBy: 'admin' });
+      }
+      if (target === 'attention' || target === 'both') {
+        createNotification(wsId, user.id, 'admin_attention_broadcast', title.trim(), message.trim(), { sentBy: 'admin' });
+      }
+      sent++;
+    }
+    res.json({ ok: true, sent });
+  } catch (err) {
+    console.error('[Admin Broadcast] Error:', err);
+    res.status(500).json({ error: 'Failed to send broadcast' });
   }
 });
 

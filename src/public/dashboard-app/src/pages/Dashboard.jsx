@@ -46,6 +46,7 @@ function Dashboard() {
   const [billingPlan, setBillingPlan] = useState('free');
   const [dailyUsage, setDailyUsage] = useState([]);
   const [connectedServicesList, setConnectedServicesList] = useState([]);
+  const [adminBroadcastCards, setAdminBroadcastCards] = useState([]);
 
   const dismissChecklistPermanently = () => {
     dismissChecklist();
@@ -78,6 +79,23 @@ function Dashboard() {
       console.error('Failed to fetch 2FA status:', err);
       setTwoFAEnabled(false);
     }
+  };
+
+  const fetchAdminBroadcasts = async () => {
+    try {
+      const res = await apiClient.get('/notifications?type=admin_attention_broadcast&read=false&limit=3');
+      const list = res.data?.notifications || res.data?.data || [];
+      setAdminBroadcastCards(Array.isArray(list) ? list : []);
+    } catch {
+      // non-critical, silently ignore
+    }
+  };
+
+  const dismissAdminCard = async (notifId) => {
+    setAdminBroadcastCards((prev) => prev.filter((c) => c.id !== notifId));
+    try {
+      await apiClient.post(`/notifications/${notifId}/read`);
+    } catch { /* ignore */ }
   };
 
   // Fetch AFP devices + check for active ChatGPT token
@@ -331,9 +349,10 @@ function Dashboard() {
     fetchMetrics();
     fetchConnectorsSummary();
     fetch2FAStatus();
+    fetchAdminBroadcasts();
     setupWebSocket();
 
-    const metricsInterval = setInterval(() => { fetchMetrics(); fetchConnectorsSummary(); }, 30000);
+    const metricsInterval = setInterval(() => { fetchMetrics(); fetchConnectorsSummary(); fetchAdminBroadcasts(); }, 30000);
 
     return () => {
       clearInterval(metricsInterval);
@@ -434,7 +453,15 @@ function Dashboard() {
   };
 
   // Attention cards derived from real data
-  const attentionCards = [];
+  const attentionCards = adminBroadcastCards.map((n) => ({
+    tone: 'accent',
+    kicker: 'ANNOUNCEMENT',
+    title: n.title,
+    body: n.message,
+    href: null,
+    action: 'Dismiss →',
+    _notifId: n.id,
+  }));
   if ((metrics.securityAlerts || 0) > 0) {
     const first = metrics.securityAlertDetails?.[0];
     attentionCards.push({
@@ -802,7 +829,9 @@ function Dashboard() {
               <div className="micro mb-2" style={{ color: accentMap[c.tone] || 'var(--ink-3)' }}>{c.kicker}</div>
               <div className="font-serif text-[17px] leading-snug ink">{c.title}</div>
               <p className="text-[13.5px] ink-2 mt-2">{c.body}</p>
-              {c.href ? (
+              {c._notifId ? (
+                <button onClick={() => dismissAdminCard(c._notifId)} className="mt-4 text-[12.5px] ink hover:opacity-80 underline underline-offset-4">{c.action}</button>
+              ) : c.href ? (
                 <Link to={c.href} className="mt-4 text-[12.5px] ink hover:opacity-80 underline underline-offset-4 block">{c.action}</Link>
               ) : (
                 <button className="mt-4 text-[12.5px] ink hover:opacity-80 underline underline-offset-4">{c.action}</button>
