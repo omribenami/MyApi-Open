@@ -56,7 +56,7 @@ export const useAuthStore = create((set, get) => ({
         let masterToken = null;
         let _sessionToken = null;
         try {
-          masterToken = localStorage.getItem('masterToken');
+          masterToken = sessionStorage.getItem('masterToken');
           _sessionToken = sessionStorage.getItem('sessionToken');
         } catch { /* ignored */ }
 
@@ -86,7 +86,7 @@ export const useAuthStore = create((set, get) => ({
             const user = normalizeUserPayload(payload);
             const bootstrapToken = payload?.bootstrap?.masterToken || null;
             if (bootstrapToken) {
-              try { localStorage.setItem('masterToken', bootstrapToken); } catch { /* ignored */ }
+              try { sessionStorage.setItem('masterToken', bootstrapToken); } catch { /* ignored */ }
             }
             // Clear any stale workspace from a previous user's session so the
             // upcoming fetchWorkspaces() starts fresh and apiClient doesn't send
@@ -127,7 +127,7 @@ export const useAuthStore = create((set, get) => ({
             if (stRes.ok) {
               const { token: oauthToken } = await stRes.json();
               if (oauthToken) {
-                try { localStorage.setItem('masterToken', oauthToken); } catch { /* ignored */ }
+                try { sessionStorage.setItem('masterToken', oauthToken); } catch { /* ignored */ }
                 const meRes = await fetch('/api/v1/auth/me', {
                   headers: { Authorization: `Bearer ${oauthToken}` },
                   credentials: 'include',
@@ -168,7 +168,7 @@ export const useAuthStore = create((set, get) => ({
   setMasterToken: (token) => {
     setLogoutInProgress(false);
     clearLoggedOut();
-    try { localStorage.setItem('masterToken', token); } catch { /* ignored */ }
+    try { sessionStorage.setItem('masterToken', token); } catch { /* ignored */ }
     try { sessionStorage.setItem('sessionAuthVerified', '1'); } catch { /* ignored */ }
     set({ masterToken: token, isAuthenticated: true, error: null });
   },

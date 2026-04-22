@@ -177,11 +177,15 @@
 
         <!-- Static rails between boxes -->
         <path id="rail-1" d="M 167 195 C 200 195, 300 195, 333 195" stroke="var(--line)" stroke-width="1" fill="none" stroke-dasharray="3 3"/>
+        <path id="rail-1r" d="M 333 203 C 300 203, 200 203, 167 203" stroke="var(--line)" stroke-width="1" fill="none" stroke-dasharray="3 3"/>
         <path id="rail-2" d="M 583 195 C 616 195, 716 195, 749 195" stroke="var(--line)" stroke-width="1" fill="none" stroke-dasharray="3 3"/>
 
         <!-- Animated pulses (request/response direction) -->
         <path id="pulse-1" d="M 167 195 C 200 195, 300 195, 333 195" stroke="url(#flow-grad-1)" stroke-width="2" fill="none" filter="url(#flow-glow)" stroke-dasharray="60 300" stroke-dashoffset="360">
           <animate attributeName="stroke-dashoffset" from="360" to="0" dur="2.4s" repeatCount="indefinite"/>
+        </path>
+        <path d="M 333 203 C 300 203, 200 203, 167 203" stroke="url(#flow-grad-1)" stroke-width="2" fill="none" filter="url(#flow-glow)" stroke-dasharray="60 300" stroke-dashoffset="360">
+          <animate attributeName="stroke-dashoffset" from="360" to="0" dur="2.4s" begin="0.7s" repeatCount="indefinite"/>
         </path>
         <path id="pulse-2" d="M 583 195 C 616 195, 716 195, 749 195" stroke="url(#flow-grad-2)" stroke-width="2" fill="none" filter="url(#flow-glow)" stroke-dasharray="60 300" stroke-dashoffset="360">
           <animate attributeName="stroke-dashoffset" from="360" to="0" dur="2.4s" begin="1.1s" repeatCount="indefinite"/>
@@ -198,6 +202,17 @@
             <mpath href="#rail-1"/>
           </animateMotion>
         </circle>
+        <!-- Return dots on rail-1r (R→L, blue) -->
+        <circle r="3" fill="var(--accent)" filter="url(#flow-glow)">
+          <animateMotion dur="2.4s" begin="0.7s" repeatCount="indefinite" rotate="auto">
+            <mpath href="#rail-1r"/>
+          </animateMotion>
+        </circle>
+        <circle r="3" fill="var(--accent)" filter="url(#flow-glow)" opacity="0.6">
+          <animateMotion dur="2.4s" begin="1.5s" repeatCount="indefinite" rotate="auto">
+            <mpath href="#rail-1r"/>
+          </animateMotion>
+        </circle>
         <circle r="3" fill="var(--green)" filter="url(#flow-glow)">
           <animateMotion dur="2.4s" begin="1.1s" repeatCount="indefinite" rotate="auto">
             <mpath href="#rail-2"/>
@@ -209,13 +224,6 @@
           </animateMotion>
         </circle>
 
-        <!-- Flow labels -->
-        <g font-family="JetBrains Mono, monospace" font-size="9" fill="var(--ink-3)" letter-spacing="1" text-anchor="middle">
-          <text x="315" y="184">REQUEST</text>
-          <text x="690" y="184">PROXY</text>
-          <text x="315" y="218">scope·persona</text>
-          <text x="690" y="218">vault·audit</text>
-        </g>
       </svg>
 
       <!-- Box 1: Connected services -->

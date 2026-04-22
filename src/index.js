@@ -823,11 +823,13 @@ function isAllowedCorsOrigin(origin) {
     if (origin === suffix || origin.endsWith(`.${suffix}`)) return true;
   }
 
-  // Cloudflare tunnel/dev domains (safe-list for remote dashboard access)
-  try {
-    const { hostname } = new URL(origin);
-    if (hostname.endsWith('.trycloudflare.com') || hostname.endsWith('.cfargotunnel.com')) return true;
-  } catch (_) {}
+  // Cloudflare tunnel domains — dev only. Any CF tunnel URL is valid so never allow in prod.
+  if (!isProd) {
+    try {
+      const { hostname } = new URL(origin);
+      if (hostname.endsWith('.trycloudflare.com') || hostname.endsWith('.cfargotunnel.com')) return true;
+    } catch (_) {}
+  }
 
   return false;
 }

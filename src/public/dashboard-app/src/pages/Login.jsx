@@ -2,6 +2,18 @@ import { useState, useEffect } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { handleOAuthCallback } from '../utils/oauth';
 import { AVAILABLE_SERVICES } from '../utils/oauth';
+
+// Prevent open redirect: only allow same-origin relative paths.
+function safeRedirect(url) {
+  if (!url) return '/dashboard/';
+  try {
+    const parsed = new URL(url, window.location.origin);
+    if (parsed.origin !== window.location.origin) return '/dashboard/';
+    return parsed.pathname + parsed.search + parsed.hash;
+  } catch {
+    return '/dashboard/';
+  }
+}
 import BrandLogo from '../components/BrandLogo';
 import { clearAuthArtifacts } from '../utils/authRuntime';
 
@@ -93,7 +105,7 @@ function Login() {
                 window.location.href = '/dashboard/onboarding';
               } else {
                 const pending = sessionStorage.getItem('pendingOAuthReturn');
-                if (pending) { sessionStorage.removeItem('pendingOAuthReturn'); window.location.href = pending; }
+                if (pending) { sessionStorage.removeItem('pendingOAuthReturn'); window.location.href = safeRedirect(pending); }
                 else { window.history.replaceState({}, document.title, '/dashboard/'); window.location.href = '/dashboard/'; }
               }
             }
@@ -115,7 +127,7 @@ function Login() {
               }
               setUser(sessionUser.user || sessionUser);
               const pending = sessionStorage.getItem('pendingOAuthReturn');
-              if (pending) { sessionStorage.removeItem('pendingOAuthReturn'); window.location.href = pending; }
+              if (pending) { sessionStorage.removeItem('pendingOAuthReturn'); window.location.href = safeRedirect(pending); }
               else { window.history.replaceState({}, document.title, '/dashboard/'); window.location.href = '/dashboard/'; }
             }
           });
@@ -175,7 +187,7 @@ function Login() {
     const pending = fromStorage || fromUrl;
     if (pending) {
       sessionStorage.removeItem('pendingOAuthReturn');
-      window.location.href = pending;
+      window.location.href = safeRedirect(pending);
     } else {
       window.location.href = '/dashboard/';
     }
@@ -219,7 +231,7 @@ function Login() {
       const serverReturnTo = result?.data?.pendingReturnTo || null;
       const clientReturnTo = sessionStorage.getItem('pendingOAuthReturn') || new URLSearchParams(window.location.search).get('returnTo');
       const pending = serverReturnTo || clientReturnTo;
-      if (pending) { sessionStorage.removeItem('pendingOAuthReturn'); window.location.href = pending; }
+      if (pending) { sessionStorage.removeItem('pendingOAuthReturn'); window.location.href = safeRedirect(pending); }
       else { window.location.href = '/dashboard/'; }
     } catch {
       setError('Failed to verify 2FA code. Please try again.');

@@ -252,7 +252,7 @@ function rotateKey(oldData, oldKey, newKey) {
     return encrypt(plaintext, newKey);
   } catch (error) {
     console.error('[Encryption] Key rotation error:', error.message);
-    throw new Error(`Key rotation failed: ${error.message}`);
+    throw new Error('Key rotation failed');
   }
 }
 

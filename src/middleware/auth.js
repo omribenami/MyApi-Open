@@ -63,10 +63,14 @@ function authenticate(tokenManager, auditLog) {
             reason: suspension.suspension_reason,
           });
         }
-      } catch (_) {}
+      } catch (e) {
+        logger.error('[Auth] Suspension check DB error — failing closed:', e.message);
+        return res.status(500).json({ error: 'Internal server error', message: 'Authentication failed' });
+      }
 
-      // Attach token data to request
+      // Attach token data to request (both names — auth.js uses tokenData, routes use tokenMeta)
       req.tokenData = tokenData;
+      req.tokenMeta = tokenData;
 
       // Security anomaly detection — blocks current request if suspicious
       try {

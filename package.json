@@ -60,7 +60,7 @@
     "qrcode": "^1.5.4",
     "speakeasy": "^2.0.0",
     "stripe": "^20.4.1",
-    "uuid": "^9.0.1"
+    "uuid": "^14.0.0"
   },
   "devDependencies": {
     "@babel/preset-env": "^7.29.2",
