@@ -867,28 +867,60 @@ class EmailService {
       ? `${base}/dashboard/devices?approval=${details.approvalId}`
       : `${base}/dashboard/devices`;
     const revokeUrl = `${base}/dashboard/access-tokens`;
-    const tokenKindLabel = details.tokenKind === 'master' ? 'Master Token' : 'Guest Token';
+    const tokenKindLabel = details.tokenKind === 'master' ? 'Master Token' : 'Guest / Scoped Token';
     const suspicious = details.suspiciousActivity?.suspicious;
     const warnings = details.suspiciousActivity?.warnings || [];
+    const detectedAt = details.detectedAt ? new Date(details.detectedAt).toUTCString() : new Date().toUTCString();
+    const headerGradient = suspicious
+      ? '#78350f 0%,#d97706 50%,#b45309 100%'
+      : '#1e3a5f 0%,#1d4ed8 50%,#2563eb 100%';
+
+    // "What happened" plain-language explanation
+    const whatHappened = details.originalDevice
+      ? `Your token <strong style="color:#e2e8f0;">"${details.tokenName || tokenKindLabel}"</strong> was previously approved for a specific device (${details.originalDevice.name || details.originalDevice.ip || 'original device'}). A <strong style="color:#e2e8f0;">different</strong> device is now trying to use the same token — this is blocked by default because each token is bound to the device that originally authorized it.`
+      : `Your token <strong style="color:#e2e8f0;">"${details.tokenName || tokenKindLabel}"</strong> was just used for the first time from a device that hasn't been approved yet. MyApi requires explicit approval for every new device that uses a token.`;
+
+    const whatToDoText = suspicious
+      ? `These signals suggest the token may have been ${details.originalDevice ? 'moved to a different machine or network without your knowledge' : 'obtained and used by an unknown party'}. <strong style="color:#fca5a5;">If you did not initiate this, revoke the token immediately and check your connected agents.</strong>`
+      : `If this was intentional — for example, you moved your agent to a new server, or you're testing from a cloud environment — approve it below. If you don't recognise this activity, revoke the token.`;
 
     const warningsHtml = warnings.length > 0
-      ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#1c1207;border:1px solid #78350f;border-radius:10px;margin:0 0 20px 0;">
-          <tr><td style="padding:16px 20px;">
-            <p style="margin:0 0 10px;font-size:12px;font-weight:700;color:#fbbf24;letter-spacing:0.8px;text-transform:uppercase;">Suspicious signals detected</p>
-            ${warnings.map(w => `<p style="margin:0 0 4px;font-size:13px;color:#fcd34d;">&#9888; ${w}</p>`).join('')}
+      ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#1c1207;border:1px solid #78350f;border-radius:10px;margin:0 0 22px 0;">
+          <tr><td style="padding:18px 20px;">
+            <p style="margin:0 0 10px;font-size:12px;font-weight:700;color:#fbbf24;letter-spacing:0.8px;text-transform:uppercase;">Suspicious signals</p>
+            ${warnings.map(w => `<p style="margin:0 0 5px;font-size:13px;color:#fcd34d;line-height:1.5;">&#9888;&nbsp; ${w}</p>`).join('')}
           </td></tr>
         </table>`
       : '';
 
+    const originalDeviceHtml = details.originalDevice
+      ? `<tr>
+          <td style="padding:14px 0 0;border-top:1px solid #1e293b;" colspan="3">
+            <p style="margin:0 0 6px;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Previously approved device</p>
+            <p style="margin:0;font-size:13px;color:#64748b;">${details.originalDevice.name || 'Unknown'} &nbsp;·&nbsp; ${details.originalDevice.ip || ''}</p>
+          </td>
+        </tr>`
+      : '';
+
+    const endpointHtml = details.endpoint
+      ? `<tr>
+          <td style="padding:14px 0 0;border-top:1px solid #1e293b;" colspan="3">
+            <p style="margin:0 0 4px;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Endpoint accessed</p>
+            <p style="margin:0;font-size:13px;font-family:monospace;color:#94a3b8;">${details.endpoint}</p>
+          </td>
+        </tr>`
+      : '';
+
     const html = `<!doctype html>
 <html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>New Device — MyApi</title></head>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${suspicious ? 'Security Warning' : 'New Device'} — MyApi</title></head>
 <body style="margin:0;padding:0;background:#020617;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#020617;padding:32px 12px;">
   <tr><td align="center">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;">
 
-      <tr><td style="background:linear-gradient(135deg,${suspicious ? '#78350f 0%,#d97706 50%,#b45309 100%' : '#1e3a5f 0%,#1d4ed8 50%,#2563eb 100%'});border-radius:16px 16px 0 0;padding:32px 36px;">
+      <!-- Header -->
+      <tr><td style="background:linear-gradient(135deg,${headerGradient});border-radius:16px 16px 0 0;padding:32px 36px;">
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
           <tr>
             <td style="vertical-align:middle;">
@@ -900,71 +932,91 @@ class EmailService {
               </tr></table>
             </td>
             <td align="right">
-              <span style="display:inline-block;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);border-radius:20px;padding:4px 14px;font-size:12px;font-weight:700;color:#fff;letter-spacing:0.5px;text-transform:uppercase;">${suspicious ? 'Security Warning' : 'New Device'}</span>
+              <span style="display:inline-block;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);border-radius:20px;padding:4px 14px;font-size:12px;font-weight:700;color:#fff;letter-spacing:0.5px;text-transform:uppercase;">${suspicious ? 'Security Warning' : 'Approval Required'}</span>
             </td>
           </tr>
           <tr><td colspan="2" style="padding-top:28px;">
             <p style="margin:0 0 6px;font-size:13px;font-weight:600;color:rgba(255,255,255,0.65);letter-spacing:1px;text-transform:uppercase;">Action required</p>
-            <h1 style="margin:0;font-size:26px;font-weight:800;color:#fff;line-height:1.25;">${suspicious ? 'Suspicious device attempting access' : 'New device requesting access'}</h1>
-            <p style="margin:10px 0 0;font-size:14px;color:rgba(255,255,255,0.75);">Hi ${name} — a new device is trying to use your token.</p>
+            <h1 style="margin:0;font-size:26px;font-weight:800;color:#fff;line-height:1.25;">${suspicious ? 'Suspicious device trying to use your token' : 'A new device wants to use your token'}</h1>
+            <p style="margin:10px 0 0;font-size:14px;color:rgba(255,255,255,0.75);">Hi ${name} — your token was blocked until you review this.</p>
           </td></tr>
         </table>
       </td></tr>
 
-      <tr><td style="background:#0f172a;border-left:1px solid #1e293b;border-right:1px solid #1e293b;padding:32px 36px 24px;">
+      <!-- Body -->
+      <tr><td style="background:#0f172a;border-left:1px solid #1e293b;border-right:1px solid #1e293b;padding:32px 36px 28px;">
 
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:20px;margin-bottom:20px;">
-          <tr><td>
-            <p style="margin:0 0 12px;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.8px;">Token</p>
-            <p style="margin:0 0 14px;font-size:16px;font-weight:700;color:#f1f5f9;">${details.tokenName || tokenKindLabel}</p>
-            <table role="presentation" cellspacing="0" cellpadding="0">
-              <tr>
-                <td style="padding-right:24px;">
-                  <p style="margin:0 0 2px;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">IP Address</p>
-                  <p style="margin:0;font-size:13px;font-weight:600;color:#94a3b8;">${details.ip || 'Unknown'}</p>
-                </td>
-                <td style="padding-right:24px;">
-                  <p style="margin:0 0 2px;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">OS</p>
-                  <p style="margin:0;font-size:13px;font-weight:600;color:#94a3b8;">${details.os || 'Unknown'}</p>
-                </td>
-                <td>
-                  <p style="margin:0 0 2px;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Browser / Agent</p>
-                  <p style="margin:0;font-size:13px;font-weight:600;color:#94a3b8;">${details.browser || 'Unknown'}</p>
-                </td>
-              </tr>
-            </table>
+        <!-- What happened -->
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#0d1f3a;border:1px solid #1e3a5f;border-radius:10px;margin:0 0 22px 0;">
+          <tr><td style="padding:18px 20px;">
+            <p style="margin:0 0 8px;font-size:12px;font-weight:700;color:#60a5fa;letter-spacing:0.8px;text-transform:uppercase;">What happened</p>
+            <p style="margin:0;font-size:14px;color:#cbd5e1;line-height:1.7;">${whatHappened}</p>
           </td></tr>
         </table>
 
-        ${warningsHtml}
-
-        <p style="margin:0 0 20px;font-size:14px;color:#94a3b8;line-height:1.7;">
-          ${suspicious
-            ? 'This request shows suspicious signals. If you do not recognise this device, deny it and revoke the token immediately.'
-            : 'If this was you — for example, you moved your agent to a new machine — approve it below. Otherwise deny the request.'}
-        </p>
-
-        <table role="presentation" cellspacing="0" cellpadding="0" style="margin-bottom:12px;">
+        <!-- New device details -->
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:20px;margin-bottom:22px;">
           <tr>
-            <td style="padding-right:12px;">
-              <a href="${approveUrl}" style="display:inline-block;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;font-size:14px;font-weight:700;text-decoration:none;padding:12px 24px;border-radius:8px;">Approve Device</a>
+            <td style="vertical-align:top;padding-right:20px;">
+              <p style="margin:0 0 4px;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">New device IP</p>
+              <p style="margin:0;font-size:14px;font-weight:600;color:#f1f5f9;">${details.ip || 'Unknown'}</p>
             </td>
-            <td>
-              <a href="${revokeUrl}" style="display:inline-block;background:#1e293b;border:1px solid #dc2626;color:#f87171;font-size:14px;font-weight:700;text-decoration:none;padding:12px 24px;border-radius:8px;">Revoke Token</a>
+            <td style="vertical-align:top;padding-right:20px;">
+              <p style="margin:0 0 4px;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">OS</p>
+              <p style="margin:0;font-size:14px;font-weight:600;color:#f1f5f9;">${details.os || 'Unknown'}</p>
+            </td>
+            <td style="vertical-align:top;">
+              <p style="margin:0 0 4px;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Agent / Browser</p>
+              <p style="margin:0;font-size:14px;font-weight:600;color:#f1f5f9;">${details.browser || 'Unknown'}</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:14px 0 0;border-top:1px solid #1e293b;" colspan="3">
+              <p style="margin:0 0 4px;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Token</p>
+              <p style="margin:0;font-size:14px;font-weight:600;color:#f1f5f9;">${details.tokenName || tokenKindLabel} <span style="font-size:12px;font-weight:400;color:#64748b;">(${tokenKindLabel})</span></p>
+            </td>
+          </tr>
+          ${originalDeviceHtml}
+          ${endpointHtml}
+          <tr>
+            <td style="padding:14px 0 0;border-top:1px solid #1e293b;" colspan="3">
+              <p style="margin:0 0 4px;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Detected at</p>
+              <p style="margin:0;font-size:13px;color:#94a3b8;">${detectedAt}</p>
             </td>
           </tr>
         </table>
 
+        ${warningsHtml}
+
+        <!-- What to do -->
+        <p style="margin:0 0 22px;font-size:14px;color:#94a3b8;line-height:1.7;">${whatToDoText}</p>
+
+        <!-- CTAs -->
+        <table role="presentation" cellspacing="0" cellpadding="0" style="margin-bottom:8px;">
+          <tr>
+            <td style="padding-right:12px;">
+              <a href="${approveUrl}" style="display:inline-block;background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;font-size:14px;font-weight:700;text-decoration:none;padding:12px 26px;border-radius:8px;letter-spacing:0.2px;">Approve This Device</a>
+            </td>
+            <td>
+              <a href="${revokeUrl}" style="display:inline-block;background:#1e293b;border:1px solid #dc2626;color:#f87171;font-size:14px;font-weight:700;text-decoration:none;padding:12px 26px;border-radius:8px;letter-spacing:0.2px;">Revoke Token</a>
+            </td>
+          </tr>
+        </table>
+        <p style="margin:12px 0 0;font-size:12px;color:#475569;">Approving allows this specific device to continue using the token. Revoking permanently disables the token.</p>
+
       </td></tr>
 
+      <!-- Footer -->
       <tr><td style="background:#0a1628;border:1px solid #1e293b;border-top:none;border-radius:0 0 16px 16px;padding:20px 36px;">
-        <p style="margin:0 0 6px;font-size:12px;color:#475569;line-height:1.6;">
-          You received this because a new device tried to use a token on your MyApi account. If you did not expect this, revoke the token immediately.
+        <p style="margin:0 0 8px;font-size:12px;color:#475569;line-height:1.6;">
+          This alert was sent because a new device attempted to use a token on your MyApi account. The request was automatically blocked pending your review.
         </p>
         <p style="margin:0;font-size:12px;color:#334155;">
           <a href="${base}/dashboard/devices" style="color:#3b82f6;text-decoration:none;">Manage Devices</a>
           &nbsp;&middot;&nbsp;
           <a href="${base}/dashboard/access-tokens" style="color:#3b82f6;text-decoration:none;">Manage Tokens</a>
+          &nbsp;&middot;&nbsp;
+          <a href="${base}/dashboard" style="color:#3b82f6;text-decoration:none;">Dashboard</a>
         </p>
       </td></tr>
 
@@ -975,8 +1027,8 @@ class EmailService {
 </html>`;
 
     const subject = suspicious
-      ? `[Security Warning] Suspicious device attempting to use your token`
-      : `[Action Required] New device requesting access to your token`;
+      ? `[Security Warning] Suspicious device attempting to use token "${details.tokenName || 'your token'}"`
+      : `[Action Required] New device wants to use token "${details.tokenName || 'your token'}"`;
     await this._dispatchEmail(toEmail.trim(), subject, html);
   }
 

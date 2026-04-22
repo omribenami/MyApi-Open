@@ -372,6 +372,7 @@ function deviceApprovalMiddleware(req, res, next) {
         const userRow = db.db.prepare('SELECT email, display_name, username FROM users WHERE id = ?').get(userId);
         if (userRow?.email) {
           const EmailService = require('../services/emailService');
+          const originalDevice = allApprovals.length > 0 ? allApprovals[0] : null;
           EmailService.sendNewDeviceApprovalEmail(
             userRow.email,
             userRow.display_name || userRow.username || 'there',
@@ -381,6 +382,11 @@ function deviceApprovalMiddleware(req, res, next) {
               ip: currentFingerprint.summary.ipAddress,
               os: currentFingerprint.summary.os,
               browser: currentFingerprint.summary.browser,
+              endpoint: `${req.method} ${req.path}`,
+              detectedAt: new Date().toISOString(),
+              originalDevice: originalDevice
+                ? { name: originalDevice.device_name, ip: originalDevice.ip_address, approvedAt: originalDevice.approved_at }
+                : null,
               approvalId,
               suspiciousActivity: suspiciousAnalysis,
             }
