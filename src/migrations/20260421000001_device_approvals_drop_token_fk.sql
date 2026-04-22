@@ -31,7 +31,7 @@ SELECT
   id, device_fingerprint, device_fingerprint_hash, token_id, user_id,
   device_info_json, ip_address, status, created_at, expires_at,
   approved_at, denied_at, denial_reason,
-  COALESCE(approval_type, 'device')
+  'device'
 FROM device_approvals_pending;
 
 DROP TABLE device_approvals_pending;

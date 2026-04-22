@@ -9356,6 +9356,7 @@ app.post("/api/v1/oauth/disconnect/:service", authenticate, async (req, res) => 
 
     // Delete token from database (always do this)
     revokeOAuthToken(service, userId);
+    tokenCache.delete(`${service}:${userId}`);
 
     // Update OAuth status
     updateOAuthStatus(service, "disconnected");
