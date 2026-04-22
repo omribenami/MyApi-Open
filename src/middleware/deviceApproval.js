@@ -200,18 +200,28 @@ function deviceApprovalMiddleware(req, res, next) {
           message: 'Access denied — waiting for the user to approve you in the dashboard.',
         });
       }
-      // Step 2: Device registration/tracking — fail open (non-critical).
-      // Track per (token, device) so each OAuth token has its own approved row
-      // and the dashboard can list/revoke devices per token.
-      try {
-        const existing = db.getApprovedDeviceByHashAndToken(userId, fingerprint.fingerprintHash, tokenId);
-        if (!existing) {
-          db.createApprovedDevice(tokenId, userId, fingerprint.fingerprintHash, tokenRow.label, fingerprint.summary, fingerprint.summary.ipAddress);
-        } else {
-          db.updateDeviceLastUsed(existing.id);
-        }
-      } catch (_) { /* registration tracking failure — non-critical */ }
-      return next();
+      // Step 2: Device fingerprint check — token is bound to the device that did the exchange.
+      // Any different device must be explicitly approved by the user.
+      const existing = (() => {
+        try { return db.getApprovedDeviceByHashAndToken(userId, fingerprint.fingerprintHash, tokenId); } catch (_) { return null; }
+      })();
+      if (existing && !existing.revoked_at) {
+        try { db.updateDeviceLastUsed(existing.id); } catch (_) {}
+        return next();
+      }
+      // Different device — require explicit user approval (same flow as master token)
+      const pendingApprovals = db.getPendingApprovals(userId, tokenId);
+      const existingPending = pendingApprovals.find(p => p.device_fingerprint_hash === fingerprint.fingerprintHash);
+      if (!existingPending) {
+        try {
+          db.createPendingApproval(tokenId, userId, fingerprint.fingerprintHash, fingerprint.summary, fingerprint.summary.ipAddress);
+        } catch (_) {}
+      }
+      return res.status(403).json({
+        error: 'device_not_approved',
+        code: 'DEVICE_APPROVAL_REQUIRED',
+        message: 'Access denied — this token was issued to a different device. Ask the user to approve you in the dashboard.',
+      });
     }
     if (!isMasterToken && !tokenRow?.requires_approval) {
       return next(); // scoped token without approval requirement — pass through

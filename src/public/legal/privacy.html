@@ -80,14 +80,14 @@
         <header>
             <h1>Privacy Policy</h1>
             <div class="meta">
-                <p><strong>Last Updated:</strong> April 14, 2026</p>
+                <p><strong>Last Updated:</strong> April 21, 2026</p>
                 <p><strong>Effective Date:</strong> April 14, 2026</p>
             </div>
         </header>
         
         <div class="highlight">
             <strong>GDPR &amp; CCPA Compliant</strong>
-            <p style="margin-top: 10px;">MyApi is committed to protecting your privacy. This policy complies with the General Data Protection Regulation (GDPR), the California Consumer Privacy Act (CCPA), and other applicable privacy laws.</p>
+            <p style="margin-top: 10px;">MyApi is a product of <strong>Agentic Integration LLC</strong>, 5900 Balcones Drive, STE 100, Austin, TX 78731, USA ("we", "us", or "our"). We are committed to protecting your privacy. This policy complies with the General Data Protection Regulation (GDPR), the California Consumer Privacy Act (CCPA), and other applicable privacy laws.</p>
         </div>
         
         <h2>1. What Data We Collect</h2>
@@ -225,7 +225,7 @@
             <tr>
                 <td><strong>OpenClaw Proxy</strong></td>
                 <td>AI routing and orchestration intermediary</td>
-                <td>All prompts and responses to cloud AI providers pass through this layer. OpenClaw may log request metadata per its own policies.</td>
+                <td>All prompts and responses to cloud AI providers pass through this layer. OpenClaw is operated by Agentic Integration LLC (the same legal entity as MyApi) and is subject to this Privacy Policy. Request metadata (model, token counts, latency) may be logged for operational monitoring. Prompt content is not retained beyond request processing.</td>
             </tr>
             <tr>
                 <td><strong>Local / Self-Hosted Models</strong> (Ollama: Gemma, Qwen, StarCoder, Llama, etc.)</td>
@@ -393,7 +393,88 @@
             <p style="margin-top: 10px;">We recommend reviewing each provider's current privacy policy for the most up-to-date information on their training practices.</p>
         </div>
         
-        <h2>7. Device Fingerprinting</h2>
+        <h2>7. Google API Services — Limited Use Disclosure</h2>
+        <div class="highlight">
+            <strong>Google API Services User Data Policy Compliance</strong>
+            <p style="margin-top: 10px;">MyApi's use and transfer of information received from Google APIs to any other app adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
+        </div>
+        <p>Specifically, with respect to data obtained through Google APIs:</p>
+        <ul>
+            <li>We use Google user data <strong>only</strong> to provide and improve the features the user explicitly requests through the Service (such as connecting your Google account to enable AI-assisted access to Gmail, Calendar, Drive, or other Google services you authorize)</li>
+            <li>We do <strong>not</strong> transfer Google user data to third parties except as strictly necessary to provide the Service to you, as required by applicable law, or with your explicit consent</li>
+            <li>We do <strong>not</strong> use Google user data for advertising, to build user profiles for advertising, or to train AI models</li>
+            <li>We do <strong>not</strong> allow humans to read Google user data unless: (a) you have given us explicit permission to do so; (b) it is necessary for security purposes (e.g., investigating abuse); or (c) it is required by law</li>
+            <li>Google OAuth tokens are encrypted with AES-256-GCM before storage and are used only to fulfill your authorized integration requests</li>
+            <li>You may disconnect your Google account and revoke access at any time through Settings → Connected Services, or via your <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">Google Account permissions page</a></li>
+        </ul>
+
+        <h2>8. GDPR — Lawful Basis for Processing</h2>
+        <p>Under Article 6 of the GDPR, we process your personal data on the following lawful bases:</p>
+        <table>
+            <tr>
+                <th>Processing Activity</th>
+                <th>Lawful Basis</th>
+                <th>Details</th>
+            </tr>
+            <tr>
+                <td>Account creation and authentication</td>
+                <td>Contract performance (Art. 6(1)(b))</td>
+                <td>Necessary to provide the Service you signed up for</td>
+            </tr>
+            <tr>
+                <td>OAuth token storage and integration</td>
+                <td>Contract performance (Art. 6(1)(b))</td>
+                <td>Required to connect and operate your third-party service integrations</td>
+            </tr>
+            <tr>
+                <td>AI conversation processing</td>
+                <td>Contract performance (Art. 6(1)(b))</td>
+                <td>Necessary to deliver AI features you explicitly use</td>
+            </tr>
+            <tr>
+                <td>Billing and payment processing</td>
+                <td>Contract performance (Art. 6(1)(b))</td>
+                <td>Required to manage your subscription and invoicing</td>
+            </tr>
+            <tr>
+                <td>Security monitoring, audit logs, rate limiting</td>
+                <td>Legitimate interests (Art. 6(1)(f))</td>
+                <td>Protecting the integrity and security of the Service and all users</td>
+            </tr>
+            <tr>
+                <td>Device fingerprinting and approval</td>
+                <td>Legitimate interests (Art. 6(1)(f))</td>
+                <td>Preventing unauthorized account access; less intrusive than alternatives</td>
+            </tr>
+            <tr>
+                <td>Aggregate usage analytics</td>
+                <td>Legitimate interests (Art. 6(1)(f))</td>
+                <td>Improving Service reliability and features; data used only in aggregate</td>
+            </tr>
+            <tr>
+                <td>Email notifications (security alerts, device approvals)</td>
+                <td>Legitimate interests (Art. 6(1)(f))</td>
+                <td>Necessary to keep you informed of security-relevant events on your account</td>
+            </tr>
+            <tr>
+                <td>Marketing or non-essential notifications</td>
+                <td>Consent (Art. 6(1)(a))</td>
+                <td>Only sent where you have opted in; withdrawable at any time via Settings</td>
+            </tr>
+            <tr>
+                <td>Compliance audit log retention</td>
+                <td>Legal obligation (Art. 6(1)(c))</td>
+                <td>Retained to comply with applicable legal and regulatory requirements</td>
+            </tr>
+            <tr>
+                <td>Responding to legal requests</td>
+                <td>Legal obligation (Art. 6(1)(c))</td>
+                <td>Required by law, regulation, or lawful governmental request</td>
+            </tr>
+        </table>
+        <p>Where processing is based on <strong>consent</strong>, you have the right to withdraw that consent at any time without affecting the lawfulness of processing before withdrawal. Where processing is based on <strong>legitimate interests</strong>, you have the right to object (see Section 11).</p>
+
+        <h2>9. Device Fingerprinting</h2>
         <p>To protect your account security, we generate a SHA-256 hash of your device characteristics (such as browser type, screen attributes, and IP address) to create a unique device fingerprint. This fingerprint is used to:</p>
         <ul>
             <li>Identify new or unrecognized devices accessing your account</li>
@@ -404,7 +485,7 @@
         <p>Device fingerprints are stored as irreversible hashes and cannot be used to reconstruct your device information. You can view and revoke approved devices at any time through your account settings.</p>
         <p>The device fingerprint hash incorporates your IP address as one input factor. Because IP addresses can indicate approximate geographic location, the device approval system implicitly processes location data as part of this security function. We do not use this data for tracking, profiling, or any purpose beyond device approval authentication.</p>
         
-        <h2>8. Privacy Controls</h2>
+        <h2>10. Privacy Controls</h2>
         <p>You have control over your privacy settings through the Service dashboard:</p>
         <ul>
             <li><strong>Cookie Preferences:</strong> Choose between "All cookies", "Essential only", or "None" (note: disabling essential cookies while authenticated is not permitted)</li>
@@ -414,7 +495,7 @@
             <li><strong>Notification Preferences:</strong> Configure which notifications you receive and how they are delivered</li>
         </ul>
         
-        <h2>9. Your Rights</h2>
+        <h2>11. Your Rights</h2>
         <div class="rights-section">
             <h3>GDPR Rights (EU/EEA Users)</h3>
             <ul>
@@ -439,10 +520,10 @@
             </ul>
         </div>
         
-        <h2>10. Children's Privacy</h2>
+        <h2>12. Children's Privacy</h2>
         <p>The Service is not directed to individuals under the age of 18. We do not knowingly collect personal information from children. If you are a parent or guardian and believe your child has provided us with personal data, please contact us immediately at <strong>privacy@myapiai.com</strong>. If we become aware that we have collected personal data from a child under 18, we will take steps to delete that information promptly.</p>
         
-        <h2>11. International Data Transfers</h2>
+        <h2>13. International Data Transfers</h2>
         <p>MyApi is a self-hosted platform. Your data is stored on the server where the Service is deployed. If you access the Service from outside the jurisdiction where the server is located, your data may be transferred across borders. We implement appropriate safeguards (including encryption in transit and at rest) to protect your data during any such transfer in accordance with applicable data protection laws.</p>
         <p>When AI features are used, your data is additionally subject to international transfer to the extent that the AI provider receiving your request is located in a different jurisdiction. Requests routed to Anthropic, OpenAI, or Google are processed on servers in the United States. Requests to xAI and other providers are processed per those providers' infrastructure policies.</p>
         <p>For EU/EEA users, we rely on the following transfer mechanisms for personal data transferred to AI providers:</p>
@@ -453,7 +534,7 @@
         </ul>
         <p>We recommend reviewing each AI provider's data transfer mechanisms, which are disclosed in their respective privacy policies linked in Section 3.1.</p>
         
-        <h2>12. Data Breach Notification</h2>
+        <h2>14. Data Breach Notification</h2>
         <p>In the event of a personal data breach that poses a risk to your rights and freedoms:</p>
         <ul>
             <li>We will notify the relevant supervisory authority within <strong>72 hours</strong> of becoming aware of the breach (GDPR Art. 33)</li>
@@ -462,7 +543,7 @@
             <li>All breach events are recorded in the immutable compliance audit log</li>
         </ul>
         
-        <h2>13. Exercise Your Rights</h2>
+        <h2>15. Exercise Your Rights</h2>
         <p>To exercise any of your privacy rights:</p>
         <ul>
             <li><strong>Email:</strong> <a href="mailto:privacy@myapiai.com">privacy@myapiai.com</a></li>
@@ -476,15 +557,16 @@
         </ul>
         <p>We may verify your identity before processing a request to protect against fraudulent requests.</p>
         
-        <h2>14. Contact Us</h2>
+        <h2>16. Contact Us</h2>
         <ul>
+            <li><strong>Legal Entity:</strong> Agentic Integration LLC, 5900 Balcones Drive, STE 100, Austin, TX 78731, USA</li>
             <li><strong>Privacy Questions:</strong> <a href="mailto:privacy@myapiai.com">privacy@myapiai.com</a></li>
             <li><strong>Security Issues:</strong> <a href="mailto:security@myapiai.com">security@myapiai.com</a></li>
             <li><strong>General Support &amp; Community:</strong> <a href="https://discord.gg/WPp4sCN4xB" target="_blank" rel="noopener">Join our Discord server</a></li>
-            <li><strong>Data Protection Concerns:</strong> If you are unsatisfied with our response, you have the right to lodge a complaint with your local data protection supervisory authority</li>
+            <li><strong>Data Protection Concerns:</strong> If you are unsatisfied with our response, you have the right to lodge a complaint with your local data protection supervisory authority. For EU/EEA users, supervisory authority contacts are listed at <a href="https://edpb.europa.eu/about-edpb/about-edpb/members_en" target="_blank" rel="noopener">edpb.europa.eu</a>.</li>
         </ul>
         
-        <h2>15. Changes to This Policy</h2>
+        <h2>17. Changes to This Policy</h2>
         <p>We may update this Privacy Policy from time to time to reflect changes in our practices, technology, or legal requirements. When we make material changes:</p>
         <ul>
             <li>We will update the "Last Updated" date at the top of this page</li>
@@ -495,7 +577,7 @@
         
         <footer>
             <p>&copy; 2026 MyApi. All rights reserved.</p>
-            <p><a href="/privacy">Privacy Policy</a> | <a href="/terms">Terms of Service</a></p>
+            <p><a href="/legal/privacy.html">Privacy Policy</a> | <a href="/legal/terms.html">Terms of Service</a></p>
         </footer>
     </div>
 </body>

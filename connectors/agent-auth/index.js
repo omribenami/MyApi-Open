@@ -3,7 +3,7 @@
  * MyApi Agent Auth — myapiai.com
  *
  * Zero-dependency OAuth PKCE installer for AI agents.
- * Handles the full browser login flow and outputs a ready-to-use Bearer token.
+ * Compatible with Node.js >= 10. Works on macOS, Linux, and Windows.
  *
  * Usage:
  *   node index.js                    # Interactive — opens browser, prints token
@@ -22,7 +22,7 @@ const os     = require('os');
 const http   = require('http');
 const https  = require('https');
 const crypto = require('crypto');
-const { execSync } = require('child_process');
+const cp     = require('child_process');
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -39,26 +39,48 @@ const FLAG_QUIET = args.includes('--quiet');
 
 // ─── Logging ─────────────────────────────────────────────────────────────────
 
-function log(msg)   { if (!FLAG_JSON && !FLAG_QUIET) console.error(msg); }
-function banner(msg){ if (!FLAG_JSON && !FLAG_QUIET) console.error('\n' + msg); }
+function log(msg)   { if (!FLAG_JSON && !FLAG_QUIET) process.stderr.write(msg + '\n'); }
+function banner(msg){ if (!FLAG_JSON && !FLAG_QUIET) process.stderr.write('\n' + msg + '\n'); }
+
+// ─── Base64url (Node >= 10 compatible — no 'base64url' encoding needed) ──────
+
+function toBase64url(buf) {
+  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
 
 // ─── PKCE ────────────────────────────────────────────────────────────────────
 
 function pkce() {
-  const verifier   = crypto.randomBytes(96).toString('base64url');
-  const challenge  = crypto.createHash('sha256').update(verifier).digest('base64url');
+  const verifierBuf = crypto.randomBytes(96);
+  const verifier    = toBase64url(verifierBuf);
+  const challenge   = toBase64url(crypto.createHash('sha256').update(verifier).digest());
   return { verifier, challenge };
 }
 
-// ─── Browser ─────────────────────────────────────────────────────────────────
+// ─── Browser opener ──────────────────────────────────────────────────────────
 
 function openBrowser(url) {
+  // Use spawn (not execSync) so the browser process is detached and doesn't
+  // block the Node event loop or inherit stdin from the curl pipe.
+  const cmds = {
+    darwin:  ['open',     [url]],
+    win32:   ['cmd',      ['/c', 'start', '', url]],
+    linux:   ['xdg-open', [url]],
+  };
+  const entry = cmds[process.platform] || cmds.linux;
   try {
-    if (process.platform === 'darwin')      execSync(`open "${url}"`);
-    else if (process.platform === 'win32')  execSync(`start "" "${url}"`);
-    else                                    execSync(`xdg-open "${url}"`);
+    cp.spawn(entry[0], entry[1], { detached: true, stdio: 'ignore' }).unref();
     return true;
-  } catch (_) { return false; }
+  } catch (_) {
+    // Try common Mac paths if $PATH is minimal (e.g. inside cursor/IDE terminal)
+    if (process.platform === 'darwin') {
+      try {
+        cp.spawn('/usr/bin/open', [url], { detached: true, stdio: 'ignore' }).unref();
+        return true;
+      } catch (_2) {}
+    }
+    return false;
+  }
 }
 
 // ─── Free port ───────────────────────────────────────────────────────────────
@@ -73,21 +95,23 @@ function getFreePort() {
 
 // ─── HTTP helpers ─────────────────────────────────────────────────────────────
 
-function httpForm(url, form) {
+function httpPost(url, form) {
   return new Promise((resolve, reject) => {
     const parsed = new URL(url);
     const lib    = parsed.protocol === 'https:' ? https : http;
-    const data   = new URLSearchParams(form).toString();
-    const req = lib.request({
+    const data   = Object.entries(form).map(([k, v]) =>
+      encodeURIComponent(k) + '=' + encodeURIComponent(v)).join('&');
+    const options = {
       hostname: parsed.hostname,
       port:     parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
-      path:     parsed.pathname,
+      path:     parsed.pathname + (parsed.search || ''),
       method:   'POST',
       headers: {
         'Content-Type':   'application/x-www-form-urlencoded',
         'Content-Length': Buffer.byteLength(data),
       },
-    }, (res) => {
+    };
+    const req = lib.request(options, (res) => {
       let raw = '';
       res.on('data', c => raw += c);
       res.on('end', () => {
@@ -143,43 +167,60 @@ async function runOAuthFlow() {
   const port        = await getFreePort();
   const redirectUri = `http://localhost:${port}/callback`;
   const { verifier, challenge } = pkce();
-  const state       = crypto.randomBytes(16).toString('hex');
+  const state       = toBase64url(crypto.randomBytes(16));
 
-  const authUrl = new URL(`${MYAPI_URL}/api/v1/oauth-server/authorize`);
-  authUrl.searchParams.set('response_type',          'code');
-  authUrl.searchParams.set('client_id',               CLIENT_ID);
-  authUrl.searchParams.set('redirect_uri',            redirectUri);
-  authUrl.searchParams.set('scope',                   SCOPE);
-  authUrl.searchParams.set('state',                   state);
-  authUrl.searchParams.set('code_challenge',          challenge);
-  authUrl.searchParams.set('code_challenge_method',   'S256');
+  // Build auth URL manually to avoid URL class differences across Node versions
+  const authUrl = MYAPI_URL + '/api/v1/oauth-server/authorize'
+    + '?response_type=code'
+    + '&client_id=' + encodeURIComponent(CLIENT_ID)
+    + '&redirect_uri=' + encodeURIComponent(redirectUri)
+    + '&scope=' + encodeURIComponent(SCOPE)
+    + '&state=' + encodeURIComponent(state)
+    + '&code_challenge=' + encodeURIComponent(challenge)
+    + '&code_challenge_method=S256';
 
-  const opened = openBrowser(authUrl.toString());
+  banner([
+    '─────────────────────────────────────────────────────────────',
+    '  MyApi Agent Auth',
+    '─────────────────────────────────────────────────────────────',
+  ].join('\n'));
+
+  const opened = openBrowser(authUrl);
   if (opened) {
-    banner('✓ Browser opened — sign in to MyApi and click Authorize.');
+    log('✓ Browser opened — sign in to MyApi and click Authorize.');
+    log('  If the browser did not open, copy this URL manually:\n');
+    log('  ' + authUrl);
   } else {
-    banner([
-      '─────────────────────────────────────────────────────────────',
-      '  Open this URL in your browser to authorize:',
-      '',
-      `  ${authUrl.toString()}`,
-      '',
-      '─────────────────────────────────────────────────────────────',
-    ].join('\n'));
+    log('  Open this URL in your browser to authorize:\n');
+    log('  ' + authUrl + '\n');
   }
 
-  // Wait for the browser to redirect back to our local server
+  // Local HTTP server to receive the OAuth callback
   const code = await new Promise((resolve, reject) => {
     const server = http.createServer((req, res) => {
-      const url  = new URL(req.url, `http://localhost:${port}`);
-      const code = url.searchParams.get('code');
-      const err  = url.searchParams.get('error');
+      // Only handle /callback — ignore favicon, etc.
+      if (!req.url || !req.url.startsWith('/callback')) {
+        res.writeHead(404);
+        res.end();
+        return;
+      }
 
-      if (err || !code || url.searchParams.get('state') !== state) {
+      // Parse query string manually for Node 10 compat
+      const qs   = req.url.split('?')[1] || '';
+      const params = {};
+      qs.split('&').forEach(p => {
+        const [k, v] = p.split('=');
+        if (k) params[decodeURIComponent(k)] = decodeURIComponent(v || '');
+      });
+
+      const code = params['code'];
+      const err  = params['error'];
+
+      if (err || !code || params['state'] !== state) {
         res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
         res.end(DENIED_HTML);
         server.close();
-        reject(new Error(err ? `Authorization denied: ${err}` : 'Invalid callback'));
+        reject(new Error(err ? ('Authorization denied: ' + err) : 'Invalid callback (state mismatch or missing code)'));
         return;
       }
 
@@ -189,18 +230,23 @@ async function runOAuthFlow() {
       resolve(code);
     });
 
-    server.listen(port, '127.0.0.1');
-    server.on('error', reject);
+    server.listen(port, '127.0.0.1', () => {
+      log('  Waiting for browser authorization (timeout: 5 min)...');
+    });
+
+    server.on('error', (e) => {
+      reject(new Error('Could not start local callback server: ' + e.message));
+    });
+
     setTimeout(() => {
       server.close();
       reject(new Error('Timeout: no browser response within 5 minutes'));
     }, 5 * 60 * 1000);
   });
 
-  log('✓ Authorization received — exchanging for token...');
+  log('\n✓ Authorization received — exchanging for token...');
 
-  // Exchange auth code for access token
-  const resp = await httpForm(`${MYAPI_URL}/api/v1/oauth-server/token`, {
+  const resp = await httpPost(MYAPI_URL + '/api/v1/oauth-server/token', {
     grant_type:    'authorization_code',
     code,
     redirect_uri:  redirectUri,
@@ -208,8 +254,8 @@ async function runOAuthFlow() {
     code_verifier: verifier,
   });
 
-  if (!resp.body?.access_token) {
-    throw new Error(`Token exchange failed (${resp.status}): ${JSON.stringify(resp.body)}`);
+  if (!resp.body || !resp.body.access_token) {
+    throw new Error('Token exchange failed (' + resp.status + '): ' + JSON.stringify(resp.body));
   }
 
   return resp.body.access_token;
@@ -218,36 +264,47 @@ async function runOAuthFlow() {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
-  banner('MyApi Agent Auth\nAuthorizes an AI agent and issues a dedicated access token.\n');
+  // Node version check — require >= 10
+  const [major] = process.versions.node.split('.').map(Number);
+  if (major < 10) {
+    process.stderr.write('Error: Node.js >= 10 required (you have ' + process.versions.node + ')\n');
+    process.stderr.write('Upgrade: https://nodejs.org/en/download\n');
+    process.exit(1);
+  }
 
   let token;
   try {
     token = await runOAuthFlow();
   } catch (err) {
-    console.error(`\nError: ${err.message}`);
+    process.stderr.write('\nError: ' + err.message + '\n');
     process.exit(1);
   }
 
   if (FLAG_SAVE) {
-    if (!fs.existsSync(CREDS_DIR)) fs.mkdirSync(CREDS_DIR, { recursive: true });
-    fs.writeFileSync(CREDS_FILE, JSON.stringify({ token, savedAt: new Date().toISOString() }, null, 2), { mode: 0o600 });
-    log(`✓ Token saved to ${CREDS_FILE}`);
+    try {
+      if (!fs.existsSync(CREDS_DIR)) fs.mkdirSync(CREDS_DIR, { recursive: true });
+      fs.writeFileSync(CREDS_FILE, JSON.stringify({ token, savedAt: new Date().toISOString() }, null, 2), { mode: 0o600 });
+      log('✓ Token saved to ' + CREDS_FILE);
+    } catch (e) {
+      process.stderr.write('Warning: could not save token: ' + e.message + '\n');
+    }
   }
 
   if (FLAG_JSON) {
-    // Machine-readable: only JSON on stdout, nothing else
     process.stdout.write(JSON.stringify({ token }) + '\n');
   } else {
-    console.log([
+    process.stdout.write([
       '',
       '╔══════════════════════════════════════════════════════════════╗',
       '║            Your MyApi Agent Token                           ║',
       '╚══════════════════════════════════════════════════════════════╝',
       '',
-      `  ${token}`,
+      '  ' + token,
       '',
       '  Use it as:  Authorization: Bearer <token>',
-      FLAG_SAVE ? `  Saved to:   ${CREDS_FILE}` : '  Tip: re-run with --save to store it in ~/.myapi/agent-token.json',
+      FLAG_SAVE
+        ? '  Saved to:   ' + CREDS_FILE
+        : '  Tip: re-run with --save to store in ~/.myapi/agent-token.json',
       '',
     ].join('\n'));
   }

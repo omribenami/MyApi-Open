@@ -4,6 +4,15 @@
 // CVSS: 8.2-8.7 (High)
 // ============================================================================
 
+// Allowlist of resource types whose ownership can be checked.
+// Table name is <type> + 's' — only types in this list are accepted to
+// prevent SQL injection via the resourceType parameter.
+const ALLOWED_RESOURCE_TYPES = new Set([
+  'persona', 'handshake', 'skill', 'conversation', 'message',
+  'kb_document', 'context_cache', 'notification', 'invitation',
+  'workspace', 'billing_subscription',
+]);
+
 /**
  * Verify user owns/has access to a resource
  * CVSS 8.7: User Management IDOR - allows modifying other users
@@ -12,18 +21,23 @@ async function verifyResourceOwnership(userId, resourceId, resourceType, db) {
   if (!userId || !resourceId || !resourceType) {
     throw new Error('Missing required parameters');
   }
-  
+
+  if (!ALLOWED_RESOURCE_TYPES.has(resourceType)) {
+    throw new Error('Access denied: Invalid resource type');
+  }
+
+  const tableName = `${resourceType}s`;
   const query = `
-    SELECT owner_id, user_id FROM ${resourceType}s 
+    SELECT owner_id, user_id FROM ${tableName}
     WHERE id = ? AND (owner_id = ? OR user_id = ?)
   `;
-  
+
   const result = await db.get(query, [resourceId, userId, userId]);
-  
+
   if (!result) {
     throw new Error('Access denied: Resource not found or not owned by user');
   }
-  
+
   return result;
 }
 

@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { useNotificationStore } from '../stores/notificationStore';
+import apiClient from '../utils/apiClient';
 import BrandLogo from './BrandLogo';
 import CookieNotice from './CookieNotice';
 import Toast from './Toast';
@@ -445,6 +446,23 @@ function Layout({ children, onLogout }) {
     return () => clearInterval(interval);
   }, [fetchUnreadCount, masterToken]);
 
+  // Poll pending device approvals for sidebar badge
+  const [pendingDeviceCount, setPendingDeviceCount] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const res = await apiClient.get('/devices/approvals/pending');
+        if (!cancelled) {
+          setPendingDeviceCount((res.data?.approvals || []).length);
+        }
+      } catch { /* silent */ }
+    };
+    poll();
+    const id = setInterval(poll, 20000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
+
   const tokenData = (() => {
     try { return JSON.parse(localStorage.getItem('tokenData') || '{}'); } catch { return {}; }
   })();
@@ -547,6 +565,8 @@ function Layout({ children, onLogout }) {
             <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
               {group.items.map(item => {
                 const active = isActive(item.path, item.exact);
+                const isDevices = item.path === '/devices';
+                const hasPending = isDevices && pendingDeviceCount > 0;
                 return (
                   <li key={item.path}>
                     <Link
@@ -554,21 +574,34 @@ function Layout({ children, onLogout }) {
                       style={{
                         display: 'flex', alignItems: 'center', gap: '8px',
                         padding: '6px 8px', fontSize: '13.5px', textDecoration: 'none',
-                        borderRadius: '4px', color: active ? 'var(--ink)' : 'var(--ink-2)',
+                        borderRadius: '4px',
+                        color: hasPending ? 'var(--amber, #d29922)' : active ? 'var(--ink)' : 'var(--ink-2)',
                         background: active ? 'var(--bg-sunk)' : 'transparent',
                         transition: 'background 0.1s, color 0.1s',
                         position: 'relative',
                       }}
-                      onMouseEnter={e => { if (!active) { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--ink)'; }}}
-                      onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--ink-2)'; }}}
+                      onMouseEnter={e => { if (!active) { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = hasPending ? 'var(--amber, #d29922)' : 'var(--ink)'; }}}
+                      onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = hasPending ? 'var(--amber, #d29922)' : 'var(--ink-2)'; }}}
                     >
-                      <span style={{ color: active ? 'var(--accent)' : 'var(--ink-3)', flexShrink: 0 }}>
+                      <span style={{ color: hasPending ? 'var(--amber, #d29922)' : active ? 'var(--accent)' : 'var(--ink-3)', flexShrink: 0 }}>
                         {item.icon}
                       </span>
                       <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {item.label}
                       </span>
-                      {active && (
+                      {hasPending && (
+                        <span style={{
+                          fontSize: '11px', fontFamily: 'JetBrains Mono, monospace',
+                          padding: '1px 5px', borderRadius: '3px',
+                          background: 'var(--amber-bg, rgba(210,153,34,0.15))',
+                          color: 'var(--amber, #d29922)',
+                          border: '1px solid var(--amber, #d29922)',
+                          flexShrink: 0,
+                        }}>
+                          {pendingDeviceCount}
+                        </span>
+                      )}
+                      {active && !hasPending && (
                         <span style={{
                           width: '3px', height: '14px', borderRadius: '999px',
                           background: 'var(--accent)', flexShrink: 0,

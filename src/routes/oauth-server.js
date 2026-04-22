@@ -18,7 +18,9 @@ const {
   consumeOAuthServerAuthCode,
   peekOAuthServerAuthCode,
   createAccessToken,
+  createApprovedDevice,
 } = require('../database');
+const DeviceFingerprint = require('../utils/deviceFingerprint');
 
 // ─── Redirect URI validation ──────────────────────────────────────────────────
 // Supports exact URIs and simple glob patterns (* matches any non-slash segment)
@@ -256,7 +258,7 @@ router.get('/deny', (req, res) => {
 });
 
 // Token exchange handler — shared by POST and GET
-async function handleTokenExchange(params, res) {
+async function handleTokenExchange(params, res, req) {
   const { grant_type, code, redirect_uri, client_id, client_secret, code_verifier } = params;
 
   if (grant_type !== 'authorization_code') {
@@ -299,7 +301,16 @@ async function handleTokenExchange(params, res) {
   const hash = await bcrypt.hash(rawToken, 10);
   const label = `${client.client_name} (OAuth)`;
 
-  createAccessToken(hash, authCode.user_id, authCode.scope || 'full', label, null, null, null, rawToken, 'guest');
+  const tokenId = createAccessToken(hash, authCode.user_id, authCode.scope || 'full', label, null, null, null, rawToken, 'guest');
+
+  // Bind token to the device that performed the exchange — any other device must be
+  // explicitly approved by the user. This makes each OAuth token single-device by default.
+  if (req && tokenId) {
+    try {
+      const fp = DeviceFingerprint.fromRequest(req);
+      createApprovedDevice(tokenId, authCode.user_id, fp.fingerprintHash, label, fp.summary, fp.summary.ipAddress);
+    } catch (_) {}
+  }
 
   res.json({
     access_token: rawToken,
@@ -314,7 +325,7 @@ router.post('/token', express.urlencoded({ extended: false }), express.json(), a
   try {
     const params = { ...req.body };
     if (!params.grant_type && params.code) params.grant_type = 'authorization_code';
-    await handleTokenExchange(params, res);
+    await handleTokenExchange(params, res, req);
   } catch (err) {
     logger.error('[OAuthServer] POST /token unhandled error:', err);
     if (!res.headersSent) res.status(500).json({ error: 'server_error', error_description: err.message });
@@ -328,7 +339,7 @@ router.get('/token', async (req, res) => {
   try {
     const params = { ...req.query };
     if (!params.grant_type && params.code) params.grant_type = 'authorization_code';
-    await handleTokenExchange(params, res);
+    await handleTokenExchange(params, res, req);
   } catch (err) {
     logger.error('[OAuthServer] GET /token unhandled error:', err);
     if (!res.headersSent) res.status(500).json({ error: 'server_error', error_description: err.message });

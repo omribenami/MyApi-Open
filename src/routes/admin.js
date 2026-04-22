@@ -16,6 +16,9 @@ const logger = require('../utils/logger');
  * @returns {Function} Express router
  */
 function createAdminRoutes(db, rbacMiddleware) {
+  // All admin routes require admin role
+  router.use(rbacMiddleware);
+
   /**
    * GET /admin/users
    * List all users with their roles in the workspace

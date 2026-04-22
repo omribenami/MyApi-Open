@@ -1,0 +1,43 @@
+MyApi
+Copyright 2026 Agentic Integration LLC
+
+This product includes software and architectural patterns derived from third-party
+open source projects. The following notices are required by their respective licenses.
+
+================================================================================
+OneCLI (https://github.com/onecli/onecli)
+================================================================================
+
+Copyright 2025 ChartDB, Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+Derived components:
+  - src/middleware/policyEngine.js
+      Policy-priority evaluation engine (Block > Manual Approval > Rate Limit > Allow),
+      per-token rule matching, and sliding-window rate limit counters.
+      Derived from: apps/gateway/src/policy.rs
+
+  - src/routes/policy.js
+      Per-request manual approval workflow (pending approvals, long-poll, approve/deny).
+      Derived from: apps/gateway/src/approval.rs
+
+  - src/gateway/tokens.js (namespace prefix pattern)
+      "oc_"-style namespaced token prefix for fast rejection before DB lookup.
+      Derived from: apps/web/src/lib/validate-api-key.ts
+
+  - src/database.js (HMAC OAuth state)
+      HMAC-SHA256 signed OAuth state tokens with timingSafeEqual verification.
+      Derived from: apps/web/src/lib/oauth-state.ts
+
+================================================================================

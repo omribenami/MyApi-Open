@@ -341,10 +341,10 @@ function renderLegalMarkdown(markdown = '') {
     mangle: false,
   });
   
-  // Fix links: sanitize hrefs but preserve link text
-  html = html.replace(/<a\s+href="([^"]*)"\s*([^>]*)>([^<]*)<\/a>/g, (match, href, attrs, text) => {
+  // Fix links: sanitize hrefs and strip all other attributes to prevent event-handler injection
+  html = html.replace(/<a\s+href="([^"]*)"\s*[^>]*>([^<]*)<\/a>/g, (match, href, text) => {
     const safeHref = sanitizeUrl(href);
-    return `<a href="${escapeHtml(safeHref)}" ${attrs}>${escapeHtml(text)}</a>`;
+    return `<a href="${escapeHtml(safeHref)}">${escapeHtml(text)}</a>`;
   });
   
   return html;
@@ -866,11 +866,9 @@ app.post('/api/v1/billing/webhook', express.raw({ type: 'application/json' }), a
       return res.status(400).json({ error: `Webhook signature verification failed: ${err.message}` });
     }
   } else {
-    try {
-      event = JSON.parse(req.body.toString());
-    } catch {
-      return res.status(400).json({ error: 'Invalid JSON body' });
-    }
+    // Reject unsigned webhooks — processing unverified Stripe events allows
+    // an attacker to trigger subscription state changes without credentials.
+    return res.status(400).json({ error: 'Stripe webhook secret not configured; unsigned events rejected' });
   }
 
   const type = event?.type;
@@ -1000,7 +998,6 @@ emailProcessorInterval.unref?.();
 app.use((req, res, next) => {
   // CRITICAL: Exempt all auth/dashboard bootstrap paths from rate limiting
   const isExempt = req.path === '/api/v1/auth/me' ||
-                   req.path === '/api/v1/auth/debug' ||
                    req.path === '/api/v1/auth/logout' ||
                    req.path === '/api/v1/dashboard/metrics' ||
                    (req.path === '/api/v1/privacy/cookies' && req.method === 'GET') ||
@@ -1343,14 +1340,7 @@ const connectorsDir = fs.existsSync(path.join(__dirname, 'connectors'))
   : path.join(__dirname, '..', 'connectors');
 app.use('/connectors', express.static(connectorsDir));
 
-// Legal pages - Terms and Privacy
-app.get('/terms', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'legal', 'terms.html'));
-});
-
-app.get('/privacy', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'legal', 'privacy.html'));
-});
+// /terms and /privacy are defined earlier with markdown rendering
 
 // Redirect invitation links to the dashboard where the PendingInvitations UI handles them
 app.get('/accept-invite/:id', (req, res) => {
@@ -1376,10 +1366,9 @@ app.get('/api/v1/', (req, res) => {
       llms: '/llms.txt',
     },
     authentication: {
-      type: 'Bearer or Query',
+      type: 'Bearer',
       header: 'Authorization: Bearer <your-token>',
-      query_param: '?token=<your-token>',
-      hint: 'Use the token provided by the platform owner. Include it in the Authorization header or as a ?token= query parameter (for AI fetch tools).',
+      hint: 'Use the token provided by the platform owner. Include it in the Authorization header.',
     },
     endpoints: {
       discovery: 'GET /api/v1/',
@@ -1646,6 +1635,15 @@ Rules:
 
     if (!connectedServices.includes(service)) {
       return res.status(400).json({ error: `Resolved service '${service}' is not connected`, connected: connectedServices });
+    }
+
+    // Validate LLM-returned values before proxying to prevent SSRF
+    const ALLOWED_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
+    if (!ALLOWED_METHODS.has(String(httpMethod).toUpperCase())) {
+      return res.status(400).json({ error: 'AI returned invalid HTTP method', method: httpMethod });
+    }
+    if (typeof apiPath !== 'string' || !apiPath.startsWith('/')) {
+      return res.status(400).json({ error: 'AI returned invalid API path', path: apiPath });
     }
 
     // Execute via internal proxy call (reuse proxy endpoint logic)
@@ -2043,7 +2041,6 @@ const rateLimitMap = {};
 // Paths exempt from rate limiting (bootstrap/auth critical paths)
 const RATE_LIMIT_EXEMPT_PATHS = [
   '/api/v1/auth/me',
-  '/api/v1/auth/debug',
   '/api/v1/auth/logout',
   '/api/v1/dashboard/metrics',
   '/api/v1/oauth/status',
@@ -2143,11 +2140,16 @@ const deviceRoutes = require('./routes/devices');
 const dashboardRoutes = require('./routes/dashboard');
 const createServicesRoutes = require('./routes/services');
 const createSkillsRoutes = require('./routes/skills');
+const policyRoutes = require('./routes/policy');
+const { policyEngine, cleanupExpiredApprovals } = require('./middleware/policyEngine');
 
 // Import new auth routes
 const newAuthRoutes = require('./routes/auth');
 
 app.use('/api/v1/auth', newAuthRoutes);
+
+// Policy management + approval endpoints
+app.use('/api/v1/policy', authenticate, policyRoutes);
 
 // AFP binary downloads — public, no auth (must be BEFORE the authRoutes catch-all below)
 {
@@ -2325,7 +2327,17 @@ function markTotpCodeUsed(userId, code) {
   usedTotpCodes.set(`${userId}:${code}`, now + TOTP_CODE_TTL_MS);
 }
 
+const _policyMiddleware = policyEngine();
+
 async function authenticate(req, res, next) {
+  // Wrap next so that successfully authenticated requests also pass through the policy engine.
+  // Public-path early-returns use the original next (no token = no policy to evaluate).
+  const policyNext = (err) => {
+    if (err) return next(err);
+    if (req.tokenMeta || req.tokenData) return _policyMiddleware(req, res, next);
+    return next();
+  };
+
   // SKIP authentication for public endpoints (OAuth authorize/callback, login signup)
   const fullPath = req.baseUrl + req.path;
   const publicPaths = [
@@ -2342,7 +2354,8 @@ async function authenticate(req, res, next) {
     /^\/api\/v1\/handshakes\/[^/]+\/status$/,  // public: AI agents poll handshake status
     /^\/api\/v1\/afp\/download/,              // public: AFP daemon binary downloads
     /^\/api\/v1\/agentic\/device\/token$/,    // public: AI agent polls for token (no prior token available)
-    /^\/api\/v1\/agent-auth\/install\.js$/,   // public: OAuth installer script download
+    /^\/api\/v1\/agent-auth\/install(\.js|-node)$/,     // public: OAuth installer (Node.js)
+    /^\/api\/v1\/agent-auth\/install(\.py|-python)$/,  // public: OAuth installer (Python 3 fallback)
     /^\/api\/v1\/agent-guide$/,              // public: AI agent capabilities + connection guide
   ];
 
@@ -2405,7 +2418,7 @@ async function authenticate(req, res, next) {
     // Browsers don't have "devices" in the master-token sense; they have sessions.
     // Device approval is only for API token/agent access.
     // Session auth is complete and secure - return immediately.
-    return next();
+    return policyNext();
   }
 
   // 2) Bearer token auth (agents) or Query parameter (for basic AI fetch tools)
@@ -2503,11 +2516,11 @@ async function authenticate(req, res, next) {
                              (routePath.startsWith('/api/v1/activity') && req.method === 'GET');
 
   if (skipDeviceApproval) {
-    return next();
+    return policyNext();
   }
 
   // Apply device approval only for guest/scoped tokens (external API access)
-  return deviceApprovalMiddleware(req, res, next);
+  return deviceApprovalMiddleware(req, res, policyNext);
 }
 
 function adminOnly(req, res, next) {
@@ -2527,7 +2540,8 @@ function getOAuthUserId(req) {
   if (req?.tokenMeta?.ownerId) {
     return String(req.tokenMeta.ownerId);
   }
-  return 'oauth_user';
+  // Return null rather than a shared phantom ID to prevent token cross-contamination
+  return null;
 }
 
 function countConnectedOAuthServices(userId) {
@@ -2680,7 +2694,8 @@ app.use('/api/v1/agentic', authenticate, agenticRoutes);
 // Path works both locally (src/index.js → ../connectors/) and in container (index.js → connectors/)
 const _connectorBase = require('fs').existsSync(require('path').join(__dirname, 'connectors')) ? __dirname : require('path').join(__dirname, '..');
 const agentAuthScript = require('path').join(_connectorBase, 'connectors/agent-auth/index.js');
-app.get('/api/v1/agent-auth/install.js', (req, res) => {
+const agentAuthPyScript = require('path').join(_connectorBase, 'connectors/agent-auth/install.py');
+function serveAgentInstallJs(req, res) {
   const fs = require('fs');
   if (!fs.existsSync(agentAuthScript)) {
     return res.status(404).send('// installer not found');
@@ -2688,7 +2703,20 @@ app.get('/api/v1/agent-auth/install.js', (req, res) => {
   res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache');
   res.send(fs.readFileSync(agentAuthScript, 'utf8'));
-});
+}
+function serveAgentInstallPy(req, res) {
+  const fs = require('fs');
+  if (!fs.existsSync(agentAuthPyScript)) {
+    return res.status(404).send('# installer not found');
+  }
+  res.setHeader('Content-Type', 'text/x-python; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.send(fs.readFileSync(agentAuthPyScript, 'utf8'));
+}
+app.get('/api/v1/agent-auth/install.js',     serveAgentInstallJs);
+app.get('/api/v1/agent-auth/install-node',   serveAgentInstallJs);
+app.get('/api/v1/agent-auth/install.py',     serveAgentInstallPy);
+app.get('/api/v1/agent-auth/install-python', serveAgentInstallPy);
 
 // ─── Public: Agent connection guide ──────────────────────────────────────────
 // Fetched by AI agents (via the onboarding starter prompt) to learn about
@@ -2792,7 +2820,14 @@ app.get('/api/v1/agent-guide', (req, res) => {
         best_for: 'Most users. Secure, auditable, and the recommended default.',
         setup: {
           quick_start: 'curl -sL https://www.myapiai.com/api/v1/agent-auth/install.js | node',
-          quick_start_note: 'Runs the full device flow automatically and prints a ready-to-use Bearer token.',
+          quick_start_note: 'Runs the full OAuth PKCE flow automatically and prints a ready-to-use Bearer token. Requires Node.js >= 10.',
+          quick_start_platforms: {
+            mac:     'curl -sL https://www.myapiai.com/api/v1/agent-auth/install.js | node',
+            linux:   'curl -sL https://www.myapiai.com/api/v1/agent-auth/install.js | node',
+            windows: 'curl -sL https://www.myapiai.com/api/v1/agent-auth/install.js | node',
+            no_node: 'python3 -c "import urllib.request,webbrowser,http.server,threading,os,hashlib,base64,secrets,json,urllib.parse; exec(urllib.request.urlopen(\'https://www.myapiai.com/api/v1/agent-auth/install.py\').read())"',
+          },
+          node_install: 'https://nodejs.org/en/download — or: brew install node (Mac), winget install OpenJS.NodeJS (Windows)',
           manual_steps: [
             'Step 1 — Request a device code:',
             '  POST /api/v1/agentic/device/authorize',
@@ -7183,7 +7218,7 @@ app.delete('/api/v1/account', authenticate, (req, res) => {
         safeDelete('DELETE FROM users WHERE id = ?', uid);
       })(userId);
     } finally {
-      rawDb.pragma('foreign_keys = ON');
+      // foreign_keys intentionally left OFF — see database.js init comment
     }
 
     if (req.session) {
@@ -7202,7 +7237,6 @@ app.delete('/api/v1/account', authenticate, (req, res) => {
 
     return res.json({ ok: true, deletedUserId: userId });
   } catch (error) {
-    try { (db.getRawDB ? db.getRawDB() : db).pragma('foreign_keys = ON'); } catch (_e) { /* ignore */ }
     console.error('Delete own account error:', error);
     return res.status(500).json({ error: 'Failed to delete account' });
   }
@@ -7918,13 +7952,12 @@ app.delete('/api/v1/users/:id', authenticate, (req, res) => {
         adminSafeDelete('DELETE FROM users WHERE id = ?', userId);
       })(id);
     } finally {
-      adminRawDb.pragma('foreign_keys = ON');
+      // foreign_keys intentionally left OFF — see database.js init comment
     }
 
     createAuditLog({ requesterId: req.tokenMeta.tokenId, action: 'delete_user', resource: `/users/${id}`, scope: req.tokenMeta.scope, ip: req.ip, details: { email: user.email || null } });
     res.json({ ok: true, deletedUserId: id });
   } catch (error) {
-    try { (db.getRawDB ? db.getRawDB() : db).pragma('foreign_keys = ON'); } catch (_e) { /* ignore */ }
     console.error('Delete user error:', error);
     res.status(500).json({ error: 'Failed to delete user' });
   }
@@ -12552,6 +12585,9 @@ if (process.env.NODE_ENV !== 'test') {
       cleanupExpiredStateTokens();
       cleanupOldRateLimits(24); // Keep 24 hours of history
     }, 60 * 60 * 1000); // 1 hour
+
+    // Expire pending policy approvals every 30 seconds
+    setInterval(cleanupExpiredApprovals, 30 * 1000);
 
     // P0 Security Fix: Cleanup expired sessions every 15 minutes (8-hour TTL)
     setInterval(() => {

@@ -258,15 +258,23 @@ router.get('/approvals/pending', requireAuth, (req, res) => {
     res.set('Pragma', 'no-cache');
     res.set('Expires', '0');
     
-    const formatted = pendingApprovals.map(approval => ({
-      id: approval.id,
-      deviceInfo: approval.device_info_json ? JSON.parse(approval.device_info_json) : null,
-      ip: approval.ip_address,
-      tokenId: approval.token_id,
-      createdAt: approval.created_at,
-      expiresAt: approval.expires_at,
-      status: approval.status,
-    }));
+    const formatted = pendingApprovals.map(approval => {
+      let tokenLabel = null;
+      try {
+        const tok = db.db.prepare('SELECT label FROM access_tokens WHERE id = ?').get(approval.token_id);
+        tokenLabel = tok?.label || null;
+      } catch (_) {}
+      return {
+        id: approval.id,
+        deviceInfo: approval.device_info_json ? JSON.parse(approval.device_info_json) : null,
+        ip: approval.ip_address,
+        tokenId: approval.token_id,
+        tokenLabel,
+        createdAt: approval.created_at,
+        expiresAt: approval.expires_at,
+        status: approval.status,
+      };
+    });
     
     res.json({
       approvals: formatted,
@@ -297,15 +305,15 @@ router.post('/approve/:approval_id', requireAuth, (req, res) => {
       return res.status(404).json({ error: 'Approval request not found' });
     }
     
-    // Convert to string for safe comparison
-    if (String(approval.user_id) !== String(req.userId)) {
+    // Convert to string for safe comparison; 'owner' is the legacy pre-users-table owner
+    if (String(approval.user_id) !== String(req.userId) && approval.user_id !== 'owner') {
       return res.status(403).json({ error: 'Unauthorized: This approval is for a different user' });
     }
-    
+
     if (approval.status !== 'pending') {
       return res.status(400).json({ error: `Approval is already ${approval.status}` });
     }
-    
+
     // Check expiration
     if (new Date(approval.expires_at) < new Date()) {
       db.denyPendingApproval(req.params.approval_id, 'Approval request expired');
@@ -385,15 +393,15 @@ router.post('/deny/:approval_id', requireAuth, (req, res) => {
       return res.status(404).json({ error: 'Approval request not found' });
     }
     
-    // Convert to string for safe comparison
-    if (String(approval.user_id) !== String(req.userId)) {
+    // Convert to string for safe comparison; 'owner' is the legacy pre-users-table owner
+    if (String(approval.user_id) !== String(req.userId) && approval.user_id !== 'owner') {
       return res.status(403).json({ error: 'Unauthorized: This approval is for a different user' });
     }
-    
+
     if (approval.status !== 'pending') {
       return res.status(400).json({ error: `Approval is already ${approval.status}` });
     }
-    
+
     const denied = db.denyPendingApproval(
       req.params.approval_id,
       reason || 'Device approval denied by user'

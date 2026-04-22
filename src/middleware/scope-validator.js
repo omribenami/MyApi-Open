@@ -49,7 +49,7 @@ function requireScopes(requiredScopes = []) {
         }
         try {
           createComplianceAuditLog(
-            req.headers?.['x-workspace-id'] || 'system', null,
+            req.tokenMeta?.workspaceId || 'system', null,
             'wildcard_scope_violation', 'token', tokenId,
             JSON.stringify({ path: req.path, method: req.method, message: 'admin:* wildcard detected' }),
             req.ip, req.get('user-agent')
@@ -83,7 +83,7 @@ function requireScopes(requiredScopes = []) {
           }
           try {
             createComplianceAuditLog(
-              req.headers?.['x-workspace-id'] || 'system', null,
+              req.tokenMeta?.workspaceId || 'system', null,
               'scope_violation', 'token', tokenId,
               JSON.stringify({ path: req.path, method: req.method, required: requiredScopes }),
               req.ip, req.get('user-agent')
@@ -114,7 +114,7 @@ function requireScopes(requiredScopes = []) {
           }
           try {
             createComplianceAuditLog(
-              req.headers?.['x-workspace-id'] || 'system', null,
+              req.tokenMeta?.workspaceId || 'system', null,
               'scope_violation', 'token', tokenId,
               JSON.stringify({ path: req.path, method: req.method, required: requiredScopes }),
               req.ip, req.get('user-agent')

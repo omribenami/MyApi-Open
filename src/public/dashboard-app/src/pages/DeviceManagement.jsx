@@ -25,6 +25,24 @@ const DeviceManagement = () => {
   useEffect(() => { loadAllDeviceData(); }, [currentWorkspace?.id]);
   useEffect(() => { loadCurrentTabData(); }, [activeTab, currentWorkspace?.id]);
 
+  // Auto-switch to pending tab if approvals exist on first load
+  useEffect(() => {
+    if (pendingApprovals.length > 0 && activeTab === 'approved') {
+      setActiveTab('pending');
+    }
+  }, [pendingApprovals.length]);
+
+  // Poll for new pending approvals every 15s while on page
+  useEffect(() => {
+    const id = setInterval(async () => {
+      try {
+        const res = await apiClient.get('/devices/approvals/pending');
+        setPendingApprovals(res.data.approvals || []);
+      } catch { /* silent */ }
+    }, 15000);
+    return () => clearInterval(id);
+  }, []);
+
   const showToast = (text, type = 'success') => {
     setToast({ text, type });
     setTimeout(() => setToast(null), 3500);
@@ -417,6 +435,11 @@ const DeviceManagement = () => {
                               <div className="text-xs ink-4 mt-0.5">
                                 {isASC ? 'Ed25519 · ASC' : `${approval.deviceInfo?.os || 'Unknown'} · ${approval.deviceInfo?.browser || 'Unknown'}`}
                               </div>
+                              {approval.tokenLabel && (
+                                <div className="text-xs mt-1" style={{ color: 'var(--amber, #d29922)', opacity: 0.85 }}>
+                                  via {approval.tokenLabel}
+                                </div>
+                              )}
                             </div>
                           </div>
                         </td>

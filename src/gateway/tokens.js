@@ -1,3 +1,8 @@
+// Namespace prefix pattern (TOKEN_PREFIXES / fast-reject logic) derived from
+// onecli/onecli (apps/web/src/lib/validate-api-key.ts)
+// Copyright 2025 ChartDB, Inc. — Apache License 2.0
+// See NOTICES file at the project root for full attribution.
+
 const { getDatabase } = require('../config/database');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
@@ -9,15 +14,26 @@ const logger = require('../utils/logger');
 // This prevents timing attacks from distinguishing "prefix not found" from "prefix found but hash mismatch".
 const DUMMY_HASH = '$2b$12$invalidhashvaluethatnevermatchesanyrealtoken00000000000';
 
+// Namespace prefixes for fast rejection before DB lookup (OneCLI-style oc_ pattern)
+const TOKEN_PREFIXES = {
+  personal: 'myapi_sk_',
+  guest: 'myapi_guest_',
+  vault: 'myapi_vault_',
+};
+const VALID_PREFIXES = new Set(Object.values(TOKEN_PREFIXES));
+const MYAPI_NAMESPACE = 'myapi_';
+
 class TokenManager {
   constructor() {
     this.db = getDatabase();
     this.saltRounds = 12;
   }
 
-  // Generate a secure random token
-  generateToken() {
-    return crypto.randomBytes(32).toString('hex');
+  // Generate a secure random token with optional namespace prefix
+  generateToken(type = null) {
+    const raw = crypto.randomBytes(32).toString('hex');
+    const prefix = type && TOKEN_PREFIXES[type] ? TOKEN_PREFIXES[type] : '';
+    return prefix + raw;
   }
 
   // Create a new token
@@ -27,7 +43,7 @@ class TokenManager {
     }
 
     const id = uuidv4();
-    const token = this.generateToken();
+    const token = this.generateToken(type);
     const tokenHash = await bcrypt.hash(token, this.saltRounds);
     const createdAt = Date.now();
     const expiresAt = expiresInDays ? createdAt + (expiresInDays * 24 * 60 * 60 * 1000) : null;
@@ -65,6 +81,18 @@ class TokenManager {
 
   // Validate a token and return its details
   async validateToken(token) {
+    // Fast reject: token starts with 'myapi_' namespace but doesn't match any valid prefix.
+    // This rejects malformed/forged tokens without a DB query.
+    if (token.startsWith(MYAPI_NAMESPACE) && !VALID_PREFIXES.has(token.substring(0, token.indexOf('_', MYAPI_NAMESPACE.length) + 1))) {
+      // Check exact prefix match (prefixes end after the second underscore segment)
+      const matchesAnyPrefix = Array.from(VALID_PREFIXES).some(p => token.startsWith(p));
+      if (!matchesAnyPrefix) {
+        logger.warn('Token rejected: invalid namespace prefix', { prefix: token.substring(0, 16) });
+        await bcrypt.compare(token, DUMMY_HASH); // equalize timing
+        return null;
+      }
+    }
+
     // Optimization: use token prefix for fast lookup to avoid O(n) bcrypt comparisons
     const tokenPrefix = token.substring(0, 8);
     let candidates;
@@ -204,3 +232,4 @@ class TokenManager {
 }
 
 module.exports = TokenManager;
+module.exports.TOKEN_PREFIXES = TOKEN_PREFIXES;

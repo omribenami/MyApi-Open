@@ -134,7 +134,8 @@ router.post('/token-login', requireCsrfForSession, async (req, res) => {
       return res.status(401).json({ error: 'Invalid or expired token' });
     }
 
-    req.session.masterToken = token;
+    // Store only the token ID (not the raw token) to avoid plain-text exposure in the session store
+    req.session.masterTokenId = validToken.tokenId;
     req.session.authMethod = 'token';
     req.session.user = { id: validToken.ownerId };
     req.session.save((err) => {
@@ -259,13 +260,16 @@ router.post('/register', requireCsrfForSession, requireBetaSlot, async (req, res
       emailService.sendWelcomeEmail(email, display_name || username).catch(() => {});
     }
 
-    // Auto-login after registration
+    // Regenerate session ID before promoting unauthenticated session to authenticated
+    // (prevents session fixation attacks)
+    await regenerateSession(req);
     req.session.user = { id, username, display_name: display_name || username, roles: 'user', needsOnboarding: true };
 
-    // Generate session token
+    // Generate session token with TTL so cleanup loop can expire it
+    const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
     const sessionToken = crypto.randomBytes(32).toString('hex');
     if (!global.sessions) global.sessions = {};
-    global.sessions[sessionToken] = { userId: id, username, createdAt: Date.now() };
+    global.sessions[sessionToken] = { userId: id, username, createdAt: Date.now(), expiresAt: Date.now() + SESSION_TTL_MS };
 
     // FIX BUG-3: Return 201 for successful creation
     return res.status(201).json({ data: { token: sessionToken, user: { id, username, displayName: display_name || username, email: email || '', timezone: timezone || 'UTC' }, needsOnboarding: true } });

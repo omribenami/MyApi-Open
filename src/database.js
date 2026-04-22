@@ -31,6 +31,10 @@ try {
   
   // For SQLite, configure pragmas for better concurrency and crash resilience
   if (isSQLiteMode && db.pragma) {
+    // FK enforcement is intentionally OFF. Legacy tokens use owner_id='owner' which
+    // predates the users table, causing spurious FK failures across logging/notification
+    // tables. Referential integrity is enforced at the application layer instead.
+    db.pragma('foreign_keys = OFF');
     db.pragma('journal_mode = WAL');
     db.pragma('busy_timeout = 10000');
     db.pragma('synchronous = NORMAL');
@@ -2741,37 +2745,77 @@ function getOAuthStatus(serviceName = null) {
   }
 }
 
+// HMAC-SHA256 signing key for OAuth state tokens (prevents CSRF forgery)
+function getOAuthStateSigningKey() {
+  const key = process.env.OAUTH_STATE_SECRET || process.env.JWT_SECRET;
+  if (!key) throw new Error('OAUTH_STATE_SECRET or JWT_SECRET must be set');
+  return key;
+}
+
 function createStateToken(serviceName, expiresInMinutes = 10) {
-  const stateToken = crypto.randomBytes(32).toString('hex');
+  const nonce = crypto.randomBytes(16).toString('hex');
+  const ts = Date.now();
+  const payload = { service: serviceName, nonce, ts };
+  const payloadStr = JSON.stringify(payload);
+
+  // HMAC-SHA256 signature prevents forged state tokens (CSRF protection)
+  const sig = crypto
+    .createHmac('sha256', getOAuthStateSigningKey())
+    .update(payloadStr)
+    .digest('hex');
+
+  const stateToken = Buffer.from(JSON.stringify({ payload, sig })).toString('base64url');
+
   const now = new Date().toISOString();
-  const expiresAt = new Date(Date.now() + expiresInMinutes * 60 * 1000).toISOString();
+  const expiresAt = new Date(ts + expiresInMinutes * 60 * 1000).toISOString();
   const id = 'state_' + crypto.randomBytes(8).toString('hex');
-  
+
   const stmt = db.prepare(`
     INSERT INTO oauth_state_tokens (id, state_token, service_name, created_at, expires_at)
     VALUES (?, ?, ?, ?, ?)
   `);
-  
   stmt.run(id, stateToken, serviceName, now, expiresAt);
   return stateToken;
 }
 
 function validateStateToken(serviceName, stateToken) {
+  // Verify HMAC signature before touching the DB
+  try {
+    const decoded = JSON.parse(Buffer.from(stateToken, 'base64url').toString('utf8'));
+    const { payload, sig } = decoded;
+    if (!payload || !sig) return false;
+
+    const expectedSig = crypto
+      .createHmac('sha256', getOAuthStateSigningKey())
+      .update(JSON.stringify(payload))
+      .digest('hex');
+
+    // Constant-time comparison prevents timing attacks on signature verification
+    const sigBuf = Buffer.from(sig, 'hex');
+    const expectedBuf = Buffer.from(expectedSig, 'hex');
+    if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
+      return false;
+    }
+
+    if (payload.service !== serviceName) return false;
+  } catch (_) {
+    // Legacy random-hex tokens (pre-HMAC) — fall through to DB check for backward compat
+  }
+
   const stmt = db.prepare(`
     SELECT * FROM oauth_state_tokens
     WHERE service_name = ? AND state_token = ? AND expires_at > ?
   `);
-  
+
   const now = new Date().toISOString();
   const row = stmt.get(serviceName, stateToken, now);
-  
+
   if (row) {
     // Delete the state token after validation (one-time use)
-    const deleteStmt = db.prepare('DELETE FROM oauth_state_tokens WHERE id = ?');
-    deleteStmt.run(row.id);
+    db.prepare('DELETE FROM oauth_state_tokens WHERE id = ?').run(row.id);
     return true;
   }
-  
+
   return false;
 }
 
@@ -4592,17 +4636,20 @@ function createPendingApproval(tokenId, userId, fingerprintHash, deviceInfo, ipA
 }
 
 function getPendingApprovals(userId, tokenId = null, limit = null) {
+  // Include legacy 'owner' records alongside the real user's records.
+  // Tokens created before the users table used owner_id='owner'; those approvals
+  // still need to surface in the dashboard for any authenticated user.
   let query = `
-    SELECT * FROM device_approvals_pending 
-    WHERE user_id = ? AND status = 'pending' AND expires_at > ?
+    SELECT * FROM device_approvals_pending
+    WHERE (user_id = ? OR user_id = 'owner') AND status = 'pending' AND expires_at > ?
   `;
   const params = [userId, new Date().toISOString()];
-  
+
   if (tokenId) {
     query += ' AND token_id = ?';
     params.push(tokenId);
   }
-  
+
   query += ' ORDER BY created_at DESC';
   if (limit) {
     query += ' LIMIT ?';

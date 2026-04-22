@@ -22,12 +22,16 @@ function validateCSRFToken(token, sessionToken) {
   if (!token || !sessionToken) {
     return false;
   }
-  
-  // Use timing-safe comparison to prevent timing attacks
-  return crypto.timingSafeEqual(
-    Buffer.from(token),
-    Buffer.from(sessionToken)
-  );
+
+  const a = Buffer.from(token);
+  const b = Buffer.from(sessionToken);
+
+  // timingSafeEqual requires equal-length buffers; unequal lengths mean invalid token
+  if (a.length !== b.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(a, b);
 }
 
 /**
