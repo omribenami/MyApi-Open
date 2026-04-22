@@ -44,6 +44,7 @@ const Icons = {
   users:    <Ico d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />,
   beta:     <Ico d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />,
   ticket:   <Ico d="M15 5v2M15 11v2M15 17v2M5 5h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V7a2 2 0 0 1 2-2z" />,
+  megaphone:<Ico d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />,
   menu:     <Ico d="M3 12h18M3 6h18M3 18h18" />,
   x:        <Ico d="M6 6l12 12M18 6L6 18" />,
   sun:      <Ico d="M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />,
@@ -110,9 +111,10 @@ const ENTERPRISE_GROUP = {
 const ADMIN_GROUP = {
   section: 'Admin',
   items: [
-    { path: '/users',   label: 'Users',   icon: Icons.users },
-    { path: '/beta',    label: 'Beta',    icon: Icons.beta },
-    { path: '/tickets', label: 'Tickets', icon: Icons.ticket },
+    { path: '/users',     label: 'Users',     icon: Icons.users },
+    { path: '/beta',      label: 'Beta',      icon: Icons.beta },
+    { path: '/broadcast', label: 'Broadcast', icon: Icons.megaphone },
+    { path: '/tickets',   label: 'Tickets',   icon: Icons.ticket },
   ]
 };
 
@@ -140,6 +142,7 @@ const PAGE_TITLES = {
   '/enterprise':     { title: 'Enterprise',     kicker: 'Workspace' },
   '/users':          { title: 'Users',          kicker: 'Admin' },
   '/beta':           { title: 'Beta',           kicker: 'Admin' },
+  '/broadcast':      { title: 'Broadcast',      kicker: 'Admin' },
   '/tickets':        { title: 'Tickets',        kicker: 'Admin' },
 };
 

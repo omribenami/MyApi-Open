@@ -17,6 +17,7 @@ import Settings from './pages/Settings';
 import EnterpriseSettings from './pages/EnterpriseSettings';
 import UserManagement from './pages/UserManagement';
 import BetaAdmin from './pages/BetaAdmin';
+import Broadcast from './pages/Broadcast';
 import Tickets from './pages/Tickets';
 import PlatformDocs from './pages/PlatformDocs';
 import ApiDocs from './pages/ApiDocs';
@@ -372,6 +373,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <BetaAdmin />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/broadcast"
+              element={
+                <ProtectedRoute>
+                  <Broadcast />
                 </ProtectedRoute>
               }
             />
