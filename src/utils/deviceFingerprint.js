@@ -177,27 +177,34 @@ class DeviceFingerprint {
       return { suspicious: false, reasons: [], warnings, riskLevel: 'new' };
     }
 
-    // Check for OS changes
-    const osChanged = previousFingerprints.some(pf => pf.summary?.os !== fingerprint.summary?.os);
-    if (osChanged) {
-      warnings.push('Operating system changed from last known device');
+    // Check for OS changes (suspicious if ALL prior devices had a different OS)
+    const priorOSes = previousFingerprints.map(pf => pf.summary?.os).filter(Boolean);
+    if (priorOSes.length > 0 && fingerprint.summary?.os && priorOSes.every(os => os !== fingerprint.summary.os)) {
+      suspicious.push(`Operating system changed: was "${priorOSes[0]}", now "${fingerprint.summary.os}"`);
+    } else if (priorOSes.length > 0 && fingerprint.summary?.os && priorOSes.some(os => os !== fingerprint.summary.os)) {
+      warnings.push('Operating system differs from some previously seen devices');
     }
 
-    // Check for browser changes
-    const browserChanged = previousFingerprints.some(pf => pf.summary?.browser !== fingerprint.summary?.browser);
-    if (browserChanged) {
-      warnings.push('Browser changed from last known device');
+    // Check for browser/agent changes
+    const priorBrowsers = previousFingerprints.map(pf => pf.summary?.browser).filter(Boolean);
+    if (priorBrowsers.length > 0 && fingerprint.summary?.browser && priorBrowsers.every(b => b !== fingerprint.summary.browser)) {
+      suspicious.push(`Agent/browser changed: was "${priorBrowsers[0]}", now "${fingerprint.summary.browser}"`);
+    } else if (priorBrowsers.length > 0 && fingerprint.summary?.browser && priorBrowsers.some(b => b !== fingerprint.summary.browser)) {
+      warnings.push('Agent/browser differs from some previously seen devices');
     }
 
-    // Check for multiple IPs in short time
+    // Check IP is entirely new vs all known devices
+    const priorIPs = previousFingerprints.map(pf => pf.fingerprint?.ipAddress || pf.summary?.ipAddress).filter(Boolean);
+    const currentIP = fingerprint.fingerprint?.ipAddress || fingerprint.summary?.ipAddress;
+    if (currentIP && priorIPs.length > 0 && priorIPs.every(ip => ip !== currentIP)) {
+      warnings.push(`New IP address (${currentIP}) — not seen on any previously approved device`);
+    }
+
+    // Multiple distinct IPs across recent history suggests token is being shared
     if (previousFingerprints.length >= 3) {
-      const recentIPs = previousFingerprints
-        .slice(-3)
-        .map(pf => pf.fingerprint?.ipAddress)
-        .filter(Boolean);
-      
-      if (new Set(recentIPs).size === recentIPs.length) {
-        warnings.push('Multiple different IP addresses detected');
+      const recentIPs = previousFingerprints.slice(-3).map(pf => pf.fingerprint?.ipAddress || pf.summary?.ipAddress).filter(Boolean);
+      if (new Set(recentIPs).size >= 3) {
+        suspicious.push('Token appears to be used from 3+ distinct IP addresses — possible token sharing');
       }
     }
 

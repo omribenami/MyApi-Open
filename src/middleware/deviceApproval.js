@@ -209,14 +209,65 @@ function deviceApprovalMiddleware(req, res, next) {
         try { db.updateDeviceLastUsed(existing.id); } catch (_) {}
         return next();
       }
-      // Different device — require explicit user approval (same flow as master token)
+      // Different device — require explicit user approval.
+      // This is always treated as suspicious: OAuth tokens are bound to the authorizing device,
+      // so any cross-device use indicates possible token theft or unauthorized sharing.
       const pendingApprovals = db.getPendingApprovals(userId, tokenId);
       const existingPending = pendingApprovals.find(p => p.device_fingerprint_hash === fingerprint.fingerprintHash);
+      let oauthApprovalId = existingPending?.id || null;
       if (!existingPending) {
         try {
-          db.createPendingApproval(tokenId, userId, fingerprint.fingerprintHash, fingerprint.summary, fingerprint.summary.ipAddress);
+          oauthApprovalId = db.createPendingApproval(tokenId, userId, fingerprint.fingerprintHash, fingerprint.summary, fingerprint.summary.ipAddress);
         } catch (_) {}
       }
+
+      // Notify + email — OAuth cross-device is always suspicious
+      try {
+        const userRow = db.db.prepare('SELECT email, display_name, username FROM users WHERE id = ?').get(userId);
+        const oauthTokenName = tokenRow?.label || 'OAuth Token';
+
+        // In-app notification
+        NotificationService.emitNotification(userId, 'security_alert',
+          `Security Alert: OAuth token used from a different device`,
+          `Token "${oauthTokenName}" was used from an unrecognised device (${fingerprint.summary.ipAddress}). This token is bound to a specific device — cross-device use may indicate token theft.`,
+          {
+            relatedEntityType: 'device',
+            relatedEntityId: oauthApprovalId,
+            data: { ip: fingerprint.summary.ipAddress, os: fingerprint.summary.os, browser: fingerprint.summary.browser, tokenName: oauthTokenName },
+            actionUrl: oauthApprovalId ? `/dashboard/devices?approval=${oauthApprovalId}` : '/dashboard/devices',
+          }
+        ).catch(err => console.error('[DeviceApproval] OAuth notification failed:', err.message));
+
+        // Email — always use the security alert style for OAuth cross-device
+        if (userRow?.email) {
+          const EmailService = require('../services/emailService');
+          const originalDevice = (() => {
+            try {
+              const approved = db.db.prepare('SELECT device_name, ip_address, approved_at FROM approved_devices WHERE token_id = ? AND user_id = ? AND revoked_at IS NULL ORDER BY approved_at ASC LIMIT 1').get(tokenId, userId);
+              return approved ? { name: approved.device_name, ip: approved.ip_address, approvedAt: approved.approved_at } : null;
+            } catch (_) { return null; }
+          })();
+          EmailService.sendNewDeviceApprovalEmail(
+            userRow.email,
+            userRow.display_name || userRow.username || 'there',
+            {
+              tokenName: oauthTokenName,
+              tokenKind: 'oauth',
+              ip: fingerprint.summary.ipAddress,
+              os: fingerprint.summary.os,
+              browser: fingerprint.summary.browser,
+              endpoint: `${req.method} ${req.path}`,
+              detectedAt: new Date().toISOString(),
+              originalDevice,
+              approvalId: oauthApprovalId,
+              suspiciousActivity: { suspicious: true, warnings: ['OAuth token used from a device it was not issued to — possible token theft or unauthorized sharing'], riskLevel: 'high' },
+            }
+          ).catch(err => console.error('[DeviceApproval] OAuth email failed:', err.message));
+        }
+      } catch (err) {
+        console.error('[DeviceApproval] OAuth alert error:', err.message);
+      }
+
       return res.status(403).json({
         error: 'device_not_approved',
         code: 'DEVICE_APPROVAL_REQUIRED',
