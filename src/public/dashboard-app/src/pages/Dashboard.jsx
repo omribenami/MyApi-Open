@@ -19,6 +19,8 @@ function Dashboard() {
   const [metrics, setMetrics] = useState({
     approvedDevices: 0,
     pendingApprovals: 0,
+    securityAlerts: 0,
+    securityAlertDetails: [],
     connectedServices: 0,
     activeTokens: 0,
     recentActivity: [],
@@ -433,6 +435,17 @@ function Dashboard() {
 
   // Attention cards derived from real data
   const attentionCards = [];
+  if ((metrics.securityAlerts || 0) > 0) {
+    const first = metrics.securityAlertDetails?.[0];
+    attentionCards.push({
+      tone: 'danger',
+      kicker: 'SECURITY ALERT',
+      title: first?.title || `${metrics.securityAlerts} unread security alert${metrics.securityAlerts > 1 ? 's' : ''}`,
+      body: first?.message || 'Suspicious activity was detected on your account. Review and take action immediately.',
+      href: '/device-management',
+      action: 'Review now →',
+    });
+  }
   if (metrics.pendingApprovals > 0) {
     attentionCards.push({
       tone: 'amber',
@@ -516,6 +529,7 @@ function Dashboard() {
   const accentMap = {
     accent: 'var(--accent)',
     amber: 'var(--amber)',
+    danger: 'var(--red)',
     default: 'var(--ink-3)',
   };
 
@@ -782,8 +796,9 @@ function Dashboard() {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {displayCards.map((c, i) => (
-            <div key={i} className="card p-5 relative overflow-hidden">
-              <div style={{ position: 'absolute', top: 0, left: 0, height: '2px', width: '40px', background: accentMap[c.tone] || 'var(--ink-3)' }} />
+            <div key={i} className="card p-5 relative overflow-hidden"
+              style={c.tone === 'danger' ? { borderColor: 'rgba(248,81,73,0.5)' } : {}}>
+              <div style={{ position: 'absolute', top: 0, left: 0, height: '2px', width: c.tone === 'danger' ? '100%' : '40px', background: accentMap[c.tone] || 'var(--ink-3)' }} />
               <div className="micro mb-2" style={{ color: accentMap[c.tone] || 'var(--ink-3)' }}>{c.kicker}</div>
               <div className="font-serif text-[17px] leading-snug ink">{c.title}</div>
               <p className="text-[13.5px] ink-2 mt-2">{c.body}</p>

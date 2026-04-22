@@ -86,6 +86,25 @@ function handleDashboardMetrics(req, res) {
     });
     const lastActivityTime = recentActivity[0]?.createdAt || null;
 
+    // Unread security alert notifications (device approval cross-device, token anomalies)
+    let securityAlerts = 0;
+    let securityAlertDetails = [];
+    try {
+      const alertRows = db.prepare(`
+        SELECT id, title, message, data, created_at FROM notifications
+        WHERE user_id = ? AND type = 'security_alert' AND is_read = 0
+        ORDER BY created_at DESC LIMIT 5
+      `).all(userId);
+      securityAlerts = alertRows.length;
+      securityAlertDetails = alertRows.map(r => ({
+        id: r.id,
+        title: r.title,
+        message: r.message,
+        createdAt: r.created_at,
+        data: (() => { try { return JSON.parse(r.data); } catch (_) { return {}; } })(),
+      }));
+    } catch (_) {}
+
     res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.set('Pragma', 'no-cache');
     res.set('Expires', '0');
@@ -93,6 +112,8 @@ function handleDashboardMetrics(req, res) {
     return res.json({
       approvedDevices,
       pendingApprovals,
+      securityAlerts,
+      securityAlertDetails,
       connectedServices,
       totalServices,
       activeTokens,
