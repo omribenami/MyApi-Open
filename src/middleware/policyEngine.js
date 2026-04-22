@@ -17,7 +17,7 @@ setInterval(() => {
     // keep windows from the last 2 minutes as buffer
     if (now - windowId > 120_000) rateLimitCounters.delete(key);
   }
-}, 5 * 60 * 1000);
+}, 5 * 60 * 1000).unref();
 
 const SENSITIVE_BODY_KEYS = new Set([
   'password', 'passwd', 'secret', 'token', 'key', 'api_key', 'apikey',

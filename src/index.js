@@ -104,7 +104,7 @@ setInterval(() => {
   if (cleared > 0) {
     console.log(`[TokenCache] Cleared ${cleared} expired entries`);
   }
-}, 10 * 60 * 1000);
+}, 10 * 60 * 1000).unref();
 
 const { pendingRequests: afpPendingRequests, afpConnections } = require('./lib/afp-state');
 
@@ -12346,7 +12346,7 @@ if (WebSocketServer) {
       ws.afpAlive = false;
       try { ws.ping(); } catch (_) {}
     });
-  }, 30_000);
+  }, 30_000).unref();
 
   // Listen for device alert events and broadcast to connected users
   alertEmitter.on('device:pending_approval', (data) => {
