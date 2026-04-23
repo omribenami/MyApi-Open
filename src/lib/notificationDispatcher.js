@@ -96,9 +96,11 @@ class NotificationDispatcher {
       // Queue for delivery on enabled channels
       queueNotificationForDelivery(notificationId, channelsToUse);
 
-      // Queue actual email when email channel is enabled
-      // (queueNotificationForDelivery only tracks delivery status; emails must go into email_queue)
-      if (channelsToUse.includes('email')) {
+      // Queue actual email when email channel is enabled.
+      // oauth_connected / oauth_disconnected are skipped here — they have dedicated
+      // transactional email sends (new design) fired directly in the route handlers.
+      const DEDICATED_EMAIL_TYPES = new Set(['oauth_connected', 'oauth_disconnected']);
+      if (channelsToUse.includes('email') && !DEDICATED_EMAIL_TYPES.has(notificationType)) {
         try {
           const user = db.prepare('SELECT email, display_name FROM users WHERE id = ?').get(userId);
           if (user?.email) {

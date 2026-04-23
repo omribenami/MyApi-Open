@@ -307,7 +307,7 @@ class EmailService {
         </div>
       </div>
       <div class="hairline" style="margin:24px 0 18px;"></div>
-      <p style="font-size:13px;">Questions? Reply to this email — it reaches a real person. Or drop into <a href="https://discord.gg/WPp4sCN4xB">our Discord</a>.</p>
+      <p style="font-size:13px;">Questions? <a href="https://discord.gg/WPp4sCN4xB">Join our Discord</a> — we're there.</p>
       <p style="font-size:13px;color:#6e7681;margin-bottom:0;">— The MyApi team</p>
     </div>
     <!-- Footer bar -->
@@ -734,7 +734,7 @@ class EmailService {
       </div>
 
       <div class="hairline" style="margin:24px 0 18px;"></div>
-      <p style="font-size:13px;">Questions? <a href="https://discord.gg/WPp4sCN4xB">Join our Discord</a> — or just reply to this email.</p>
+      <p style="font-size:13px;">Questions? <a href="https://discord.gg/WPp4sCN4xB">Join our Discord</a> — we're there.</p>
       <p style="font-size:13px;color:#6e7681;margin-bottom:0;">— The MyApi team</p>
     </div>
     <!-- Footer bar -->
@@ -977,7 +977,7 @@ class EmailService {
       </table>
 
       <div class="hairline" style="margin:20px 0 16px;"></div>
-      <p style="font-size:12px;color:#6e7681;margin:0;">If you did not expect this, revoke the token and check your connected agents. Questions? Reply to this email.</p>
+      <p style="font-size:12px;color:#6e7681;margin:0;">If you did not expect this, revoke the token and check your connected agents. Questions? <a href="https://discord.gg/WPp4sCN4xB" style="color:#4493f8;">Join our Discord</a>.</p>
     </div>
     <!-- Footer bar -->
     <div style="background:#010409;border-top:1px solid #2a313c;padding:14px 32px;">
@@ -1151,7 +1151,7 @@ class EmailService {
       <p style="font-size:12px;color:#6e7681;margin:0;">Approving allows this device to continue using the token. Revoking permanently disables it.</p>
 
       <div class="hairline" style="margin:20px 0 16px;"></div>
-      <p style="font-size:12px;color:#6e7681;margin:0;">Questions? Reply to this email.</p>
+      <p style="font-size:12px;color:#6e7681;margin:0;">Questions? <a href="https://discord.gg/WPp4sCN4xB" style="color:#4493f8;">Join our Discord</a>.</p>
     </div>
     <!-- Footer bar -->
     <div style="background:#010409;border-top:1px solid #2a313c;padding:14px 32px;">
