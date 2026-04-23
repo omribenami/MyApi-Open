@@ -210,14 +210,6 @@ class EmailService {
     if (!toEmail || !this.fromAddress) return;
     const name = displayName || 'there';
     const base = (process.env.PUBLIC_URL || process.env.BASE_URL || 'https://www.myapiai.com').replace(/\/$/, '');
-    const masterTokenBlock = masterToken ? `
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:rgba(56,139,253,0.08);border:1px solid rgba(68,147,248,0.35);border-radius:6px;margin:4px 0 22px;">
-        <tr><td style="padding:12px 14px;">
-          <div style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:#4493f8;margin-bottom:4px;">YOUR MASTER TOKEN</div>
-          <div style="background:#010409;border:1px solid #2a313c;border-radius:6px;padding:12px 14px;font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#a5d6ff;word-break:break-all;">${masterToken}</div>
-          <p style="font-size:12px;margin:8px 0 0;color:#6e7681;">Shown once. Store it in a password manager — you can always issue scoped tokens from the dashboard.</p>
-        </td></tr>
-      </table>` : '';
     const html = `<!doctype html>
 <html lang="en">
 <head>
@@ -292,7 +284,6 @@ class EmailService {
       <div style="margin:22px 0;">
         <a href="${base}/dashboard" class="btn">Open your dashboard →</a>
       </div>
-      ${masterTokenBlock}
       <div class="micro" style="margin-bottom:8px;">3 STEPS TO YOUR FIRST AGENT</div>
       <div class="step">
         <div class="step-num"><span>1</span></div>
