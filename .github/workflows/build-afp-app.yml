@@ -84,7 +84,7 @@ jobs:
           Get-ChildItem *.exe | Format-Table Name, Length
 
       - name: Upload win artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: win-exe
           path: connectors/afp-app/dist/MyApi-AFP-win-x64.exe
