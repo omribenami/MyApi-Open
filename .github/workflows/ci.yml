@@ -121,7 +121,7 @@ jobs:
         run: mkdir -p connectors/afp-daemon/dist connectors/afp-oauth/dist
 
       - name: Build backend image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./src/Dockerfile
