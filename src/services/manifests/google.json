@@ -1,0 +1,60 @@
+{
+  "service": {
+    "name": "google",
+    "label": "Google",
+    "category": "productivity",
+    "icon": "https://cdn.simpleicons.org/google",
+    "description": "Email, Calendar, Drive, Sheets, and Docs",
+    "auth_type": "oauth2",
+    "api_endpoint": "https://www.googleapis.com",
+    "documentation_url": "https://developers.google.com"
+  },
+  "methods": [
+    {
+      "method_name": "gmail.messages.list",
+      "http_method": "GET",
+      "endpoint": "/services/google/gmail/messages",
+      "description": "List Gmail messages from inbox",
+      "parameters": [
+        { "name": "maxResults", "type": "number", "required": false, "description": "Max messages to return (default 5, max 20)" },
+        { "name": "pageToken", "type": "string", "required": false, "description": "Pagination token from previous response" },
+        { "name": "q", "type": "string", "required": false, "description": "Gmail search query" }
+      ],
+      "response_example": {
+        "success": true,
+        "messages": [
+          { "id": "msg_123", "subject": "Hello", "from": "user@example.com" }
+        ]
+      }
+    },
+    {
+      "method_name": "gmail.messages.get",
+      "http_method": "GET",
+      "endpoint": "/services/google/gmail/messages/:messageId",
+      "description": "Get full Gmail message by ID",
+      "parameters": [
+        { "name": "messageId", "type": "string", "required": true, "description": "Message ID from gmail.messages.list" }
+      ],
+      "response_example": {
+        "success": true,
+        "message": { "id": "msg_123", "subject": "Hello" }
+      }
+    },
+    {
+      "method_name": "gmail.send",
+      "http_method": "POST",
+      "endpoint": "/services/google/gmail/send",
+      "description": "Send an email via Gmail",
+      "parameters": [
+        { "name": "to", "type": "array", "required": true, "description": "Recipient email addresses" },
+        { "name": "subject", "type": "string", "required": true, "description": "Email subject" },
+        { "name": "body", "type": "string", "required": true, "description": "Email body" }
+      ],
+      "response_example": {
+        "success": true,
+        "messageId": "msg_123",
+        "threadId": "thread_456"
+      }
+    }
+  ]
+}
