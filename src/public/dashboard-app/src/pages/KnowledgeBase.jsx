@@ -4,6 +4,7 @@ import { useKnowledgeStore } from '../stores/knowledgeStore';
 import DocumentEditor from '../components/DocumentEditor';
 import CreateDocumentModal from '../components/CreateDocumentModal';
 import DeleteDocumentConfirmation from '../components/DeleteDocumentConfirmation';
+import UploadDocumentModal from '../components/UploadDocumentModal';
 
 const SOURCE_COLORS = {
   memory: 'bg-purple-600 bg-opacity-20 text-purple-300 border-purple-700',
@@ -56,6 +57,7 @@ function KnowledgeBase() {
 
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [showUploadModal, setShowUploadModal] = useState(false);
 
   useEffect(() => {
     if (masterToken) {
@@ -144,7 +146,7 @@ function KnowledgeBase() {
     return result;
   }, [documents, filterSource, searchQuery, sortBy, sortOrder]);
 
-  const handleUpload = async (file) => {
+  const handleUpload = async (file, opts = {}) => {
     if (!file || !masterToken) return;
 
     setUploading(true);
@@ -154,6 +156,7 @@ function KnowledgeBase() {
 
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('convertToMarkdown', opts.convertToMarkdown ? 'true' : 'false');
 
     await new Promise((resolve) => {
       const xhr = new XMLHttpRequest();
@@ -178,7 +181,14 @@ function KnowledgeBase() {
           if (xhr.status >= 200 && xhr.status < 300) {
             const created = data?.documentsCreated || 0;
             const storage = data?.file?.storage ? ` · stored: ${data.file.storage}` : '';
-            setSuccess(`Uploaded ${file.name} (${created} KB document chunks${storage})`);
+            const method = data?.file?.conversionMethod;
+            const converted = method === 'markitdown'
+              ? ' · converted to Markdown via MarkItDown'
+              : method === 'pdf-parse-fallback'
+                ? ' · PDF text extracted (fallback)'
+                : '';
+            setSuccess(`Uploaded ${file.name} (${created} KB document chunks${converted}${storage})`);
+            setShowUploadModal(false);
             await fetchDocuments();
           } else {
             const fallbackText = (xhr.responseText || '').slice(0, 180).trim();
@@ -235,14 +245,9 @@ function KnowledgeBase() {
   };
 
   const handleImport = () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.txt,.md,.pdf,text/plain,text/markdown,application/pdf';
-    input.onchange = (e) => {
-      const file = e.target.files?.[0];
-      if (file) handleUpload(file);
-    };
-    input.click();
+    clearError();
+    clearSuccess();
+    setShowUploadModal(true);
   };
 
   return (
@@ -254,7 +259,7 @@ function KnowledgeBase() {
           <h1 className="font-serif text-[22px] sm:text-[34px] leading-[1.05] tracking-tight ink font-medium">Documents agents can reason over.</h1>
           <p className="mt-2 text-[15px] ink-2 max-w-[60ch]">Attach documents to specific personas. Everything is markdown-first, encrypted at rest, and versioned.</p>
         </div>
-        <div className="flex items-center gap-2 pt-1">
+        <div className="flex items-center gap-2 pt-1" data-tour="kb-actions">
           <button className="btn" onClick={handleImport}>&#x2197; Import</button>
           <button className="btn btn-primary" onClick={openCreateModal}>+ New document</button>
         </div>
@@ -285,18 +290,6 @@ function KnowledgeBase() {
         </div>
       )}
 
-      {uploading && (
-        <div className="rounded bg-raised hairline p-4">
-          <div className="flex items-center justify-between text-sm ink-2 mb-2">
-            <span>Uploading document…</span>
-            <span>{uploadProgress}%</span>
-          </div>
-          <div className="w-full h-2 rounded overflow-hidden bg-sunk">
-            <div className="h-full transition-all" style={{ width: `${uploadProgress}%`, background: 'var(--green)' }} />
-          </div>
-        </div>
-      )}
-
       {/* Loading spinner */}
       {isLoading && (
         <div className="flex justify-center h-32 items-center">
@@ -306,7 +299,7 @@ function KnowledgeBase() {
 
       {/* Search / filter bar */}
       {!isLoading && (
-        <div className="flex items-center gap-3 mb-4">
+        <div className="flex items-center gap-3 mb-4" data-tour="kb-search">
           <input
             className="ui-input"
             style={{ maxWidth: '280px' }}
@@ -350,7 +343,7 @@ function KnowledgeBase() {
 
       {/* Table */}
       {!isLoading && (
-        <div className="card overflow-hidden">
+        <div className="card overflow-hidden" data-tour="kb-table">
           {/* Column header */}
           <div className="grid grid-cols-12 px-5 py-2 border-b hairline bg-sunk micro">
             <span className="col-span-5">Title</span>
@@ -444,6 +437,13 @@ function KnowledgeBase() {
       <CreateDocumentModal />
       <DocumentEditor />
       <DeleteDocumentConfirmation />
+      <UploadDocumentModal
+        open={showUploadModal}
+        onClose={() => { if (!uploading) setShowUploadModal(false); }}
+        onUpload={handleUpload}
+        uploading={uploading}
+        uploadProgress={uploadProgress}
+      />
     </div>
   );
 }

@@ -154,11 +154,13 @@ function installServiceLinux(configDir) {
   const unit = `[Unit]
 Description=MyApi AFP Daemon
 After=network.target
+StartLimitIntervalSec=300
+StartLimitBurst=10
 
 [Service]
 Type=simple
 ExecStart=${exePath}
-Restart=on-failure
+Restart=always
 RestartSec=5
 StandardOutput=journal
 StandardError=journal

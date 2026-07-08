@@ -527,6 +527,104 @@ const SERVICE_METHODS = {
       rateLimit: '2000 requests per 10 minutes',
       notes: 'emailAddresses is array with address and type. Includes both personal and shared contacts.'
     }
+  ],
+
+  // ==================== HOME ASSISTANT ====================
+  // Instance-hosted: all calls go through the generic proxy with the user's
+  // stored instance URL + long-lived token. `path` below is the HA REST path
+  // relative to {instance}/api.
+  homeassistant: [
+    {
+      name: 'states.list',
+      description: 'List every entity with its current state and attributes',
+      method: 'POST',
+      endpoint: '/services/homeassistant/proxy',
+      scope: 'services:read or services:homeassistant:read or master',
+      parameters: { path: { type: 'string', description: 'Use "/states"' }, method: { type: 'string', description: '"GET"' } },
+      returns: 'array of {entity_id, state, attributes, last_changed, last_updated}',
+      notes: 'Body: {"path": "/states", "method": "GET"}. Filter client-side by domain prefix (light., switch., sensor., climate., ...).'
+    },
+    {
+      name: 'states.get',
+      description: 'Get one entity state',
+      method: 'POST',
+      endpoint: '/services/homeassistant/proxy',
+      scope: 'services:read or services:homeassistant:read or master',
+      parameters: { path: { type: 'string', description: '"/states/{entity_id}" e.g. "/states/light.living_room"' }, method: { type: 'string', description: '"GET"' } },
+      returns: '{entity_id, state, attributes, last_changed, last_updated}'
+    },
+    {
+      name: 'services.call',
+      description: 'Call a Home Assistant service — turn lights on/off, set climate, activate scenes, run automations/scripts',
+      method: 'POST',
+      endpoint: '/services/homeassistant/proxy',
+      scope: 'services:write or services:homeassistant:write or master',
+      parameters: {
+        path: { type: 'string', description: '"/services/{domain}/{service}" e.g. "/services/light/turn_on"' },
+        method: { type: 'string', description: '"POST"' },
+        body: { type: 'object', description: 'Service data, e.g. {"entity_id": "light.living_room", "brightness_pct": 60}' }
+      },
+      returns: 'array of states that changed as a result of the call',
+      notes: 'Body: {"path": "/services/light/turn_on", "method": "POST", "body": {"entity_id": "light.living_room"}}. List available services with GET "/services".'
+    },
+    {
+      name: 'services.list',
+      description: 'List every service domain and its services (what actions exist)',
+      method: 'POST',
+      endpoint: '/services/homeassistant/proxy',
+      scope: 'services:read or services:homeassistant:read or master',
+      parameters: { path: { type: 'string', description: '"/services"' }, method: { type: 'string', description: '"GET"' } },
+      returns: 'array of {domain, services: {name: {description, fields}}}'
+    },
+    {
+      name: 'history.period',
+      description: 'State history for entities over a time period',
+      method: 'POST',
+      endpoint: '/services/homeassistant/proxy',
+      scope: 'services:read or services:homeassistant:read or master',
+      parameters: {
+        path: { type: 'string', description: '"/history/period/{ISO timestamp}" (start time)' },
+        method: { type: 'string', description: '"GET"' },
+        query: { type: 'object', description: '{"filter_entity_id": "sensor.temperature", "end_time": "<ISO>"}' }
+      },
+      returns: 'array of state-change lists per entity'
+    },
+    {
+      name: 'logbook.period',
+      description: 'Logbook entries (human-readable event log)',
+      method: 'POST',
+      endpoint: '/services/homeassistant/proxy',
+      scope: 'services:read or services:homeassistant:read or master',
+      parameters: { path: { type: 'string', description: '"/logbook/{ISO timestamp}"' }, method: { type: 'string', description: '"GET"' }, query: { type: 'object', description: '{"entity": "light.living_room"}', optional: true } },
+      returns: 'array of {when, name, message, entity_id}'
+    },
+    {
+      name: 'template.render',
+      description: 'Render a Jinja2 template against live instance state',
+      method: 'POST',
+      endpoint: '/services/homeassistant/proxy',
+      scope: 'services:read or services:homeassistant:read or master',
+      parameters: { path: { type: 'string', description: '"/template"' }, method: { type: 'string', description: '"POST"' }, body: { type: 'object', description: '{"template": "{{ states(\'sensor.temperature\') }}"}' } },
+      returns: 'rendered template string'
+    },
+    {
+      name: 'events.fire',
+      description: 'Fire a custom event on the event bus',
+      method: 'POST',
+      endpoint: '/services/homeassistant/proxy',
+      scope: 'services:write or services:homeassistant:write or master',
+      parameters: { path: { type: 'string', description: '"/events/{event_type}"' }, method: { type: 'string', description: '"POST"' }, body: { type: 'object', description: 'event data payload', optional: true } },
+      returns: '{message: "Event {event_type} fired."}'
+    },
+    {
+      name: 'config.check',
+      description: 'Instance config + API health',
+      method: 'POST',
+      endpoint: '/services/homeassistant/proxy',
+      scope: 'services:read or services:homeassistant:read or master',
+      parameters: { path: { type: 'string', description: '"/config" (or "/" for API health)' }, method: { type: 'string', description: '"GET"' } },
+      returns: 'config object: location, version, components, unit system'
+    }
   ]
 };
 

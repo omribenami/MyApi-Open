@@ -255,6 +255,24 @@ function start(cfg, log) {
     const ws = new WebSocket(wsUrl, { headers: wsHeaders });
     currentWs = ws;
 
+    // Guarantee exactly one reconnect is scheduled per connection attempt, no
+    // matter which failure path fires (close, error, or a non-101 upgrade
+    // response like 502). Previously a transient HTTP 5xx on upgrade scheduled
+    // nothing, the event loop drained, and the process exited 0 — which
+    // Restart=on-failure does not restart, killing the connector permanently.
+    let settled = false;
+    let heartbeat = null;
+    const reconnect = (reason, nextUrl) => {
+      if (settled) return;
+      settled = true;
+      currentWs = null;
+      if (heartbeat) { clearInterval(heartbeat); heartbeat = null; }
+      const delay = backoffMs;
+      backoffMs = Math.min(backoffMs * 2, 30000);
+      logger.warn(`${reason}. Reconnecting in ${delay}ms ...`);
+      setTimeout(() => connect(nextUrl || baseUrl), delay);
+    };
+
     ws.on('open', () => {
       backoffMs = 1000;
       logger.info('WebSocket connected. Sending registration ...');
@@ -266,29 +284,43 @@ function start(cfg, log) {
         platform:    process.platform,
         arch:        process.arch,
       }));
+
+      // Heartbeat: keeps idle proxies (Cloudflare ~100s) from dropping the
+      // socket with a silent 1006, and detects a half-open connection quickly.
+      let awaitingPong = false;
+      ws.on('pong', () => { awaitingPong = false; });
+      heartbeat = setInterval(() => {
+        if (awaitingPong) {
+          logger.warn('No pong from server — terminating stale socket');
+          ws.terminate(); // triggers 'close' → reconnect
+          return;
+        }
+        awaitingPong = true;
+        try { ws.ping(); } catch (_) { /* ping on a dying socket — close will follow */ }
+      }, 30000);
     });
 
     ws.on('message', raw => handleMsg(ws, raw));
 
     ws.on('close', (code) => {
-      currentWs = null;
-      logger.warn(`Disconnected (code=${code}). Reconnecting in ${backoffMs}ms ...`);
-      setTimeout(() => {
-        backoffMs = Math.min(backoffMs * 2, 30000);
-        connect(baseUrl);
-      }, backoffMs);
+      reconnect(`Disconnected (code=${code})`);
     });
 
     ws.on('unexpected-response', (req, res) => {
-      logger.error(`WebSocket upgrade failed (HTTP ${res.statusCode})`);
+      res.resume(); // drain so the socket can be freed
       if ([301, 302, 307, 308].includes(res.statusCode) && res.headers.location) {
         const next = new URL(res.headers.location, baseUrl).origin;
-        logger.info(`Redirected to ${next}, reconnecting...`);
-        setTimeout(() => { backoffMs = Math.min(backoffMs * 2, 30000); connect(next); }, backoffMs);
+        reconnect(`Upgrade redirected (HTTP ${res.statusCode}) to ${next}`, next);
+      } else {
+        // 502/503/429/etc. — transient edge/server hiccup. Retry, do not give up.
+        reconnect(`WebSocket upgrade failed (HTTP ${res.statusCode})`);
       }
     });
 
-    ws.on('error', err => logger.error(`WebSocket error: ${err.message}`));
+    ws.on('error', err => {
+      logger.error(`WebSocket error: ${err.message}`);
+      reconnect(`Connection error (${err.code || err.message})`);
+    });
   }
 
   connect();

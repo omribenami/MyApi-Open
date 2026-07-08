@@ -18,6 +18,7 @@ export function startOAuthFlow(service, options = {}) {
     if (options.mode) params.append('mode', options.mode);
     if (options.forcePrompt != null) params.append('forcePrompt', String(options.forcePrompt));
     if (options.returnTo) params.append('returnTo', options.returnTo);
+    if (options.toolkit) params.append('toolkit', options.toolkit);
     
     // CRITICAL FIX: Pass masterToken from localStorage to authenticate the OAuth flow
     // This ensures the ownerId is captured in the state metadata
@@ -74,7 +75,8 @@ export const AVAILABLE_SERVICES = [
   { id: 'tiktok', name: 'TikTok', icon: '🎵', color: '#111827', description: 'Connect to TikTok account', scopes: ['user.info.basic'] },
   { id: 'twitter', name: 'X / Twitter', icon: '𝕏', color: '#111827', description: 'Connect to X account', scopes: ['tweet.read', 'users.read'] },
   { id: 'reddit', name: 'Reddit', icon: '👽', color: '#FF4500', description: 'Connect to Reddit account', scopes: ['identity', 'read'] },
-  { id: 'linkedin', name: 'LinkedIn', icon: 'in', color: '#0A66C2', description: 'Connect to LinkedIn profile and pages', scopes: ['r_liteprofile', 'r_emailaddress'] },
+  { id: 'linkedin', name: 'LinkedIn', icon: 'in', color: '#0A66C2', description: 'Connect to your personal LinkedIn profile', scopes: ['r_liteprofile', 'r_emailaddress'] },
+  { id: 'linkedin_pages', name: 'LinkedIn Pages', icon: 'in', color: '#0A66C2', description: 'Post and read on LinkedIn company Pages you administer', scopes: ['r_organization_social', 'w_organization_social'] },
   { id: 'slack', name: 'Slack', icon: '💬', color: '#36C5F0', description: 'Connect to Slack workspace and channels', scopes: ['chat:write', 'chat:read'] },
   { id: 'discord', name: 'Discord', icon: '🎮', color: '#5865F2', description: 'Connect to Discord server and channels', scopes: ['identify', 'email'] },
   { id: 'whatsapp', name: 'WhatsApp', icon: '💬', color: '#25D366', description: 'Connect to WhatsApp Business Account', scopes: ['messages', 'contacts'] },

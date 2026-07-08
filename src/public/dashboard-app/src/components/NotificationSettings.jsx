@@ -21,8 +21,10 @@ function NotificationSettings() {
     { key: 'skill_used', label: 'Skill Used' },
     { key: 'persona_invoked', label: 'Persona Used' },
     { key: 'guest_token_used', label: 'Guest Token Used' },
+    { key: 'token_created', label: 'Token Created' },
     { key: 'token_revoked', label: 'Token Revoked' },
     { key: 'service_connected', label: 'Service Connected' },
+    { key: 'oauth_reconnect_required', label: 'Service Needs Reconnection' },
   ];
 
   // Fetch settings on mount
@@ -243,6 +245,10 @@ function NotificationSettings() {
             </div>
           ))}
         </div>
+
+        <p className="text-xs text-slate-500 mt-4">
+          Security alerts (e.g. a token suspended for suspicious activity) are always delivered in-app and cannot be disabled.
+        </p>
       </div>
     </div>
   );

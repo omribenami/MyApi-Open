@@ -26,7 +26,7 @@ const bcrypt = require("bcrypt");
 const crypto = require("crypto");
 const fs = require("fs");
 const multer = require('multer');
-const pdfParse = require('pdf-parse');
+const markitdown = require('./lib/markitdown');
 const speakeasy = require('speakeasy');
 const QRCode = require('qrcode');
 const { marked } = require('marked');
@@ -34,9 +34,10 @@ const http = require('http');
 const EventEmitter = require('events');
 const expressRateLimit = require('express-rate-limit');
 const logger = require('./utils/logger');
-const { requestContextMiddleware } = require('./lib/request-context');
+const { requestContextMiddleware, setRequestActor, getRequestStore } = require('./lib/request-context');
 const betaMode = require('./lib/betaMode');
 const { requireBetaSlot } = require('./middleware/betaCap');
+const { maybeOptimizeApiResponse } = require('./lib/headroom');
 
 // Database initialization
 let mongodbReady = Promise.resolve();
@@ -117,6 +118,12 @@ const {
   getVaultTokens,
   deleteVaultToken,
   decryptVaultToken,
+  createVaultCredential,
+  getVaultCredentials,
+  getVaultCredential,
+  decryptVaultCredential,
+  updateVaultCredential,
+  deleteVaultCredential,
   createAccessToken,
   getAccessTokens,
   getExistingMasterToken,
@@ -164,6 +171,7 @@ const {
   deletePersona,
   storeOAuthToken,
   getOAuthToken,
+  getOAuthLoginToken,
   revokeOAuthToken,
   updateOAuthStatus,
   getOAuthStatus,
@@ -279,6 +287,11 @@ const {
   upsertOAuthServerClient,
   createApprovedDevice,
   createNotification,
+  getApprovedDeviceByKeyFingerprintGlobal,
+  getPendingApprovalByFingerprintGlobal,
+  restoreASCDevice,
+  wasAscKeyEverApproved,
+  getAfpDevices,
 } = require("./database");
 const DeviceFingerprint = require('./utils/deviceFingerprint');
 
@@ -287,7 +300,6 @@ const GoogleAdapter = require("./services/google-adapter");
 const GitHubAdapter = require("./services/github-adapter");
 const SlackAdapter = require("./services/slack-adapter");
 const DiscordAdapter = require("./services/discord-adapter");
-const WhatsAppAdapter = require("./services/whatsapp-adapter");
 const GenericOAuthAdapter = require("./services/generic-oauth-adapter");
 const {
   buildServiceDefinition,
@@ -296,11 +308,40 @@ const {
   OAUTH_PROVIDER_DETAILS,
 } = require('./services/integration-layer');
 const {
-  PLAN_LIMITS: BILLING_PLAN_LIMITS,
-  resolveWorkspaceCurrentPlan,
-  computeUsageVsLimits,
-  getRangeDays,
-} = require('./lib/billing');
+  COMPOSIO_ROOT_SERVICE,
+  isComposioConfigured,
+  isComposioManagedService,
+  isComposioRootService,
+  isComposioConnectedService,
+  stripComposioPrefix,
+  getComposioStatusServices,
+  getComposioServiceCatalog,
+  getComposioServiceByName,
+  createComposioConnectLink,
+  createComposioApiKeyConnection,
+  disconnectComposioForUser,
+  disconnectComposioToolkit,
+  proxyComposioService,
+  syncComposioStateForUser,
+} = require('./services/composio-integration');
+// Open-core boundary: commercial modules (billing/Stripe, B2B orgs/SSO/SCIM,
+// self-host licensing, owner analytics) are loaded when present and the
+// platform degrades gracefully when they are absent (MyApi Open builds).
+function optionalRequire(modulePath) {
+  try {
+    return require(modulePath);
+  } catch (err) {
+    if (err.code === 'MODULE_NOT_FOUND' && String(err.message).includes(modulePath.replace(/^\.\//, ''))) {
+      return null;
+    }
+    throw err;
+  }
+}
+
+// Billing (closed-source) — when absent, plan gates fall back to unrestricted use.
+const billingLib = optionalRequire('./lib/billing');
+const BILLING_PLAN_LIMITS = billingLib?.PLAN_LIMITS || null;
+const billingRoutesModule = optionalRequire('./routes/billing');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -312,7 +353,10 @@ const LEGAL_DOCS_DIR = path.join(__dirname, '..', 'docs', 'legal');
 
 // Import device approval middleware
 const { deviceApprovalMiddleware, setAlertEmitter: setDeviceAlertEmitter } = require('./middleware/deviceApproval');
-const { isResourceAllowed } = require('./middleware/scope-validator');
+const tokenSecurityMonitor = require('./lib/tokenSecurityMonitor');
+const { isResourceAllowed, getAllowedResources } = require('./middleware/scope-validator');
+const agentLimits = require('./lib/agent-limits');
+const { SERVICE_RESOURCE_KINDS, enforceServiceResources, normalizeServiceResources } = require('./lib/service-resource-scopes');
 
 function escapeHtml(value = '') {
   return String(value)
@@ -352,7 +396,12 @@ function renderLegalMarkdown(markdown = '') {
 }
 
 function loadLegalDoc(filename, fallbackTitle, fallbackBody) {
-  const targetPath = path.join(LEGAL_DOCS_DIR, filename);
+  // Bare filenames live in docs/legal/; repo-relative paths (e.g.
+  // connectors/openai/privacy-policy.md) resolve from the app root's parent,
+  // matching where the Dockerfile places /docs and /connectors.
+  const targetPath = filename.includes('/')
+    ? path.join(__dirname, '..', filename)
+    : path.join(LEGAL_DOCS_DIR, filename);
   if (fs.existsSync(targetPath)) {
     return fs.readFileSync(targetPath, 'utf8');
   }
@@ -391,6 +440,16 @@ function renderLegalPage({ title, markdownContent }) {
 
 // Initialize database
 initDatabase();
+
+// Initialize config/database.js — a SEPARATE connection used by the security stack
+// (tokenSecurityMonitor, asnLookup, gateway/tokens, middleware/auth). Its getDatabase()
+// throws until initDatabase() is called, and tokenSecurityMonitor swallows that error
+// and returns { blocked: false } — so without this call the entire token anomaly
+// detection (velocity / ASN drift / UA drift) silently never runs. Must use the same
+// path resolution as lib/db-abstraction.js so both connections open the same file.
+require('./config/database').initDatabase(
+  process.env.DB_PATH || path.join(__dirname, 'data', 'myapi.db')
+);
 
 // Seed scope definitions (idempotent upsert — safe to run every startup)
 seedDefaultScopes();
@@ -440,7 +499,6 @@ const oauthAdapters = {
   github: new GitHubAdapter(oauthConfig.github || {}),
   slack: new SlackAdapter(oauthConfig.slack || {}),
   discord: new DiscordAdapter(oauthConfig.discord || {}),
-  whatsapp: new WhatsAppAdapter(oauthConfig.whatsapp || {}),
   facebook: new GenericOAuthAdapter({
     serviceName: 'facebook',
     authUrl: 'https://www.facebook.com/v19.0/dialog/oauth',
@@ -458,7 +516,7 @@ const oauthAdapters = {
     authUrl: 'https://www.instagram.com/oauth/authorize',
     tokenUrl: 'https://api.instagram.com/oauth/access_token',
     verifyUrl: 'https://graph.instagram.com/v21.0/me?fields=id,username,name',
-    scope: process.env.INSTAGRAM_SCOPE || 'instagram_business_basic',
+    scope: process.env.INSTAGRAM_SCOPE || 'instagram_business_basic,instagram_business_content_publish',
     redirectUri: process.env.INSTAGRAM_REDIRECT_URI || oauthConfig.instagram?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/instagram`,
     clientId: process.env.INSTAGRAM_CLIENT_ID || oauthConfig.instagram?.clientId,
     clientSecret: process.env.INSTAGRAM_CLIENT_SECRET || oauthConfig.instagram?.clientSecret,
@@ -468,7 +526,7 @@ const oauthAdapters = {
     authUrl: 'https://threads.net/oauth/authorize',
     tokenUrl: 'https://graph.threads.net/oauth/access_token',
     verifyUrl: 'https://graph.threads.net/v19.0/me?fields=id,username',
-    scope: 'threads_basic_access,threads_manage_metadata',
+    scope: 'threads_basic_access,threads_manage_metadata,threads_content_publish',
     redirectUri: process.env.THREADS_REDIRECT_URI || oauthConfig.threads?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/threads`,
     clientId: process.env.THREADS_CLIENT_ID || oauthConfig.threads?.clientId,
     clientSecret: process.env.THREADS_CLIENT_SECRET || oauthConfig.threads?.clientSecret,
@@ -478,7 +536,7 @@ const oauthAdapters = {
     serviceName: 'tiktok',
     authUrl: 'https://www.tiktok.com/v2/auth/authorize/',
     tokenUrl: 'https://open.tiktokapis.com/v2/oauth/token/',
-    verifyUrl: 'https://open.tiktokapis.com/v1/user/info/',
+    verifyUrl: 'https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,avatar_url,display_name,username',
     scope: process.env.TIKTOK_SCOPE || 'user.info.basic,user.info.profile,user.info.stats,video.list,video.upload,video.publish,comment.list,comment.list.pull',
     redirectUri: process.env.TIKTOK_REDIRECT_URI || oauthConfig.tiktok?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/tiktok`,
     // TikTok docs/UI often call this value "Client Key". Accept both env names.
@@ -500,27 +558,30 @@ const oauthAdapters = {
     clientSecret: process.env.TWITTER_CLIENT_SECRET || oauthConfig.twitter?.clientSecret,
     tokenAuthStyle: 'basic',
   }),
-  reddit: new GenericOAuthAdapter({
-    serviceName: 'reddit',
-    authUrl: 'https://www.reddit.com/api/v1/authorize',
-    tokenUrl: 'https://www.reddit.com/api/v1/access_token',
-    verifyUrl: 'https://oauth.reddit.com/api/v1/me',
-    scope: process.env.REDDIT_SCOPE || 'identity read submit privatemessages modmail',
-    redirectUri: process.env.REDDIT_REDIRECT_URI || oauthConfig.reddit?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/reddit`,
-    clientId: process.env.REDDIT_CLIENT_ID || oauthConfig.reddit?.clientId,
-    clientSecret: process.env.REDDIT_CLIENT_SECRET || oauthConfig.reddit?.clientSecret,
-    tokenAuthStyle: 'basic',
-    extraAuthParams: { duration: 'permanent' },
-  }),
   linkedin: new GenericOAuthAdapter({
     serviceName: 'linkedin',
     authUrl: 'https://www.linkedin.com/oauth/v2/authorization',
     tokenUrl: 'https://www.linkedin.com/oauth/v2/accessToken',
-    verifyUrl: 'https://api.linkedin.com/v2/me',
-    scope: process.env.LINKEDIN_SCOPE || 'openid profile email',
+    verifyUrl: 'https://api.linkedin.com/v2/userinfo',
+    scope: process.env.LINKEDIN_SCOPE || 'openid profile email w_member_social',
     redirectUri: process.env.LINKEDIN_REDIRECT_URI || oauthConfig.linkedin?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/linkedin`,
     clientId: process.env.LINKEDIN_CLIENT_ID || oauthConfig.linkedin?.clientId,
     clientSecret: process.env.LINKEDIN_CLIENT_SECRET || oauthConfig.linkedin?.clientSecret,
+    extraAuthParams: { response_type: 'code' },
+  }),
+  // LinkedIn Pages — MyApi's native organization/company-page connector. Reuses
+  // the LinkedIn OAuth app credentials but requests Community Management
+  // (organization) scopes so agents can post & read on Pages the user admins.
+  // Composio's `linkedin` toolkit remains the personal-profile connector.
+  linkedin_pages: new GenericOAuthAdapter({
+    serviceName: 'linkedin_pages',
+    authUrl: 'https://www.linkedin.com/oauth/v2/authorization',
+    tokenUrl: 'https://www.linkedin.com/oauth/v2/accessToken',
+    verifyUrl: 'https://api.linkedin.com/v2/userinfo',
+    scope: process.env.LINKEDIN_PAGES_SCOPE || 'openid profile email r_organization_admin rw_organization_admin r_organization_social w_organization_social',
+    redirectUri: process.env.LINKEDIN_PAGES_REDIRECT_URI || oauthConfig.linkedin_pages?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/linkedin_pages`,
+    clientId: process.env.LINKEDIN_PAGES_CLIENT_ID || process.env.LINKEDIN_CLIENT_ID || oauthConfig.linkedin_pages?.clientId || oauthConfig.linkedin?.clientId,
+    clientSecret: process.env.LINKEDIN_PAGES_CLIENT_SECRET || process.env.LINKEDIN_CLIENT_SECRET || oauthConfig.linkedin_pages?.clientSecret || oauthConfig.linkedin?.clientSecret,
     extraAuthParams: { response_type: 'code' },
   }),
   notion: new GenericOAuthAdapter({
@@ -540,7 +601,8 @@ const oauthAdapters = {
     authUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
     tokenUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
     verifyUrl: 'https://graph.microsoft.com/v1.0/me',
-    scope: process.env.MICROSOFT365_SCOPE || 'openid profile email offline_access User.Read Mail.Read Calendars.Read',
+    // Parity with Google: full mail read/write/delete, full calendar, files (OneDrive).
+    scope: process.env.MICROSOFT365_SCOPE || 'openid profile email offline_access User.Read Mail.ReadWrite Mail.Send Calendars.ReadWrite Tasks.ReadWrite Files.ReadWrite',
     redirectUri: process.env.MICROSOFT365_REDIRECT_URI || oauthConfig.microsoft365?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/microsoft365`,
     clientId: process.env.MICROSOFT365_CLIENT_ID || oauthConfig.microsoft365?.clientId,
     clientSecret: process.env.MICROSOFT365_CLIENT_SECRET || oauthConfig.microsoft365?.clientSecret,
@@ -550,51 +612,23 @@ const oauthAdapters = {
     authUrl: 'https://www.dropbox.com/oauth2/authorize',
     tokenUrl: 'https://api.dropboxapi.com/oauth2/token',
     verifyUrl: 'https://api.dropboxapi.com/2/users/get_current_account',
-    scope: process.env.DROPBOX_SCOPE || '',
+    scope: process.env.DROPBOX_SCOPE || 'account_info.read files.content.read files.content.write files.metadata.read files.metadata.write',
     redirectUri: process.env.DROPBOX_REDIRECT_URI || oauthConfig.dropbox?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/dropbox`,
     clientId: process.env.DROPBOX_CLIENT_ID || oauthConfig.dropbox?.clientId,
     clientSecret: process.env.DROPBOX_CLIENT_SECRET || oauthConfig.dropbox?.clientSecret,
-  }),
-  trello: new GenericOAuthAdapter({
-    serviceName: 'trello',
-    authUrl: 'https://trello.com/1/OAuthAuthorizeToken',
-    tokenUrl: 'https://trello.com/1/OAuthGetAccessToken',
-    verifyUrl: 'https://api.trello.com/1/members/me',
-    scope: process.env.TRELLO_SCOPE || 'read,write',
-    redirectUri: process.env.TRELLO_REDIRECT_URI || oauthConfig.trello?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/trello`,
-    clientId: process.env.TRELLO_CLIENT_ID || oauthConfig.trello?.clientId,
-    clientSecret: process.env.TRELLO_CLIENT_SECRET || oauthConfig.trello?.clientSecret,
   }),
   zoom: new GenericOAuthAdapter({
     serviceName: 'zoom',
     authUrl: 'https://zoom.us/oauth/authorize',
     tokenUrl: 'https://zoom.us/oauth/token',
     verifyUrl: 'https://api.zoom.us/v2/users/me',
-    scope: process.env.ZOOM_SCOPE || '',
+    // User-level OAuth app scopes — the :admin variants are account-level and fail
+    // consent for normal users.
+    scope: process.env.ZOOM_SCOPE || 'meeting:read meeting:write user:read',
     redirectUri: process.env.ZOOM_REDIRECT_URI || oauthConfig.zoom?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/zoom`,
     clientId: process.env.ZOOM_CLIENT_ID || oauthConfig.zoom?.clientId,
     clientSecret: process.env.ZOOM_CLIENT_SECRET || oauthConfig.zoom?.clientSecret,
     tokenAuthStyle: 'basic',
-  }),
-  hubspot: new GenericOAuthAdapter({
-    serviceName: 'hubspot',
-    authUrl: 'https://app.hubspot.com/oauth/authorize',
-    tokenUrl: 'https://api.hubapi.com/oauth/v1/token',
-    verifyUrl: 'https://api.hubapi.com/oauth/v1/access-tokens/',
-    scope: process.env.HUBSPOT_SCOPE || 'oauth crm.objects.contacts.read crm.objects.contacts.write crm.objects.deals.read crm.objects.deals.write',
-    redirectUri: process.env.HUBSPOT_REDIRECT_URI || oauthConfig.hubspot?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/hubspot`,
-    clientId: process.env.HUBSPOT_CLIENT_ID || oauthConfig.hubspot?.clientId,
-    clientSecret: process.env.HUBSPOT_CLIENT_SECRET || oauthConfig.hubspot?.clientSecret,
-  }),
-  salesforce: new GenericOAuthAdapter({
-    serviceName: 'salesforce',
-    authUrl: 'https://login.salesforce.com/services/oauth2/authorize',
-    tokenUrl: 'https://login.salesforce.com/services/oauth2/token',
-    verifyUrl: 'https://login.salesforce.com/services/oauth2/userinfo',
-    scope: process.env.SALESFORCE_SCOPE || 'api refresh_token',
-    redirectUri: process.env.SALESFORCE_REDIRECT_URI || oauthConfig.salesforce?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/salesforce`,
-    clientId: process.env.SALESFORCE_CLIENT_ID || oauthConfig.salesforce?.clientId,
-    clientSecret: process.env.SALESFORCE_CLIENT_SECRET || oauthConfig.salesforce?.clientSecret,
   }),
   jira: new GenericOAuthAdapter({
     serviceName: 'jira',
@@ -606,121 +640,6 @@ const oauthAdapters = {
     clientId: process.env.JIRA_CLIENT_ID || oauthConfig.jira?.clientId,
     clientSecret: process.env.JIRA_CLIENT_SECRET || oauthConfig.jira?.clientSecret,
     extraAuthParams: { audience: 'api.atlassian.com', prompt: 'consent' },
-  }),
-  confluence: new GenericOAuthAdapter({
-    serviceName: 'confluence',
-    authUrl: 'https://auth.atlassian.com/authorize',
-    tokenUrl: 'https://auth.atlassian.com/oauth/token',
-    verifyUrl: 'https://api.atlassian.com/me',
-    scope: process.env.CONFLUENCE_SCOPE || 'read:confluence-content.all read:confluence-user write:confluence-content offline_access',
-    redirectUri: process.env.CONFLUENCE_REDIRECT_URI || oauthConfig.confluence?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/confluence`,
-    clientId: process.env.CONFLUENCE_CLIENT_ID || oauthConfig.confluence?.clientId,
-    clientSecret: process.env.CONFLUENCE_CLIENT_SECRET || oauthConfig.confluence?.clientSecret,
-    extraAuthParams: { audience: 'api.atlassian.com', prompt: 'consent' },
-  }),
-  asana: new GenericOAuthAdapter({
-    serviceName: 'asana',
-    authUrl: 'https://app.asana.com/-/oauth_authorize',
-    tokenUrl: 'https://app.asana.com/-/oauth_token',
-    verifyUrl: 'https://app.asana.com/api/1.0/users/me',
-    scope: process.env.ASANA_SCOPE || 'default',
-    redirectUri: process.env.ASANA_REDIRECT_URI || oauthConfig.asana?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/asana`,
-    clientId: process.env.ASANA_CLIENT_ID || oauthConfig.asana?.clientId,
-    clientSecret: process.env.ASANA_CLIENT_SECRET || oauthConfig.asana?.clientSecret,
-    tokenAuthStyle: 'basic',
-  }),
-  linear: new GenericOAuthAdapter({
-    serviceName: 'linear',
-    authUrl: 'https://linear.app/oauth/authorize',
-    tokenUrl: 'https://api.linear.app/oauth/token',
-    verifyUrl: 'https://api.linear.app/oauth/userinfo',
-    scope: process.env.LINEAR_SCOPE || 'read write',
-    redirectUri: process.env.LINEAR_REDIRECT_URI || oauthConfig.linear?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/linear`,
-    clientId: process.env.LINEAR_CLIENT_ID || oauthConfig.linear?.clientId,
-    clientSecret: process.env.LINEAR_CLIENT_SECRET || oauthConfig.linear?.clientSecret,
-    extraAuthParams: { response_type: 'code', actor: 'user' },
-  }),
-  box: new GenericOAuthAdapter({
-    serviceName: 'box',
-    authUrl: 'https://account.box.com/api/oauth2/authorize',
-    tokenUrl: 'https://api.box.com/oauth2/token',
-    verifyUrl: 'https://api.box.com/2.0/users/me',
-    scope: process.env.BOX_SCOPE || 'root_readwrite',
-    redirectUri: process.env.BOX_REDIRECT_URI || oauthConfig.box?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/box`,
-    clientId: process.env.BOX_CLIENT_ID || oauthConfig.box?.clientId,
-    clientSecret: process.env.BOX_CLIENT_SECRET || oauthConfig.box?.clientSecret,
-  }),
-  airtable: new GenericOAuthAdapter({
-    serviceName: 'airtable',
-    authUrl: 'https://airtable.com/oauth2/v1/authorize',
-    tokenUrl: 'https://airtable.com/oauth2/v1/token',
-    verifyUrl: 'https://api.airtable.com/v0/meta/whoami',
-    scope: process.env.AIRTABLE_SCOPE || 'data.records:read data.records:write schema.bases:read',
-    redirectUri: process.env.AIRTABLE_REDIRECT_URI || oauthConfig.airtable?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/airtable`,
-    clientId: process.env.AIRTABLE_CLIENT_ID || oauthConfig.airtable?.clientId,
-    clientSecret: process.env.AIRTABLE_CLIENT_SECRET || oauthConfig.airtable?.clientSecret,
-    tokenAuthStyle: 'basic',
-  }),
-  figma: new GenericOAuthAdapter({
-    serviceName: 'figma',
-    authUrl: 'https://www.figma.com/oauth',
-    tokenUrl: 'https://www.figma.com/api/oauth/token',
-    verifyUrl: 'https://api.figma.com/v1/me',
-    scope: process.env.FIGMA_SCOPE || 'files:read',
-    redirectUri: process.env.FIGMA_REDIRECT_URI || oauthConfig.figma?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/figma`,
-    clientId: process.env.FIGMA_CLIENT_ID || oauthConfig.figma?.clientId,
-    clientSecret: process.env.FIGMA_CLIENT_SECRET || oauthConfig.figma?.clientSecret,
-  }),
-  canva: new GenericOAuthAdapter({
-    serviceName: 'canva',
-    authUrl: 'https://www.canva.com/api/oauth/authorize',
-    tokenUrl: 'https://www.canva.com/api/oauth/token',
-    verifyUrl: 'https://api.canva.com/rest/v1/users/me',
-    scope: process.env.CANVA_SCOPE || 'asset:read profile:read design:content:read',
-    redirectUri: process.env.CANVA_REDIRECT_URI || oauthConfig.canva?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/canva`,
-    clientId: process.env.CANVA_CLIENT_ID || oauthConfig.canva?.clientId,
-    clientSecret: process.env.CANVA_CLIENT_SECRET || oauthConfig.canva?.clientSecret,
-  }),
-  zendesk: new GenericOAuthAdapter({
-    serviceName: 'zendesk',
-    authUrl: `https://${process.env.ZENDESK_SUBDOMAIN || oauthConfig.zendesk?.subdomain || 'your-subdomain'}.zendesk.com/oauth/authorizations/new`,
-    tokenUrl: `https://${process.env.ZENDESK_SUBDOMAIN || oauthConfig.zendesk?.subdomain || 'your-subdomain'}.zendesk.com/oauth/tokens`,
-    verifyUrl: `https://${process.env.ZENDESK_SUBDOMAIN || oauthConfig.zendesk?.subdomain || 'your-subdomain'}.zendesk.com/api/v2/users/me.json`,
-    scope: process.env.ZENDESK_SCOPE || 'read write',
-    redirectUri: process.env.ZENDESK_REDIRECT_URI || oauthConfig.zendesk?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/zendesk`,
-    clientId: process.env.ZENDESK_CLIENT_ID || oauthConfig.zendesk?.clientId,
-    clientSecret: process.env.ZENDESK_CLIENT_SECRET || oauthConfig.zendesk?.clientSecret,
-    extraAuthParams: { response_type: 'code' },
-  }),
-  intercom: new GenericOAuthAdapter({
-    serviceName: 'intercom',
-    authUrl: 'https://app.intercom.com/oauth',
-    tokenUrl: 'https://api.intercom.io/auth/eagle/token',
-    verifyUrl: 'https://api.intercom.io/me',
-    scope: process.env.INTERCOM_SCOPE || '',
-    redirectUri: process.env.INTERCOM_REDIRECT_URI || oauthConfig.intercom?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/intercom`,
-    clientId: process.env.INTERCOM_CLIENT_ID || oauthConfig.intercom?.clientId,
-    clientSecret: process.env.INTERCOM_CLIENT_SECRET || oauthConfig.intercom?.clientSecret,
-  }),
-  clickup: new GenericOAuthAdapter({
-    serviceName: 'clickup',
-    authUrl: 'https://app.clickup.com/api',
-    tokenUrl: 'https://app.clickup.com/api/v2/oauth/token',
-    verifyUrl: 'https://api.clickup.com/api/v2/user',
-    scope: process.env.CLICKUP_SCOPE || '',
-    redirectUri: process.env.CLICKUP_REDIRECT_URI || oauthConfig.clickup?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/clickup`,
-    clientId: process.env.CLICKUP_CLIENT_ID || oauthConfig.clickup?.clientId,
-    clientSecret: process.env.CLICKUP_CLIENT_SECRET || oauthConfig.clickup?.clientSecret,
-  }),
-  monday: new GenericOAuthAdapter({
-    serviceName: 'monday',
-    authUrl: 'https://auth.monday.com/oauth2/authorize',
-    tokenUrl: 'https://auth.monday.com/oauth2/token',
-    verifyUrl: null,
-    scope: process.env.MONDAY_SCOPE || 'me:read boards:read',
-    redirectUri: process.env.MONDAY_REDIRECT_URI || oauthConfig.monday?.redirectUri || `http://localhost:${PORT}/api/v1/oauth/callback/monday`,
-    clientId: process.env.MONDAY_CLIENT_ID || oauthConfig.monday?.clientId,
-    clientSecret: process.env.MONDAY_CLIENT_SECRET || oauthConfig.monday?.clientSecret,
   }),
 };
 
@@ -757,6 +676,96 @@ if (!process.env.DATABASE_URL) {
 // SOC2 Phase 2 — CC7: Assign a unique correlation ID to every request for log tracing
 // Propagated automatically via AsyncLocalStorage — no manual threading needed
 app.use(requestContextMiddleware);
+
+// Canonical SQL predicate for a real AGENT API call in audit_log — a request made
+// by a token/agent against the API, NOT human dashboard activity. A row counts
+// only when it is authenticated by an agent credential:
+//   • auth_type IN ('bearer','asc','trigger') — token / ASC channel / automation
+//   • OR requester_id LIKE 'tok_%'             — access-token call (some logged
+//                                                with auth_type NULL)
+// and it is NOT:
+//   • dashboard browsing / session    → auth_type='session' or requester_id sess_*
+//   • a GUI account action            → requester_id usr_* with NULL auth_type
+//       (2fa, signup, marketplace_install, device approvals — these are humans
+//        clicking in the website, never agent API traffic)
+//   • an auth rejection               → action LIKE 'auth_blocked%' (blocked at the
+//        gate, never reached a handler — same reason the accounting middleware
+//        skips 401s; counting these would inflate usage with failed attempts)
+// Both the platform aggregate and the per-user attribution use this so the
+// "API calls" figure is identical, agent-only, and accurate everywhere.
+const COUNTED_API_CALL_SQL =
+  "(auth_type IN ('bearer','asc','trigger') OR requester_id LIKE 'tok\\_%' ESCAPE '\\') " +
+  "AND auth_type IS NOT 'session' " +
+  "AND requester_id NOT LIKE 'sess\\_%' ESCAPE '\\' " +
+  "AND (action IS NULL OR action NOT LIKE 'auth_blocked%')";
+
+// ── API call accounting ───────────────────────────────────────────────────────
+// Counts every TOKEN-authenticated API request exactly once into
+// usage_daily.api_calls. Session (dashboard UI) requests are never counted —
+// browsing the website must not inflate the API-call metric. If the endpoint
+// did not write its own audit row, a generic `api_request` row is recorded so
+// per-device/per-token activity views have complete coverage without duplicates.
+// res.on('finish') runs outside the ALS context, so capture the store reference
+// during the request and read its `audited` flag afterwards.
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/api/')) return next();
+  const store = getRequestStore();
+  res.on('finish', () => {
+    try {
+      const meta = req.tokenMeta;
+      if (!meta) return;                                              // unauthenticated/public
+      if (req.authType === 'session') return;                        // dashboard UI browsing
+      if (String(meta.tokenId || '').startsWith('sess_')) return;
+      if (res.statusCode === 401) return;                            // auth never succeeded
+      if (req.agentLimitBlocked) return;                             // rejected by quota — don't self-inflate usage
+
+      trackWorkspaceUsage(req, { api_calls: 1 });
+
+      // Per-agent quota accounting: one call, attributed to the target service
+      // when the request went through /services/:name/* (tagged on the ALS
+      // store), plus any context tokens the proxy measured for this request.
+      agentLimits.recordAgentUsage(meta.tokenId, {
+        service: (store && store.usageService) || '',
+        calls: 1,
+        tokens: (store && store.usageTokens) || 0,
+      });
+
+      if (store && !store.audited) {
+        const actor = store.actor || {};
+        createAuditLog({
+          requesterId: meta.tokenId,
+          actorId: meta.ownerId || actor.ownerId || null,
+          action: 'api_request',
+          resource: req.baseUrl + req.path,
+          scope: typeof meta.scope === 'string' ? meta.scope : JSON.stringify(meta.scope || null),
+          ip: req.ip,
+          httpMethod: req.method,
+          statusCode: res.statusCode,
+          requestId: store.requestId,
+          authType: actor.authType || req.authType || null,
+          tokenLabel: actor.tokenLabel || meta.label || null,
+          deviceId: actor.deviceId || null,
+          deviceName: actor.deviceName || null,
+          userAgent: actor.userAgent || req.get('user-agent') || null,
+        });
+      }
+    } catch (err) {
+      console.error('[ApiCallAccounting] failed:', err.message);
+    }
+  });
+  next();
+});
+
+// Tag the ALS store with the target service for /services/:name/* requests so
+// the per-agent accounting hook and the total-call limit gate can attribute
+// the call to the right service. Runs before auth; enforcement happens later.
+app.use('/api/v1/services/:serviceName', (req, res, next) => {
+  const store = getRequestStore();
+  if (store && !store.usageService && req.params.serviceName) {
+    store.usageService = String(req.params.serviceName).toLowerCase();
+  }
+  next();
+});
 
 // SOC2 Phase 4.3 — CSP nonce: generate a cryptographically random nonce per request.
 // The nonce is injected into the CSP header (scriptSrc) by Helmet and into the dashboard
@@ -854,102 +863,8 @@ app.use(cors({
 
 // Stripe webhook must be registered before express.json() so it receives the raw body
 // required by stripe.webhooks.constructEvent() for signature verification.
-app.post('/api/v1/billing/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-  const configuredSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
-  let event;
-
-  if (configuredSecret) {
-    const signature = req.headers['stripe-signature'];
-    if (!signature) return res.status(400).json({ error: 'Missing Stripe signature' });
-    const stripe = getStripeClient();
-    if (!stripe) return res.status(500).json({ error: 'Stripe not configured' });
-    try {
-      event = stripe.webhooks.constructEvent(req.body, signature, configuredSecret);
-    } catch (err) {
-      return res.status(400).json({ error: `Webhook signature verification failed: ${err.message}` });
-    }
-  } else {
-    // Reject unsigned webhooks — processing unverified Stripe events allows
-    // an attacker to trigger subscription state changes without credentials.
-    return res.status(400).json({ error: 'Stripe webhook secret not configured; unsigned events rejected' });
-  }
-
-  const type = event?.type;
-  const obj = event?.data?.object || {};
-  const metadataWorkspaceId = obj?.metadata?.workspace_id || null;
-
-  if (type === 'customer.subscription.created' || type === 'customer.subscription.updated') {
-    if (metadataWorkspaceId) {
-      const newPlanId = (obj.items?.data?.[0]?.price?.nickname || obj.items?.data?.[0]?.price?.lookup_key || 'free').toLowerCase();
-      upsertBillingSubscription(metadataWorkspaceId, {
-        stripe_subscription_id: obj.id,
-        plan_id: newPlanId,
-        status: obj.status || 'active',
-        period_start: obj.current_period_start ? new Date(obj.current_period_start * 1000).toISOString() : null,
-        period_end: obj.current_period_end ? new Date(obj.current_period_end * 1000).toISOString() : null,
-        cancel_at_period_end: !!obj.cancel_at_period_end,
-      });
-      // Notify workspace owner on active subscription (upgrade)
-      if (type === 'customer.subscription.updated' && obj.status === 'active' && newPlanId !== 'free') {
-        const billingWs = getWorkspaces(null, metadataWorkspaceId);
-        if (billingWs?.ownerId) {
-          NotificationDispatcher.onSubscriptionUpgraded(metadataWorkspaceId, billingWs.ownerId, newPlanId)
-            .catch(err => console.error('[Billing] Subscription upgrade notification error:', err));
-        }
-      }
-    }
-  }
-
-  if (type === 'customer.subscription.deleted') {
-    if (metadataWorkspaceId) {
-      upsertBillingSubscription(metadataWorkspaceId, {
-        stripe_subscription_id: obj.id,
-        plan_id: 'free',
-        status: 'canceled',
-        period_start: null,
-        period_end: null,
-        cancel_at_period_end: false,
-      });
-    }
-  }
-
-  if (type === 'customer.subscription.trial_will_end') {
-    if (metadataWorkspaceId) {
-      upsertBillingSubscription(metadataWorkspaceId, {
-        stripe_subscription_id: obj.id,
-        plan_id: (obj.items?.data?.[0]?.price?.nickname || obj.items?.data?.[0]?.price?.lookup_key || 'free').toLowerCase(),
-        status: obj.status || 'trialing',
-        period_start: obj.current_period_start ? new Date(obj.current_period_start * 1000).toISOString() : null,
-        period_end: obj.current_period_end ? new Date(obj.current_period_end * 1000).toISOString() : null,
-        cancel_at_period_end: !!obj.cancel_at_period_end,
-      });
-    }
-  }
-
-  if (type === 'invoice.paid' || type === 'invoice.payment_failed' || type === 'invoice.finalized') {
-    if (metadataWorkspaceId) {
-      upsertInvoice(metadataWorkspaceId, {
-        stripe_invoice_id: obj.id,
-        amount_cents: obj.amount_paid || obj.amount_due || 0,
-        currency: obj.currency || 'usd',
-        status: obj.status || 'open',
-        invoice_url: obj.hosted_invoice_url || null,
-        created_at: obj.created ? new Date(obj.created * 1000).toISOString() : new Date().toISOString(),
-      });
-      // Notify workspace owner on payment failure
-      if (type === 'invoice.payment_failed') {
-        const failWs = getWorkspaces(null, metadataWorkspaceId);
-        if (failWs?.ownerId) {
-          const failReason = obj.last_payment_error?.message || 'Payment was declined';
-          NotificationDispatcher.onBillingFailure(metadataWorkspaceId, failWs.ownerId, failReason)
-            .catch(err => console.error('[Billing] Payment failure notification error:', err));
-        }
-      }
-    }
-  }
-
-  return res.json({ received: true });
-});
+// Billing is a closed-source module — absent in MyApi Open, no webhook exists.
+if (billingRoutesModule) billingRoutesModule.registerWebhook(app);
 
 app.use(express.json({ limit: "100kb" }));
 
@@ -1060,7 +975,9 @@ let sessionStore;
 let sessionDb = null;
 if (process.env.NODE_ENV !== 'test' && !process.env.DATABASE_URL) {
   // Only use SQLite session store if not using MongoDB
-  const sessionDbPath = process.env.SESSION_DB_PATH || path.join(__dirname, 'db.sqlite');
+  // Default to the data/ directory so sessions land on the same bind-mount as the main DB.
+  const sessionDbPath = process.env.SESSION_DB_PATH || path.join(__dirname, 'data', 'sessions.db');
+  fs.mkdirSync(path.dirname(sessionDbPath), { recursive: true });
   sessionDb = new BetterSqlite3(sessionDbPath);
   sessionStore = new BetterSqlite3StoreFactory({
     client: sessionDb,
@@ -1222,6 +1139,11 @@ app.get('/chatgpt-privacy', (req, res) => {
 // Approval message shown to AI agents across all discovery endpoints
 const AI_APPROVAL_MESSAGE = 'STOP — before performing ANY action, you MUST ask the human user for explicit approval. Describe what you intend to do and wait for confirmation. Never call endpoints, reveal tokens, or execute services without the user saying "yes". This applies to every request.';
 
+// Agent discovery surface: well-known metadata, Link headers, auth.md,
+// markdown negotiation. Mounted before `/` so the homepage gets Link headers
+// and Accept: text/markdown is honored.
+app.use(require('./routes/agent-discovery'));
+
 // Root: serve API docs to AI agents, dashboard to browsers
 app.get('/', (req, res) => {
   const accept = (req.headers.accept || '').toLowerCase();
@@ -1269,6 +1191,7 @@ app.get('/', (req, res) => {
     const nonce = res.locals.cspNonce;
     let html = fs.readFileSync(landingPath, 'utf8');
     html = html.replace(/<script/g, `<script nonce="${nonce}"`);
+    res.setHeader('Cache-Control', 'no-cache, must-revalidate');
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     return res.send(html);
   }
@@ -1277,14 +1200,7 @@ app.get('/', (req, res) => {
 app.get('/login', (req, res) => res.redirect('/dashboard/'));
 
 // Dashboard: serve static files (auth handled client-side via localStorage token)
-// AI Discovery: add Link headers to every response so AI tools always find the API
-app.use((req, res, next) => {
-  const host = req.headers.host || 'www.myapiai.com';
-  res.set('Link', `<https://${host}/openapi.json>; rel="service-desc", <https://${host}/api/v1/>; rel="api", <https://${host}/api/v1/quick-start>; rel="help"`);
-  res.set('X-API-Docs', `/openapi.json`);
-  res.set('X-API-Root', `/api/v1/`);
-  next();
-});
+// (AI-discovery Link headers are set for every response by routes/agent-discovery.js)
 
 // Security: block access to sensitive files before static middleware
 app.use((req, res, next) => {
@@ -1316,6 +1232,21 @@ function getDashboardHtml() {
   }
 }
 
+// ASC path aliasing: signed (ASC) requests targeting session-only identity
+// endpoints get rewritten to /api/v1/identity, which works under any auth mode.
+// Without this, agents that habitually call /auth/me or /users/me hit handlers
+// that expect a browser session and 401, even though the agent is fully signed.
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/api/v1/')) return next();
+  const hasAsc = req.headers['x-agent-publickey'] && req.headers['x-agent-signature'] && req.headers['x-agent-timestamp'];
+  if (!hasAsc) return next();
+  if (req.path === '/api/v1/auth/me' || req.path === '/api/v1/users/me') {
+    const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+    req.url = '/api/v1/identity' + qs;
+  }
+  next();
+});
+
 app.use('/dashboard/assets', express.static(path.join(dashboardDistPath, 'assets')));
 app.use('/dashboard', (req, res, next) => {
   // Only serve non-HTML static files directly (images, favicons, etc)
@@ -1329,12 +1260,25 @@ app.use('/dashboard', (req, res, next) => {
   const patched = html
     .replace(/<script(\b[^>]*)>/gi, (_, attrs) => `<script${attrs} nonce="${nonce}">`)
     .replace(/<link(\b[^>]*rel=["']stylesheet["'][^>]*)>/gi, (_, attrs) => `<link${attrs} nonce="${nonce}">`);
+  // SPA shell must always revalidate so deploys take effect immediately.
+  // Hashed assets under /dashboard/assets/ stay long-cacheable.
+  res.setHeader('Cache-Control', 'no-cache, must-revalidate');
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(patched);
 });
 
 // General static files
 app.use(express.static(path.join(__dirname, "public")));
+
+// Public SEO-friendly aliases for indexable dashboard routes
+app.get(['/signup', '/marketplace', '/platform-docs'], (req, res) => {
+  const target = {
+    '/signup': '/dashboard/signup',
+    '/marketplace': '/dashboard/marketplace',
+    '/platform-docs': '/dashboard/platform-docs',
+  }[req.path] || '/dashboard/';
+  res.redirect(301, target);
+});
 
 // Connectors — serve OpenAPI specs and related files publicly
 // In Docker __dirname=/app (src/ contents are at /app/); in dev __dirname=.../src/
@@ -1384,13 +1328,14 @@ app.get('/api/v1/', (req, res) => {
       identity: 'GET /api/v1/identity',
       vaultTokens: 'GET /api/v1/vault/tokens',
       connectors: 'GET /api/v1/connectors',
+      automations: 'GET|POST /api/v1/triggers',
       openapi: 'GET /openapi.json',
     },
   });
 });
 
 // GET /api/v1/quick-start - personalized step-by-step guide for AI agents
-app.get('/api/v1/quick-start', (req, res) => {
+app.get('/api/v1/quick-start', async (req, res) => {
   const hasAuth = !!(req.headers.authorization || '').match(/^Bearer\s+.+/i);
   const host = req.headers.host || 'www.myapiai.com';
   const canonicalBase = `https://${host}`;
@@ -1405,6 +1350,16 @@ app.get('/api/v1/quick-start', (req, res) => {
         const token = getCachedOAuthToken(svcId, userId) || getOAuthToken(svcId, userId);
         if (token) connectedSvcs.push(svcId);
       }
+      // Composio-connected toolkits are callable exactly like native services
+      // under their clean toolkit name (TTL-cached lookup, non-critical).
+      if (isComposioConfigured()) {
+        try {
+          const composioState = await syncComposioStateForUser(String(userId));
+          for (const toolkit of composioState.services || []) {
+            connectedSvcs.push(toolkit.toolkitSlug);
+          }
+        } catch (_e) { /* non-critical */ }
+      }
       const tokenLabel = req.tokenMeta?.label || 'your-token';
       const authHeader = `Authorization: Bearer ${tokenLabel === 'your-token' ? '<your-token>' : tokenLabel}`;
 
@@ -1415,17 +1370,17 @@ app.get('/api/v1/quick-start', (req, res) => {
         slack: '/conversations.list?limit=5',
         notion: '/search',
         discord: '/users/@me/guilds',
-        linear: '/issues?first=5',
         jira: '/rest/api/3/myself',
         zoom: '/users/me/meetings',
         microsoft365: '/me/messages?$top=5',
         dropbox: '/files/list_folder',
-        hubspot: '/crm/v3/objects/contacts?limit=5',
-        trello: '/members/me/boards',
+        gmail: '/gmail/v1/users/me/messages?maxResults=5',
+        googlecalendar: '/calendar/v3/calendars/primary/events?maxResults=5',
       };
 
       const exampleCurls = connectedSvcs.slice(0, 3).map(svcId => {
-        const path = SERVICE_EXAMPLE_PATHS[svcId] || '/';
+        // composio__{slug} services share example paths with their native toolkit
+        const path = SERVICE_EXAMPLE_PATHS[svcId] || SERVICE_EXAMPLE_PATHS[svcId.replace(/^composio__/, '')] || '/';
         return {
           service: svcId,
           description: `List/fetch from ${svcId}`,
@@ -1532,6 +1487,20 @@ app.get('/api/v1/quick-start', (req, res) => {
         detail: 'Call any connected service (github, google, slack, etc.) through the proxy using the owner\'s stored credentials.',
         requiredScope: 'services:read',
       },
+      {
+        step: 8,
+        action: 'Create automations (scheduled, proactive tasks)',
+        endpoint: 'POST /api/v1/triggers',
+        detail: 'Schedule a recurring/one-time task that MyApi runs on its own. Use actionType "ai_prompt" for a plain-English task across the owner\'s connected services (recommended). schedule.type ∈ once|interval|daily|weekly|monthly. List with GET /api/v1/triggers, run-now with POST /api/v1/triggers/:id/run. Requires a Pro/Heavy plan.',
+        body: {
+          name: 'Morning email digest',
+          kind: 'schedule',
+          schedule: { type: 'daily', atHour: 7, atMinute: 0 },
+          timezone: 'UTC',
+          actionType: 'ai_prompt',
+          action: { prompt: 'Summarize my unread email and send it to me', services: ['gmail'] },
+        },
+      },
     ],
     fullDocs: '/openapi.json',
     personalized: personalized || undefined,
@@ -1575,12 +1544,9 @@ app.post('/api/v1/ask', authenticate, async (req, res) => {
       slack: 'channels(/conversations.list), messages(/conversations.history), users(/users.list)',
       notion: 'pages(/pages), databases(/databases), search(/search)',
       discord: 'user-guilds(/users/@me/guilds), guild-channels(/guilds/{id}/channels), messages(/channels/{id}/messages)',
-      linear: 'issues(/issues), projects(/projects), teams(/teams)',
       microsoft365: 'mail(/me/messages), calendar(/me/events), files(/me/drive/root/children)',
       jira: 'issues(/rest/api/3/search), projects(/rest/api/3/project)',
       zoom: 'meetings(/users/me/meetings), recordings(/users/me/recordings)',
-      trello: 'boards(/members/me/boards), cards(/boards/{id}/cards)',
-      hubspot: 'contacts(/crm/v3/objects/contacts), deals(/crm/v3/objects/deals)',
       dropbox: 'files(/files/list_folder), search(/files/search_v2)',
     };
 
@@ -1677,7 +1643,10 @@ Rules:
 
 // /.well-known/openapi - standard discovery path (public for AI agent bootstrap)
 app.get('/.well-known/openapi.json', (req, res) => {
-  res.redirect('/openapi.json');
+  req.url = '/openapi.json';
+  app._router.handle(req, res, () => {
+    if (!res.headersSent) res.status(404).end();
+  });
 });
 
 // /.well-known/ai-plugin.json - ChatGPT/AI plugin discovery standard
@@ -2223,7 +2192,7 @@ app.use('/api/v1/devices', authenticate, deviceRoutes);
 // Device approval is now applied globally in the authenticate middleware
 app.use('/api/v1/dashboard', authenticate, dashboardRoutes);
 // Services endpoints are public for discovery; auth required only for mutations
-app.use('/api/v1/services', createServicesRoutes());
+app.use('/api/v1/services', authenticate, createServicesRoutes());
 
 // PUBLIC: List all skills (no auth required - metadata only)
 // Works with both SQLite and MongoDB
@@ -2332,6 +2301,21 @@ function markTotpCodeUsed(userId, code) {
 
 const _policyMiddleware = policyEngine();
 
+// ASC replay window (seconds). Originally 60s; bumped to 300s to absorb the clock
+// drift seen in container/VM-hosted MCPs that don't run NTP. Replay risk is still
+// bounded — keys are Ed25519 + every request carries a fresh signature, so this
+// only widens the window an attacker would need to capture-and-replay within.
+const ASC_REPLAY_WINDOW_SECONDS = 300;
+
+const ASC_REASON_HINTS = {
+  timestamp_invalid:  'X-Agent-Timestamp must be an integer Unix seconds value.',
+  timestamp_stale:    'Clock skew between agent and server exceeds the replay window. Sync NTP and retry.',
+  publickey_invalid:  'X-Agent-PublicKey must be a 32-byte Ed25519 key base64-encoded.',
+  signature_invalid:  'X-Agent-Signature did not verify against the supplied public key.',
+  device_not_approved:'This key has never been approved by a user. Approve it from the dashboard devices page.',
+  internal_error:     'Server error while validating the signed request. Retry; if it persists, check server logs.',
+};
+
 async function authenticate(req, res, next) {
   // Wrap next so that successfully authenticated requests also pass through the policy engine.
   // Public-path early-returns use the original next (no token = no policy to evaluate).
@@ -2350,13 +2334,18 @@ async function authenticate(req, res, next) {
     /^\/api\/v1\/auth\/signup/,
     /^\/api\/v1\/auth\/me/,
     /^\/api\/v1\/auth\/2fa\/challenge/,
+    /^\/api\/v1\/auth\/sso\//,               // public: B2B SSO entry (start, OIDC/SAML callbacks, SP metadata)
     /^\/api\/v1\/auth\/oauth-signup\/pending/,
     /^\/api\/v1\/auth\/oauth-signup\/complete/,
     /^\/api\/v1\/billing\/plans/,
     /^\/oauth\//,
     /^\/api\/v1\/handshakes\/[^/]+\/status$/,  // public: AI agents poll handshake status
     /^\/api\/v1\/afp\/download/,              // public: AFP daemon binary downloads
+    /^\/api\/v1\/afp\/install\.sh$/,          // public: one-line installer script (Linux/macOS)
+    /^\/api\/v1\/afp\/install\.ps1$/,         // public: one-line installer script (Windows)
+    /^\/api\/v1\/afp\/enroll$/,               // public: enrollment-code exchange (code-gated)
     /^\/api\/v1\/agentic\/device\/token$/,    // public: AI agent polls for token (no prior token available)
+    /^\/api\/v1\/agentic\/asc\/enroll$/,      // public: one-time enrollment-code exchange (code-gated, pre-approved)
     /^\/api\/v1\/agent-auth\/install(\.js|-node)$/,     // public: OAuth installer (Node.js)
     /^\/api\/v1\/agent-auth\/install(\.py|-python)$/,  // public: OAuth installer (Python 3 fallback)
     /^\/api\/v1\/agent-guide$/,              // public: AI agent capabilities + connection guide
@@ -2386,6 +2375,13 @@ async function authenticate(req, res, next) {
     req.authType = 'session';
     // session users are treated as "full" for MVP; we will add RBAC later.
     req.tokenMeta = { tokenId: `sess_${req.user.id}`, scope: 'full', ownerId: String(req.user.id), label: 'session' };
+    setRequestActor({
+      authType: 'session',
+      ownerId: String(req.user.id),
+      tokenId: `sess_${req.user.id}`,
+      tokenLabel: 'Dashboard session',
+      userAgent: req.get('user-agent') || null,
+    });
     
     // Set workspace ID from session for multi-tenancy filtering
     if (req.session.currentWorkspace) {
@@ -2432,6 +2428,124 @@ async function authenticate(req, res, next) {
 
   if (parts.length === 2 && parts[0] === "Bearer") {
     rawToken = parts[1];
+  }
+
+  // 2b) ASC (Ed25519 keypair) auth — no Bearer token required.
+  // On any ASC failure we return a structured 401 (asc_reason) instead of falling
+  // through to the generic message, so agents can self-diagnose and the MCP can
+  // surface a single concrete next-action.
+  const ascPubKeyB64 = req.headers['x-agent-publickey'];
+  const ascSigB64    = req.headers['x-agent-signature'];
+  const ascTsHeader  = req.headers['x-agent-timestamp'];
+  const ascAttempted = !rawToken && !!(ascPubKeyB64 && ascSigB64 && ascTsHeader);
+
+  if (ascAttempted) {
+    const respondAscFail = (reason, extra = {}) => {
+      console.warn('[AUTH 401 ASC]', { reason, path: req.path, ...extra });
+      try {
+        createComplianceAuditLog(
+          req.headers['x-workspace-id'] || 'system', null,
+          'auth_failed', 'asc', null, JSON.stringify({ reason, path: req.path }),
+          req.ip, req.get('user-agent')
+        );
+      } catch (_) {}
+      return res.status(401).json({
+        error: 'asc_auth_failed',
+        asc_reason: reason,
+        message: ASC_REASON_HINTS[reason] || 'ASC authentication failed.',
+        ...extra,
+      });
+    };
+
+    try {
+      const ts = parseInt(ascTsHeader, 10);
+      if (isNaN(ts)) return respondAscFail('timestamp_invalid');
+      const skew = Math.floor(Date.now() / 1000) - ts;
+      if (Math.abs(skew) > ASC_REPLAY_WINDOW_SECONDS) {
+        return respondAscFail('timestamp_stale', { server_time: Math.floor(Date.now() / 1000), skew_seconds: skew });
+      }
+
+      let rawPub;
+      try { rawPub = Buffer.from(ascPubKeyB64, 'base64'); } catch { return respondAscFail('publickey_invalid'); }
+      if (rawPub.length !== 32) return respondAscFail('publickey_invalid');
+
+      const fingerprint = crypto.createHash('sha256').update(rawPub).digest('hex').substring(0, 32);
+      const spki   = Buffer.concat([Buffer.from('302a300506032b6570032100', 'hex'), rawPub]);
+      const keyObj = crypto.createPublicKey({ key: spki, format: 'der', type: 'spki' });
+      const msg    = Buffer.from(`${ascTsHeader}:${fingerprint}`);
+      let sigValid = false;
+      try { sigValid = crypto.verify(null, msg, keyObj, Buffer.from(ascSigB64, 'base64')); } catch (_) {}
+      if (!sigValid) return respondAscFail('signature_invalid', { key_fingerprint: fingerprint });
+
+      // Signature OK — find the device. If missing/revoked but a prior approval
+      // exists, auto-restore inline (the signature proves key ownership).
+      let device = getApprovedDeviceByKeyFingerprintGlobal(fingerprint);
+      if (!device) {
+        try {
+          const restored = restoreASCDevice(fingerprint, rawPub.toString('base64'), req.ip);
+          if (restored && !restored.revoked_at) {
+            device = restored;
+            console.info('[AUTH ASC] auto-restored device on signed request', { fingerprint });
+          }
+        } catch (e) {
+          console.warn('[AUTH ASC] restore attempt failed', { fingerprint, err: e.message });
+        }
+      }
+      if (!device) {
+        return respondAscFail('device_not_approved', {
+          key_fingerprint: fingerprint,
+          next_action: 'Open ' + (process.env.PUBLIC_BASE_URL || 'https://www.myapiai.com') + '/dashboard/devices and approve this key.',
+        });
+      }
+
+      const ownerId = String(device.user_id);
+      // Scoped ASC keys: a key registered with a scoped token carries that
+      // token's scope (JSON array in approved_devices.scope) — never 'full'.
+      // tokenType 'guest' keeps isMaster() false so all scope gates apply.
+      // Only JSON-array values bind scope; legacy 'read'/'full' device values
+      // keep their original (device-visibility) semantics.
+      const ascBoundScope = typeof device.scope === 'string' && device.scope.startsWith('[') ? device.scope : null;
+      req.tokenMeta = {
+        tokenId:   fingerprint,
+        id:        `asc_${fingerprint}`,
+        ownerId,
+        userId:    ownerId,
+        type:      'asc',
+        tokenType: ascBoundScope ? 'guest' : 'master',
+        scope:     ascBoundScope || 'full',
+        name:      device.device_name || 'ASC Agent',
+      };
+      req.userId   = ownerId;
+      req.authType = 'asc';
+      setRequestActor({
+        authType: 'asc',
+        ownerId: ownerId ? String(ownerId) : null,
+        tokenId: fingerprint,
+        tokenLabel: device.device_name || 'ASC Agent',
+        deviceId: device.id,
+        deviceName: device.device_name || 'ASC Agent',
+        userAgent: req.get('user-agent') || null,
+      });
+      try {
+        const ascOwner = getUserById(ownerId);
+        if (ascOwner) req.user = ascOwner;
+      } catch (_) {}
+      try {
+        createAuditLog({
+          requesterId: fingerprint,
+          action:      'asc_request',
+          resource:    req.path,
+          scope:       ascBoundScope || 'full',
+          ip:          req.ip,
+          details:     JSON.stringify({ method: req.method, agent: device.device_name || 'ASC Agent' }),
+        });
+      } catch (_) {}
+      if (!enforceAgentUsageLimits(req, res)) return;
+      return _policyMiddleware(req, res, next);
+    } catch (e) {
+      console.error('[AUTH ASC] unexpected error', e);
+      return respondAscFail('internal_error');
+    }
   }
 
   if (!rawToken) {
@@ -2488,6 +2602,59 @@ async function authenticate(req, res, next) {
   }
   req.tokenMeta = matched;
   req.authType = 'bearer';
+  setRequestActor({
+    authType: 'bearer',
+    ownerId: matched.ownerId ? String(matched.ownerId) : null,
+    tokenId: matched.tokenId,
+    tokenLabel: matched.label || null,
+    tokenType: matched.tokenType || 'guest',
+    userAgent: req.get('user-agent') || null,
+  });
+
+  // ── Enforce token suspension ────────────────────────────────────────────────
+  // tokenSecurityMonitor.handleAnomaly() suspends a token (sets suspended_at) when
+  // it detects compromise signals. That suspension MUST block every subsequent
+  // request until the user re-approves — not only the requests where the anomaly
+  // is still actively re-detected by checkRequest() below. Without this gate a
+  // suspended token silently works again as soon as the velocity window passes or
+  // the next request happens to look "normal", making suspension cosmetic.
+  // This also runs on token-cache hits, so a freshly suspended token is caught
+  // immediately. Fail closed: a DB hiccup must not let a suspended token through.
+  try {
+    const { getTokenSuspension } = require('./database');
+    const suspension = getTokenSuspension(matched.tokenId);
+    if (suspension) {
+      try {
+        createAuditLog({
+          requesterId: matched.tokenId,
+          action: 'auth_blocked_suspended_token',
+          resource: req.path,
+          ip: req.ip,
+          details: { method: req.method, reason: suspension.suspension_reason },
+        });
+      } catch (_) {}
+      return res.status(403).json({
+        error: 'token_suspended',
+        code: 'TOKEN_SUSPENDED',
+        message: 'This token was suspended due to suspicious activity. Review your notifications and re-approve it to continue.',
+        reason: suspension.suspension_reason,
+      });
+    }
+  } catch (e) {
+    console.error('[Auth] Suspension check DB error — failing closed:', e.message);
+    return res.status(500).json({ error: 'Internal server error', message: 'Authentication failed' });
+  }
+
+  // ── Enforce per-agent usage limits (calls) ─────────────────────────────────
+  if (!enforceAgentUsageLimits(req, res)) return;
+
+  // Track token usage for staleness policies (B2B auto-revoke). Throttled to
+  // one write per hour per token via string-prefix comparison on the ISO hour.
+  try {
+    const hour = new Date().toISOString().slice(0, 13);
+    db.prepare("UPDATE access_tokens SET last_used_at = ? WHERE id = ? AND (last_used_at IS NULL OR substr(last_used_at, 1, 13) != ?)")
+      .run(new Date().toISOString(), matched.tokenId, hour);
+  } catch (_) {}
 
   // Populate req.user from the token's owner so endpoints that read req.user?.id work
   // correctly regardless of whether auth came from a session or a Bearer token.
@@ -2522,8 +2689,33 @@ async function authenticate(req, res, next) {
     return policyNext();
   }
 
-  // Apply device approval only for guest/scoped tokens (external API access)
-  return deviceApprovalMiddleware(req, res, policyNext);
+  // Chain: deviceApprovalMiddleware (token-level revocation + device visibility)
+  //        → tokenSecurityMonitor.checkRequest (real-anomaly detection: ASN drift,
+  //          VPN/Tor, velocity). Monitor is the ONLY thing that may suspend an OAuth
+  //          token — the legacy hardcoded "OAuth cross-device = suspicious" path is
+  //          gone (kept reachable via FEATURE_OAUTH_STRICT_DEVICE_BIND for one release).
+  return deviceApprovalMiddleware(req, res, async () => {
+    try {
+      const tokenId = req.tokenMeta?.tokenId;
+      const tokenType = req.tokenMeta?.tokenType || 'guest';
+      if (tokenId) {
+        const result = await tokenSecurityMonitor.checkRequest(req, tokenId, tokenType);
+        if (result?.blocked) {
+          return res.status(403).json({
+            error: 'token_suspended',
+            code: 'TOKEN_SUSPENDED',
+            message: result.message || 'Token suspended due to suspicious activity.',
+            reasons: result.reasons,
+            approvalId: result.approvalId,
+          });
+        }
+      }
+    } catch (err) {
+      console.error('[Auth] tokenSecurityMonitor error:', err.message);
+      // Fail open on monitor error — primary auth + device approval already passed
+    }
+    return policyNext();
+  });
 }
 
 function adminOnly(req, res, next) {
@@ -2580,6 +2772,21 @@ app.use('/api/v1/notifications', authenticate, notificationsRouter);
 app.use('/api/v1/activity', authenticate, activityRoutes);
 app.use('/api/v1/email', authenticate, emailRoutes);
 app.use('/api/v1/workspaces', authenticate, workspacesRoutes);
+// B2B (closed-source): organization management (org lifecycle, domains, members,
+// policy, audit) and SCIM 2.0 provisioning (own bearer-token auth) — absent in
+// MyApi Open, where these endpoints simply do not exist.
+const createOrgRoutes = optionalRequire('./routes/orgs');
+if (createOrgRoutes) app.use('/api/v1/orgs', authenticate, createOrgRoutes());
+const scimModule = optionalRequire('./routes/scim');
+if (scimModule) app.use('/scim/v2', scimModule.createScimRoutes());
+
+// B2B: self-host license status (boot check logs; endpoint powers admin UI).
+// Closed-source module; MyApi Open reports a plain 'oss' edition.
+const licenseLib = optionalRequire('./lib/license');
+if (licenseLib) licenseLib.bootLicenseCheck();
+app.get('/api/v1/license', authenticate, (req, res) => {
+  res.json({ license: licenseLib ? licenseLib.getLicenseStatus() : { edition: 'oss' } });
+});
 app.use('/api/v1/invitations', authenticate, invitationsRoutes);
 
 // Waitlist: public POST (email capture), admin-gated list/invite/notify-launch.
@@ -2588,68 +2795,89 @@ app.use('/api/v1/waitlist', createWaitlistRoutes({ isMaster, authenticate }));
 
 // Mount management routes (audit, tokens, etc)
 // Note: Management routes require authentication but have their own permission checks
-const auditLogService = {
-  getRecent: (limit = 1000, offset = 0) => {
-    try {
-      const stmt = db.prepare('SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT ? OFFSET ?');
-      return stmt.all(limit, offset) || [];
-    } catch (e) {
-      console.error('Error fetching audit logs:', e);
-      return [];
-    }
-  }
-};
-
-// Create a simple audit/agents endpoint directly (bypass requirePersonal for read-only audit)
+// Agent/token usage rollup for the Settings "AI Agent & Token Usage" panel.
+// Reads the real audit_log (the old version queried a non-existent audit_logs
+// table and always returned []). Session (dashboard UI) activity is excluded —
+// this view answers "which agents/devices are calling my API".
 app.get('/api/v1/manage/audit/agents', authenticate, (req, res) => {
   try {
-    const logs = auditLogService.getRecent(1000, 0);
-    const agentMap = {};
+    if (!isMaster(req)) {
+      return res.status(403).json({ error: 'Requires a master token or dashboard session' });
+    }
+    const days = Math.min(Number(req.query.days) || 30, 365);
+    const since = new Date(Date.now() - days * 86400000).toISOString();
 
-    logs.forEach(log => {
-      if (!log.request_id) return;
+    // SECURITY: scope to THIS user's own agents/calls unless they're the platform
+    // owner. A row is the user's when actor_id or requester_id is the user id.
+    // Without this every dashboard session (which passes isMaster) saw every
+    // other user's agents, devices, and API-call counts.
+    const reqUserId = getOAuthUserId(req);
+    const owner = isOwnerUser(reqUserId);
+    const userScope = owner
+      ? { sql: '', params: [] }
+      : { sql: 'AND (audit_log.actor_id = ? OR audit_log.requester_id = ?)', params: [reqUserId, reqUserId] };
 
-      const userAgent = log.user_agent || '';
-      let agentName = 'Unknown';
-      let agentType = 'browser';
+    // Group by the most specific identity available: approved-device name
+    // (device management), then token label, then raw requester id. Old rows
+    // predating the actor columns fall back to the joined token label.
+    const agentKey = "COALESCE(audit_log.device_name, audit_log.token_label, t.label, audit_log.requester_id)";
+    const rows = db.prepare(`
+      SELECT
+        ${agentKey} AS agent_name,
+        MAX(audit_log.auth_type) AS auth_type,
+        MAX(audit_log.user_agent) AS user_agent,
+        MAX(audit_log.device_id) AS device_id,
+        MAX(audit_log.device_name) AS device_name,
+        MAX(COALESCE(audit_log.token_label, t.label)) AS token_label,
+        COUNT(*) AS access_count,
+        MAX(audit_log.timestamp) AS last_access
+      FROM audit_log
+      LEFT JOIN access_tokens t ON t.id = audit_log.requester_id
+      WHERE audit_log.timestamp >= ?
+        ${userScope.sql}
+        AND (audit_log.auth_type IS NULL OR audit_log.auth_type != 'session')
+        AND audit_log.requester_id NOT LIKE 'sess\\_%' ESCAPE '\\'
+        AND audit_log.requester_id NOT IN ('system', 'anonymous', 'unknown')
+        AND audit_log.action NOT IN ('auth_fail', 'uncaught_exception', 'db_integrity_warning')
+      GROUP BY ${agentKey}
+      ORDER BY access_count DESC
+      LIMIT 25
+    `).all(since, ...userScope.params);
 
-      if (userAgent.includes('Jarvis')) {
-        agentName = 'Jarvis';
-        agentType = 'ai';
-      } else if (userAgent.includes('OpenClaw')) {
-        agentName = 'OpenClaw';
-        agentType = 'ai';
-      } else if (userAgent.includes('curl') || userAgent.includes('node')) {
-        agentName = userAgent.split('/')[0];
-        agentType = 'cli';
-      } else if (userAgent.includes('Python')) {
-        agentName = 'Python';
-        agentType = 'script';
-      }
+    const endpointsStmt = db.prepare(`
+      SELECT DISTINCT audit_log.resource AS resource
+      FROM audit_log
+      LEFT JOIN access_tokens t ON t.id = audit_log.requester_id
+      WHERE ${agentKey} = ? AND audit_log.timestamp >= ? AND audit_log.resource IS NOT NULL
+        ${userScope.sql}
+      ORDER BY audit_log.timestamp DESC
+      LIMIT 8
+    `);
 
-      if (!agentMap[agentName]) {
-        agentMap[agentName] = {
-          agentName,
-          agentType,
-          accessCount: 0,
-          lastAccess: null,
-          tokensUsed: [],
-          endpointsAccessed: []
-        };
-      }
+    const classify = (row) => {
+      if (row.auth_type === 'asc') return 'ai';
+      const ua = String(row.user_agent || '');
+      if (/jarvis|openclaw|chatgpt|claude|gpt|anthropic|openai|agent/i.test(ua)) return 'ai';
+      if (/curl|wget|node|axios|got\//i.test(ua)) return 'cli';
+      if (/python|requests|httpx/i.test(ua)) return 'script';
+      if (row.auth_type === 'bearer') return 'ai';
+      return 'browser';
+    };
 
-      agentMap[agentName].accessCount++;
-      agentMap[agentName].lastAccess = log.created_at;
+    const agents = rows.map((row) => ({
+      agentName: row.agent_name,
+      agentType: classify(row),
+      authType: row.auth_type || 'bearer',
+      deviceId: row.device_id || null,
+      deviceName: row.device_name || null,
+      tokenLabel: row.token_label || null,
+      accessCount: row.access_count,
+      lastAccess: row.last_access,
+      tokensUsed: row.token_label ? [row.token_label] : [],
+      endpointsAccessed: endpointsStmt.all(row.agent_name, since, ...userScope.params).map((r) => r.resource),
+    }));
 
-      if (log.resource && !agentMap[agentName].endpointsAccessed.includes(log.resource)) {
-        agentMap[agentName].endpointsAccessed.push(log.resource);
-      }
-    });
-
-    res.json({
-      ok: true,
-      agents: Object.values(agentMap)
-    });
+    res.json({ ok: true, rangeDays: days, agents });
   } catch (error) {
     console.error('Error fetching agent usage:', error);
     res.status(500).json({ error: 'Failed to fetch agent usage' });
@@ -2680,6 +2908,25 @@ const afpRoutes = require('./routes/afp');
 
 app.use('/api/v1/afp', authenticate, afpRoutes);
 
+// Automations (Triggers) — proactive "when X → do Y". Pro/Heavy (or beta) only.
+const triggersRoutes = require('./routes/triggers');
+function requireAutomationsPlan(req, res, next) {
+  const plan = resolveRequesterPlan(req);
+  if (plan === 'pro' || plan === 'enterprise' || plan === 'beta') return next();
+  // During the beta every plan gets automations; free-plan AI automations
+  // must bring their own API key (enforced in routes/triggers.js).
+  if (betaMode.isBetaMode()) {
+    req.betaFreeAutomations = true;
+    return next();
+  }
+  return res.status(403).json({
+    error: 'Automations require a Pro or Heavy plan',
+    plan, feature: 'automations',
+    upgradeHint: 'Upgrade to Pro ($9/mo) or Heavy ($29/mo) to create automations',
+  });
+}
+app.use('/api/v1/triggers', authenticate, requireAutomationsPlan, triggersRoutes);
+
 // FAL Image Generation API
 const falImagesRoutes = require('./routes/fal-images');
 app.use('/api/v1/fal', authenticate, falImagesRoutes);
@@ -2689,6 +2936,163 @@ const oauthServerRoutes = require('./routes/oauth-server');
 app.use('/api/v1/oauth-server', oauthServerRoutes);
 
 const agenticRoutes = require('./routes/agentic');
+// key-status is public (called before ASC approval, so no auth available)
+app.get('/api/v1/agentic/asc/key-status', (req, res) => {
+  const { fingerprint } = req.query;
+  if (!fingerprint || !/^[0-9a-f]{32}$/.test(fingerprint)) {
+    return res.status(400).json({ error: 'fingerprint must be a 32-char lowercase hex string' });
+  }
+  // Only report 'approved' when the device is actually in approved_devices —
+  // the same table the auth middleware queries. Never trust the pending table
+  // status alone, which can be 'approved' even after a device is revoked.
+  const approved = getApprovedDeviceByKeyFingerprintGlobal(fingerprint);
+  if (approved) return res.json({ status: 'approved' });
+  const pending = getPendingApprovalByFingerprintGlobal(fingerprint);
+  if (pending && pending.status !== 'approved') return res.json({ status: pending.status });
+  return res.json({ status: 'not_registered' });
+});
+
+// Public: ASC self-restore — no Bearer token needed.
+// The MCP calls this automatically on 401 to silently re-activate a previously
+// approved key without any user interaction.
+// Security: proves private-key ownership via Ed25519 signature over
+// "timestamp:fingerprint". Only keys that were EVER approved can be restored;
+// new keys must still go through the dashboard registration flow.
+app.post('/api/v1/agentic/asc/restore', (req, res) => {
+  try {
+    const { public_key, signature, timestamp } = req.body || {};
+    if (!public_key || !signature || !timestamp) {
+      return res.status(400).json({ error: 'public_key, signature, and timestamp are required' });
+    }
+    const ts = parseInt(timestamp, 10);
+    if (isNaN(ts) || Math.abs(Math.floor(Date.now() / 1000) - ts) > ASC_REPLAY_WINDOW_SECONDS) {
+      return res.status(400).json({ error: `timestamp must be within ${ASC_REPLAY_WINDOW_SECONDS} seconds of server time`, server_time: Math.floor(Date.now() / 1000) });
+    }
+    // Decode and verify signature — same mechanism as the auth middleware
+    let rawPub;
+    try {
+      const keyBuf = Buffer.from(public_key, 'base64');
+      rawPub = keyBuf.length === 44 ? keyBuf.slice(12) : keyBuf; // handle SPKI or raw
+      if (rawPub.length !== 32) throw new Error('bad length');
+    } catch {
+      return res.status(400).json({ error: 'public_key must be a 32-byte raw or 44-byte SPKI Ed25519 key in base64' });
+    }
+    const fingerprint = crypto.createHash('sha256').update(rawPub).digest('hex').substring(0, 32);
+    const spki   = Buffer.concat([Buffer.from('302a300506032b6570032100', 'hex'), rawPub]);
+    const keyObj = crypto.createPublicKey({ key: spki, format: 'der', type: 'spki' });
+    const msg    = Buffer.from(`${timestamp}:${fingerprint}`);
+    let valid;
+    try { valid = crypto.verify(null, msg, keyObj, Buffer.from(signature, 'base64')); } catch { valid = false; }
+    if (!valid) return res.status(403).json({ error: 'Signature verification failed' });
+
+    // Restore the device — only works if fingerprint was previously approved
+    const rawPubB64 = rawPub.toString('base64');
+    const device = restoreASCDevice(fingerprint, rawPubB64, req.ip);
+    if (!device) {
+      return res.status(403).json({
+        error: 'not_eligible',
+        message: 'This key has never been approved. Register it via the dashboard first.',
+      });
+    }
+    return res.json({ status: 'restored', key_fingerprint: fingerprint });
+  } catch (err) {
+    logger.error('[ASC restore] error:', err.message);
+    res.status(500).json({ error: 'Restore failed' });
+  }
+});
+
+// Public: ASC self-diagnose. Verifies a signed payload and reports every reason
+// a signed request might fail (clock skew, signature, device approval status,
+// plan gating). Designed to give an agent ONE call that explains why /identity
+// just 401'd, without needing to read server logs.
+app.post('/api/v1/agentic/asc/diagnose', (req, res) => {
+  const report = {
+    server_time: Math.floor(Date.now() / 1000),
+    replay_window_seconds: ASC_REPLAY_WINDOW_SECONDS,
+    clock_skew_seconds: null,
+    timestamp_valid: false,
+    signature_valid: false,
+    key_fingerprint: null,
+    device_status: 'unknown',
+    plan: null,
+    next_action: null,
+  };
+
+  try {
+    const { public_key, signature, timestamp } = req.body || {};
+    if (!public_key || !signature || !timestamp) {
+      report.next_action = 'Send a POST with public_key, signature, timestamp signed as `${timestamp}:${fingerprint}`.';
+      return res.json(report);
+    }
+
+    const ts = parseInt(timestamp, 10);
+    if (!isNaN(ts)) {
+      report.clock_skew_seconds = Math.floor(Date.now() / 1000) - ts;
+      report.timestamp_valid = Math.abs(report.clock_skew_seconds) <= ASC_REPLAY_WINDOW_SECONDS;
+    }
+
+    let rawPub;
+    try {
+      const buf = Buffer.from(public_key, 'base64');
+      rawPub = buf.length === 44 ? buf.slice(12) : buf;
+      if (rawPub.length !== 32) throw new Error('bad length');
+    } catch {
+      report.next_action = 'public_key must be a 32-byte raw or 44-byte SPKI Ed25519 key in base64.';
+      return res.json(report);
+    }
+    const fingerprint = crypto.createHash('sha256').update(rawPub).digest('hex').substring(0, 32);
+    report.key_fingerprint = fingerprint;
+
+    if (report.timestamp_valid) {
+      try {
+        const spki   = Buffer.concat([Buffer.from('302a300506032b6570032100', 'hex'), rawPub]);
+        const keyObj = crypto.createPublicKey({ key: spki, format: 'der', type: 'spki' });
+        const msg    = Buffer.from(`${timestamp}:${fingerprint}`);
+        report.signature_valid = crypto.verify(null, msg, keyObj, Buffer.from(signature, 'base64'));
+      } catch (_) { report.signature_valid = false; }
+    }
+
+    const approved = getApprovedDeviceByKeyFingerprintGlobal(fingerprint);
+    if (approved) {
+      report.device_status = 'approved';
+      try {
+        const owner = getUserById(String(approved.user_id));
+        if (owner) report.plan = owner.plan || owner.subscription_tier || null;
+      } catch (_) {}
+    } else {
+      const pending = getPendingApprovalByFingerprintGlobal(fingerprint);
+      if (pending) {
+        report.device_status = pending.status; // pending | denied | etc.
+      } else {
+        // Try restore-eligibility (key was previously approved but revoked)
+        report.device_status = wasAscKeyEverApproved(fingerprint) ? 'revoked_restorable' : 'never_registered';
+      }
+    }
+
+    // Compose the single next action
+    if (!report.timestamp_valid) {
+      report.next_action = `Clock skew is ${report.clock_skew_seconds}s. Sync NTP on the agent host (server_time=${report.server_time}).`;
+    } else if (!report.signature_valid) {
+      report.next_action = 'Signature did not verify. Confirm the agent signs `${timestamp}:${fingerprint}` with the Ed25519 private key matching this public key.';
+    } else if (report.device_status === 'approved') {
+      report.next_action = 'Connection is healthy. Signed requests should succeed.';
+    } else if (report.device_status === 'revoked_restorable') {
+      report.next_action = 'Key was previously approved but revoked. The next signed request will auto-restore inline.';
+    } else if (report.device_status === 'pending') {
+      report.next_action = `Open ${process.env.PUBLIC_BASE_URL || 'https://www.myapiai.com'}/dashboard/devices and approve this key.`;
+    } else if (report.device_status === 'denied') {
+      report.next_action = 'Approval was denied. Delete the local key file and re-register.';
+    } else {
+      report.next_action = 'Register this key first: POST /api/v1/agentic/asc/register with a personal token.';
+    }
+  } catch (err) {
+    logger.error('[ASC diagnose] error:', err.message);
+    report.next_action = 'Diagnose handler failed. Check server logs.';
+  }
+
+  res.json(report);
+});
+
 app.use('/api/v1/agentic', authenticate, agenticRoutes);
 
 // ─── Public: Agent Auth installer script ──────────────────────────────────────
@@ -2720,6 +3124,16 @@ app.get('/api/v1/agent-auth/install.js',     serveAgentInstallJs);
 app.get('/api/v1/agent-auth/install-node',   serveAgentInstallJs);
 app.get('/api/v1/agent-auth/install.py',     serveAgentInstallPy);
 app.get('/api/v1/agent-auth/install-python', serveAgentInstallPy);
+
+// ─── ASC bootstrap script ─────────────────────────────────────────────────────
+// curl -fsSL https://www.myapiai.com/install/asc | sudo bash
+const ascBootstrapFile = path.join(__dirname, 'public/install/asc-bootstrap.sh');
+app.get(['/install/asc', '/install/asc-bootstrap.sh'], (req, res) => {
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Content-Disposition', 'inline; filename="asc-bootstrap.sh"');
+  res.sendFile(ascBootstrapFile);
+});
 
 // ─── Public: Agent connection guide ──────────────────────────────────────────
 // Fetched by AI agents (via the onboarding starter prompt) to learn about
@@ -2941,79 +3355,8 @@ app.get('/api/v1/config/public', (req, res) => {
 });
 
 // --- PUBLIC: BILLING PLANS ENDPOINT (no auth required) ---
-app.get('/api/v1/billing/plans', (req, res) => {
-  try {
-    // Try to get plans from database first
-    const stmt = db.prepare(`
-      SELECT id, name, price_cents, description, features,
-             monthly_api_call_limit, max_services, max_team_members,
-             max_skills_per_persona, stripe_product_id, active
-      FROM pricing_plans
-      WHERE active = 1
-      ORDER BY display_order ASC
-    `);
-    const dbPlans = stmt.all();
-
-    const betaActive = betaMode.isBetaMode();
-    const annotate = (plan) => ({
-      ...plan,
-      beta_locked: betaActive && String(plan.id).toLowerCase() !== 'free',
-    });
-
-    if (dbPlans && dbPlans.length > 0) {
-      // Transform database plans to frontend format
-      const plans = dbPlans.map(plan => annotate({
-        id: plan.id,
-        name: plan.name,
-        price_cents: plan.price_cents,
-        priceMonthly: Math.floor(plan.price_cents / 100), // For backwards compat
-        description: plan.description,
-        features: typeof plan.features === 'string' ? JSON.parse(plan.features) : plan.features,
-        monthlyApiCallLimit: plan.monthly_api_call_limit,
-        maxServices: plan.max_services,
-        maxTeamMembers: plan.max_team_members,
-        maxSkillsPerPersona: plan.max_skills_per_persona,
-        stripe_product_id: plan.stripe_product_id
-      }));
-      return res.json({ data: plans });
-    }
-
-    // Fallback to hardcoded plans if database is empty
-    const plans = Object.values(BILLING_PLANS).map(plan => annotate({
-      id: plan.id,
-      name: plan.name,
-      price_cents: plan.price_cents,
-      priceMonthly: plan.priceMonthly,
-      description: plan.description,
-      features: plan.features,
-      monthlyApiCallLimit: plan.monthlyApiCallLimit,
-      maxServices: plan.maxServices,
-      maxTeamMembers: plan.maxTeamMembers,
-      maxSkillsPerPersona: plan.maxSkillsPerPersona,
-      stripe_product_id: plan.stripe_product_id
-    }));
-    res.json({ data: plans });
-  } catch (err) {
-    console.error('[Billing] Error fetching plans:', err);
-    // Return hardcoded plans as fallback
-    const betaActive = betaMode.isBetaMode();
-    const plans = Object.values(BILLING_PLANS).map(plan => ({
-      id: plan.id,
-      name: plan.name,
-      price_cents: plan.price_cents,
-      priceMonthly: plan.priceMonthly,
-      description: plan.description,
-      features: plan.features,
-      monthlyApiCallLimit: plan.monthlyApiCallLimit,
-      maxServices: plan.maxServices,
-      maxTeamMembers: plan.maxTeamMembers,
-      maxSkillsPerPersona: plan.maxSkillsPerPersona,
-      stripe_product_id: plan.stripe_product_id,
-      beta_locked: betaActive && String(plan.id).toLowerCase() !== 'free',
-    }));
-    res.json({ data: plans });
-  }
-});
+// Lives in the closed-source billing module; absent in MyApi Open.
+if (billingRoutesModule) billingRoutesModule.registerPublicRoutes(app);
 
 // Import multi-tenancy middleware
 const { extractWorkspaceContext, enforceMultiTenancy, switchWorkspaceHandler } = require('./middleware/multitenancy');
@@ -3021,6 +3364,142 @@ const { createAuditSecurityRouter } = require('./routes/auditSecurity');
 
 // Extract workspace context for all authenticated requests
 app.use('/api/v1', authenticate, extractWorkspaceContext, enforceMultiTenancy);
+
+// B2B (closed-source): org security policies (IP allowlist, service allowlist)
+// for org members. Absent in MyApi Open — no org gate, no org maintenance jobs.
+const orgPolicyModule = optionalRequire('./middleware/orgPolicy');
+if (orgPolicyModule) {
+  app.use('/api/v1', orgPolicyModule.orgPolicyGate);
+  if (process.env.NODE_ENV !== 'test') {
+    // Hourly sweep: revoke org tokens idle past the org's token_auto_revoke_days
+    setInterval(() => {
+      try {
+        const n = orgPolicyModule.revokeStaleOrgTokens();
+        if (n > 0) console.log(`[OrgPolicy] auto-revoked ${n} stale org tokens`);
+      } catch (e) { console.error('[OrgPolicy] stale token sweep failed:', e.message); }
+    }, 60 * 60 * 1000).unref();
+  }
+}
+if (process.env.NODE_ENV !== 'test') {
+  // Audit → SIEM webhook streaming (30s batches) + daily seat reconciliation
+  // (closed-source B2B modules; skipped entirely in MyApi Open)
+  const auditStreamerLib = optionalRequire('./lib/auditStreamer');
+  if (auditStreamerLib) {
+    setInterval(() => {
+      auditStreamerLib.pumpAuditSinks().catch((e) => console.error('[AuditStreamer]', e.message));
+    }, 30 * 1000).unref();
+  }
+  const orgBillingLib = optionalRequire('./lib/orgBilling');
+  if (orgBillingLib || auditStreamerLib) {
+    setInterval(() => {
+      if (orgBillingLib) orgBillingLib.reconcileAllOrgSeats().catch((e) => console.error('[OrgBilling] reconcile:', e.message));
+      if (auditStreamerLib) { try { auditStreamerLib.purgeOrgAuditPerRetention(); } catch (e) { console.error('[AuditRetention]', e.message); } }
+    }, 24 * 60 * 60 * 1000).unref();
+  }
+}
+
+// ── Monthly API-call quota gate ───────────────────────────────────────────────
+// Personal (free) hard-blocks at the monthly quota with 429. Plans with overage
+// (Pro) are never blocked — extra calls are metered and billed ($0.25/1k).
+// Only token-authenticated requests count toward (and are blocked by) the quota;
+// dashboard sessions always pass. Month-to-date usage is cached for 30s per
+// workspace so the gate adds no measurable per-request cost.
+const API_QUOTA_GATE_ENABLED = process.env.ENFORCE_API_CALL_LIMIT === 'true'
+  ? true
+  : (process.env.NODE_ENV === 'test' ? false : process.env.ENFORCE_PLAN_LIMITS !== 'false');
+const _quotaCache = new Map(); // workspaceId -> { calls, expires }
+const QUOTA_CACHE_TTL_MS = process.env.NODE_ENV === 'test' ? 0 : 30 * 1000;
+
+// Paths that must keep working when over quota: billing (to see/upgrade the
+// plan), auth/devices (account control), and the quota error itself explains
+// the rest. Everything else under /api/v1 is gated.
+const QUOTA_EXEMPT = /^\/(billing|auth|devices|handshakes|notifications)\b/;
+
+function getMonthToDateApiCalls(workspaceId) {
+  const cached = _quotaCache.get(workspaceId);
+  if (cached && cached.expires > Date.now()) return cached.calls;
+  const today = new Date().toISOString().slice(0, 10);
+  const firstOfMonth = `${today.slice(0, 7)}-01`;
+  const calls = getUsageDaily(workspaceId, firstOfMonth, today)
+    .reduce((sum, row) => sum + Number(row.api_calls || 0), 0);
+  _quotaCache.set(workspaceId, { calls, expires: Date.now() + QUOTA_CACHE_TTL_MS });
+  return calls;
+}
+
+function apiCallQuotaGate(req, res, next) {
+  try {
+    if (!API_QUOTA_GATE_ENABLED) return next();
+    if (req.method === 'OPTIONS') return next();
+    if (!req.tokenMeta) return next();                                  // public/unauthenticated
+    if (req.authType === 'session') return next();                      // dashboard UI never gated
+    if (String(req.tokenMeta.tokenId || '').startsWith('sess_')) return next();
+    if (QUOTA_EXEMPT.test(req.path || '')) return next();
+    if (!BILLING_PLAN_LIMITS) return next();          // MyApi Open: no billing module — unlimited
+
+    const planId = resolveRequesterPlan(req);
+    const planDef = BILLING_PLAN_LIMITS[planId] || BILLING_PLAN_LIMITS.free;
+    const limit = planDef.limits.monthlyApiCalls;
+    if (!Number.isFinite(limit)) return next();                         // unlimited (Heavy/Beta/Enterprise org)
+    if (planDef.overage) return next();                                 // overage plans (Pro) never block
+
+    // B2B org plans: quota is POOLED across all org members, not per workspace.
+    if (planDef.perSeat) {
+      const { resolveOrgPlan } = require('./lib/planEnforcement');
+      const orgPlan = resolveOrgPlan(req?.user?.id || req?.tokenMeta?.ownerId);
+      if (!orgPlan) return next();
+      const orgLimit = Number(orgPlan.org.settings?.pooled_monthly_api_calls) || limit;
+      const cacheKey = `org:${orgPlan.org.id}`;
+      let orgUsed;
+      const cached = _quotaCache.get(cacheKey);
+      if (cached && cached.expires > Date.now()) {
+        orgUsed = cached.calls;
+      } else {
+        const firstOfMonth = new Date().toISOString().slice(0, 7) + '-01';
+        orgUsed = require('./database').getOrgUsage(orgPlan.org.id, { from: firstOfMonth }).apiCalls;
+        _quotaCache.set(cacheKey, { calls: orgUsed, expires: Date.now() + QUOTA_CACHE_TTL_MS });
+      }
+      if (orgUsed < orgLimit) return next();
+      return res.status(429).json({
+        error: 'monthly_api_quota_exceeded',
+        code: 'ORG_PLAN_LIMIT_EXCEEDED',
+        message: `Your organization's pooled monthly API quota is exhausted (${orgUsed.toLocaleString()} of ${orgLimit.toLocaleString()}).`,
+        plan: planId,
+        limit: orgLimit,
+        used: orgUsed,
+        upgradeHint: 'Ask an organization admin to raise the pooled quota or upgrade the org plan.',
+      });
+    }
+
+    const workspaceId = getRequestWorkspaceId(req);
+    if (!workspaceId) return next();
+
+    const used = getMonthToDateApiCalls(workspaceId);
+    if (used < limit) return next();
+
+    createAuditLog({
+      requesterId: req.tokenMeta.tokenId,
+      action: 'api_quota_exceeded',
+      resource: req.baseUrl + req.path,
+      scope: typeof req.tokenMeta.scope === 'string' ? req.tokenMeta.scope : null,
+      ip: req.ip,
+      details: { plan: planId, limit, used },
+    });
+    return res.status(429).json({
+      error: 'monthly_api_quota_exceeded',
+      code: 'PLAN_LIMIT_EXCEEDED',
+      message: `Monthly API call quota reached (${used.toLocaleString()} of ${limit.toLocaleString()} on the ${planDef.name} plan). Quota resets on the 1st of next month.`,
+      plan: planId,
+      limit,
+      used,
+      upgradeHint: 'Upgrade to Pro ($9/mo — 10,000 calls + $0.25 per 1,000 beyond) or Heavy ($29/mo — unlimited) at /dashboard/settings.',
+    });
+  } catch (err) {
+    console.error('[ApiQuotaGate] error — failing open:', err.message);
+    return next();
+  }
+}
+
+app.use('/api/v1', apiCallQuotaGate);
 
 // Workspace-scoped API logging for sensitive actions
 app.use('/api/v1', (req, res, next) => {
@@ -3054,7 +3533,7 @@ app.use('/api/v1', (req, res, next) => {
 app.post('/api/v1/workspace-switch/:workspaceId', authenticate, switchWorkspaceHandler);
 
 // Phase 3: audit/security API
-app.use('/api/v1', authenticate, createAuditSecurityRouter({ sessionDb, sessionStore }));
+app.use('/api/v1', authenticate, createAuditSecurityRouter({ sessionDb, sessionStore, isOwner: isOwnerUser }));
 
 function getRequestOwnerId(req) {
   const id = req?.tokenMeta?.ownerId || req?.session?.user?.id;
@@ -3086,20 +3565,6 @@ function getRequestWorkspaceId(req) {
     if (workspaces?.length) return workspaces[0].id;
   }
   return null;
-}
-
-function isStripeConfigured() {
-  return Boolean(process.env.STRIPE_SECRET_KEY);
-}
-
-function getStripeClient() {
-  if (!isStripeConfigured()) return null;
-  try {
-    const Stripe = require('stripe');
-    return new Stripe(process.env.STRIPE_SECRET_KEY);
-  } catch {
-    return null;
-  }
 }
 
 function trackWorkspaceUsage(req, delta = {}) {
@@ -3185,6 +3650,41 @@ function pruneRedundantMasterTokens(ownerId, keep = 3) {
 
 // --- Scope helpers ---
 
+// Gate: does one more request fit within this agent's configured usage limits?
+// Applies to Bearer tokens and ASC agents (never dashboard sessions). Checks
+// total call limits plus per-service call limits when the request targets
+// /services/:name/* (service tagged on the ALS store by the early middleware).
+// Token(context)-budget limits are enforced at the service proxy where payload
+// sizes are measurable. Sends the 429 itself and returns false when blocked.
+function enforceAgentUsageLimits(req, res) {
+  const agentId = req.tokenMeta?.tokenId;
+  if (!agentId || String(agentId).startsWith('sess_')) return true;
+  const service = getRequestStore()?.usageService || null;
+  const verdict = agentLimits.checkAgentLimits(agentId, service, { enforceTokens: false });
+  if (verdict.allowed) return true;
+  req.agentLimitBlocked = true;
+  try {
+    createAuditLog({
+      requesterId: agentId,
+      action: 'agent_limit_blocked',
+      resource: req.baseUrl + req.path,
+      ip: req.ip,
+      details: { metric: verdict.metric, scope: verdict.scope, limit: verdict.limit, used: verdict.used, period: verdict.period },
+    });
+  } catch (_) {}
+  res.status(429).json({
+    error: 'agent_limit_exceeded',
+    code: 'AGENT_LIMIT_EXCEEDED',
+    message: verdict.reason,
+    metric: verdict.metric,
+    scope: verdict.scope,
+    limit: verdict.limit,
+    used: verdict.used,
+    period: verdict.period,
+  });
+  return false;
+}
+
 // Returns true for master tokens and session (dashboard) users — full access.
 function isMaster(req) {
   return req.tokenMeta?.scope === 'full' ||
@@ -3198,6 +3698,44 @@ function hasScope(req, scope) {
   if (isMaster(req)) return true;
   const tokenScopes = getTokenScopes(req.tokenMeta?.tokenId || '');
   return tokenScopes.includes('admin:*') || tokenScopes.includes(scope);
+}
+
+// Per-service scopes (services:{name}:read|write|*) are pattern-validated and live
+// only in the token's scope JSON (access_tokens.scope) — intentionally not in the
+// access_token_scopes table — so they must be read from req.tokenMeta.scope here.
+function getTokenScopeList(req) {
+  const raw = req.tokenMeta?.scope;
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === 'string' && raw.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch { return []; }
+  }
+  return [];
+}
+
+// A per-service scope is a standalone grant: services:{name}:read allows calling
+// that one service read-only even without the global services:read scope.
+function hasServiceLevelScope(req, serviceName, level /* 'read' | 'write' */) {
+  if (isMaster(req)) return true;
+  const scopes = getTokenScopeList(req);
+  if (scopes.includes(`services:${serviceName}:*`)) return true;
+  if (scopes.includes(`services:${serviceName}:${level}`)) return true;
+  return level === 'read' && scopes.includes(`services:${serviceName}:write`);
+}
+
+function canAccessService(req, serviceName) {
+  return isMaster(req) ||
+    isResourceAllowed(req, 'services', serviceName) ||
+    hasServiceLevelScope(req, serviceName, 'read');
+}
+
+async function resolveRequestUserId(req) {
+  await tryAuthenticate(req);
+  if (req.session?.user?.id) return String(req.session.user.id);
+  if (req.tokenMeta?.ownerId) return String(req.tokenMeta.ownerId);
+  return null;
 }
 
 // Returns the persona_id from scope_bundle for non-master bundle tokens, or null.
@@ -3563,6 +4101,49 @@ function buildCapabilitiesForRequest(req) {
     });
   }
 
+  // Services — visible with the global services scope or any standalone
+  // per-service grant (services:{name}:read|write|*).
+  const hasPerServiceScope = getTokenScopeList(req).some((s) => /^services:[^:]+:(read|write|\*)$/.test(s));
+  const canReadServices = isMaster(req) || hasPermission(scopes, ['services:read']) || hasPermission(scopes, ['services:write']) || hasPerServiceScope;
+
+  if (canReadServices) {
+    endpoints.push({
+      purpose: 'List ALL connected services — native OAuth and Composio-backed (all use clean names, e.g. gmail, slack, notion)',
+      method: 'GET',
+      url: '/api/v1/services',
+      params: [],
+      sampleRequest: { method: 'GET', headers: [...auth.requiredHeaders] },
+      sampleResponse: { success: true, data: [{ id: 'github', status: 'connected' }, { id: 'gmail', status: 'connected', source: 'composio' }] },
+      commonErrors: [{ status: 403, error: "Requires 'services:read' or a per-service scope" }],
+    });
+    endpoints.push({
+      purpose: 'Documented operations for a service — call before using an unfamiliar service (works for Composio-backed services too)',
+      method: 'GET',
+      url: '/api/v1/services/:name/methods',
+      params: [],
+      sampleRequest: { method: 'GET', headers: [...auth.requiredHeaders] },
+      sampleResponse: { success: true, data: [{ name: 'proxy.request', endpoint: '/services/{name}/proxy' }] },
+      commonErrors: [{ status: 404, error: 'Service not found' }],
+    });
+    endpoints.push({
+      purpose: 'Proxy a raw API request to any connected service (native or Composio) using stored credentials',
+      method: 'POST',
+      url: '/api/v1/services/:name/proxy',
+      params: [
+        { in: 'body', name: 'path', required: true, type: 'string', description: 'Provider-native REST path, e.g. "/gmail/v1/users/me/messages" or "/user/repos"' },
+        { in: 'body', name: 'method', required: false, type: 'string', description: 'HTTP method for the provider call (default GET). Writes require services:write or services:{name}:write.' },
+        { in: 'body', name: 'body', required: false, type: 'object' },
+        { in: 'body', name: 'query', required: false, type: 'object' },
+      ],
+      sampleRequest: { method: 'POST', headers: [...auth.requiredHeaders, 'Content-Type: application/json'], body: { path: '/gmail/v1/users/me/messages', method: 'GET', query: { maxResults: 5 } } },
+      sampleResponse: { ok: true, statusCode: 200, data: { messages: [] } },
+      commonErrors: [
+        { status: 403, error: "Token needs 'services:read' or 'services:{name}:read' scope" },
+        { status: 403, error: "Service '{name}' not connected. Please connect it first." },
+      ],
+    });
+  }
+
   const filtered = endpoints.filter((e) => {
     if (e.url.startsWith('/api/v1/brain') && !canReadBrain) return false;
     if (e.url.startsWith('/api/v1/vault') && !canReadVault) return false;
@@ -3916,11 +4497,33 @@ All paths are relative to https://${host} — do NOT add /api/v1 to the base URL
 
 ### Services & Vault
 - GET  /api/v1/vault/tokens                       → Connected service tokens (vault)
-- GET  /api/v1/services                           → List connected OAuth services
-- POST /api/v1/services/:name/proxy               → Proxy raw API request to a service
+- GET  /api/v1/services                           → List ALL services with status (native + Composio-backed)
+- GET  /api/v1/services/:name/methods             → Documented operations for a service + generic proxy usage
+- POST /api/v1/services/:name/proxy               → Proxy raw API request to a service  { path, method, body?, query? }
+- POST /api/v1/services/:name/execute             → Execute a predefined service method  { method, params }
 - GET  /api/v1/services/google/gmail/messages     → List Gmail messages
 - GET  /api/v1/services/google/drive/files        → List Google Drive files
 - POST /api/v1/services/google/drive/upload       → Upload file to Google Drive
+
+### Composio-Connected Services (clean names like gmail, slack, notion)
+Services connected through Composio appear in GET /api/v1/services under their clean
+toolkit name (e.g. gmail, notion, linkedin) — no special prefix.
+Call them EXACTLY like native services — same proxy endpoint, same auth, same scopes:
+  POST /api/v1/services/{toolkit}/proxy
+  Body: { "path": "<provider-native REST path>", "method": "GET|POST|PUT|PATCH|DELETE", "body": {...}, "query": {...} }
+Example — list Gmail messages through Composio:
+  POST /api/v1/services/gmail/proxy
+  Body: { "path": "/gmail/v1/users/me/messages", "method": "GET", "query": { "maxResults": 5 } }
+MyApi relays the call via Composio with the stored credentials — you never see provider tokens.
+Discover what is connected via GET /api/v1/services (status: "connected") and per-service call
+documentation via GET /api/v1/services/{toolkit}/methods.
+
+### Service Token Scopes
+- services:read / services:write                  → global access to all connected services (write implies read)
+- services:{name}:read|write|*                    → STANDALONE per-service grant (works without the global scope),
+                                                    e.g. services:gmail:read. Write implies read.
+- A 403 with "Requires 'services:...' scope" means the token lacks the scope above — ask the
+  owner to issue a token with it from /dashboard/access-tokens.
 
 ### Access Requests (no auth required)
 - POST /api/v1/handshakes                         → Request access (no auth)
@@ -3937,6 +4540,25 @@ Requires a registered AFP daemon running on the target PC.
 - DELETE /api/v1/afp/:deviceId/rm                 → Delete a file or directory  { path, recursive? }
 - POST /api/v1/afp/:deviceId/mkdir                → Create a directory  { path }
 - GET  /api/v1/afp/download/:platform             → Download AFP daemon binary (linux|mac|mac-arm|win) — no auth required
+
+## Automations (Scheduled, Proactive Tasks — Pro/Heavy plan)
+Schedule recurring or one-time tasks that MyApi runs on its own, even when no agent is connected.
+- GET    /api/v1/triggers                          → List the owner's automations
+- POST   /api/v1/triggers                          → Create one. Recommended shape:
+    { "name": "Morning digest", "kind": "schedule",
+      "schedule": { "type": "daily", "atHour": 7, "atMinute": 0 }, "timezone": "UTC",
+      "actionType": "ai_prompt",
+      "action": { "prompt": "Summarize my unread email and send it to me", "services": ["gmail"] } }
+  schedule.type ∈ once | interval | daily | weekly | monthly.
+  actionType ∈ ai_prompt (an AI agent acts over the owner's CONNECTED services — recommended) |
+              service_proxy { service, path, method, body } | afp_exec { deviceId, cmd }.
+  ai_prompt emails through the owner's own connected mailbox (e.g. Gmail), never a system mailer.
+- POST   /api/v1/triggers/:id/run                  → Run an automation now (test)
+- GET    /api/v1/triggers/:id/runs                 → Run history
+- PATCH/DELETE /api/v1/triggers/:id                → Edit / delete
+- GET    /api/v1/triggers/ai/settings              → AI providers/models + MyApi-AI credit wallet (balance, limit, auto-reload)
+Automation activity counts against the plan's API-call quota. MyApi-provided AI is metered as
+credits (1 credit = $0.01); using your own provider key (keyMode:"byo") is free.
 
 ## Memory (Cross-AI Persistent Context)
 Store notes that persist across all AI sessions. Any AI reading gateway/context sees these.
@@ -3956,11 +4578,20 @@ Store notes that persist across all AI sessions. Any AI reading gateway/context 
 // robots.txt - point crawlers and AIs to the API
 app.get('/robots.txt', (req, res) => {
   const host = req.headers.host || 'www.myapiai.com';
+  // Short max-age: without it Cloudflare's default (4h) kept serving stale
+  // robots.txt after deploys, hiding the Content-Signal line from scanners.
+  res.set('Cache-Control', 'public, max-age=300');
   res.type('text/plain').send(
 `User-agent: *
 Allow: /
 
+# AI content usage preferences (https://contentsignals.org/)
+Content-Signal: search=yes, ai-input=yes, ai-train=no
+
 # MyApi - Personal API Platform
+# Agent auth guide: https://${host}/auth.md
+# API catalog: https://${host}/.well-known/api-catalog
+# Agent skills: https://${host}/.well-known/agent-skills/index.json
 # AI Agent Instructions: https://${host}/llms.txt
 # API Documentation: https://${host}/openapi.json
 # Quick Start Guide: https://${host}/api/v1/quick-start
@@ -3971,17 +4602,31 @@ Sitemap: https://${host}/sitemap.xml
 `);
 });
 
-// sitemap.xml - list all discoverable endpoints
+// sitemap.xml - list all discoverable pages + endpoints
 app.get('/sitemap.xml', (req, res) => {
   const host = req.headers.host || 'www.myapiai.com';
+  const lastmod = new Date().toISOString().slice(0, 10);
+  // Only include canonical, indexable HTML pages. Discovery/API JSON endpoints
+  // stay publicly accessible, but they should not be submitted for web indexing.
+  // [path, changefreq, priority]
   const urls = [
-    '/', '/openapi.json', '/api/v1/', '/api/v1/quick-start',
-    '/.well-known/ai-plugin.json', '/.well-known/openapi.json',
-    '/dashboard/',
+    ['/', 'weekly', '1.0'],
+    ['/dashboard/signup', 'monthly', '0.9'],
+    ['/dashboard/marketplace', 'daily', '0.8'],
+    ['/dashboard/platform-docs', 'weekly', '0.8'],
+    ['/dashboard/api-docs', 'weekly', '0.7'],
+    ['/privacy', 'monthly', '0.5'],
+    ['/terms', 'monthly', '0.5'],
+    ['/chatgpt-privacy', 'monthly', '0.4'],
   ];
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urls.map(u => `  <url><loc>https://${host}${u}</loc></url>`).join('\n')}
+${urls.map(([u, freq, pri]) => `  <url>
+    <loc>https://${host}${u}</loc>
+    <lastmod>${lastmod}</lastmod>
+    <changefreq>${freq}</changefreq>
+    <priority>${pri}</priority>
+  </url>`).join('\n')}
 </urlset>`;
   res.type('application/xml').send(xml);
 });
@@ -3998,6 +4643,12 @@ app.get('/turso-import', (req, res) => {
 });
 
 app.get('/api/v1/turso/export-sql', (req, res) => {
+  // This dumps EVERY table and row (users, encrypted vault/oauth tokens, audit
+  // logs) with no tenant/scope/privacy filtering. It must be master-only — a
+  // read-only guest token reaching it would be a full-database exfiltration.
+  if (!isMaster(req)) {
+    return res.status(403).json({ error: 'Master token required for database export' });
+  }
   try {
     const Database = require('better-sqlite3');
     const dbPath = process.env.DB_PATH || path.join(__dirname, 'data/myapi.db');
@@ -4035,6 +4686,13 @@ app.get('/api/v1/turso/export-sql', (req, res) => {
 });
 
 app.post('/api/v1/turso/execute', express.json(), (req, res) => {
+  // Master-only: this makes the server issue an outbound request to a
+  // caller-supplied host (SSRF surface). A scoped guest token must not be able
+  // to use MyApi as a request proxy.
+  if (!isMaster(req)) {
+    return res.status(403).json({ error: 'Master token required' });
+  }
+
   const { sql, tursoUrl } = req.body;
   const authHeader = req.headers.authorization;
 
@@ -4042,12 +4700,31 @@ app.post('/api/v1/turso/execute', express.json(), (req, res) => {
     return res.status(400).json({ error: 'Missing required fields: sql, tursoUrl, Authorization header' });
   }
 
+  // SSRF guard: only allow real Turso/libSQL hosts, never IP literals, private
+  // ranges, or arbitrary internal services. Previously the hostname was taken
+  // verbatim from the request body and pointed anywhere.
+  let tursoHostname;
+  try {
+    const parsed = new URL(tursoUrl);
+    if (parsed.protocol !== 'https:') throw new Error('must be https');
+    tursoHostname = parsed.hostname;
+    const { isPrivateIP } = require('./lib/ssrf-prevention');
+    const net = require('net');
+    if (net.isIP(tursoHostname) !== 0) throw new Error('IP literals not allowed');
+    if (isPrivateIP(tursoHostname)) throw new Error('private host not allowed');
+    if (!/\.turso\.(io|tech)$/i.test(tursoHostname) && !/\.libsql\./i.test(tursoHostname)) {
+      throw new Error('host is not a Turso endpoint');
+    }
+  } catch (e) {
+    return res.status(400).json({ error: `Invalid tursoUrl: ${e.message}` });
+  }
+
   const token = authHeader.replace('Bearer ', '');
 
   // Execute via HTTP to Turso
   const https = require('https');
   const options = {
-    hostname: tursoUrl.split('://')[1].split('/')[0],
+    hostname: tursoHostname,
     port: 443,
     path: '/',
     method: 'POST',
@@ -4091,8 +4768,8 @@ app.get('/openapi.json', (req, res) => {
     openapi: '3.0.0',
     info: {
       title: 'MyApi',
-      version: '0.1.0',
-      description: 'Personal API platform with scope-aware discovery and automation-friendly endpoints.',
+      version: '0.2.0',
+      description: 'Personal API gateway: identity, memory, knowledge & personas; 100+ connected services (native OAuth + Composio) callable by clean name through a single proxy; AFP remote file/shell access to your own machines; scheduled AI automations (with a prepaid AI-credit model, BYO or MyApi-provided keys across Anthropic/OpenAI/OpenRouter); scope-aware tokens, ASC Ed25519 agent auth, and audit logging.',
     },
     servers: [{ url: `${scheme}://${host}` }],
     components: {
@@ -4173,6 +4850,9 @@ app.get('/openapi.json', (req, res) => {
       '/api/v1/tokens': { get: { summary: 'List master tokens', security: [{ bearerAuth: [] }] }, post: { summary: 'Create master token', security: [{ bearerAuth: [] }] } },
       '/api/v1/tokens/{id}': { get: { summary: 'Get token', security: [{ bearerAuth: [] }] }, put: { summary: 'Update token', security: [{ bearerAuth: [] }] }, delete: { summary: 'Revoke token', security: [{ bearerAuth: [] }] } },
       '/api/v1/tokens/{id}/regenerate': { post: { summary: 'Regenerate token secret', security: [{ bearerAuth: [] }] } },
+      '/api/v1/tokens/{id}/usage': { get: { summary: 'Agent usage vs configured limits', description: 'Calls + context tokens consumed in the current window (?period=day|month), total and per service. Limits are set via the `limits` field on POST/PUT /tokens: {period, maxCalls, maxTokens, perService: {name: {maxCalls, maxTokens}}}. Exceeding a limit returns 429 AGENT_LIMIT_EXCEEDED.', security: [{ bearerAuth: [] }] } },
+      '/api/v1/services/homeassistant/connect': { post: { summary: 'Connect Home Assistant (instance URL + long-lived token)', description: 'Body: {base_url, token}. Validates by probing GET {base_url}/api/ before storing. The full HA REST API is then available via POST /api/v1/services/homeassistant/proxy with {path, method, body, query} — e.g. path "/states", "/services/light/turn_on". Master token required. DELETE disconnects.', security: [{ bearerAuth: [] }] }, delete: { summary: 'Disconnect Home Assistant', security: [{ bearerAuth: [] }] } },
+      '/api/v1/services/{serviceName}/resources': { get: { summary: 'List sub-scopable resources in a connected service', description: 'Enumerates resources a token can be restricted to (Monday boards, Slack channels, Discord servers/channels, GitHub repos, Trello boards, Notion databases). ?kind= filters one kind; ?parent= for nested kinds (Discord channels need the guild id). Restrictions are stored on the token as allowedResources.service_resources = {service: {kind: [ids]}} and enforced at the service proxy (403 resource_restricted). Master token required.', security: [{ bearerAuth: [] }] } },
       '/api/v1/tokens/master/regenerate': { post: { summary: 'Regenerate master token', security: [{ bearerAuth: [] }] } },
       '/api/v1/scopes': { get: { summary: 'List scopes', security: [{ bearerAuth: [] }] } },
 
@@ -4472,11 +5152,11 @@ app.get('/openapi.json', (req, res) => {
       '/api/v1/marketplace/my-listings': { get: { summary: 'My listings', security: [{ bearerAuth: [] }] } },
 
       '/api/v1/services/categories': { get: { summary: 'Service categories', security: [{ bearerAuth: [] }] } },
-      '/api/v1/services': { get: { summary: 'List services', security: [{ bearerAuth: [] }] } },
-      '/api/v1/services/{name}': { get: { summary: 'Get service', security: [{ bearerAuth: [] }] } },
-      '/api/v1/services/{serviceId}/methods': { get: { summary: 'Service methods', security: [{ bearerAuth: [] }] } },
-      '/api/v1/services/{serviceName}/execute': { post: { summary: 'Execute service method', security: [{ bearerAuth: [] }] } },
-      '/api/v1/services/{serviceName}/proxy': { post: { summary: 'Proxy raw API request to service', security: [{ bearerAuth: [] }] } },
+      '/api/v1/services': { get: { summary: 'List services', description: 'All services with connection status — native OAuth and Composio-backed. Every service uses its clean name (e.g. gmail, slack) and is called the same way.', security: [{ bearerAuth: [] }] } },
+      '/api/v1/services/{name}': { get: { summary: 'Get service', description: 'Service detail; works for native and Composio-backed services (clean names).', security: [{ bearerAuth: [] }] } },
+      '/api/v1/services/{serviceId}/methods': { get: { summary: 'Service methods', description: 'Documented operations for a service plus generic proxy usage. For Composio-backed services this explains the exact proxy call shape.', security: [{ bearerAuth: [] }] } },
+      '/api/v1/services/{serviceName}/execute': { post: { summary: 'Execute service method', description: 'Execute a predefined method with {method, params}. Scopes: services:read/services:write, or standalone per-service services:{name}:read|write.', security: [{ bearerAuth: [] }] } },
+      '/api/v1/services/{serviceName}/proxy': { post: { summary: 'Proxy raw API request to service', description: 'Body: {path, method, body?, query?, headers?}. path is the provider-native REST path. headers forwards provider request headers (e.g. LinkedIn-Version, X-Restli-Protocol-Version for LinkedIn /rest endpoints); Authorization/Host/Cookie are managed by MyApi and cannot be overridden. Works for native and Composio-backed services (clean names); MyApi attaches stored credentials. Scopes: services:read (writes need services:write) or per-service services:{name}:read|write.', security: [{ bearerAuth: [] }] } },
 
       '/api/v1/services/google/gmail/messages': {
         get: {
@@ -4657,6 +5337,47 @@ app.get('/openapi.json', (req, res) => {
         },
       },
 
+      '/api/v1/services/google/calendar/events': {
+        get: {
+          operationId: 'listCalendarEvents',
+          summary: 'List Google Calendar events',
+          description: 'Fetch upcoming events (or a time range) from the connected Google Calendar. Works whether Calendar was connected natively or through Composio.',
+          security: [{ bearerAuth: [] }],
+          parameters: [
+            { name: 'timeMin', in: 'query', schema: { type: 'string' }, description: 'RFC3339 lower bound (default: now)' },
+            { name: 'timeMax', in: 'query', schema: { type: 'string' }, description: 'RFC3339 upper bound' },
+            { name: 'q', in: 'query', schema: { type: 'string' }, description: 'Free-text search over event fields' },
+            { name: 'maxResults', in: 'query', schema: { type: 'integer', default: 10, maximum: 50 } },
+            { name: 'calendarId', in: 'query', schema: { type: 'string', default: 'primary' } },
+          ],
+          responses: { '200': { description: 'List of calendar events' }, '403': { description: 'Calendar not connected' } },
+        },
+        post: {
+          operationId: 'createCalendarEvent',
+          summary: 'Create a Google Calendar event',
+          description: 'Create an event on the connected Google Calendar. start/end accept an ISO datetime (timed) or YYYY-MM-DD (all-day).',
+          security: [{ bearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: { 'application/json': { schema: {
+              type: 'object',
+              required: ['summary', 'start', 'end'],
+              properties: {
+                summary: { type: 'string', description: 'Event title' },
+                start: { type: 'string', description: 'ISO datetime (2026-06-20T14:00:00Z) or date (2026-06-20)' },
+                end: { type: 'string', description: 'ISO datetime or date' },
+                description: { type: 'string' },
+                location: { type: 'string' },
+                attendees: { type: 'array', items: { type: 'string', format: 'email' } },
+                calendarId: { type: 'string', default: 'primary' },
+                timeZone: { type: 'string', description: 'IANA tz (e.g. America/New_York) for timed events' },
+              },
+            } } },
+          },
+          responses: { '200': { description: 'Event created' }, '403': { description: 'Calendar not connected' } },
+        },
+      },
+
       // ── AFP — PC File System Access (master token only) ───────
       '/api/v1/afp/devices': {
         get: {
@@ -4818,8 +5539,35 @@ app.get('/openapi.json', (req, res) => {
       '/api/v1/oauth/status': { get: { summary: 'OAuth status', security: [{ bearerAuth: [] }] } },
       '/api/v1/oauth/disconnect/{service}': { post: { summary: 'Disconnect OAuth service', security: [{ bearerAuth: [] }] } },
 
-      '/api/v1/billing/plans': { get: { summary: 'Billing plans' } },
-      '/api/v1/billing/checkout': { post: { summary: 'Billing checkout' } },
+      '/api/v1/triggers': {
+        get: { summary: 'List automations', description: 'Scheduled/proactive automations (triggers) the user created. Pro/Heavy plan.', security: [{ bearerAuth: [] }] },
+        post: { summary: 'Create automation', description: 'Schedule a recurring/one-time task MyApi runs on its own. Recommended actionType "ai_prompt": {name, kind:"schedule", schedule:{type:once|interval|daily|weekly|monthly,...}, timezone, actionType:"ai_prompt", action:{prompt, services:[connected slugs], provider?, model?, keyMode?}}. Other actionTypes: service_proxy, afp_exec. Pro/Heavy plan.', security: [{ bearerAuth: [] }], responses: { '201': { description: 'Created' } } },
+      },
+      '/api/v1/triggers/{id}': {
+        get: { summary: 'Get automation + recent runs', security: [{ bearerAuth: [] }] },
+        patch: { summary: 'Update automation', description: 'Update name/enabled/timezone/schedule/action.', security: [{ bearerAuth: [] }] },
+        delete: { summary: 'Delete automation', security: [{ bearerAuth: [] }] },
+      },
+      '/api/v1/triggers/{id}/run': { post: { summary: 'Run an automation now (test)', security: [{ bearerAuth: [] }] } },
+      '/api/v1/triggers/{id}/runs': { get: { summary: 'Automation run history', security: [{ bearerAuth: [] }] } },
+      '/api/v1/triggers/ai/settings': { get: { summary: 'AI engine settings + MyApi-AI wallet', description: 'Per-provider availability (anthropic/openai/openrouter), selectable models, and the prepaid MyApi-AI wallet: balance, used/included credits, spend limit, alert %, auto-reload.', security: [{ bearerAuth: [] }] } },
+      '/api/v1/triggers/ai/key': {
+        put: { summary: 'Store a personal (BYO) provider key', description: 'Body {provider, key}. BYO-key automation runs are free (use the user\'s own key).', security: [{ bearerAuth: [] }] },
+        delete: { summary: 'Remove a personal provider key', description: 'Body/query {provider}.', security: [{ bearerAuth: [] }] },
+      },
+      '/api/v1/triggers/ai/wallet': { put: { summary: 'Update MyApi-AI spend controls', description: 'Body {spendLimitCredits, alertPercent, autoReload:{enabled,whenBelowCredits,topUpCredits}}. 1 credit = $0.01 charged.', security: [{ bearerAuth: [] }] } },
+      '/api/v1/triggers/ai/topup': { post: { summary: 'Buy MyApi-AI credits (Stripe Checkout)', description: 'Body {amountCents}. Returns a Checkout URL.', security: [{ bearerAuth: [] }],
+        'x-payment-info': { intent: 'session', method: 'stripe', amount: 5.00, currency: 'USD' } } },
+
+      '/api/v1/billing/plans': { get: { summary: 'Billing plans', description: 'Personal (free, ≤5 services, 1k calls/mo), Pro ($9, all services, 10k calls/mo + $0.25/1k overage), Heavy ($29, unlimited). Automations + MyApi-AI require Pro/Heavy.' } },
+      '/api/v1/billing/checkout': { post: {
+        summary: 'Billing checkout',
+        description: 'Start a Stripe Checkout session for a paid plan (pro $9/mo, enterprise $29/mo). Returns a Checkout URL.',
+        security: [{ bearerAuth: [] }],
+        // MPP (Machine Payment Protocol) discovery — https://mpp.dev
+        'x-payment-info': { intent: 'session', method: 'stripe', amount: 9.00, currency: 'USD' },
+      } },
+      '/api/v1/billing/usage': { get: { summary: 'Workspace usage vs plan limits (API calls, overage)', security: [{ bearerAuth: [] }] } },
     },
   });
 });
@@ -4947,16 +5695,24 @@ app.get("/api/v1/identity/availability", authenticate, (req, res) => {
 app.get("/api/v1/preferences", authenticate, (req, res) => {
   if (!isMaster(req)) return res.status(403).json({ error: "Insufficient scope" });
   const userId = getRequestOwnerId(req);
+  const { getUserPreferences } = require('./database');
+  // DB is the per-user source of truth (survives restarts); warm the in-memory cache.
+  const prefs = getUserPreferences(userId);
+  vault.preferences[userId] = prefs;
   createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "read_preferences", resource: "/preferences", scope: req.tokenMeta.scope, ip: req.ip });
-  res.json({ data: vault.preferences[userId] || {} });
+  res.json({ data: prefs });
 });
 
 app.put("/api/v1/preferences", authenticate, (req, res) => {
   if (!isMaster(req)) return res.status(403).json({ error: "Insufficient scope" });
   const userId = getRequestOwnerId(req);
-  vault.preferences[userId] = { ...(vault.preferences[userId] || {}), ...req.body };
+  const { getUserPreferences, setUserPreferences } = require('./database');
+  // Merge onto the persisted per-user prefs and write back (per-user isolated + durable).
+  const merged = { ...getUserPreferences(userId), ...(req.body || {}) };
+  setUserPreferences(userId, merged);
+  vault.preferences[userId] = merged;
   createAuditLog({ requesterId: req.tokenMeta.tokenId, action: "update_preferences", resource: "/preferences", scope: req.tokenMeta.scope, ip: req.ip });
-  res.json({ data: vault.preferences[userId] });
+  res.json({ data: merged });
 });
 
 // --- VAULT TOKENS (encrypted external API keys) ---
@@ -5100,13 +5856,186 @@ app.delete("/api/v1/vault/tokens/:id", authenticate, (req, res) => {
   res.json({ data: { deleted: true } });
 });
 
+// ============================================================================
+// Vault credentials (username/password). Master token only, same as vault/tokens.
+// ============================================================================
+
+app.post("/api/v1/vault/credentials", authenticate, (req, res) => {
+  if (!isMaster(req)) return res.status(403).json({ error: "Only master token can add vault credentials" });
+  try {
+    const { label, name, username, password, url, notes, totpSecret, totp_secret, service } = req.body || {};
+    const credLabel = String(label || name || '').trim();
+    const credUsername = String(username || '').trim();
+    const credPassword = String(password || '');
+
+    if (!credLabel) return res.status(400).json({ error: 'label is required' });
+    if (!credUsername) return res.status(400).json({ error: 'username is required' });
+    if (!credPassword) return res.status(400).json({ error: 'password is required' });
+    if (credPassword.length > 8192) return res.status(400).json({ error: 'password length must be at most 8192 characters' });
+
+    let normalizedUrl = null;
+    if (url) {
+      normalizedUrl = parseAndValidateHttpUrl(url);
+      if (!normalizedUrl) return res.status(400).json({ error: 'url must be a valid http(s) URL' });
+    }
+
+    const ownerId = getRequestOwnerId(req);
+    const workspaceId = req.workspaceId || req.session?.currentWorkspace || null;
+
+    const cred = createVaultCredential({
+      label: credLabel,
+      username: credUsername,
+      password: credPassword,
+      url: normalizedUrl,
+      notes: notes || null,
+      totpSecret: totpSecret || totp_secret || null,
+      service: service || null,
+      ownerId,
+      workspaceId,
+    });
+
+    createAuditLog({
+      requesterId: req.tokenMeta.tokenId,
+      action: "create_vault_credential",
+      resource: `/vault/credentials/${cred.id}`,
+      scope: req.tokenMeta.scope,
+      ip: req.ip,
+      details: { label: credLabel, service: service || null, hasTotp: !!(totpSecret || totp_secret) },
+    });
+    res.status(201).json({ data: cred });
+  } catch (error) {
+    console.error('Vault credential create error:', error);
+    res.status(500).json({ error: 'Failed to store vault credential' });
+  }
+});
+
+app.get("/api/v1/vault/credentials", authenticate, (req, res) => {
+  if (!isMaster(req)) return res.status(403).json({ error: "Only master token can view vault credentials" });
+  const ownerId = getRequestOwnerId(req);
+  const credentials = getVaultCredentials(ownerId, null);
+  createAuditLog({
+    requesterId: req.tokenMeta.tokenId,
+    action: "list_vault_credentials",
+    resource: "/vault/credentials",
+    scope: req.tokenMeta.scope,
+    ip: req.ip,
+  });
+  res.json({ data: credentials, credentials });
+});
+
+app.get("/api/v1/vault/credentials/:id/reveal", authenticate, (req, res) => {
+  if (!isMaster(req)) return res.status(403).json({ error: "Only master token can decrypt vault credentials" });
+  const ownerId = getRequestOwnerId(req);
+  const workspaceId = req.workspaceId || req.session?.currentWorkspace || null;
+  const cred = decryptVaultCredential(req.params.id, ownerId, workspaceId);
+  if (!cred) return res.status(404).json({ error: "Credential not found" });
+  createAuditLog({
+    requesterId: req.tokenMeta.tokenId,
+    action: "reveal_vault_credential",
+    resource: `/vault/credentials/${req.params.id}`,
+    scope: req.tokenMeta.scope,
+    ip: req.ip,
+  });
+  res.json({ data: cred });
+});
+
+app.put("/api/v1/vault/credentials/:id", authenticate, (req, res) => {
+  if (!isMaster(req)) return res.status(403).json({ error: "Only master token can update vault credentials" });
+  try {
+    const { label, username, password, url, notes, totpSecret, totp_secret, service } = req.body || {};
+
+    const fields = {};
+    if (label !== undefined) fields.label = String(label).trim();
+    if (username !== undefined) fields.username = String(username).trim();
+    if (password !== undefined) fields.password = String(password);
+    if (notes !== undefined) fields.notes = notes;
+    if (service !== undefined) fields.service = service;
+    if (totpSecret !== undefined) fields.totpSecret = totpSecret;
+    else if (totp_secret !== undefined) fields.totpSecret = totp_secret;
+
+    if (url !== undefined) {
+      if (url === null || url === '') {
+        fields.url = null;
+      } else {
+        const normalizedUrl = parseAndValidateHttpUrl(url);
+        if (!normalizedUrl) return res.status(400).json({ error: 'url must be a valid http(s) URL' });
+        fields.url = normalizedUrl;
+      }
+    }
+
+    const ownerId = getRequestOwnerId(req);
+    const workspaceId = req.workspaceId || req.session?.currentWorkspace || null;
+    const updated = updateVaultCredential(req.params.id, fields, ownerId, workspaceId);
+    if (!updated) return res.status(404).json({ error: "Credential not found" });
+
+    createAuditLog({
+      requesterId: req.tokenMeta.tokenId,
+      action: "update_vault_credential",
+      resource: `/vault/credentials/${req.params.id}`,
+      scope: req.tokenMeta.scope,
+      ip: req.ip,
+      details: { fields: Object.keys(fields) },
+    });
+    res.json({ data: updated });
+  } catch (error) {
+    console.error('Vault credential update error:', error);
+    res.status(500).json({ error: 'Failed to update vault credential' });
+  }
+});
+
+app.delete("/api/v1/vault/credentials/:id", authenticate, (req, res) => {
+  if (!isMaster(req)) return res.status(403).json({ error: "Only master token can delete vault credentials" });
+  const ownerId = getRequestOwnerId(req);
+  const workspaceId = req.workspaceId || req.session?.currentWorkspace || null;
+  const deleted = deleteVaultCredential(req.params.id, ownerId, workspaceId);
+  if (!deleted) return res.status(404).json({ error: "Credential not found" });
+  createAuditLog({
+    requesterId: req.tokenMeta.tokenId,
+    action: "delete_vault_credential",
+    resource: `/vault/credentials/${req.params.id}`,
+    scope: req.tokenMeta.scope,
+    ip: req.ip,
+  });
+  res.json({ data: { deleted: true } });
+});
+
 // --- ACCESS TOKENS (guest tokens with fine-grained scopes) ---
 
 // Create a new guest token with fine-grained scopes
 app.post("/api/v1/tokens", authenticate, (req, res) => {
   if (!isMaster(req)) return res.status(403).json({ error: "Only master token can create tokens" });
 
-  const { label = "Guest Token", scopes, expiresInHours, description, allowedPersonas, requiresApproval, scopeBundle, allowedResources } = req.body;
+  const { label = "Guest Token", scopes, expiresInHours, description, allowedPersonas, requiresApproval, scopeBundle, allowedResources, limits } = req.body;
+
+  // B2B: org token policy (max TTL, admin-scope restriction) — checked first
+  try {
+    const { enforceOrgTokenPolicy } = require('./middleware/orgPolicy');
+    const policyError = enforceOrgTokenPolicy({
+      ownerId: req.user?.id || req.tokenMeta?.ownerId,
+      expiresInHours,
+      scopes,
+    });
+    if (policyError) {
+      return res.status(403).json({ error: policyError, code: 'ORG_TOKEN_POLICY' });
+    }
+  } catch (_) { /* policy module errors must not block token creation for B2C */ }
+
+  // Validate usage limits + resource sub-scopes up front — nothing is created on bad input.
+  let normalizedLimits = null;
+  try {
+    normalizedLimits = agentLimits.normalizeLimits(limits);
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
+  if (allowedResources && typeof allowedResources === 'object' && allowedResources.service_resources !== undefined) {
+    try {
+      const normalizedSvcResources = normalizeServiceResources(allowedResources.service_resources);
+      if (normalizedSvcResources) allowedResources.service_resources = normalizedSvcResources;
+      else delete allowedResources.service_resources;
+    } catch (e) {
+      return res.status(400).json({ error: e.message });
+    }
+  }
 
   // Parse scopes - support both template names and individual scopes
   let finalScopes = [];
@@ -5180,8 +6109,12 @@ app.post("/api/v1/tokens", authenticate, (req, res) => {
   db.prepare('UPDATE access_tokens SET scope_bundle = ?, requires_approval = ?, allowed_resources = ? WHERE id = ?')
     .run(bundleJson, needsApproval, resourcesJson, tokenId);
 
-  // Grant the scopes to the token
-  grantScopes(tokenId, finalScopes);
+  if (normalizedLimits) agentLimits.setAgentLimits(tokenId, normalizedLimits);
+
+  // Grant the scopes to the token. Per-service pattern scopes (services:{name}:{level})
+  // live only in the scope JSON column — keep them out of access_token_scopes,
+  // matching the PUT /tokens/:id behavior and the grantScopes pre-filter contract.
+  grantScopes(tokenId, finalScopes.filter(s => !/^services:[a-z0-9_-]+:(read|write|\*)$/.test(s)));
 
   createAuditLog({
     requesterId: req.tokenMeta.tokenId,
@@ -5198,6 +6131,18 @@ app.post("/api/v1/tokens", authenticate, (req, res) => {
   // Security: log token creation as security event
   console.warn(`🔑 SECURITY: New token created - label="${label}", scope="${JSON.stringify(finalScopes)}", by=${req.tokenMeta.tokenId}, ip=${req.ip}`);
 
+  // Notify the owner: a token they didn't create themselves is an early compromise signal
+  try {
+    const tokenOwnerId = getRequestOwnerId(req);
+    if (tokenOwnerId && tokenOwnerId !== 'owner') {
+      NotificationService.emitNotification(tokenOwnerId, 'token_created',
+        `New Access Token Created: ${label}`,
+        `A new token "${label}" was created (scopes: ${finalScopes.join(', ')}) from ${req.ip}. If this wasn't you, revoke it immediately.`,
+        { data: { tokenId, scopes: finalScopes, ip: req.ip } }
+      ).catch(err => console.error('[Notifications] token_created emit failed:', err.message));
+    }
+  } catch (_) {}
+
   res.status(201).json({
     data: {
       id: tokenId,
@@ -5208,6 +6153,8 @@ app.post("/api/v1/tokens", authenticate, (req, res) => {
       allowedPersonas: personaIds,
       requiresApproval: needsApproval === 1,
       scopeBundle: bundleJson ? scopeBundle : null,
+      allowedResources: resourcesJson ? allowedResources : null,
+      limits: normalizedLimits,
       createdAt: new Date().toISOString(),
       expiresAt
     }
@@ -5242,6 +6189,8 @@ app.get("/api/v1/tokens/:id", authenticate, (req, res) => {
     if (row?.allowed_resources) allowedResources = JSON.parse(row.allowed_resources);
   } catch (_) {}
 
+  const tokenLimits = agentLimits.getAgentLimits(req.params.id);
+
   res.json({
     data: {
       id: token.tokenId,
@@ -5252,6 +6201,8 @@ app.get("/api/v1/tokens/:id", authenticate, (req, res) => {
       requiresApproval: !!token.requiresApproval,
       scopeBundle: token.scopeBundle || null,
       allowedResources,
+      limits: tokenLimits,
+      usage: tokenLimits ? agentLimits.getAgentUsage(req.params.id, tokenLimits.period || 'month') : undefined,
       tokenType: token.tokenType || 'guest',
       isShareable: !!token.isShareable,
       createdAt: token.createdAt,
@@ -5262,12 +6213,29 @@ app.get("/api/v1/tokens/:id", authenticate, (req, res) => {
   });
 });
 
+// Usage + limits for one agent (token id or ASC key fingerprint).
+// ?period=day|month overrides the window (defaults to the limit's own period).
+app.get("/api/v1/tokens/:id/usage", authenticate, (req, res) => {
+  if (!isMaster(req)) return res.status(403).json({ error: "Only master token can view token usage" });
+
+  const limits = agentLimits.getAgentLimits(req.params.id);
+  const period = ['day', 'month'].includes(req.query.period) ? req.query.period : (limits?.period || 'month');
+  res.json({
+    data: {
+      id: req.params.id,
+      period,
+      limits,
+      usage: agentLimits.getAgentUsage(req.params.id, period),
+    }
+  });
+});
+
 // Update a token: scopes, requiresApproval, scopeBundle, allowedResources, allowedPersonas.
 // Partial updates supported — only fields present in the body are modified.
 app.put("/api/v1/tokens/:id", authenticate, (req, res) => {
   if (!isMaster(req)) return res.status(403).json({ error: "Only master token can update tokens" });
 
-  const { scopes, requiresApproval, scopeBundle, allowedResources, allowedPersonas, label } = req.body;
+  const { scopes, requiresApproval, scopeBundle, allowedResources, allowedPersonas, label, limits } = req.body;
 
   // At least one updatable field must be provided
   const hasScopes = scopes !== undefined;
@@ -5276,9 +6244,26 @@ app.put("/api/v1/tokens/:id", authenticate, (req, res) => {
   const hasResources = allowedResources !== undefined;
   const hasPersonas = allowedPersonas !== undefined;
   const hasLabel = typeof label === 'string' && label.length > 0;
+  const hasLimits = limits !== undefined;
 
-  if (!hasScopes && !hasApproval && !hasBundle && !hasResources && !hasPersonas && !hasLabel) {
+  if (!hasScopes && !hasApproval && !hasBundle && !hasResources && !hasPersonas && !hasLabel && !hasLimits) {
     return res.status(400).json({ error: "At least one updatable field must be provided" });
+  }
+
+  // Validate limits + resource sub-scopes before touching anything (null clears limits).
+  if (hasLimits) {
+    try { agentLimits.normalizeLimits(limits); } catch (e) {
+      return res.status(400).json({ error: e.message });
+    }
+  }
+  if (hasResources && allowedResources && typeof allowedResources === 'object' && allowedResources.service_resources !== undefined) {
+    try {
+      const normalizedSvcResources = normalizeServiceResources(allowedResources.service_resources);
+      if (normalizedSvcResources) allowedResources.service_resources = normalizedSvcResources;
+      else delete allowedResources.service_resources;
+    } catch (e) {
+      return res.status(400).json({ error: e.message });
+    }
   }
 
   if (hasScopes && !Array.isArray(scopes) && typeof scopes !== 'string') {
@@ -5380,6 +6365,10 @@ app.put("/api/v1/tokens/:id", authenticate, (req, res) => {
       if (sets.length > 0) {
         params.push(req.params.id);
         db.prepare(`UPDATE access_tokens SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+      }
+
+      if (hasLimits) {
+        agentLimits.setAgentLimits(req.params.id, limits); // null clears
       }
     };
 
@@ -5514,7 +6503,18 @@ app.post("/api/v1/tokens/:id/regenerate", authenticate, (req, res) => {
   const hash = bcrypt.hashSync(rawToken, 10);
   const now = new Date().toISOString();
 
-  db.prepare('UPDATE access_tokens SET hash = ? WHERE id = ?').run(hash, req.params.id);
+  // If the token is expired, reset expires_at to 30 days from now so the regenerated
+  // token is actually usable. Without this the new secret would still be rejected as expired.
+  const isExpired = token.expiresAt && new Date(token.expiresAt) <= new Date();
+  const newExpiresAt = isExpired
+    ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+    : token.expiresAt;
+
+  if (isExpired) {
+    db.prepare('UPDATE access_tokens SET hash = ?, expires_at = ? WHERE id = ?').run(hash, newExpiresAt, req.params.id);
+  } else {
+    db.prepare('UPDATE access_tokens SET hash = ? WHERE id = ?').run(hash, req.params.id);
+  }
 
   const scopes = getTokenScopes(req.params.id);
 
@@ -5533,7 +6533,7 @@ app.post("/api/v1/tokens/:id/regenerate", authenticate, (req, res) => {
       token: rawToken,
       scopes,
       regeneratedAt: now,
-      expiresAt: token.expiresAt,
+      expiresAt: newExpiresAt,
       allowedPersonas: token.allowedPersonas || null
     }
   });
@@ -5752,92 +6752,26 @@ app.post("/api/v1/tokens/validate", authRateLimit, async (req, res) => {
   });
 });
 
-const BILLING_PLANS = {
-  free: {
-    id: 'free',
-    name: 'Starter',
-    price_cents: 1000,
-    priceMonthly: 10, // deprecated, kept for backwards compat
-    description: 'Perfect for personal use and getting started.',
-    features: [
-      '2 AI Personas',
-      '3 Service Connections',
-      '10 MB Knowledge Base',
-      '5 Token Vault entries',
-      'Attach up to 4 Skills per Persona',
-      '1,000 API calls/month',
-      'Up to 2 team members'
-    ],
-    monthlyApiCallLimit: 1000,
-    maxServices: 3,
-    maxTeamMembers: 2,
-    maxSkillsPerPersona: 4,
-    stripe_product_id: process.env.STRIPE_PRODUCT_ID_STARTER_LIVE || 'prod_UE1qwjLE5Sfyqs',
-    stripePriceId: process.env.STRIPE_PRICE_ID_STARTER_LIVE,
-    stripePaymentLinkEnv: 'STRIPE_PAYMENT_LINK_STARTER',
-  },
-  pro: {
-    id: 'pro',
-    name: 'Pro',
-    price_cents: 2900,
-    priceMonthly: 29, // deprecated, kept for backwards compat
-    description: 'For creators and small teams',
-    features: [
-      '5 AI Personas',
-      'Unlimited Service Connections',
-      '50 MB Knowledge Base',
-      'Unlimited Token Vault entries',
-      'Attach unlimited Skills per Persona',
-      '100,000 API calls/month',
-      'Up to 10 team members',
-      'AFP — API File Protocol (remote file & shell operations)',
-      'Priority support'
-    ],
-    monthlyApiCallLimit: 100000,
-    maxServices: -1, // unlimited
-    maxTeamMembers: 10,
-    maxSkillsPerPersona: -1, // unlimited
-    stripe_product_id: process.env.STRIPE_PRODUCT_ID_PRO_LIVE || 'prod_pro_myapi',
-    stripePriceId: process.env.STRIPE_PRICE_ID_PRO_LIVE,
-    stripePaymentLinkEnv: 'STRIPE_PAYMENT_LINK_PRO',
-  },
-  enterprise: {
-    id: 'enterprise',
-    name: 'Enterprise',
-    price_cents: 9900,
-    priceMonthly: 99, // deprecated, kept for backwards compat
-    description: 'Scale with higher limits and custom support',
-    features: [
-      '20 AI Personas',
-      'Unlimited Service Connections',
-      '200 MB Knowledge Base',
-      'Unlimited Token Vault entries',
-      'Attach unlimited Skills per Persona',
-      'Unlimited API calls/month',
-      'Unlimited team members',
-      'AFP — API File Protocol (remote file & shell operations)',
-      'Priority 24/7 support',
-      'Custom SLA & onboarding',
-      'Dedicated infrastructure option'
-    ],
-    monthlyApiCallLimit: -1, // unlimited
-    maxServices: -1, // unlimited
-    maxTeamMembers: -1, // unlimited
-    maxSkillsPerPersona: -1, // unlimited
-    stripe_product_id: process.env.STRIPE_PRODUCT_ID_ENTERPRISE_LIVE || 'prod_enterprise_myapi',
-    stripePriceId: process.env.STRIPE_PRICE_ID_ENTERPRISE_LIVE,
-    stripePaymentLinkEnv: 'STRIPE_PAYMENT_LINK_ENTERPRISE',
-  },
-};
+// Plan catalog (BILLING_PLANS) lives in the closed-source billing module
+// (src/routes/billing.js); MyApi Open keeps only the resource-limit map below.
 
 const PLAN_ENFORCEMENT_ENABLED = process.env.NODE_ENV === 'test'
   ? false
   : process.env.ENFORCE_PLAN_LIMITS !== 'false';
 
 const PLAN_LIMITS = {
+  beta: {
+    personas: Infinity,
+    serviceConnections: Infinity,
+    knowledgeBytes: Infinity,
+    vaultTokens: Infinity,
+    skillsPerPersona: Infinity,
+    monthlyApiCalls: Infinity,
+    teamMembers: Infinity,
+  },
   free: {
     personas: 2,
-    serviceConnections: 3,
+    serviceConnections: 5,
     knowledgeBytes: 10 * 1024 * 1024, // 10 MB
     vaultTokens: 5,
     skillsPerPersona: 4,
@@ -5845,12 +6779,12 @@ const PLAN_LIMITS = {
     teamMembers: 2,
   },
   pro: {
-    personas: 5,
+    personas: 10,
     serviceConnections: Infinity,
     knowledgeBytes: 50 * 1024 * 1024, // 50 MB
     vaultTokens: Infinity,
     skillsPerPersona: Infinity,
-    monthlyApiCalls: 100000,
+    monthlyApiCalls: 10000, // + $0.25 per 1,000 overage (not blocked)
     teamMembers: 10,
   },
   enterprise: {
@@ -5866,23 +6800,32 @@ const PLAN_LIMITS = {
 
 function resolveRequesterPlan(req) {
   try {
-    // Check user's directly-assigned plan first (set via User Management UI)
+    // B2B: org plan supersedes personal plans for org members (single choke
+    // point shared with lib/planEnforcement.resolveOrgPlan)
+    const { resolveOrgPlan } = require('./lib/planEnforcement');
+    const orgPlan = resolveOrgPlan(req?.user?.id || req?.tokenMeta?.ownerId);
+    if (orgPlan) return orgPlan.plan;
+
+    // Check user's directly-assigned plan first (set via User Management UI).
+    // Validity check falls back to the open PLAN_LIMITS map when the billing
+    // module is absent (MyApi Open).
+    const knownPlans = BILLING_PLAN_LIMITS || PLAN_LIMITS;
     if (req?.user?.id) {
       const user = getUserById(req.user.id);
-      if (user?.plan && BILLING_PLAN_LIMITS[String(user.plan).toLowerCase()]) return String(user.plan).toLowerCase();
+      if (user?.plan && knownPlans[String(user.plan).toLowerCase()]) return String(user.plan).toLowerCase();
     }
 
     const ownerId = req?.tokenMeta?.ownerId;
     if (ownerId && ownerId !== 'owner') {
       const owner = getUserById(ownerId);
-      if (owner?.plan && BILLING_PLAN_LIMITS[String(owner.plan).toLowerCase()]) return String(owner.plan).toLowerCase();
+      if (owner?.plan && knownPlans[String(owner.plan).toLowerCase()]) return String(owner.plan).toLowerCase();
     }
 
-    // Fall back to workspace billing subscription
+    // Fall back to workspace billing subscription (closed-source billing module)
     const workspaceId = getRequestWorkspaceId(req);
-    if (workspaceId) {
+    if (workspaceId && billingLib) {
       const sub = getBillingSubscriptionByWorkspace(workspaceId);
-      return resolveWorkspaceCurrentPlan(sub).id;
+      return billingLib.resolveWorkspaceCurrentPlan(sub).id;
     }
 
     return 'free';
@@ -5924,436 +6867,22 @@ function getKnowledgeBaseBytesUsed(req) {
   return rows.reduce((sum, row) => sum + Buffer.byteLength(String(row.content || ''), 'utf8'), 0);
 }
 
-// --- PLAN DOWNGRADE PREVIEW ---
-app.post('/api/v1/billing/downgrade-preview', authenticate, (req, res) => {
-  try {
-    const { newPlan } = req.body || {};
-    const newPlanId = String(newPlan || '').toLowerCase();
-    const newPlanDef = BILLING_PLANS[newPlanId];
-    if (!newPlanDef) {
-      return res.status(400).json({ error: 'Invalid plan' });
-    }
-
-    const ownerId = getRequestOwnerId(req);
-    const currentPlanId = String(resolveRequesterPlan(req) || 'free').toLowerCase();
-    const currentPlanDef = BILLING_PLANS[currentPlanId] || BILLING_PLANS.free;
-
-    if (!currentPlanDef) {
-      return res.status(400).json({ error: 'Unable to determine current plan' });
-    }
-
-    // If upgrading (higher or equal limits), no preview needed
-    // Handle unlimited (-1) case: unlimited is always "higher"
-    const currentMax = currentPlanDef.maxServices === -1 ? Infinity : currentPlanDef.maxServices;
-    const newMax = newPlanDef.maxServices === -1 ? Infinity : newPlanDef.maxServices;
-    if (currentMax <= newMax) {
-      return res.json({ isDowngrade: false, preview: null });
-    }
-
-    // Calculate what would be deleted
-    const preview = { isDowngrade: true, toDelete: {} };
-
-    // Check personas (Free: 2, Pro: 5, Enterprise: 20)
-    const personas = db.prepare('SELECT id, created_at FROM personas WHERE owner_id = ? ORDER BY created_at DESC').all(ownerId);
-    const maxPersonas = newPlanId === 'free' ? 2 : (newPlanId === 'pro' ? 5 : -1);
-    if (maxPersonas > 0 && personas.length > maxPersonas) {
-      const toDelete = personas.length - maxPersonas;
-      preview.toDelete.personas = {
-        count: toDelete,
-        message: `Will keep oldest ${maxPersonas}, delete ${toDelete} newest`
-      };
-    }
-
-    // Check service connections (Free: 3, Pro: unlimited, Enterprise: unlimited)
-    const services = db.prepare(`
-      SELECT id, service_name, created_at FROM oauth_tokens WHERE user_id = ? ORDER BY created_at DESC
-    `).all(ownerId);
-    if (newPlanDef.maxServices > 0 && services.length > newPlanDef.maxServices) {
-      const toDelete = services.length - newPlanDef.maxServices;
-      preview.toDelete.services = {
-        count: toDelete,
-        message: `Will keep oldest ${newPlanDef.maxServices}, delete ${toDelete} newest services`
-      };
-    }
-
-    return res.json(preview);
-  } catch (error) {
-    console.error('Downgrade preview error:', error);
-    return res.status(500).json({ error: 'Failed to generate downgrade preview' });
-  }
-});
-
-// --- PLAN DOWNGRADE CONFIRM (executes deletion) ---
-app.post('/api/v1/billing/downgrade-confirm', authenticate, async (req, res) => {
-  try {
-    const { newPlan, confirmed } = req.body || {};
-    if (!confirmed) {
-      return res.status(400).json({ error: 'Downgrade must be confirmed' });
-    }
-
-    const newPlanId = String(newPlan || '').toLowerCase();
-    const newPlanDef = BILLING_PLANS[newPlanId];
-    if (!newPlanDef) {
-      return res.status(400).json({ error: 'Invalid plan' });
-    }
-
-    const ownerId = getRequestOwnerId(req);
-    const currentPlanId = String(resolveRequesterPlan(req) || 'free').toLowerCase();
-    const currentPlanDef = BILLING_PLANS[currentPlanId] || BILLING_PLANS.free;
-
-    // Verify this is actually a downgrade
-    // Handle unlimited (-1) case: unlimited is always "higher"
-    const currentMax = currentPlanDef.maxServices === -1 ? Infinity : currentPlanDef.maxServices;
-    const newMax = newPlanDef.maxServices === -1 ? Infinity : newPlanDef.maxServices;
-    console.log(`[Downgrade Confirm] currentPlan=${currentPlanId}, newPlan=${newPlanId}, currentMax=${currentMax}, newMax=${newMax}, isUpgrade=${currentMax <= newMax}`);
-    if (currentMax <= newMax) {
-      return res.status(400).json({ error: 'This is not a downgrade' });
-    }
-
-    const downgradeRawDb = db.getRawDB ? db.getRawDB() : db;
-    downgradeRawDb.transaction(() => {
-      // Delete excess personas (keep oldest)
-      const maxPersonas = newPlanId === 'free' ? 2 : (newPlanId === 'pro' ? 5 : -1);
-      if (maxPersonas > 0) {
-        const personas = downgradeRawDb.prepare('SELECT id FROM personas WHERE owner_id = ? ORDER BY created_at DESC').all(ownerId);
-        if (personas.length > maxPersonas) {
-          const toDelete = personas.slice(0, personas.length - maxPersonas).map(p => p.id);
-          for (const id of toDelete) {
-            downgradeRawDb.prepare('DELETE FROM persona_documents WHERE persona_id = ?').run(id);
-            downgradeRawDb.prepare('DELETE FROM persona_skills WHERE persona_id = ?').run(id);
-            downgradeRawDb.prepare('DELETE FROM personas WHERE id = ?').run(id);
-          }
-        }
-      }
-
-      // Delete excess service connections (keep oldest)
-      if (newPlanDef.maxServices > 0) {
-        const services = downgradeRawDb.prepare('SELECT id FROM oauth_tokens WHERE user_id = ? ORDER BY created_at DESC').all(ownerId);
-        if (services.length > newPlanDef.maxServices) {
-          const toDelete = services.slice(0, services.length - newPlanDef.maxServices).map(s => s.id);
-          for (const id of toDelete) {
-            downgradeRawDb.prepare('DELETE FROM oauth_tokens WHERE id = ?').run(id);
-          }
-        }
-      }
-
-      // Update user's plan
-      downgradeRawDb.prepare('UPDATE users SET plan = ? WHERE id = ?').run(newPlanId, req.user?.id || ownerId);
-
-      // Update workspace subscription
-      const workspaceId = getRequestWorkspaceId(req);
-      if (workspaceId) {
-        upsertBillingSubscription(workspaceId, {
-          stripe_subscription_id: `manual_downgrade_${Date.now()}`,
-          plan_id: newPlanId,
-          status: 'active',
-        });
-      }
-    })();
-
-    // Cancel Stripe subscription if downgrading from paid plan to lower/free plan
-    const paidPlans = ['pro', 'enterprise'];
-    if (paidPlans.includes(currentPlanId) && (newPlanId === 'free' || (currentPlanId === 'enterprise' && newPlanId === 'pro'))) {
-      try {
-        const stripe = getStripeClient();
-        const workspaceId = getRequestWorkspaceId(req);
-        const sub = getBillingSubscriptionByWorkspace(workspaceId);
-        if (sub && sub.stripe_subscription_id && !sub.stripe_subscription_id.includes('manual')) {
-          await stripe.subscriptions.cancel(sub.stripe_subscription_id);
-          console.log(`[Downgrade] Cancelled Stripe subscription ${sub.stripe_subscription_id} (${currentPlanId} → ${newPlanId})`);
-        }
-      } catch (err) {
-        console.error('[Downgrade] Failed to cancel Stripe subscription:', err.message);
-        // Don't fail the whole downgrade if Stripe cancellation fails
-      }
-    }
-
-    createAuditLog({
-      requesterId: req.tokenMeta.tokenId,
-      action: 'downgrade_plan',
-      resource: `/billing/plans`,
-      scope: req.tokenMeta.scope,
-      ip: req.ip,
-      details: { fromPlan: currentPlanId, toPlan: newPlanId }
-    });
-
-    return res.json({ ok: true, message: `Downgraded to ${newPlanId}. Excess items deleted. Stripe subscription cancelled.` });
-  } catch (error) {
-    console.error('Downgrade confirm error:', error);
-    return res.status(500).json({ error: 'Failed to process downgrade' });
-  }
-});
-
-// --- BILLING / STRIPE CHECKOUT + USAGE ---
-app.post('/api/v1/billing/checkout', authenticate, async (req, res) => {
-  try {
-    const { plan } = req.body || {};
-    const selectedPlan = String(plan || '').toLowerCase().trim();
-    const definition = BILLING_PLANS[selectedPlan];
-    if (!definition) {
-      return res.status(400).json({ error: `Invalid plan. Allowed: ${Object.keys(BILLING_PLANS).join(', ')}` });
-    }
-
-    if (betaMode.isBetaMode() && selectedPlan !== 'free') {
-      return res.status(403).json({
-        error: 'Paid plans are not available during beta. Ask in Discord for access.',
-        code: 'BETA_PLAN_LOCKED',
-        discordUrl: 'https://discord.gg/WPp4sCN4xB',
-      });
-    }
-
-    const workspaceId = getRequestWorkspaceId(req);
-    if (!workspaceId) return res.status(400).json({ error: 'Workspace context is required' });
-
-    if (!isStripeConfigured()) {
-      upsertBillingSubscription(workspaceId, {
-        stripe_subscription_id: `mock_sub_${Date.now()}`,
-        plan_id: selectedPlan,
-        status: 'active',
-      });
-      return res.status(200).json({
-        provider: 'mock',
-        plan: selectedPlan,
-        message: 'Billing is not configured (missing STRIPE_SECRET_KEY).',
-      });
-    }
-
-    const stripe = getStripeClient();
-    if (!stripe) {
-      return res.status(503).json({ error: 'Billing configured but Stripe SDK unavailable' });
-    }
-
-    const ownerEmail = String(req?.user?.email || req?.session?.user?.email || '').trim() || null;
-    let customer = getBillingCustomerByWorkspace(workspaceId);
-    if (!customer) {
-      const created = await stripe.customers.create({ email: ownerEmail || undefined, metadata: { workspace_id: workspaceId } });
-      customer = upsertBillingCustomer(workspaceId, created.id, ownerEmail);
-    }
-
-    // During beta, Starter (free) is complimentary — activate without payment
-    if (selectedPlan === 'free' && betaMode.isBetaMode()) {
-      upsertBillingSubscription(workspaceId, {
-        stripe_subscription_id: `beta_starter_${Date.now()}`,
-        plan_id: 'free',
-        status: 'active',
-      });
-      return res.json({
-        url: null,
-        plan: 'free',
-        provider: 'stripe',
-        message: 'Starter plan activated (free during beta)'
-      });
-    }
-
-    // For paid plans, create a Stripe Checkout Session
-    const priceId = definition.stripePriceId;
-    if (!priceId) {
-      return res.status(400).json({ error: `No price configured for ${selectedPlan} plan` });
-    }
-
-    const baseUrl = process.env.BASE_URL || 'https://www.myapiai.com';
-    const checkoutSession = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
-      mode: 'subscription',
-      customer: customer.stripe_customer_id,
-      line_items: [{
-        price: priceId,
-        quantity: 1,
-      }],
-      success_url: `${baseUrl}/dashboard/?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${baseUrl}/dashboard/?checkout=canceled`,
-      metadata: {
-        workspace_id: workspaceId,
-        plan: selectedPlan,
-      },
-    });
-
-    return res.json({
-      url: checkoutSession.url,
-      sessionId: checkoutSession.id,
-      plan: selectedPlan,
-      provider: 'stripe',
-      customerId: customer?.stripe_customer_id || null,
-    });
-  } catch (error) {
-    console.error('Stripe checkout init error:', error);
-    return res.status(500).json({ error: 'Failed to initialize checkout' });
-  }
-});
-
-app.get('/api/v1/billing/current', authenticate, (req, res) => {
-  const workspaceId = getRequestWorkspaceId(req);
-  if (!workspaceId) return res.status(400).json({ error: 'Workspace context is required' });
-
-  const subscription = getBillingSubscriptionByWorkspace(workspaceId);
-  const plan = resolveWorkspaceCurrentPlan(subscription);
-
-  // When no workspace subscription exists, honour the user's directly-assigned plan
-  let effectivePlanId = plan.id;
-  if (!subscription) {
-    const userId = req?.user?.id || req?.tokenMeta?.ownerId;
-    if (userId && userId !== 'owner') {
-      const user = getUserById(userId);
-      if (user?.plan && BILLING_PLAN_LIMITS[String(user.plan).toLowerCase()]) {
-        effectivePlanId = String(user.plan).toLowerCase();
-      }
-    }
-  }
-
-  // Include the plan's limits and features so the frontend can show them
-  const planDef = BILLING_PLANS[effectivePlanId] || BILLING_PLANS.free;
-  const planLimits = PLAN_LIMITS[effectivePlanId] || PLAN_LIMITS.free;
-
-  res.json({
-    data: {
-      workspaceId,
-      plan: effectivePlanId,
-      status: subscription?.status || 'active',
-      subscription: subscription ? {
-        stripeSubscriptionId: subscription.stripe_subscription_id,
-        periodStart: subscription.period_start,
-        periodEnd: subscription.period_end,
-        cancelAtPeriodEnd: Boolean(subscription.cancel_at_period_end),
-      } : null,
-      billingConfigured: isStripeConfigured(),
-      features: planDef.features || [],
-      limits: {
-        personas: planLimits.personas,
-        serviceConnections: planLimits.serviceConnections === Infinity ? null : planLimits.serviceConnections,
-        knowledgeBytes: planLimits.knowledgeBytes === Infinity ? null : planLimits.knowledgeBytes,
-        vaultTokens: planLimits.vaultTokens === Infinity ? null : planLimits.vaultTokens,
-        skillsPerPersona: planLimits.skillsPerPersona === Infinity ? null : planLimits.skillsPerPersona,
-        monthlyApiCalls: planLimits.monthlyApiCalls === Infinity ? null : planLimits.monthlyApiCalls,
-        teamMembers: planLimits.teamMembers === Infinity ? null : planLimits.teamMembers,
-      },
-    },
-  });
-});
-
-app.get('/api/v1/billing/invoices', authenticate, (req, res) => {
-  const workspaceId = getRequestWorkspaceId(req);
-  if (!workspaceId) return res.status(400).json({ error: 'Workspace context is required' });
-  const invoices = listInvoicesByWorkspace(workspaceId, Number(req.query.limit || 50));
-  res.json({
-    data: invoices.map((inv) => ({
-      stripeInvoiceId: inv.stripe_invoice_id,
-      amountCents: inv.amount_cents,
-      currency: inv.currency,
-      status: inv.status,
-      invoiceUrl: inv.invoice_url,
-      createdAt: inv.created_at,
-    })),
-  });
-});
-
-app.get('/api/v1/billing/usage', billingUsageRateLimit, authenticate, (req, res) => {
-  const workspaceId = getRequestWorkspaceId(req);
-  if (!workspaceId) return res.status(400).json({ error: 'Workspace context is required' });
-
-  const days = getRangeDays(req.query.range);
-  const now = new Date();
-  const from = new Date(now);
-  from.setDate(now.getDate() - (days - 1));
-  const fromDate = from.toISOString().slice(0, 10);
-  const toDate = now.toISOString().slice(0, 10);
-
-  const rows = getUsageDaily(workspaceId, fromDate, toDate);
-  const totals = rows.reduce((acc, row) => ({
-    monthlyApiCalls: acc.monthlyApiCalls + Number(row.api_calls || 0),
-    installs: acc.installs + Number(row.installs || 0),
-    ratings: acc.ratings + Number(row.ratings || 0),
-    activeServices: Math.max(acc.activeServices, Number(row.active_services || 0)),
-  }), { monthlyApiCalls: 0, installs: 0, ratings: 0, activeServices: 0 });
-
-  // Resolve effective plan (honour user's directly-assigned plan when no subscription)
-  const subscription = getBillingSubscriptionByWorkspace(workspaceId);
-  let effectivePlan = resolveWorkspaceCurrentPlan(subscription);
-  if (!subscription) {
-    const userId = req?.user?.id || req?.tokenMeta?.ownerId;
-    if (userId && userId !== 'owner') {
-      const user = getUserById(userId);
-      if (user?.plan && BILLING_PLAN_LIMITS[String(user.plan).toLowerCase()]) {
-        effectivePlan = BILLING_PLAN_LIMITS[String(user.plan).toLowerCase()];
-      }
-    }
-  }
-
-  const usageVsLimits = computeUsageVsLimits(effectivePlan, totals);
-
-  // Collect real-time resource counts
-  const ownerId = getRequestOwnerId(req);
-  const planLimits = PLAN_LIMITS[effectivePlan.id] || PLAN_LIMITS.free;
-  let resourceCounts;
-  try {
-    const personaCount = getPersonas(ownerId, workspaceId).length;
-    const vaultTokenCount = getVaultTokens(ownerId, workspaceId).length;
-    const serviceCount = countConnectedOAuthServices(ownerId);
-    const memberCount = getWorkspaceMembers(workspaceId).length;
-
-    const kbRows = db.prepare('SELECT content FROM kb_documents WHERE owner_id = ?').all(ownerId);
-    const kbBytesUsed = kbRows.reduce((sum, row) => sum + Buffer.byteLength(String(row.content || ''), 'utf8'), 0);
-
-    const makeResourceMetric = (used, limit) => {
-      const unlimited = limit === Infinity || limit === null || limit === undefined;
-      const numLimit = unlimited ? null : limit;
-      const ratio = unlimited ? 0 : (numLimit > 0 ? Math.min(1, used / numLimit) : 0);
-      return {
-        used,
-        limit: numLimit,
-        unlimited,
-        ratio,
-        remaining: unlimited ? null : Math.max(0, numLimit - used),
-        exceeded: unlimited ? false : used > numLimit,
-      };
-    };
-
-    resourceCounts = {
-      personas: makeResourceMetric(personaCount, planLimits.personas),
-      serviceConnections: makeResourceMetric(serviceCount, planLimits.serviceConnections),
-      knowledgeBytes: makeResourceMetric(kbBytesUsed, planLimits.knowledgeBytes),
-      vaultTokens: makeResourceMetric(vaultTokenCount, planLimits.vaultTokens),
-      teamMembers: makeResourceMetric(memberCount, planLimits.teamMembers),
-    };
-  } catch (err) {
-    console.error('[Billing] Error computing resource counts:', err);
-    resourceCounts = {};
-  }
-
-  res.json({
-    data: {
-      workspaceId,
-      range: `${days}d`,
-      totals,
-      daily: rows,
-      limits: usageVsLimits.metrics,
-      resources: resourceCounts,
-    },
-  });
-});
-
-app.post('/api/v1/billing/portal', authenticate, async (req, res) => {
-  const workspaceId = getRequestWorkspaceId(req);
-  if (!workspaceId) return res.status(400).json({ error: 'Workspace context is required' });
-
-  if (!isStripeConfigured()) {
-    return res.status(503).json({ error: 'Billing is not configured', billingConfigured: false });
-  }
-
-  try {
-    const customer = getBillingCustomerByWorkspace(workspaceId);
-    if (!customer?.stripe_customer_id) {
-      return res.status(404).json({ error: 'No billing customer found for workspace' });
-    }
-    const stripe = getStripeClient();
-    const session = await stripe.billingPortal.sessions.create({
-      customer: customer.stripe_customer_id,
-      return_url: `${req.protocol}://${req.get('host')}/dashboard/settings`,
-    });
-    res.json({ data: { url: session.url } });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to create billing portal session' });
-  }
-});
+// --- BILLING ENDPOINTS (closed-source module) ---
+// Plan downgrade preview/confirm, Stripe checkout, current plan, invoices,
+// usage, and customer portal all live in src/routes/billing.js; absent in
+// MyApi Open, none of these endpoints exist and the dashboard degrades on 404.
+const billingRoutes = billingRoutesModule
+  ? billingRoutesModule.createBillingRoutes({
+      authenticate,
+      getRequestWorkspaceId,
+      getRequestOwnerId,
+      resolveRequesterPlan,
+      countConnectedOAuthServices,
+      PLAN_LIMITS,
+      billingUsageRateLimit,
+    })
+  : null;
+if (billingRoutes) billingRoutes.registerAuthedRoutes(app);
 
 // Stripe webhook handler is registered early in the file (before express.json) for raw body access.
 
@@ -6379,14 +6908,18 @@ app.post("/api/v1/connectors", authenticate, (req, res) => {
 });
 
 // --- GATEWAY CONTEXT ASSEMBLY ---
-app.get("/api/v1/gateway/context", authenticate, (req, res) => {
-  if (!isMaster(req)) return res.status(403).json({ error: "Only master token can access gateway context" });
-
+app.get("/api/v1/gateway/context", authenticate, async (req, res) => {
   try {
+    const master = isMaster(req);
+    // A power-user device flipped to "read" scope must not even SEE the privileged
+    // admin API paths (AFP shell exec/ls) in its endpoint manifest. We hide them
+    // from discovery only — this does not change vault/identity/memory visibility,
+    // which stay governed by `master`. req.device.scope is set by deviceApprovalMiddleware.
+    const showAdminPaths = master && req.device?.scope !== 'read';
     const ownerId = getRequestOwnerId(req);
 
-    // Active persona — full soul_content so AI agents know their operating instructions
-    const activePersona = getActivePersona(ownerId);
+    // Active persona — only if token has personas scope
+    const activePersona = hasScope(req, 'personas') ? getActivePersona(ownerId) : null;
     const persona = activePersona ? {
       id: activePersona.id,
       name: activePersona.name,
@@ -6395,37 +6928,39 @@ app.get("/api/v1/gateway/context", authenticate, (req, res) => {
       active: activePersona.active,
     } : null;
 
-    // User identity from DB (what the AI needs to know about the person it's serving)
-    // Prefer DB user record; fall back to vault.identityDocs for file-based setups
-    const dbUser = getUserById(ownerId) || getUserById('owner');
-    const vaultIdentity = resolveIdentityForUser(ownerId);
-    const userProfile = dbUser ? {
-      ...vaultIdentity,  // file-based extras (role, company, etc.) — overridden by DB below
-      name: dbUser.displayName || dbUser.username || vaultIdentity.name || 'User',
-      email: dbUser.email || vaultIdentity.email || null,
-      timezone: dbUser.timezone || vaultIdentity.timezone || null,
-      plan: dbUser.plan || 'free',
-    } : (Object.keys(vaultIdentity).length > 0 ? vaultIdentity : null);
+    // User identity — only if token has basic scope (or master)
+    let userProfile = null;
+    if (hasScope(req, 'basic') || master) {
+      const dbUser = getUserById(ownerId) || getUserById('owner');
+      const vaultIdentity = resolveIdentityForUser(ownerId);
+      userProfile = dbUser ? {
+        ...vaultIdentity,
+        name: dbUser.displayName || dbUser.username || vaultIdentity.name || 'User',
+        email: dbUser.email || vaultIdentity.email || null,
+        timezone: dbUser.timezone || vaultIdentity.timezone || null,
+        plan: dbUser.plan || 'free',
+      } : (Object.keys(vaultIdentity).length > 0 ? vaultIdentity : null);
+    }
 
-    // Long-term memory: DB entries (newest first) + MEMORY.md bullets
-    const dbMemories = getMemories(ownerId, req.workspaceId || null);
-    const fileMemory = contextEngine.loadMemory();
+    // Long-term memory — only if token has memory scope (or master)
+    const dbMemories = (hasScope(req, 'memory') || master) ? getMemories(ownerId, req.workspaceId || null) : [];
+    const fileMemory = (hasScope(req, 'memory') || master) ? contextEngine.loadMemory() : {};
 
-    // Vault tokens (metadata only — never the actual token values)
-    const vaultTokens = getVaultTokens().map(t => ({
+    // Vault tokens (metadata only) — master only
+    const vaultTokens = master ? getVaultTokens().map(t => ({
       id: t.id,
       label: t.label,
       description: t.description,
       createdAt: t.createdAt,
-    }));
+    })) : undefined;
 
-    // All personas (so AI can switch or reference other personas)
-    const allPersonas = getPersonas(ownerId).map(p => ({
+    // All personas — only if token has personas scope
+    const allPersonas = hasScope(req, 'personas') ? getPersonas(ownerId).map(p => ({
       id: p.id,
       name: p.name,
       active: p.active,
       created_at: p.created_at,
-    }));
+    })) : undefined;
 
     // Endpoint manifest — every endpoint this token can call, so the AI knows immediately
     // ⚠️ IMPORTANT: All paths below include /api/v1. The base URL is https://www.myapiai.com (NO /api/v1 suffix).
@@ -6457,10 +6992,22 @@ app.get("/api/v1/gateway/context", authenticate, (req, res) => {
       { method: 'POST',   path: '/api/v1/skills',                        description: 'Create a new skill', scope: 'skills:write' },
       { method: 'PUT',    path: '/api/v1/skills/:id',                    description: 'Update a skill', scope: 'skills:write' },
       { method: 'DELETE', path: '/api/v1/skills/:id',                    description: 'Delete a skill', scope: 'skills:write' },
+      { method: 'GET',    path: '/api/v1/services',                      description: 'List ALL services with connection status — native and Composio-backed (all use clean names, e.g. gmail, slack)', scope: 'services:read' },
+      { method: 'GET',    path: '/api/v1/services/:name',                description: 'Service detail (works for native and Composio-backed services)', scope: 'services:read' },
+      { method: 'GET',    path: '/api/v1/services/:name/methods',        description: 'Documented operations for a service + generic proxy usage. Always call this before using an unfamiliar service.', scope: 'services:read' },
+      { method: 'POST',   path: '/api/v1/services/:name/proxy',          description: 'Proxy a raw API request to any connected service (native or Composio) with {path, method, body, query}', scope: 'services:read' },
+      { method: 'POST',   path: '/api/v1/services/:name/execute',        description: 'Execute a predefined service method with {method, params}', scope: 'services:read' },
       { method: 'GET',    path: '/api/v1/services/:service/*',           description: 'Proxy GET to a connected OAuth service', scope: 'services:read' },
       { method: 'POST',   path: '/api/v1/services/:service/*',           description: 'Proxy POST/PUT/DELETE to a connected OAuth service', scope: 'services:write' },
       { method: 'GET',    path: '/api/v1/oauth/status',                  description: 'List all connected OAuth services and their status' },
     ];
+    if (showAdminPaths) {
+      ENDPOINT_MANIFEST.push(
+        { method: 'GET',  path: '/api/v1/afp/devices',        description: 'AFP: list the user\'s registered machines (PCs/servers) for file system + shell access' },
+        { method: 'POST', path: '/api/v1/afp/:deviceId/exec', description: 'AFP: run a shell command on a registered machine, body {cmd, cwd?, timeout?}' },
+        { method: 'GET',  path: '/api/v1/afp/:deviceId/ls',   description: 'AFP: list a directory on a registered machine (?path=)' },
+      );
+    }
 
     // Per-service usage instructions for connected services — tells AI exactly how to proxy each one
     const SERVICE_INSTRUCTIONS = {
@@ -6493,14 +7040,51 @@ app.get("/api/v1/gateway/context", authenticate, (req, res) => {
       },
       google: {
         description: 'Google — Gmail, Calendar, Drive',
-        proxy_note: 'All Google calls go through POST /api/v1/services/google/proxy with {path, method, body}.',
+        proxy_note: 'Most Google calls go through POST /api/v1/services/google/proxy with body {path, method, body}. The proxy hits https://www.googleapis.com + your path. A few Gmail endpoints have first-class MyApi routes (marked below) — use those when listed; for everything else, use the generic proxy.',
         actions: [
-          { action: 'List Gmail messages',          method: 'GET',    path: '/gmail/v1/users/me/messages?maxResults=10' },
-          { action: 'Get a Gmail message',          method: 'GET',    path: '/gmail/v1/users/me/messages/{messageId}' },
-          { action: 'Send a Gmail message',         method: 'POST',   path: '/api/v1/services/google/gmail/send' },
-          { action: 'Trash a Gmail message',        method: 'DELETE', path: '/api/v1/services/google/gmail/messages/{messageId}' },
-          { action: 'List calendar events',         method: 'GET',  path: '/calendar/v3/calendars/primary/events?maxResults=10' },
-          { action: 'List Drive files',             method: 'GET',  path: '/drive/v3/files?pageSize=10' },
+          // Gmail — first-class MyApi routes
+          { action: 'List Gmail messages',          method: 'GET',    path: '/api/v1/services/google/gmail/messages?q=is:unread&maxResults=20', first_class: true },
+          { action: 'Get a Gmail message',          method: 'GET',    path: '/api/v1/services/google/gmail/messages/{messageId}', first_class: true,
+            note: 'Response includes attachments[] with {attachmentId, filename, mimeType, size}. Fetch each attachment via the dedicated route below — do NOT use format=full over the proxy (it inlines base64 and gets truncated by MCP stdio).' },
+          { action: 'Download a Gmail attachment (full base64, never truncated)',
+            method: 'GET', path: '/api/v1/services/google/gmail/messages/{messageId}/attachments/{attachmentId}?filename={filename}&mimeType={mimeType}', first_class: true,
+            note: 'Returns {dataBase64} as standard base64 (decode with Buffer.from(data,"base64") or atob()). Append &format=binary to stream raw bytes instead of JSON.' },
+          { action: 'Send a Gmail message',         method: 'POST',   path: '/api/v1/services/google/gmail/send', first_class: true,
+            body: { to: 'recipient@example.com', subject: 'Subject', body: 'Plain text body' } },
+          { action: 'Trash a Gmail message',        method: 'DELETE', path: '/api/v1/services/google/gmail/messages/{messageId}', first_class: true },
+
+          // Calendar — via generic proxy (body.path is the Google API path)
+          { action: 'List calendars',               method: 'POST',   path: '/api/v1/services/google/proxy',
+            body: { path: '/calendar/v3/users/me/calendarList', method: 'GET' } },
+          { action: 'List calendar events',         method: 'POST',   path: '/api/v1/services/google/proxy',
+            body: { path: '/calendar/v3/calendars/primary/events?maxResults=10&singleEvents=true&orderBy=startTime&timeMin=2026-05-22T00:00:00Z', method: 'GET' } },
+          { action: 'Create a calendar event',      method: 'POST',   path: '/api/v1/services/google/proxy',
+            body: { path: '/calendar/v3/calendars/primary/events', method: 'POST',
+              body: { summary: 'Event title', description: 'Optional details', location: 'Optional location',
+                start: { dateTime: '2026-06-07T16:00:00', timeZone: 'America/Chicago' },
+                end:   { dateTime: '2026-06-07T17:00:00', timeZone: 'America/Chicago' },
+                attendees: [{ email: 'guest@example.com' }] } } },
+          { action: 'Update a calendar event',      method: 'POST',   path: '/api/v1/services/google/proxy',
+            body: { path: '/calendar/v3/calendars/primary/events/{eventId}', method: 'PATCH',
+              body: { summary: 'New title' } } },
+          { action: 'Delete a calendar event',      method: 'POST',   path: '/api/v1/services/google/proxy',
+            body: { path: '/calendar/v3/calendars/primary/events/{eventId}', method: 'DELETE' } },
+          { action: 'Quick-add a calendar event from natural language',
+            method: 'POST', path: '/api/v1/services/google/proxy',
+            body: { path: '/calendar/v3/calendars/primary/events/quickAdd?text=Lunch+with+Sam+Friday+1pm', method: 'POST' } },
+
+          // Drive — via generic proxy
+          { action: 'List Drive files',             method: 'POST',   path: '/api/v1/services/google/proxy',
+            body: { path: '/drive/v3/files?pageSize=10', method: 'GET' } },
+          { action: 'Get a Drive file metadata',    method: 'POST',   path: '/api/v1/services/google/proxy',
+            body: { path: '/drive/v3/files/{fileId}', method: 'GET' } },
+          { action: 'Download a Drive file',        method: 'POST',   path: '/api/v1/services/google/proxy',
+            body: { path: '/drive/v3/files/{fileId}?alt=media', method: 'GET' } },
+        ],
+        notes: [
+          'first_class:true paths are MyApi routes (call them directly). Everything else uses /services/google/proxy with body.path = Google API path.',
+          'Calendar timeZone strings are IANA names (America/Chicago, Europe/London, etc.).',
+          'All Google API paths are relative to https://www.googleapis.com — the proxy prepends this automatically.',
         ],
       },
       slack: {
@@ -6524,11 +7108,44 @@ app.get("/api/v1/gateway/context", authenticate, (req, res) => {
         ],
       },
       linkedin: {
-        description: 'LinkedIn — profile, posts',
+        description: 'LinkedIn — profile, posts, reactions, comments',
         proxy_note: 'All LinkedIn calls go through POST /api/v1/services/linkedin/proxy with {path, method, body}.',
+        scopes: 'openid profile email w_member_social',
         actions: [
-          { action: 'Get your profile',             method: 'GET',  path: '/me' },
-          { action: 'Get profile picture',          method: 'GET',  path: '/me?projection=(id,profilePicture(displayImage~:playableStreams))' },
+          { action: 'Get your profile (name, picture, locale)',
+            method: 'GET', path: '/userinfo' },
+          { action: 'Get your LinkedIn member ID (needed as author URN for posts)',
+            method: 'GET', path: '/userinfo',
+            note: 'Use sub field as member ID, e.g. urn:li:person:{sub}' },
+          { action: 'Create a text post',
+            method: 'POST', path: '/ugcPosts',
+            body: { author: 'urn:li:person:{member_id}', lifecycleState: 'PUBLISHED', specificContent: { 'com.linkedin.ugc.ShareContent': { shareCommentary: { text: 'Post text here' }, shareMediaCategory: 'NONE' } }, visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC' } } },
+          { action: 'Create a post with a URL/article share',
+            method: 'POST', path: '/ugcPosts',
+            body: { author: 'urn:li:person:{member_id}', lifecycleState: 'PUBLISHED', specificContent: { 'com.linkedin.ugc.ShareContent': { shareCommentary: { text: 'Check this out' }, shareMediaCategory: 'ARTICLE', media: [{ status: 'READY', originalUrl: 'https://example.com', title: { text: 'Article title' } }] } }, visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC' } } },
+          { action: 'Read your own posts',
+            method: 'GET', path: '/ugcPosts?q=authors&authors=List(urn:li:person:{member_id})&count=10' },
+          { action: 'Delete a post',
+            method: 'DELETE', path: '/ugcPosts/{post_urn_encoded}',
+            note: 'Encode the post URN: urn:li:ugcPost:123 → urn%3Ali%3AugcPost%3A123' },
+          { action: 'React to a post (like/celebrate/support/funny/love/insightful/curious)',
+            method: 'POST', path: '/reactions?actor=urn:li:person:{member_id}&object={post_urn_encoded}',
+            body: { reactionType: 'LIKE' } },
+          { action: 'Remove a reaction from a post',
+            method: 'DELETE', path: '/reactions?actor=urn:li:person:{member_id}&object={post_urn_encoded}' },
+          { action: 'Add a comment to a post',
+            method: 'POST', path: '/comments',
+            body: { actor: 'urn:li:person:{member_id}', object: '{post_urn}', message: { text: 'Comment text' } } },
+          { action: 'Read comments on a post',
+            method: 'GET', path: '/comments?q=comments&commentedOnActivity={post_urn_encoded}&count=20' },
+          { action: 'Delete a comment',
+            method: 'DELETE', path: '/comments/{comment_urn_encoded}' },
+        ],
+        notes: [
+          '/v2/me is deprecated — use /userinfo for profile data with OpenID Connect scopes.',
+          'Messaging (r_messaging / w_messaging) requires LinkedIn Communications API partner approval — not available via standard OAuth.',
+          'URNs must be URL-encoded when used as query params: replace : with %3A.',
+          'All API paths are relative to https://api.linkedin.com/v2 — the proxy prepends this base.',
         ],
       },
       twitter: {
@@ -6557,46 +7174,115 @@ app.get("/api/v1/gateway/context", authenticate, (req, res) => {
       },
     };
 
-    // Build connected_services: only include services that have an OAuth token stored
-    const connectedServiceIds = OAUTH_SERVICES.filter(svcId => {
-      try {
-        const tok = getCachedOAuthToken(svcId, ownerId) || getOAuthToken(svcId, ownerId);
-        return !!tok;
-      } catch { return false; }
-    });
+    // Build connected_services: native OAuth services with a stored token, plus
+    // Composio-connected virtual services (composio__{slug}). Tokens holding only
+    // standalone per-service scopes (services:{name}:read|write) see just the
+    // services they are scoped for, even without the global services:read scope.
+    const perServiceScopedNames = getTokenScopeList(req)
+      .map(s => /^services:([^:]+):(read|write|\*)$/.exec(s)?.[1])
+      .filter(Boolean);
+    const canListServices = master || hasScope(req, 'services:read') || perServiceScopedNames.length > 0;
+    const serviceVisible = (name) => master || hasScope(req, 'services:read') || perServiceScopedNames.includes(name);
 
-    const connectedServices = connectedServiceIds.map(svcId => ({
-      service: svcId,
-      proxy_endpoint: `/api/v1/services/${svcId}/proxy`,
-      ...(SERVICE_INSTRUCTIONS[svcId] || {
-        description: `${svcId} — connected OAuth service`,
-        proxy_note: `All calls go through POST /api/v1/services/${svcId}/proxy with {path, method, body}.`,
-      }),
-    }));
+    let connectedServices;
+    if (canListServices) {
+      connectedServices = OAUTH_SERVICES.filter(svcId => {
+        if (!serviceVisible(svcId)) return false;
+        try {
+          const tok = getCachedOAuthToken(svcId, ownerId) || getOAuthToken(svcId, ownerId);
+          return !!tok;
+        } catch { return false; }
+      }).map(svcId => ({
+        service: svcId,
+        proxy_endpoint: `/api/v1/services/${svcId}/proxy`,
+        ...(SERVICE_INSTRUCTIONS[svcId] || {
+          description: `${svcId} — connected OAuth service`,
+          proxy_note: `All calls go through POST /api/v1/services/${svcId}/proxy with {path, method, body}.`,
+        }),
+      }));
+
+      // AFP devices (remote PC/server file system + shell) — master tokens and
+      // ASC agents only. Listed with exact endpoints so an agent asked to e.g.
+      // "check docker containers on my server" succeeds on the first try.
+      if (master) {
+        try {
+          const afpDevices = (getAfpDevices(String(ownerId)) || []).map((d) => ({
+            deviceId: d.id,
+            name: d.device_name,
+            hostname: d.hostname,
+            platform: d.platform,
+            status: afpConnections.has(d.id) ? 'online' : 'offline',
+          }));
+          if (afpDevices.length > 0) {
+            connectedServices.push({
+              service: 'afp',
+              label: 'AFP — Remote Devices',
+              provider: 'afp',
+              description: `Direct file system and shell access to the user's machines: ${afpDevices.map((d) => `${d.name} (${d.platform}, ${d.status})`).join(', ')}. Use this for anything on the user's PC or server — running commands (docker, git, systemctl), reading/writing files.`,
+              devices: afpDevices,
+              endpoints_note: 'AFP uses direct MyApi routes (NOT /services/afp/proxy). Pick a deviceId from devices[].',
+              actions: [
+                { action: 'List devices', method: 'GET', path: '/api/v1/afp/devices' },
+                { action: 'Run a shell command', method: 'POST', path: '/api/v1/afp/{deviceId}/exec', body: { cmd: 'docker ps -a' } },
+                { action: 'List a directory', method: 'GET', path: '/api/v1/afp/{deviceId}/ls?path=/var/log' },
+                { action: 'Read a file', method: 'GET', path: '/api/v1/afp/{deviceId}/read?path=/etc/hostname' },
+                { action: 'Write a file', method: 'POST', path: '/api/v1/afp/{deviceId}/write', body: { path: '/tmp/note.txt', content: '...' } },
+              ],
+              methods_endpoint: '/api/v1/services/afp/methods',
+            });
+          }
+        } catch (afpError) {
+          console.warn('[Gateway] AFP context unavailable:', afpError.message);
+        }
+      }
+
+      // Composio-connected toolkits surface under their clean toolkit name and
+      // are called exactly like native ones. syncComposioStateForUser is TTL-cached;
+      // a Composio outage must never break gateway/context.
+      if (isComposioConfigured()) {
+        try {
+          const composioState = await syncComposioStateForUser(String(ownerId));
+          for (const toolkit of composioState.services || []) {
+            const name = toolkit.toolkitSlug;
+            if (!serviceVisible(name)) continue;
+            connectedServices.push({
+              service: name,
+              label: toolkit.label,
+              provider: 'composio',
+              toolkit: toolkit.toolkitSlug,
+              proxy_endpoint: `/api/v1/services/${name}/proxy`,
+              methods_endpoint: `/api/v1/services/${name}/methods`,
+              description: `${toolkit.label} — connected through Composio; call it exactly like a native service.`,
+              proxy_note: `All ${toolkit.label} calls go through POST /api/v1/services/${name}/proxy with {path, method, body, query}. path is the provider-native REST path (e.g. "/gmail/v1/users/me/messages"); MyApi relays the call via Composio with the stored credentials — you never handle the provider token.`,
+              scope_note: `Requires services:read (writes need services:write), or the standalone per-service scope services:${name}:read|write.`,
+            });
+          }
+        } catch (composioError) {
+          console.warn('[Gateway] Composio context unavailable:', composioError.message);
+        }
+      }
+    }
+
+    // Filter endpoint manifest to only what this token can actually call
+    const filteredEndpoints = ENDPOINT_MANIFEST.filter(e => !e.scope || hasScope(req, e.scope));
 
     const context = {
       timestamp: new Date().toISOString(),
       version: "2.0",
       base_url: `${req.protocol}://${req.get('host')}`,
       base_url_warning: 'All endpoint paths in this response include /api/v1. Do NOT append /api/v1 to base_url when constructing request URLs. Correct: base_url + /api/v1/skills. Wrong: base_url + /api/v1 + /api/v1/skills (double-prefix causes ROUTE_NOT_FOUND).',
-      // Who this AI is — full soul_content so it can set its own instructions
       persona,
-      // Who the AI is serving — full identity from the database
       user: userProfile,
-      // Long-term memory: structured DB entries + legacy MEMORY.md bullets
       memory: dbMemories.map(m => ({ id: m.id, content: m.content, created_at: m.created_at })),
       memory_legacy: fileMemory.memories || [],
-      // Connected services with per-service usage instructions
-      connected_services: connectedServices,
-      // Connected services metadata (no credentials)
-      vault: { tokens: vaultTokens },
-      // All available personas
-      personas: allPersonas,
-      // Every endpoint this token can call
-      endpoints: ENDPOINT_MANIFEST,
+      ...(connectedServices !== undefined && { connected_services: connectedServices }),
+      ...(vaultTokens !== undefined && { vault: { tokens: vaultTokens } }),
+      ...(allPersonas !== undefined && { personas: allPersonas }),
+      endpoints: filteredEndpoints,
       meta: {
         requesterId: req.tokenMeta.tokenId,
         ownerId,
+        scope: req.tokenMeta.scope,
         activePersonaId: activePersona?.id ?? null,
       },
     };
@@ -6609,7 +7295,14 @@ app.get("/api/v1/gateway/context", authenticate, (req, res) => {
       ip: req.ip,
     });
 
-    res.json({ data: context });
+    const responseBody = await maybeOptimizeApiResponse(req, { data: context }, {
+      label: 'gateway context',
+      select: (payload) => payload?.data,
+      assignOptimized: (payload, optimized) => {
+        payload.data = optimized;
+      },
+    });
+    res.json(responseBody);
   } catch (error) {
     createAuditLog({
       requesterId: req.tokenMeta.tokenId,
@@ -6629,8 +7322,12 @@ app.get("/api/v1/audit", authenticate, (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = Math.min(parseInt(req.query.limit) || 50, 500);
   const offset = (page - 1) * limit;
-  const { logs, total } = getAuditLogs(limit, offset);
-  res.json({ data: logs, meta: { total, page, limit } });
+  // `actor=me` (or scope=mine) restricts the result to the calling user's own
+  // signals — used by the Live signal rail so it never shows whole-site traffic.
+  const mine = req.query.actor === 'me' || req.query.scope === 'mine';
+  const actorId = mine ? (req.tokenMeta?.ownerId || req.session?.user?.id || null) : null;
+  const { logs, total } = getAuditLogs(limit, offset, actorId);
+  res.json({ data: logs, meta: { total, page, limit, actorId } });
 });
 
 // ============================
@@ -7368,6 +8065,8 @@ app.post('/api/v1/auth/oauth-signup/complete', async (req, res) => {
 
   if (pending.oauthToken) {
     const t = pending.oauthToken;
+    // Store as login_only=true: the signup OAuth token only has authentication scopes
+    // (email, profile). Explicitly connecting the service grants write/delete permissions.
     storeOAuthToken(
       pending.service,
       createdUser.id,
@@ -7375,6 +8074,7 @@ app.post('/api/v1/auth/oauth-signup/complete', async (req, res) => {
       t.refreshToken || null,
       t.expiresAt || null,
       t.scope || null,
+      true, // loginOnly
     );
   }
 
@@ -8000,6 +8700,24 @@ app.post('/api/v1/users/cleanup-test-users', authenticate, (req, res) => {
   }
 });
 
+// Manually run (or dry-run) the beta inactive-user lifecycle sweep.
+// POST /api/v1/admin/inactive-users/sweep?dryRun=1
+app.post('/api/v1/admin/inactive-users/sweep', authenticate, (req, res) => {
+  if (!isMaster(req)) return res.status(403).json({ error: 'Only master token can run the sweep' });
+  if (!requirePowerUser(req, res)) return;
+  try {
+    const dryRun = String(req.query?.dryRun || req.body?.dryRun || '').toLowerCase() === '1'
+      || req.body?.dryRun === true || String(req.query?.dryRun || '').toLowerCase() === 'true';
+    const { sweepInactiveUsers } = require('./lib/userLifecycle');
+    const report = sweepInactiveUsers({ dryRun });
+    createAuditLog({ requesterId: req.tokenMeta.tokenId, action: 'inactive_users_sweep', resource: '/admin/inactive-users/sweep', scope: req.tokenMeta.scope, ip: req.ip, details: { dryRun, warned: report.warned.length, deleted: report.deleted.length } });
+    res.json({ data: report });
+  } catch (error) {
+    console.error('Inactive-user sweep error:', error);
+    res.status(500).json({ error: 'Failed to run inactive-user sweep' });
+  }
+});
+
 // Tickets — power-user-only complaint tracking
 const createTicketsRoutes = require('./routes/tickets');
 app.use('/api/v1/tickets', authenticate, createTicketsRoutes({ db, requirePowerUser, isMaster }));
@@ -8418,8 +9136,13 @@ app.get('/api/v1/personas/:id/skills', authenticate, (req, res) => {
   }
   
   const ownerId = getRequestOwnerId(req);
-  const skills = getPersonaSkills(personaId, ownerId);
-  res.json({ data: skills });
+  try {
+    const skills = getPersonaSkills(personaId, ownerId);
+    res.json({ data: skills });
+  } catch (err) {
+    console.error('[Skills] DB error loading persona skills:', err.message);
+    res.status(500).json({ error: 'Failed to load skills', data: [] });
+  }
 });
 
 app.post('/api/v1/personas/:id/skills', authenticate, (req, res) => {
@@ -8478,6 +9201,32 @@ app.get('/api/v1/oauth/authorize/twitter/x', (req, res) => {
   return res.redirect(`/api/v1/oauth/authorize/twitter${suffix}`);
 });
 
+// POST /api/v1/oauth/composio/connect-key - Connect an API-key Composio toolkit
+// (OpenAI, Anthropic, Perplexity, ...) by submitting the user's secret directly.
+// No OAuth redirect: the connected account comes back ACTIVE immediately.
+app.post('/api/v1/oauth/composio/connect-key', async (req, res) => {
+  await tryAuthenticate(req);
+  const ownerId = req.session?.user?.id || req.tokenMeta?.ownerId;
+  if (!ownerId) {
+    return res.status(401).json({ error: 'Authentication required to connect this service' });
+  }
+  if (!isComposioConfigured()) {
+    return res.status(400).json({ error: 'Composio is not configured on the server' });
+  }
+  const toolkit = String(req.body?.toolkit || '').toLowerCase().trim();
+  const fields = (req.body?.fields && typeof req.body.fields === 'object') ? req.body.fields : {};
+  if (!toolkit) {
+    return res.status(400).json({ error: 'toolkit is required' });
+  }
+  try {
+    const result = await createComposioApiKeyConnection(String(ownerId), toolkit, fields);
+    return res.json({ ok: true, service: result.toolkitSlug, status: result.status });
+  } catch (err) {
+    console.error('[Composio] API-key connect failed:', err.message);
+    return res.status(400).json({ error: err.message || 'Failed to connect service' });
+  }
+});
+
 // GET /api/v1/oauth/authorize/:service - Start OAuth flow
 app.get("/api/v1/oauth/authorize/:service", async (req, res) => {
   const { service } = req.params;
@@ -8486,6 +9235,34 @@ app.get("/api/v1/oauth/authorize/:service", async (req, res) => {
     ? ['1', 'true', 'yes'].includes(String(req.query.forcePrompt).toLowerCase())
     : null;
   const forcePrompt = explicitForcePrompt == null ? mode === 'login' : explicitForcePrompt;
+
+  if (service === COMPOSIO_ROOT_SERVICE) {
+    await tryAuthenticate(req);
+    const ownerId = req.session?.user?.id || req.tokenMeta?.ownerId;
+    if (!ownerId) {
+      return res.status(401).json({ error: 'Authentication required to connect Composio' });
+    }
+    if (!isComposioConfigured()) {
+      return res.status(400).json({ error: 'Composio is not configured on the server' });
+    }
+
+    try {
+      const callbackUrl = `${req.protocol}://${req.get('host')}/api/v1/oauth/callback/composio`;
+      const toolkitSlug = req.query.toolkit ? String(req.query.toolkit).toLowerCase() : null;
+      const { authUrl } = await createComposioConnectLink(String(ownerId), toolkitSlug, callbackUrl);
+      const wantsJson = String(req.query.json || '').toLowerCase() === '1';
+      if (wantsJson) {
+        return res.json({ ok: true, authUrl, service });
+      }
+      return res.redirect(authUrl);
+    } catch (authError) {
+      console.error('[OAuth] Failed to create Composio connect link:', authError);
+      return res.status(500).json({
+        error: 'Failed to generate authorization URL',
+        message: authError.message || 'Could not generate Composio authorization URL'
+      });
+    }
+  }
 
   // Validate service parameter
   if (!service || typeof service !== 'string' || service.trim().length === 0) {
@@ -8573,6 +9350,21 @@ app.get("/api/v1/oauth/authorize/:service", async (req, res) => {
     const adapter = oauthAdapters[service];
     const runtimeAuthParams = {};
 
+    // Login-mode scope override: request the minimum read-only identity scopes for
+    // authentication. The OAuth token stored after login is marked login_only=1
+    // and grants only what's needed to verify the user. Explicit "Connect" flow
+    // (mode='connect') uses each adapter's default full scope set and upgrades
+    // the token to a full-access connection.
+    if (mode === 'login') {
+      if (service === 'google') {
+        runtimeAuthParams.scope = 'https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile';
+      } else if (service === 'github') {
+        runtimeAuthParams.scope = 'read:user user:email';
+      } else if (service === 'facebook') {
+        runtimeAuthParams.scope = 'email,public_profile';
+      }
+    }
+
     if (forcePrompt && mode === 'login') {
       if (service === 'google') {
         runtimeAuthParams.prompt = 'select_account';
@@ -8594,7 +9386,7 @@ app.get("/api/v1/oauth/authorize/:service", async (req, res) => {
       }
     }
 
-    if (['twitter', 'airtable', 'canva'].includes(service)) {
+    if (['twitter'].includes(service)) {
       const { codeChallenge } = buildPkcePairFromState(state);
       runtimeAuthParams.code_challenge = codeChallenge;
       runtimeAuthParams.code_challenge_method = 'S256';
@@ -8666,6 +9458,22 @@ app.get([
 ], async (req, res) => {
   const { service } = req.params;
   const { code, state, error: providerError, error_description: providerErrorDescription } = req.query;
+
+  if (service === COMPOSIO_ROOT_SERVICE) {
+    try {
+      await tryAuthenticate(req);
+      const ownerId = req.session?.user?.id || req.tokenMeta?.ownerId;
+      if (!ownerId) {
+        return res.status(401).json({ error: 'Authentication required to finalize Composio connection' });
+      }
+      const synced = await syncComposioStateForUser(String(ownerId), { force: true });
+      const status = synced.connected ? 'connected' : 'pending';
+      return res.redirect(`/dashboard/services?oauth_status=${encodeURIComponent(status)}&oauth_service=${encodeURIComponent(service)}`);
+    } catch (error) {
+      console.error('[OAuth] Composio callback sync failed:', error);
+      return res.redirect(`/dashboard/services?oauth_error=${encodeURIComponent('composio_sync_failed')}&oauth_error_description=${encodeURIComponent(error.message || 'Failed to sync Composio services')}&service=${encodeURIComponent(service)}`);
+    }
+  }
   console.error(`[OAuth CALLBACK] ${service} hit with code=${Boolean(code)} state=${Boolean(state)} error=${providerError || 'none'}`);
   console.error(`[OAuth] Full query:`, req.query);
   console.error(`[OAuth] Session user:`, req.session?.user?.id || 'none');
@@ -8747,7 +9555,7 @@ app.get([
   try {
     const adapter = oauthAdapters[service];
     const runtimeTokenParams = {};
-    if (['twitter', 'airtable', 'canva'].includes(service)) {
+    if (['twitter'].includes(service)) {
       const { codeVerifier } = buildPkcePairFromState(state);
       runtimeTokenParams.code_verifier = codeVerifier;
     }
@@ -8810,7 +9618,7 @@ app.get([
         // bounces through the signup wizard only to be rejected at the final step.
         if (betaMode.isBetaMode() && betaMode.isBetaFull()) {
           const waitlistEmail = email ? `&email=${encodeURIComponent(email)}` : '';
-          return res.redirect(`/?beta=full${waitlistEmail}`);
+          return res.redirect(`/dashboard/signup?beta=full${waitlistEmail}`);
         }
         req.session.oauth_signup = {
           service,
@@ -8831,7 +9639,7 @@ app.get([
           createdAt: new Date().toISOString(),
         };
 
-        const redirectUrl = `/dashboard/?oauth_service=${service}&oauth_status=signup_required&signup=true`;
+        const redirectUrl = `/dashboard/signup?oauth_service=${service}&oauth_status=signup_required`;
         return req.session.save(() => {
           res.redirect(redirectUrl);
         });
@@ -8860,7 +9668,7 @@ app.get([
         console.log(`[OAuth Callback] 2FA required for user: ${appUser.id}, routing to 2FA challenge`);
         return req.session.save((err) => {
           if (err) console.error('[OAuth Callback] Session save error before 2FA redirect:', err);
-          res.redirect(`/dashboard/?oauth_service=${encodeURIComponent(service)}&oauth_status=pending_2fa`);
+          res.redirect(`/?oauth_service=${encodeURIComponent(service)}&oauth_status=pending_2fa`);
         });
       }
 
@@ -8958,6 +9766,7 @@ app.get([
       }
 
       const storeResult = storeOAuthToken(service, oauthOwnerId, tokenData.accessToken, tokenData.refreshToken || null, expiresAt, tokenData.scope);
+      tokenCache.delete(`${service}:${oauthOwnerId}`);
       tokenStoredForUser = true;
       logger.info('[OAuth Callback] token stored', { service });
 
@@ -9149,7 +9958,8 @@ app.get("/api/v1/oauth/status", async (req, res) => {
       status: "disconnected",
       reason: "not_authenticated"
     }));
-    return res.json({ services });
+    const composioServices = await getComposioStatusServices(null);
+    return res.json({ services: [...services, ...composioServices] });
   }
 
   console.log(`[OAuth Status] Resolved userId: ${userId} (from tokenMeta.ownerId=${req.tokenMeta?.ownerId || 'null'}, session.user=${req.session?.user?.id || 'null'})`);
@@ -9163,36 +9973,44 @@ app.get("/api/v1/oauth/status", async (req, res) => {
     let token = null;
     let connectionStatus = "disconnected";
 
+    let loginToken = null;
     if (userId) {
       try {
-        // Use cache to prevent CPU spike
+        // Service token (full-scope) takes precedence. Fall back to the sign-in token
+        // so a user who has only logged in via this provider still sees the service
+        // as "connected" in the dashboard (with loginOnly=true so the UI offers Connect).
         token = getCachedOAuthToken(service, userId);
         if (!token) {
           token = getOAuthToken(service, userId);
-          if (token) {
-            setCachedOAuthToken(service, userId, token);
-          }
+          if (token) setCachedOAuthToken(service, userId, token);
         }
-        // Source of truth: actual token existence, not oauth_status table (which can be stale)
-        connectionStatus = token && !token.revoked_at ? "connected" : "disconnected";
+        if (!token) {
+          loginToken = getOAuthLoginToken(service, userId);
+        }
+        const effective = token || loginToken;
+        connectionStatus = effective && !effective.revoked_at ? "connected" : "disconnected";
       } catch (err) {
-        // Log decryption errors but don't crash
         console.warn(`[OAuth Status] Failed to decrypt token for ${service}:`, err.message);
         token = null;
+        loginToken = null;
         connectionStatus = "disconnected";
       }
     } else {
       connectionStatus = "disconnected";
     }
 
+    const effective = token || loginToken;
     return {
       name: service,
       status: connectionStatus,
       lastSync: status?.lastSyncedAt || null,
-      lastApiCall: token?.lastApiCall || null,  // Phase 5.4: Last API call timestamp
-      scope: token?.scope || null,
+      lastApiCall: effective?.lastApiCall || null,  // Phase 5.4: Last API call timestamp
+      scope: effective?.scope || null,
+      // loginOnly = true iff this user has only the sign-in token, no service token.
+      // When both rows exist, the service token wins and loginOnly is false.
+      loginOnly: !token && !!loginToken,
       enabled: isOAuthServiceEnabled(service),
-      auth_type: 'oauth2',  // All services use OAuth 2.0
+      auth_type: 'oauth2',
       auth_type_label: 'OAuth 2.0'
     };
   });
@@ -9208,7 +10026,10 @@ app.get("/api/v1/oauth/status", async (req, res) => {
     });
   }
 
-  res.json({ services });
+  const composioServices = await getComposioStatusServices(userId);
+  const mergedServices = [...services, ...composioServices].filter((service) => canAccessService(req, service.name));
+
+  res.json({ services: mergedServices });
 });
 
 // POST /api/v1/oauth/confirm - Confirm pending OAuth login
@@ -9285,6 +10106,26 @@ app.post("/api/v1/oauth/confirm", authRateLimit, (req, res) => {
       req.session.currentWorkspace = userWorkspaces[0].id;
     }
 
+    // Persist the read-only OAuth token from the login flow so the service appears
+    // as connected in the dashboard. storeOAuthToken upserts (service, user) and
+    // never downgrades — if a full-access token already exists, login_only stays 0.
+    if (pending.tokenData?.accessToken && pending.service) {
+      try {
+        storeOAuthToken(
+          pending.service,
+          pending.userId,
+          pending.tokenData.accessToken,
+          pending.tokenData.refreshToken || null,
+          pending.tokenData.expiresAt || null,
+          pending.tokenData.scope || null,
+          true, // loginOnly — sign-in scopes only; explicit Connect upgrades to full
+        );
+        tokenCache.delete(`${pending.service}:${pending.userId}`);
+      } catch (err) {
+        logger.warn('[OAuth Confirm] storeOAuthToken (login_only) failed', { error: err.message, service: pending.service });
+      }
+    }
+
     // Clear pending login and token
     delete req.session.oauth_login_pending;
     delete req.session.oauth_confirm;
@@ -9323,6 +10164,58 @@ app.post("/api/v1/oauth/confirm", authRateLimit, (req, res) => {
 app.post("/api/v1/oauth/disconnect/:service", authenticate, async (req, res) => {
   const { service } = req.params;
 
+  // Only route to the Composio branch for a name-shared toolkit when Composio is
+  // actually configured. Otherwise (no API key) a native service like facebook
+  // would hit the Composio path, no-op, and leave its native token orphaned.
+  if (service === COMPOSIO_ROOT_SERVICE || (isComposioConfigured() && isComposioManagedService(service))) {
+    try {
+      const userId = getOAuthUserId(req);
+
+      // Several clean names (facebook, github, box, canva, dropbox, zoom, figma)
+      // exist BOTH as a Composio toolkit and as a native connector. Composio now
+      // owns the name, so disconnect routes here — but the user may still hold a
+      // lingering NATIVE oauth_tokens row (connected natively, or via sign-in,
+      // before Composio took over). Without wiping it the service keeps showing
+      // "connected" after a successful Composio disconnect. Clean it up too.
+      if (userId && OAUTH_SERVICES.includes(service)) {
+        try {
+          let nativeTok = null;
+          try { nativeTok = getOAuthToken(service, userId); } catch { /* decrypt-resilient */ }
+          let nativeLogin = null;
+          try { nativeLogin = getOAuthLoginToken(service, userId); } catch { /* decrypt-resilient */ }
+          if (nativeTok || nativeLogin) {
+            revokeOAuthToken(service, userId);
+            tokenCache.delete(`${service}:${userId}`);
+            updateOAuthStatus(service, 'disconnected');
+          }
+        } catch (nativeErr) {
+          console.warn(`[OAuth Disconnect] Native cleanup failed for ${service}:`, nativeErr.message);
+        }
+      }
+
+      // Root "composio" = disconnect everything; a specific toolkit
+      // (composio__googlecalendar / googlecalendar) = disconnect ONLY that one,
+      // leaving the user's other Composio services connected.
+      if (isComposioRootService(service)) {
+        await disconnectComposioForUser(userId);
+        return res.json({ ok: true, message: 'Disconnected all Composio services' });
+      }
+      const result = await disconnectComposioToolkit(userId, service);
+      if (!result.ok) {
+        return res.status(502).json({ error: 'Failed to fully disconnect service', ...result });
+      }
+      return res.json({
+        ok: true,
+        message: `Disconnected ${stripComposioPrefix(service)}`,
+        removed: result.removed,
+        stillConnected: (result.services || []).map((s) => s.toolkitSlug),
+      });
+    } catch (error) {
+      console.error('Composio disconnect error:', error.message);
+      return res.status(500).json({ error: 'Failed to disconnect Composio service', message: error.message });
+    }
+  }
+
   // Validate service
   if (!OAUTH_SERVICES.includes(service)) {
     return res.status(400).json({ error: "Invalid OAuth service" });
@@ -9331,39 +10224,40 @@ app.post("/api/v1/oauth/disconnect/:service", authenticate, async (req, res) => 
   try {
     const userId = getOAuthUserId(req);
 
-    // Try to get token, but handle decryption errors gracefully
-    let token = null;
+    // Look up whichever token rows exist: a full-scope service token, a sign-in
+    // (login_only) token, or both. Either is grounds for "disconnect" — we want
+    // to wipe everything tied to this (service, user).
+    let serviceToken = null;
+    let loginToken = null;
     try {
-      // Use cache to prevent CPU spike
-      token = getCachedOAuthToken(service, userId);
-      if (!token) {
-        token = getOAuthToken(service, userId);
-        if (token) {
-          setCachedOAuthToken(service, userId, token);
-        }
-      }
+      serviceToken = getCachedOAuthToken(service, userId) || getOAuthToken(service, userId);
+      if (serviceToken) setCachedOAuthToken(service, userId, serviceToken);
     } catch (decryptErr) {
-      console.warn(`[OAuth Disconnect] Token decryption failed for ${service} (old key?):`, decryptErr.message);
-      // Token is corrupted/unreadable, just delete it from DB
-      token = { accessToken: null };
+      console.warn(`[OAuth Disconnect] Service token decryption failed for ${service}:`, decryptErr.message);
+    }
+    try {
+      loginToken = getOAuthLoginToken(service, userId);
+    } catch (decryptErr) {
+      console.warn(`[OAuth Disconnect] Login token decryption failed for ${service}:`, decryptErr.message);
     }
 
-    if (!token) {
+    if (!serviceToken && !loginToken) {
       return res.json({ ok: true, message: `${service} was not connected` });
     }
 
-    // Try to revoke on remote service (only if we have a valid token)
-    if (token.accessToken) {
-      try {
-        const adapter = oauthAdapters[service];
-        await adapter.revokeToken(token.accessToken);
-      } catch (revokeErr) {
-        console.warn(`[OAuth Disconnect] Remote revocation failed for ${service}:`, revokeErr.message);
-        // Don't fail if remote revocation fails - continue with local deletion
+    // Best-effort remote revocation for each token we still hold a usable access
+    // string for. Failures here are non-fatal — local deletion always proceeds.
+    const adapter = oauthAdapters[service];
+    for (const t of [serviceToken, loginToken]) {
+      if (t?.accessToken && adapter?.revokeToken) {
+        try { await adapter.revokeToken(t.accessToken); }
+        catch (revokeErr) {
+          console.warn(`[OAuth Disconnect] Remote revocation failed for ${service}:`, revokeErr.message);
+        }
       }
     }
 
-    // Delete token from database (always do this)
+    // Delete BOTH rows from the DB and invalidate the cache. Clean break.
     revokeOAuthToken(service, userId);
     tokenCache.delete(`${service}:${userId}`);
 
@@ -9519,6 +10413,157 @@ app.get("/api/v1/keys/status", authenticate, adminOnly, (req, res) => {
   }
 });
 
+// GET /api/v1/admin/analytics — platform-wide business metrics (power-user only).
+// Privacy by design: AGGREGATE COUNTS ONLY. No per-user PII (emails/names), no
+// identity-vault / message / conversation content, no individual user rows — only
+// numbers and distributions that are safe to retain and that carry business value.
+app.get('/api/v1/admin/analytics', authenticate, (req, res) => {
+  if (!requirePowerUser(req, res)) return;
+  const nDaysAgoISO = (n) => new Date(Date.now() - n * 86400000).toISOString();
+  const d7 = nDaysAgoISO(7), d14 = nDaysAgoISO(14), d30 = nDaysAgoISO(30);
+  const one = (sql, ...args) => { try { return db.prepare(sql).get(...args)?.c ?? 0; } catch (_) { return 0; } };
+  const rows = (sql, ...args) => { try { return db.prepare(sql).all(...args); } catch (_) { return []; } };
+
+  // Range for the time-series charts (24h/7/30/90 days). Aggregate counts (totals,
+  // 7d/30d) are unaffected — only the per-day series length changes. '24h' maps to
+  // a single trailing day so the picker has a short-window option.
+  const rangeDays = ({ '24h': 1, '7d': 7, '30d': 30, '90d': 90 }[String(req.query.range)]) || 30;
+  const dayKeys = (() => { const out = []; const base = new Date(); for (let i = rangeDays - 1; i >= 0; i--) { const x = new Date(base); x.setDate(base.getDate() - i); out.push(x.toISOString().slice(0, 10)); } return out; })();
+  const dayLabels = dayKeys.map((k) => { const [, m, d] = k.split('-'); return `${+m}/${+d}`; });
+  const windowStart = dayKeys[0];
+  const pctDelta = (cur, prev) => prev > 0 ? Math.round(((cur - prev) / prev) * 1000) / 10 : (cur > 0 ? 100 : 0);
+  // Plan pricing (June 2026): Personal/free $0, Pro $9, Heavy/enterprise $29.
+  const PLAN_PRICE = { free: 0, beta: 0, pro: 9, enterprise: 29 };
+  const priceFor = (p) => PLAN_PRICE[String(p || 'free').toLowerCase()] ?? 0;
+
+  // ── Users & growth ──────────────────────────────────────────────
+  const totalUsers = one('SELECT COUNT(*) c FROM users');
+  const newUsers7d = one('SELECT COUNT(*) c FROM users WHERE created_at >= ?', d7);
+  const newUsers30d = one('SELECT COUNT(*) c FROM users WHERE created_at >= ?', d30);
+  const activeWAU = one('SELECT COUNT(*) c FROM users WHERE last_login >= ?', d7);
+  const activeMAU = one('SELECT COUNT(*) c FROM users WHERE last_login >= ?', d30);
+  const usersByPlan = rows("SELECT COALESCE(plan,'free') AS plan, COUNT(*) c FROM users GROUP BY COALESCE(plan,'free')")
+    .reduce((a, r) => (a[r.plan] = r.c, a), {});
+
+  // ── Monetization ────────────────────────────────────────────────
+  const paidUsers = one("SELECT COUNT(*) c FROM users WHERE plan IS NOT NULL AND plan != 'free'");
+  const activeSubscriptions = one("SELECT COUNT(*) c FROM billing_subscriptions WHERE status IN ('active','trialing','past_due')");
+  const subsByPlan = rows("SELECT plan_id, COUNT(*) c FROM billing_subscriptions WHERE status IN ('active','trialing') GROUP BY plan_id")
+    .reduce((a, r) => (a[r.plan_id || 'unknown'] = r.c, a), {});
+  const conversionRatePct = totalUsers ? Math.round((paidUsers / totalUsers) * 1000) / 10 : 0;
+
+  // ── API usage (token/agent calls; dashboard browsing excluded) ──
+  const apiCalls7d = one("SELECT COUNT(*) c FROM audit_log WHERE timestamp >= ? AND " + COUNTED_API_CALL_SQL, d7);
+  const apiCalls30d = one("SELECT COUNT(*) c FROM audit_log WHERE timestamp >= ? AND " + COUNTED_API_CALL_SQL, d30);
+
+  // ── Integrations (which services are in demand — partnership/monetization value) ──
+  // Union of native connectors (oauth_tokens) and Composio-connected toolkits
+  // (service_preferences). Composio accounts live only in the latter, so an
+  // oauth_tokens-only count under-reported the most-used integrations.
+  const svcConnections = {};
+  for (const r of rows("SELECT service_name AS service, COUNT(*) c FROM oauth_tokens WHERE login_only IS NOT 1 GROUP BY service_name")) {
+    const name = String(r.service || '').replace(/^composio__/, '');
+    if (name) svcConnections[name] = (svcConnections[name] || 0) + r.c;
+  }
+  for (const r of rows("SELECT preferences_json FROM service_preferences WHERE service_name = 'composio'")) {
+    try {
+      const p = JSON.parse(r.preferences_json || '{}');
+      for (const t of (p.services || [])) {
+        const name = String(t.toolkitSlug || t.slug || t.label || '').replace(/^composio__/, '');
+        if (name) svcConnections[name] = (svcConnections[name] || 0) + 1;
+      }
+    } catch (_) { /* malformed JSON — skip */ }
+  }
+  const topServices = Object.entries(svcConnections)
+    .map(([service, connections]) => ({ service, connections }))
+    .sort((a, b) => b.connections - a.connections)
+    .slice(0, 12);
+
+  // ── Agents / tokens ─────────────────────────────────────────────
+  const activeTokens = one('SELECT COUNT(*) c FROM access_tokens WHERE revoked_at IS NULL');
+  const tokensByType = rows("SELECT COALESCE(token_type,'guest') AS t, COUNT(*) c FROM access_tokens WHERE revoked_at IS NULL GROUP BY COALESCE(token_type,'guest')")
+    .reduce((a, r) => (a[r.t] = r.c, a), {});
+  const oauthClients = one('SELECT COUNT(DISTINCT oauth_client_id) c FROM access_tokens WHERE oauth_client_id IS NOT NULL AND revoked_at IS NULL');
+  const activeDevicesByType = rows("SELECT COALESCE(connection_type,'fingerprint') AS t, COUNT(*) c FROM approved_devices WHERE revoked_at IS NULL GROUP BY COALESCE(connection_type,'fingerprint')")
+    .reduce((a, r) => (a[r.t] = r.c, a), {});
+
+  // ── Marketplace (public listings — owner-authored, not user PII) ─
+  const mpListings = one("SELECT COUNT(*) c FROM marketplace_listings WHERE status = 'published'");
+  const mpInstalls = one("SELECT COALESCE(SUM(install_count),0) c FROM marketplace_listings");
+  const mpTop = rows("SELECT title, type, install_count, avg_rating FROM marketplace_listings WHERE status='published' ORDER BY install_count DESC LIMIT 5")
+    .map(r => ({ title: r.title, type: r.type, installs: r.install_count || 0, rating: r.avg_rating || 0 }));
+
+  // ── Time series & deltas (real per-day figures for the charts) ──────────
+  // User growth: cumulative registered users across the window.
+  const newUsersByDay = rows('SELECT substr(created_at,1,10) d, COUNT(*) c FROM users WHERE created_at >= ? GROUP BY d', windowStart)
+    .reduce((a, r) => (a[r.d] = r.c, a), {});
+  const usersBeforeWindow = one('SELECT COUNT(*) c FROM users WHERE created_at < ?', windowStart);
+  const usersNewPerDay = dayKeys.map((k) => newUsersByDay[k] || 0);
+  let _cum = usersBeforeWindow;
+  const usersCumulative = dayKeys.map((k) => (_cum += (newUsersByDay[k] || 0)));
+
+  // API calls per day (token/agent calls only; dashboard browsing excluded).
+  const callsByDay = rows("SELECT substr(timestamp,1,10) d, COUNT(*) c FROM audit_log WHERE timestamp >= ? AND " + COUNTED_API_CALL_SQL + " GROUP BY d", windowStart)
+    .reduce((a, r) => (a[r.d] = r.c, a), {});
+  const callsPerDay = dayKeys.map((k) => callsByDay[k] || 0);
+  const callsSpark7 = callsPerDay.slice(-7);
+
+  // MRR from real plan assignments (Pro $9, Heavy $29). Series is the cumulative
+  // paid-plan run-rate as paid users joined over the window.
+  const mrrUsd = Object.entries(usersByPlan).reduce((s, [plan, c]) => s + priceFor(plan) * c, 0);
+  const paidNewByDay = rows("SELECT substr(created_at,1,10) d, COALESCE(plan,'free') plan, COUNT(*) c FROM users WHERE created_at >= ? AND plan IS NOT NULL AND plan != 'free' GROUP BY d, plan", windowStart)
+    .reduce((a, r) => (a[r.d] = (a[r.d] || 0) + priceFor(r.plan) * r.c, a), {});
+  const mrrBeforeWindow = rows("SELECT COALESCE(plan,'free') plan, COUNT(*) c FROM users WHERE created_at < ? AND plan IS NOT NULL AND plan != 'free' GROUP BY plan", windowStart)
+    .reduce((s, r) => s + priceFor(r.plan) * r.c, 0);
+  let _mrr = mrrBeforeWindow;
+  const mrrSeries = dayKeys.map((k) => (_mrr += (paidNewByDay[k] || 0)));
+
+  // Active scoped tokens created per day → cumulative (agent growth trend).
+  const tokensNewByDay = rows('SELECT substr(created_at,1,10) d, COUNT(*) c FROM access_tokens WHERE created_at >= ? AND revoked_at IS NULL GROUP BY d', windowStart)
+    .reduce((a, r) => (a[r.d] = r.c, a), {});
+  const tokensBeforeWindow = one('SELECT COUNT(*) c FROM access_tokens WHERE created_at < ? AND revoked_at IS NULL', windowStart);
+  let _tok = tokensBeforeWindow;
+  const tokenSpark = dayKeys.map((k) => (_tok += (tokensNewByDay[k] || 0)));
+
+  // KPI deltas — current period vs the immediately-preceding equal period.
+  const newUsersPrev7d = one('SELECT COUNT(*) c FROM users WHERE created_at >= ? AND created_at < ?', d14, d7);
+  const activeWAUprev = one('SELECT COUNT(*) c FROM users WHERE last_login >= ? AND last_login < ?', d14, d7);
+  const apiCallsPrev7d = one("SELECT COUNT(*) c FROM audit_log WHERE timestamp >= ? AND timestamp < ? AND " + COUNTED_API_CALL_SQL, d14, d7);
+  const deltas = {
+    totalUsers: pctDelta(newUsers7d, newUsersPrev7d),
+    activeWAU: pctDelta(activeWAU, activeWAUprev),
+    apiCalls7d: pctDelta(apiCalls7d, apiCallsPrev7d),
+    mrr: pctDelta(mrrSeries[mrrSeries.length - 1] || 0, mrrSeries[0] || 0),
+  };
+
+  return res.json({
+    generatedAt: new Date().toISOString(),
+    range: `${rangeDays}d`,
+    note: 'Aggregate, privacy-safe platform metrics (no per-user PII or content).',
+    series: { dayLabels },
+    deltas,
+    users: { total: totalUsers, new7d: newUsers7d, new30d: newUsers30d, activeWAU, activeMAU, byPlan: usersByPlan, cumulative: usersCumulative, newPerDay: usersNewPerDay },
+    monetization: { paidUsers, conversionRatePct, activeSubscriptions, subscriptionsByPlan: subsByPlan, mrrUsd, mrrSeries },
+    apiUsage: { calls7d: apiCalls7d, calls30d: apiCalls30d, avgCalls7dPerActiveUser: activeWAU ? Math.round(apiCalls7d / activeWAU) : 0, callsPerDay, spark7: callsSpark7 },
+    integrations: { topServices },
+    agents: { activeTokens, tokensByType, distinctOAuthClients: oauthClients, activeDevicesByType, tokenSpark },
+    marketplace: { publishedListings: mpListings, totalInstalls: mpInstalls, topListings: mpTop },
+  });
+});
+
+// Owner-only admin insights (closed-source module): per-user activation &
+// retention (/admin/user-insights) and GA4 web analytics (/admin/ga-insights).
+// Absent in MyApi Open — the dashboard's Users/Web analytics tabs degrade on 404.
+const adminInsightsModule = optionalRequire('./routes/admin-insights');
+if (adminInsightsModule) {
+  adminInsightsModule.registerAdminInsightsRoutes(app, {
+    authenticate,
+    requirePowerUser,
+    getOAuthUserId,
+    COUNTED_API_CALL_SQL,
+  });
+}
+
 // POST /api/v1/admin/broadcast-notification — push a message to all users
 app.post('/api/v1/admin/broadcast-notification', authenticate, async (req, res) => {
   if (!isMaster(req)) return res.status(403).json({ error: 'Insufficient scope' });
@@ -9631,6 +10676,9 @@ app.get('/api/v1/services/categories', (req, res) => {
   try {
     const { getServiceCategories } = require('./database');
     const categories = getServiceCategories();
+    if (isComposioConfigured() && !categories.some((category) => category.name === 'composio')) {
+      categories.push({ name: 'composio', label: 'Composio', description: 'Services connected through Composio' });
+    }
     res.json({ data: categories });
   } catch (err) {
     console.error('Service categories error:', err);
@@ -9639,14 +10687,17 @@ app.get('/api/v1/services/categories', (req, res) => {
 });
 
 // Get all services (optionally filter by category)
-app.get('/api/v1/services', (req, res) => {
+app.get('/api/v1/services', async (req, res) => {
   try {
     const { category } = req.query;
     const { getServices, getServicesByCategory, getServiceMethods } = require('./database');
+    const userId = await resolveRequestUserId(req);
 
     let services;
-    if (category) {
+    if (category && category !== 'composio') {
       services = getServicesByCategory(category);
+    } else if (category === 'composio') {
+      services = [];
     } else {
       services = getServices();
     }
@@ -9656,7 +10707,19 @@ app.get('/api/v1/services', (req, res) => {
       return buildServiceDefinition(service, methods);
     });
 
-    res.json({ data: enriched, count: enriched.length });
+    const composioServices = await getComposioServiceCatalog(userId);
+    const merged = category && category !== 'composio'
+      ? enriched
+      : [...enriched, ...composioServices.filter((service) => !category || service.category === category || service.categoryLabel?.toLowerCase() === category)];
+
+    const responseBody = await maybeOptimizeApiResponse(req, { data: merged, count: merged.length }, {
+      label: 'connected services list',
+      select: (payload) => payload?.data,
+      assignOptimized: (payload, optimized) => {
+        payload.data = optimized;
+      },
+    });
+    res.json(responseBody);
   } catch (err) {
     console.error('Services list error:', err);
     res.status(500).json({ error: 'Failed to get services' });
@@ -9664,13 +10727,18 @@ app.get('/api/v1/services', (req, res) => {
 });
 
 // Get specific service details
-app.get('/api/v1/services/:name', (req, res) => {
+app.get('/api/v1/services/:name', async (req, res) => {
   try {
     const { getServiceByName, getServiceMethods } = require('./database');
     const service = getServiceByName(req.params.name);
 
     if (!service) {
-      return res.status(404).json({ error: 'Service not found' });
+      const userId = await resolveRequestUserId(req);
+      const composioService = await getComposioServiceByName(userId, req.params.name);
+      if (!composioService) {
+        return res.status(404).json({ error: 'Service not found' });
+      }
+      return res.json({ data: composioService });
     }
 
     const methods = getServiceMethods(service.id);
@@ -9820,15 +10888,82 @@ app.get('/api/v1/services/:serviceName/test', authenticate, async (req, res) => 
 
 // Execute a service API call (AI communication layer)
 app.post('/api/v1/services/:serviceName/execute', authenticate, async (req, res) => {
-  // Determine read vs write based on the method's HTTP verb (resolved after service lookup)
-  // Use services:read as the minimum required; write-methods will be caught at execution time if needed.
-  // Default to requiring services:read; POST/PUT/DELETE methods require services:write.
-  if (!hasScope(req, 'services:read') && !hasScope(req, 'services:write')) {
-    return res.status(403).json({ error: "Requires 'services:read' or 'services:write' scope" });
+  // Entry gate: global services scope OR a per-service scope for this service.
+  // Write-level enforcement happens once the HTTP verb is resolved below.
+  if (!hasScope(req, 'services:read') && !hasScope(req, 'services:write') &&
+      !hasServiceLevelScope(req, req.params.serviceName, 'read')) {
+    return res.status(403).json({ error: "Requires 'services:read', 'services:write', or a per-service scope for this service" });
   }
   try {
     const { serviceName } = req.params;
     const { method, params } = req.body;
+
+    if (!canAccessService(req, serviceName)) {
+      return res.status(403).json({ error: 'Service access denied by token resource restrictions' });
+    }
+
+    // Route to Composio only when the toolkit is actually connected there. A clean
+    // name like "github" or "facebook" that is connected NATIVELY (not via Composio)
+    // must fall through to the native handler below — Composio wins ties, not absences.
+    const composioRoutingUserId = getOAuthUserId(req);
+    if (isComposioRootService(serviceName)) {
+      return res.status(400).json({ error: 'The root Composio connector is not directly executable. Use a specific Composio-backed service.' });
+    }
+    if (isComposioManagedService(serviceName) && await isComposioConnectedService(composioRoutingUserId, serviceName)) {
+      const userId = composioRoutingUserId;
+      const httpMethod = params?.httpMethod || params?.method || 'GET';
+      if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(String(httpMethod).toUpperCase()) &&
+          !hasScope(req, 'services:write') && !hasServiceLevelScope(req, serviceName, 'write')) {
+        return res.status(403).json({ error: `Write access to '${serviceName}' requires 'services:write' or 'services:${serviceName}:write' scope` });
+      }
+      const endpoint = params?.endpoint || params?.path;
+      const execution = await proxyComposioService({
+        userId,
+        serviceName,
+        apiPath: endpoint,
+        httpMethod,
+        reqBody: params?.body || null,
+        queryParams: params?.query || null,
+      });
+
+      const result = {
+        service: serviceName,
+        method,
+        status: execution.ok ? 'executed' : 'failed',
+        timestamp: new Date().toISOString(),
+        response: execution,
+      };
+
+      createAuditLog({
+        requesterId: req.tokenMeta.tokenId,
+        action: 'service_execute',
+        resource: `/services/${serviceName}/execute`,
+        scope: req.tokenMeta.scope,
+        ip: req.ip,
+        details: {
+          service: serviceName,
+          provider: 'composio',
+          method,
+          endpoint,
+          httpMethod: String(httpMethod).toUpperCase(),
+          status: result.status,
+          statusCode: execution.statusCode || null,
+        },
+      });
+
+      if (!execution.ok) {
+        return res.status(execution.statusCode || 500).json({ error: execution.error?.message || 'Failed to execute Composio service', data: result });
+      }
+
+      const responseBody = await maybeOptimizeApiResponse(req, { data: result }, {
+        label: `${serviceName} execute response`,
+        select: (payload) => payload?.data?.response || payload?.data,
+        assignOptimized: (payload, optimized) => {
+          payload.data = optimized;
+        },
+      });
+      return res.json(responseBody);
+    }
 
     const { getServiceByName, getServiceMethods, getOAuthToken, isTokenExpired, refreshOAuthToken } = require('./database');
     const service = getServiceByName(serviceName);
@@ -9842,6 +10977,11 @@ app.post('/api/v1/services/:serviceName/execute', authenticate, async (req, res)
     const validation = validateExecutionInput(serviceDef, method, params);
     if (!validation.ok) {
       return res.status(validation.status || 400).json({ error: validation.error, code: validation.code || 'VALIDATION_ERROR' });
+    }
+
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(validation.method.httpMethod) &&
+        !hasScope(req, 'services:write') && !hasServiceLevelScope(req, serviceName, 'write')) {
+      return res.status(403).json({ error: `Write access to '${serviceName}' requires 'services:write' or 'services:${serviceName}:write' scope` });
     }
 
     const userId = getOAuthUserId(req);
@@ -9932,7 +11072,14 @@ app.post('/api/v1/services/:serviceName/execute', authenticate, async (req, res)
       return res.status(execution.statusCode || 500).json({ error: safeMessage, data: result });
     }
 
-    res.json({ data: result });
+    const responseBody = await maybeOptimizeApiResponse(req, { data: result }, {
+      label: `${serviceName} execute response`,
+      select: (payload) => payload?.data?.response || payload?.data,
+      assignOptimized: (payload, optimized) => {
+        payload.data = optimized;
+      },
+    });
+    res.json(responseBody);
   } catch (err) {
     console.error('Service execution error:', err);
     res.status(500).json({ error: 'Failed to execute service method' });
@@ -9941,30 +11088,316 @@ app.post('/api/v1/services/:serviceName/execute', authenticate, async (req, res)
 
 // POST /api/v1/services/:serviceName/proxy - Direct API proxy (pass-through to service API)
 // Allows AI agents to call any endpoint on a connected service without predefined methods
+// Minimal internal service call with the caller's stored credentials — used by
+// the resource-listing endpoint below. Mirrors the proxy's dispatch (Composio
+// when connected, else native OAuth/api-key) without preference injection or
+// per-request accounting; discovery listings shouldn't count as agent traffic.
+async function internalServiceRequest(req, serviceName, { path: apiPath, method = 'GET', body, query, headers: extraHeaders } = {}) {
+  const userId = getOAuthUserId(req);
+
+  if (isComposioManagedService(serviceName) && await isComposioConnectedService(userId, serviceName)) {
+    const r = await proxyComposioService({ userId, serviceName, apiPath, httpMethod: method, reqBody: body, queryParams: query, reqHeaders: extraHeaders });
+    return { ok: r.ok, statusCode: r.statusCode, data: r.data, error: r.error?.message };
+  }
+
+  const { getOAuthToken, isTokenExpired, refreshOAuthToken, getServiceByName } = require('./database');
+  const serviceRecord = getServiceByName(serviceName);
+  const authType = serviceName === 'homeassistant' ? 'api_key' : (serviceRecord?.auth_type || 'oauth2');
+  let token = authType === 'api_key'
+    ? resolveServiceApiKeyToken(serviceName, userId)
+    : (getCachedOAuthToken(serviceName, userId) || getOAuthToken(serviceName, userId));
+  if (!token) return { ok: false, error: `Service '${serviceName}' not connected` };
+
+  if (authType !== 'api_key' && isTokenExpired(token)) {
+    const provider = OAUTH_PROVIDER_DETAILS[serviceName];
+    const clientId = process.env[`${serviceName.toUpperCase()}_CLIENT_ID`];
+    const clientSecret = process.env[`${serviceName.toUpperCase()}_CLIENT_SECRET`];
+    if (provider?.tokenUrl && token.refreshToken && clientId && clientSecret) {
+      const refreshResult = await refreshOAuthToken(serviceName, userId, provider.tokenUrl, clientId, clientSecret);
+      if (refreshResult.ok) token = refreshResult.token;
+    }
+  }
+
+  // Listers may use absolute provider URLs (removes base-path ambiguity);
+  // relative paths resolve against the service's configured API root.
+  const isAbsolute = /^https?:\/\//i.test(apiPath);
+  let apiRoot = OAUTH_PROVIDER_DETAILS[serviceName]?.apiRoot || serviceRecord?.api_endpoint;
+  if (serviceName === 'homeassistant') {
+    apiRoot = require('./lib/homeassistant').getConnection(userId)?.apiRoot || null;
+    if (!apiRoot) return { ok: false, error: "Service 'homeassistant' not connected" };
+  }
+  if (!isAbsolute && !apiRoot) return { ok: false, error: `No API root configured for service '${serviceName}'` };
+
+  const targetUrl = new URL(isAbsolute ? apiPath : (apiPath.startsWith('/') ? `${apiRoot}${apiPath}` : `${apiRoot}/${apiPath}`));
+  if (isPrivateHost(targetUrl.hostname) && !require('./lib/homeassistant').allowPrivateHosts()) {
+    return { ok: false, error: 'Target URL resolves to a private address' };
+  }
+  if (query && typeof query === 'object') {
+    Object.entries(query).forEach(([k, v]) => targetUrl.searchParams.set(k, v));
+  }
+
+  const headers = { 'Accept': 'application/json', 'User-Agent': 'MyApi-Gateway/1.0', ...(extraHeaders || {}) };
+  if (token.accessToken) {
+    if (serviceName === 'github') headers['Authorization'] = `token ${token.accessToken}`;
+    else if (serviceName === 'discord' && /^\/(guilds|channels)\//.test(apiPath)) {
+      const botToken = String(getServicePreference(userId, 'discord')?.preferences?.bot_token || '').trim();
+      if (!botToken) return { ok: false, error: 'Discord bot token not configured — save it via PUT /api/v1/services/discord/preferences' };
+      headers['Authorization'] = `Bot ${botToken}`;
+    } else headers['Authorization'] = `Bearer ${token.accessToken}`;
+  }
+
+  let bodyStr = null;
+  if (['POST', 'PUT', 'PATCH'].includes(method.toUpperCase()) && body) {
+    bodyStr = JSON.stringify(body);
+    headers['Content-Type'] = 'application/json';
+    headers['Content-Length'] = Buffer.byteLength(bodyStr);
+  }
+
+  const https = require('https');
+  const http = require('http');
+  const transport = targetUrl.protocol === 'https:' ? https : http;
+  try {
+    const result = await new Promise((resolve, reject) => {
+      const request = transport.request(targetUrl, { method: method.toUpperCase(), headers }, (response) => {
+        let data = '';
+        response.on('data', chunk => data += chunk);
+        response.on('end', () => {
+          let parsed;
+          try { parsed = JSON.parse(data); } catch { parsed = data; }
+          resolve({ statusCode: response.statusCode, data: parsed });
+        });
+      });
+      request.on('error', reject);
+      if (bodyStr) request.write(bodyStr);
+      request.end();
+    });
+    return { ok: result.statusCode < 400, statusCode: result.statusCode, data: result.data };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+// Enumerate the sub-scopable resources inside a connected service (Monday
+// boards, Slack channels, Discord servers/channels, GitHub repos, ...) so the
+// dashboard can offer a picker when narrowing a token to specific resources.
+// ?kind=<kind> limits to one kind; ?parent=<id> is required for nested kinds
+// (e.g. Discord channels need the parent guild id).
+app.get('/api/v1/services/:serviceName/resources', authenticate, async (req, res) => {
+  if (!isMaster(req)) return res.status(403).json({ error: 'Only master token can enumerate service resources' });
+
+  const serviceName = String(req.params.serviceName || '').toLowerCase();
+  const kindSpecs = SERVICE_RESOURCE_KINDS[serviceName];
+  if (!kindSpecs) {
+    return res.json({
+      data: { service: serviceName, kinds: [], resources: {} },
+      message: 'This service has no resource sub-scopes yet. Restrict it at the service level instead.',
+    });
+  }
+
+  const kindFilter = req.query.kind ? String(req.query.kind) : null;
+  const parent = req.query.parent ? String(req.query.parent) : null;
+  const resources = {};
+  for (const spec of kindSpecs) {
+    if (kindFilter && spec.kind !== kindFilter) continue;
+    if (spec.lister.requiresParent && !parent) {
+      resources[spec.kind] = { requiresParent: spec.lister.requiresParent, items: [] };
+      continue;
+    }
+    const reqSpec = typeof spec.lister.request === 'function' ? spec.lister.request(parent) : spec.lister.request;
+    try {
+      const result = await internalServiceRequest(req, serviceName, reqSpec);
+      // Some proxies wrap provider errors as 200 with an HTML/text body —
+      // surface those as errors instead of an empty picker.
+      const providerBroken = result.ok && typeof result.data === 'string';
+      resources[spec.kind] = (result.ok && !providerBroken)
+        ? { items: spec.lister.parse(result.data) }
+        : {
+            error: providerBroken
+              ? `Provider returned a non-JSON response: ${String(result.data).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 140)}`
+              : (result.error || `Provider returned ${result.statusCode}`),
+            items: [],
+          };
+    } catch (e) {
+      resources[spec.kind] = { error: e.message, items: [] };
+    }
+  }
+
+  res.json({
+    data: {
+      service: serviceName,
+      kinds: kindSpecs.map(k => ({ kind: k.kind, label: k.label, requiresParent: k.lister.requiresParent || undefined })),
+      resources,
+    }
+  });
+});
+
 app.post('/api/v1/services/:serviceName/proxy', authenticate, async (req, res) => {
   try {
     const { serviceName } = req.params;
-    const { path: apiPath, method: httpMethod = 'GET', body: reqBody, query: queryParams } = req.body;
+    const { path: apiPath, method: httpMethod = 'GET', body: reqBody, query: queryParams, headers: rawHeaders } = req.body;
+
+    // Caller-supplied request headers (e.g. LinkedIn-Version, X-Restli-Protocol-Version,
+    // Accept) are forwarded to the upstream provider. Auth/transport headers are stripped
+    // — MyApi/Composio owns the credential and the connection, so callers must not be able
+    // to override Authorization, Host, Cookie, or framing headers.
+    const BLOCKED_PROXY_HEADERS = new Set([
+      'authorization', 'host', 'cookie', 'content-length', 'connection',
+      'x-workspace-id', 'x-user-email',
+    ]);
+    const reqHeaders = {};
+    if (rawHeaders && typeof rawHeaders === 'object') {
+      for (const [name, value] of Object.entries(rawHeaders)) {
+        if (value == null) continue;
+        if (BLOCKED_PROXY_HEADERS.has(String(name).toLowerCase())) continue;
+        reqHeaders[String(name)] = String(value);
+      }
+    }
+
+    if (!canAccessService(req, serviceName)) {
+      return res.status(403).json({ error: 'Service access denied by token resource restrictions' });
+    }
+
+    // Service scope enforcement — applies to Composio and core services alike.
+    // A per-service scope (services:{name}:read|write) is a standalone grant.
+    const isWriteVerb = ['POST', 'PUT', 'PATCH', 'DELETE'].includes((httpMethod || 'GET').toUpperCase());
+    const requiredLevel = isWriteVerb ? 'write' : 'read';
+    const hasGlobalScope = hasScope(req, 'services:write') || (!isWriteVerb && hasScope(req, 'services:read'));
+    if (!hasGlobalScope && !hasServiceLevelScope(req, serviceName, requiredLevel)) {
+      return res.status(403).json({
+        error: 'Insufficient scope',
+        message: `Token needs 'services:${requiredLevel}' or 'services:${serviceName}:${requiredLevel}' scope`,
+        hint: 'Update token scope to include service access'
+      });
+    }
+
+    // Per-agent token(context)-budget limits. Call-count limits were already
+    // enforced in authenticate; here the request payload size is known, so the
+    // token budget (total + per-service) can be checked before dispatch. The
+    // response side is added to the counters by the accounting hook afterwards.
+    const proxyAgentId = req.tokenMeta?.tokenId;
+    const proxyRequestTokens = agentLimits.estimateTokens(reqBody) + agentLimits.estimateTokens(queryParams) + agentLimits.estimateTokens(apiPath);
+    if (proxyAgentId && !String(proxyAgentId).startsWith('sess_')) {
+      const limitVerdict = agentLimits.checkAgentLimits(proxyAgentId, serviceName, { tokens: proxyRequestTokens });
+      if (!limitVerdict.allowed) {
+        req.agentLimitBlocked = true;
+        createAuditLog({
+          requesterId: proxyAgentId,
+          action: 'agent_limit_blocked',
+          resource: `/services/${serviceName}/proxy`,
+          ip: req.ip,
+          details: { metric: limitVerdict.metric, scope: limitVerdict.scope, limit: limitVerdict.limit, used: limitVerdict.used, period: limitVerdict.period },
+        });
+        return res.status(429).json({
+          error: 'agent_limit_exceeded',
+          code: 'AGENT_LIMIT_EXCEEDED',
+          message: limitVerdict.reason,
+          metric: limitVerdict.metric,
+          scope: limitVerdict.scope,
+          limit: limitVerdict.limit,
+          used: limitVerdict.used,
+          period: limitVerdict.period,
+        });
+      }
+    }
+
+    // Resource sub-scopes: the token may be narrowed to specific resources
+    // inside this service (Monday boards, Slack channels, GitHub repos, ...).
+    if (!isMaster(req)) {
+      const svcResources = getAllowedResources(req)?.service_resources?.[String(serviceName).toLowerCase()];
+      if (svcResources) {
+        const resourceVerdict = enforceServiceResources(svcResources, serviceName, {
+          apiPath, method: httpMethod, body: reqBody, query: queryParams,
+        });
+        if (!resourceVerdict.allowed) {
+          createAuditLog({
+            requesterId: req.tokenMeta.tokenId,
+            action: 'resource_scope_violation',
+            resource: `/services/${serviceName}/proxy`,
+            ip: req.ip,
+            details: { service: serviceName, kind: resourceVerdict.kind, path: apiPath, method: String(httpMethod || 'GET').toUpperCase() },
+          });
+          return res.status(403).json({
+            error: 'resource_restricted',
+            code: 'RESOURCE_RESTRICTED',
+            message: resourceVerdict.reason,
+            kind: resourceVerdict.kind,
+          });
+        }
+      }
+    }
+
+    // Composio wins ties, not absences — only route here when actually connected via
+    // Composio; otherwise fall through to a native connector of the same clean name.
+    const composioProxyUserId = getOAuthUserId(req);
+    if (isComposioRootService(serviceName)) {
+      return res.status(400).json({ error: 'The root Composio connector is not directly proxyable. Use a specific Composio-backed service.' });
+    }
+    if (isComposioManagedService(serviceName) && await isComposioConnectedService(composioProxyUserId, serviceName)) {
+      const userId = composioProxyUserId;
+      const composioResult = await proxyComposioService({
+        userId,
+        serviceName,
+        apiPath,
+        httpMethod,
+        reqBody,
+        queryParams,
+        reqHeaders,
+      });
+
+      const response = {
+        ok: composioResult.ok,
+        service: serviceName,
+        statusCode: composioResult.statusCode,
+        data: composioResult.data,
+        ...(composioResult.error ? { error: composioResult.error.message } : {}),
+        meta: {
+          ...(composioResult.meta || {}),
+          endpoint: apiPath,
+          method: String(httpMethod || 'GET').toUpperCase(),
+          timestamp: new Date().toISOString(),
+        }
+      };
+
+      createAuditLog({
+        requesterId: req.tokenMeta.tokenId,
+        action: 'service_proxy',
+        resource: `/services/${serviceName}/proxy`,
+        scope: req.tokenMeta.scope,
+        ip: req.ip,
+        details: {
+          service: serviceName,
+          provider: 'composio',
+          path: apiPath,
+          method: String(httpMethod || 'GET').toUpperCase(),
+          status: composioResult.statusCode,
+        },
+      });
+
+      const optimizedResponse = await maybeOptimizeApiResponse(req, response, {
+        label: `${serviceName} proxy response`,
+        select: (payload) => payload?.data,
+        assignOptimized: (payload, optimized) => {
+          payload.data = optimized;
+        },
+      });
+      {
+        // Meter context tokens (request + response payload) for agent quotas.
+        const usageStore = getRequestStore();
+        if (usageStore) usageStore.usageTokens = proxyRequestTokens + agentLimits.estimateTokens(optimizedResponse?.data);
+      }
+      return res.status(composioResult.ok ? 200 : (composioResult.statusCode || 500)).json(optimizedResponse);
+    }
 
     if (!apiPath) {
       return res.status(400).json({ error: 'path is required (e.g. "/user/repos")' });
     }
 
-    // Service scope enforcement
-    const isWrite = ['POST', 'PUT', 'PATCH', 'DELETE'].includes((httpMethod || 'GET').toUpperCase());
-    const requiredScope = isWrite ? 'services:write' : 'services:read';
-    if (!hasScope(req, requiredScope)) {
-      return res.status(403).json({
-        error: 'Insufficient scope',
-        message: `Token needs '${requiredScope}' scope`,
-        hint: 'Update token scope to include service access'
-      });
-    }
-
     const { getOAuthToken, isTokenExpired, refreshOAuthToken, getServiceByName } = require('./database');
     const userId = getOAuthUserId(req);
     const serviceRecord = getServiceByName(serviceName);
-    const authType = serviceRecord?.auth_type || 'oauth2';
+    // Instance-hosted services (Home Assistant) are api_key regardless of the
+    // services table — the credential lives in per-user service preferences.
+    const authType = serviceName === 'homeassistant' ? 'api_key' : (serviceRecord?.auth_type || 'oauth2');
 
     let token;
     if (authType === 'api_key') {
@@ -10002,7 +11435,18 @@ app.post('/api/v1/services/:serviceName/proxy', authenticate, async (req, res) =
     }
 
     const provider = OAUTH_PROVIDER_DETAILS[serviceName];
-    const apiRoot = provider?.apiRoot || serviceRecord?.api_endpoint;
+    let apiRoot = provider?.apiRoot || serviceRecord?.api_endpoint;
+    if (serviceName === 'homeassistant') {
+      // Per-user API root: the caller's own Home Assistant instance.
+      const haConn = require('./lib/homeassistant').getConnection(userId);
+      if (!haConn) {
+        return res.status(403).json({
+          error: "Service 'homeassistant' not connected. Connect it with your instance URL and a long-lived access token.",
+          hint: 'POST /api/v1/services/homeassistant/connect {"base_url": "https://your-instance:8123", "token": "<long-lived token>"}',
+        });
+      }
+      apiRoot = haConn.apiRoot;
+    }
     if (!apiRoot) {
       return res.status(400).json({ error: `No API root configured for service '${serviceName}'` });
     }
@@ -10027,7 +11471,7 @@ app.post('/api/v1/services/:serviceName/proxy', authenticate, async (req, res) =
     const http = require('http');
     const targetUrl = new URL(apiPath.startsWith('/') ? `${apiRoot}${apiPath}` : `${apiRoot}/${apiPath}`);
 
-    if (isPrivateHost(targetUrl.hostname)) {
+    if (isPrivateHost(targetUrl.hostname) && !require('./lib/homeassistant').allowPrivateHosts()) {
       return res.status(400).json({ error: 'Target URL resolves to a private address' });
     }
 
@@ -10079,11 +11523,12 @@ app.post('/api/v1/services/:serviceName/proxy', authenticate, async (req, res) =
             finalBody.profile_id = prefs.default_profile_id;
             console.log(`[ServicePrefs] Injected default LinkedIn profile_id: ${prefs.default_profile_id}`);
           }
-        } else if (serviceName === 'reddit') {
-          // If no subreddit is specified, inject the default
-          if (!finalBody.subreddit && prefs.default_subreddit) {
-            finalBody.subreddit = prefs.default_subreddit;
-            console.log(`[ServicePrefs] Injected default Reddit subreddit: ${prefs.default_subreddit}`);
+        } else if (serviceName === 'linkedin_pages') {
+          // LinkedIn Pages posts/reads are authored by an organization URN. Inject
+          // the user's default organization when the caller didn't specify one.
+          if (!finalBody.organization_id && prefs.default_organization_id) {
+            finalBody.organization_id = prefs.default_organization_id;
+            console.log(`[ServicePrefs] Injected default LinkedIn Pages organization_id: ${prefs.default_organization_id}`);
           }
         } else if (serviceName === 'tiktok') {
           // If no account is specified, inject the default
@@ -10139,6 +11584,13 @@ app.post('/api/v1/services/:serviceName/proxy', authenticate, async (req, res) =
       }
     }
 
+    // Merge caller-supplied headers (already sanitized of auth/transport headers
+    // above). Applied before body framing and after Authorization so callers can
+    // set provider headers (LinkedIn-Version, etc.) but never override credentials.
+    for (const [name, value] of Object.entries(reqHeaders)) {
+      headers[name] = value;
+    }
+
     let bodyStr = null;
     if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && finalBody && Object.keys(finalBody).length > 0) {
       bodyStr = JSON.stringify(finalBody);
@@ -10169,8 +11621,8 @@ app.post('/api/v1/services/:serviceName/proxy', authenticate, async (req, res) =
     // Increment rate limit counter
     incrementRateLimit(userId, serviceName, limitPerHour);
 
+    // api_calls is counted once per request by the global accounting middleware.
     trackWorkspaceUsage(req, {
-      api_calls: 1,
       active_services: countConnectedOAuthServices(userId),
     });
 
@@ -10227,11 +11679,36 @@ app.post('/api/v1/services/:serviceName/proxy', authenticate, async (req, res) =
       // Continue without instructions if there's an error
     }
 
+    // When a service returns 403, add actionable guidance so the agent
+    // knows exactly what to do without asking the user.
+    let scopeGuidance = null;
+    if (result.statusCode === 403) {
+      const reAuthUrl = `${req.protocol}://${req.get('host')}/api/v1/oauth/connect/${serviceName}`;
+      const serviceScopes = {
+        linkedin:     { current: 'openid profile email w_member_social', profile_endpoint: '/userinfo', note: '/v2/me is deprecated — use /userinfo for profile data.' },
+        google:       { current: 'openid email profile https://mail.google.com/ https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/calendar', note: 'Full Gmail (read/write/delete), Drive, and Calendar are granted. If a 403 persists, reconnect Google to refresh the grant.' },
+        github:       { current: 'repo user gist', note: 'For org access, reconnect GitHub and approve org scopes.' },
+        twitter:      { current: 'tweet.read tweet.write users.read offline.access', note: 'For DMs, reconnect Twitter and approve dm.read.' },
+        facebook:     { current: 'email public_profile', note: 'For pages/posting, reconnect Facebook and approve pages_show_list + pages_manage_posts.' },
+        discord:      { current: 'identify email guilds', note: 'For message read/write, reconnect Discord and approve messages.read.' },
+        slack:        { current: 'chat:write channels:read channels:history users:read users.profile:read', note: 'For file upload, reconnect Slack and approve files:write.' },
+      };
+      const info = serviceScopes[serviceName];
+      scopeGuidance = {
+        reason: 'insufficient_scope',
+        message: info?.note || `The ${serviceName} token does not have permission for this endpoint. Re-authenticate to grant additional scopes.`,
+        reauth_url: reAuthUrl,
+        current_scopes: info?.current,
+      };
+      if (info?.profile_endpoint) scopeGuidance.suggested_endpoint = info.profile_endpoint;
+    }
+
     const response = {
       ok: result.statusCode < 400,
       service: serviceName,
       statusCode: result.statusCode,
       data: result.data,
+      ...(scopeGuidance ? { guidance: scopeGuidance } : {}),
       meta: {
         endpoint: targetUrl.toString(),
         method,
@@ -10252,7 +11729,19 @@ app.post('/api/v1/services/:serviceName/proxy', authenticate, async (req, res) =
       response.nextEndpoints = instructionsData.nextEndpoints || undefined;
     }
 
-    res.status(result.statusCode >= 400 ? result.statusCode : 200).json(response);
+    const optimizedResponse = await maybeOptimizeApiResponse(req, response, {
+      label: `${serviceName} proxy response`,
+      select: (payload) => payload?.data,
+      assignOptimized: (payload, optimized) => {
+        payload.data = optimized;
+      },
+    });
+    {
+      // Meter context tokens (request + response payload) for agent quotas.
+      const usageStore = getRequestStore();
+      if (usageStore) usageStore.usageTokens = proxyRequestTokens + agentLimits.estimateTokens(optimizedResponse?.data);
+    }
+    res.status(result.statusCode >= 400 ? result.statusCode : 200).json(optimizedResponse);
   } catch (err) {
     console.error('Service proxy error:', err);
     res.status(500).json({ error: 'Proxy request failed', message: err.message });
@@ -10283,15 +11772,51 @@ const knowledgeBase = new KnowledgeBase({
 });
 let llmAdapter = null;
 
+const KB_UPLOAD_ALLOWED_MIME = new Set([
+  'text/plain',
+  'text/markdown',
+  'text/csv',
+  'text/tab-separated-values',
+  'text/html',
+  'text/xml',
+  'application/xml',
+  'application/json',
+  'application/pdf',
+  'application/rtf',
+  'application/epub+zip',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.oasis.opendocument.text',
+  'application/vnd.oasis.opendocument.spreadsheet',
+  'application/vnd.oasis.opendocument.presentation',
+]);
+const KB_UPLOAD_ALLOWED_EXT = new Set([
+  '.txt', '.md', '.markdown',
+  '.csv', '.tsv',
+  '.html', '.htm', '.xml',
+  '.json',
+  '.pdf', '.rtf', '.epub',
+  '.doc', '.docx',
+  '.ppt', '.pptx',
+  '.xls', '.xlsx',
+  '.odt', '.ods', '.odp',
+]);
+
 const kbUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
   fileFilter: (req, file, cb) => {
-    const allowedMimeTypes = ['text/plain', 'text/markdown', 'application/pdf', 'application/json', 'text/csv'];
-    if (allowedMimeTypes.includes(file.mimetype)) {
+    const mimeOk = KB_UPLOAD_ALLOWED_MIME.has((file.mimetype || '').toLowerCase());
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    const extOk = KB_UPLOAD_ALLOWED_EXT.has(ext);
+    if (mimeOk || extOk) {
       cb(null, true);
     } else {
-      cb(new Error(`Unsupported file type: ${file.mimetype}`), false);
+      cb(new Error(`Unsupported file type: ${file.mimetype || ext || 'unknown'}`), false);
     }
   }
 });
@@ -10730,25 +12255,61 @@ app.post('/api/v1/brain/knowledge-base/upload', authenticate, kbUploadFields, as
     const ext = path.extname(originalName).toLowerCase();
     const mimeType = (uploadedFile.mimetype || '').toLowerCase();
 
-    const isTextLike = ext === '.txt' || ext === '.md' || mimeType === 'text/plain' || mimeType === 'text/markdown';
-    const isPdf = ext === '.pdf' || mimeType === 'application/pdf';
+    const isTextLike =
+      ext === '.txt' || ext === '.md' || ext === '.markdown' ||
+      mimeType === 'text/plain' || mimeType === 'text/markdown';
+    const canConvert = markitdown.isSupportedExtension(ext);
+    const convertRequested = ['true', '1', 'on', 'yes'].includes(
+      String(req.body?.convertToMarkdown ?? '').toLowerCase()
+    );
 
-    if (!isTextLike && !isPdf) {
-      return res.status(400).json({ error: 'Unsupported file type. Supported: .txt, .md, .pdf' });
+    if (!isTextLike && !canConvert) {
+      return res.status(400).json({
+        error: `Unsupported file type: ${ext || mimeType || 'unknown'}. Upload a text/markdown file or a supported document (pdf, docx, pptx, xlsx, html, csv, epub, rtf, etc.).`,
+      });
+    }
+
+    if (!isTextLike && canConvert && !convertRequested) {
+      return res.status(400).json({
+        error: 'This document needs to be converted to Markdown before AI agents can read it. Enable "Convert to Markdown (.md) for AI" in the upload dialog and try again.',
+        code: 'conversion_required',
+      });
     }
 
     let content = '';
+    let conversionMethod = 'passthrough';
+    let sourceFormat = ext || mimeType || 'unknown';
+
     if (isTextLike) {
       content = uploadedFile.buffer.toString('utf8');
+      conversionMethod = 'passthrough';
     } else {
       try {
-        const parsed = await pdfParse(uploadedFile.buffer);
-        content = (parsed?.text || '').trim();
+        const { markdown } = await markitdown.convertBufferToMarkdown(
+          uploadedFile.buffer,
+          originalName
+        );
+        content = (markdown || '').trim();
+        conversionMethod = 'markitdown';
       } catch (err) {
-        return res.status(400).json({
-          error: 'Failed to parse PDF. Please upload a text-based PDF or convert it to .txt/.md.',
-          details: err.message,
-        });
+        // Last-resort fallback for PDFs if markitdown is unavailable.
+        if (ext === '.pdf' || mimeType === 'application/pdf') {
+          try {
+            const parsed = await require('pdf-parse')(uploadedFile.buffer);
+            content = (parsed?.text || '').trim();
+            conversionMethod = 'pdf-parse-fallback';
+          } catch (fallbackErr) {
+            return res.status(400).json({
+              error: 'Failed to parse PDF. Please upload a text-based PDF or convert it to .txt/.md.',
+              details: `${err.message}; fallback: ${fallbackErr.message}`,
+            });
+          }
+        } else {
+          return res.status(400).json({
+            error: 'Failed to convert document to Markdown.',
+            details: err.message,
+          });
+        }
       }
     }
 
@@ -10777,6 +12338,8 @@ app.post('/api/v1/brain/knowledge-base/upload', authenticate, kbUploadFields, as
         chunks: docs.length,
         storage: persisted.storage,
         localPath: persisted.localPath,
+        conversionMethod,
+        sourceFormat,
       }
     });
 
@@ -10786,6 +12349,8 @@ app.post('/api/v1/brain/knowledge-base/upload', authenticate, kbUploadFields, as
         name: originalName,
         size: uploadedFile.size,
         mimeType: uploadedFile.mimetype,
+        sourceFormat,
+        conversionMethod,
         storage: persisted.storage,
         localPath: persisted.localPath,
       },
@@ -10799,7 +12364,7 @@ app.post('/api/v1/brain/knowledge-base/upload', authenticate, kbUploadFields, as
 });
 
 // GET /api/v1/brain/knowledge-base - List KB documents
-app.get('/api/v1/brain/knowledge-base', authenticate, (req, res) => {
+app.get('/api/v1/brain/knowledge-base', authenticate, async (req, res) => {
   if (!hasScope(req, 'knowledge')) return res.status(403).json({ error: "Requires 'knowledge' scope" });
   try {
     const ownerId = getRequestOwnerId(req);
@@ -10827,7 +12392,14 @@ app.get('/api/v1/brain/knowledge-base', authenticate, (req, res) => {
       ip: req.ip
     });
 
-    res.json(documents);
+    const responseBody = await maybeOptimizeApiResponse(req, documents, {
+      label: 'knowledge base documents list',
+      select: (payload) => payload,
+      assignOptimized: (payload, optimized) => {
+        payload.data = optimized;
+      },
+    });
+    res.json(responseBody);
   } catch (error) {
     console.error('Get KB documents error:', error);
     res.status(500).json({ error: 'Failed to get documents' });
@@ -10835,7 +12407,7 @@ app.get('/api/v1/brain/knowledge-base', authenticate, (req, res) => {
 });
 
 // GET /api/v1/brain/knowledge-base/:id - Get full KB document
-app.get('/api/v1/brain/knowledge-base/:id', authenticate, (req, res) => {
+app.get('/api/v1/brain/knowledge-base/:id', authenticate, async (req, res) => {
   if (!hasScope(req, 'knowledge')) return res.status(403).json({ error: "Requires 'knowledge' scope" });
   try {
     const { id } = req.params;
@@ -10864,7 +12436,14 @@ app.get('/api/v1/brain/knowledge-base/:id', authenticate, (req, res) => {
       ip: req.ip,
     });
 
-    res.json({ data: doc });
+    const responseBody = await maybeOptimizeApiResponse(req, { data: doc }, {
+      label: 'knowledge base document',
+      select: (payload) => payload?.data,
+      assignOptimized: (payload, optimized) => {
+        payload.data = optimized;
+      },
+    });
+    res.json(responseBody);
   } catch (error) {
     console.error('Get KB document error:', error);
     res.status(500).json({ error: 'Failed to get document' });
@@ -11978,137 +13557,11 @@ app.get('/api/v1/marketplace-my', authenticate, (req, res) => {
   }
 });
 
-// ========== PHASE 4: ENTERPRISE SSO + RBAC ==========
-
-// GET /api/v1/enterprise/sso/config - Get SSO configuration
-app.get('/api/v1/enterprise/sso/config', authenticate, (req, res) => {
-  try {
-    const workspaceId = req.workspaceId || (req.user ? getOrEnsureUserWorkspace(req.user.id) : null);
-    if (!workspaceId) {
-      return res.status(401).json({ error: 'Workspace context required' });
-    }
-
-    // Get current SSO config (for now, return default template)
-    const config = getSSOConfigurationsByWorkspace(workspaceId);
-    const ssoConfig = config?.[0] ? {
-      enabled: config[0].active === 1,
-      provider: config[0].provider || 'saml',
-      saml: config[0].config?.saml || { entryPoint: '', certificate: '', issuer: '' },
-      oidc: config[0].config?.oidc || { discoveryUrl: '', clientId: '', clientSecret: '' },
-    } : {
-      enabled: false,
-      provider: 'saml',
-      saml: { entryPoint: '', certificate: '', issuer: '' },
-      oidc: { discoveryUrl: '', clientId: '', clientSecret: '' },
-    };
-
-    res.json({ config: ssoConfig });
-  } catch (err) {
-    console.error('[Enterprise] SSO config fetch error:', err);
-    res.status(500).json({ error: 'Failed to fetch SSO configuration' });
-  }
-});
-
-// PUT /api/v1/enterprise/sso/config - Save SSO configuration
-app.put('/api/v1/enterprise/sso/config', authenticate, (req, res) => {
-  try {
-    const workspaceId = req.workspaceId || (req.user ? getOrEnsureUserWorkspace(req.user.id) : null);
-    if (!workspaceId) {
-      return res.status(401).json({ error: 'Workspace context required' });
-    }
-
-    const { enabled, provider, saml, oidc } = req.body;
-
-    // Validate required fields based on provider
-    if (enabled) {
-      if (provider === 'saml' && (!saml?.entryPoint || !saml?.issuer)) {
-        return res.status(400).json({ error: 'SAML requires entryPoint and issuer' });
-      }
-      if (provider === 'oidc' && !oidc?.discoveryUrl) {
-        return res.status(400).json({ error: 'OIDC requires discoveryUrl' });
-      }
-    }
-
-    const config = {
-      enabled,
-      provider: provider || 'saml',
-      saml: saml || {},
-      oidc: oidc || {},
-    };
-
-    // Check if config exists
-    const existing = getSSOConfigurationByProvider(workspaceId, provider);
-    
-    if (existing) {
-      updateSSOConfiguration(existing.id, { 
-        config: { saml, oidc },
-        active: enabled ? 1 : 0 
-      });
-    } else {
-      createSSOConfiguration(workspaceId, provider, { saml, oidc }, req.user?.id);
-    }
-
-    res.json({ 
-      success: true, 
-      message: 'SSO configuration saved',
-      config 
-    });
-  } catch (err) {
-    console.error('[Enterprise] SSO config save error:', err);
-    res.status(500).json({ error: 'Failed to save SSO configuration' });
-  }
-});
-
-// GET /api/v1/enterprise/rbac/roles - Get RBAC roles
-app.get('/api/v1/enterprise/rbac/roles', authenticate, (req, res) => {
-  try {
-    const workspaceId = req.workspaceId || (req.user ? getOrEnsureUserWorkspace(req.user.id) : null);
-    if (!workspaceId) {
-      return res.status(401).json({ error: 'Workspace context required' });
-    }
-
-    const roles = getRolesByWorkspace(workspaceId);
-    
-    // Include default roles if none exist
-    const defaultRoles = [
-      { id: 'owner', name: 'Owner', description: 'Full access. Can manage members, billing, and settings.', permissions: ['*'] },
-      { id: 'admin', name: 'Admin', description: 'Can manage members, create resources, and configure workspace.', permissions: ['members:write', 'resources:write', 'settings:write'] },
-      { id: 'member', name: 'Member', description: 'Can create and manage own resources. Limited workspace access.', permissions: ['resources:write', 'resources:read'] },
-      { id: 'viewer', name: 'Viewer', description: 'Read-only access. Can view resources but cannot make changes.', permissions: ['resources:read'] },
-    ];
-
-    const allRoles = [
-      ...defaultRoles,
-      ...(roles || []).filter(r => !['owner', 'admin', 'member', 'viewer'].includes(r.id))
-    ];
-
-    res.json({ roles: allRoles });
-  } catch (err) {
-    console.error('[Enterprise] RBAC roles fetch error:', err);
-    res.status(500).json({ error: 'Failed to fetch roles' });
-  }
-});
-
-// POST /api/v1/enterprise/rbac/roles - Create custom role
-app.post('/api/v1/enterprise/rbac/roles', authenticate, (req, res) => {
-  try {
-    const workspaceId = req.workspaceId || (req.user ? getOrEnsureUserWorkspace(req.user.id) : null);
-    if (!workspaceId) {
-      return res.status(401).json({ error: 'Workspace context required' });
-    }
-
-    const { name, description, permissions } = req.body;
-    if (!name) {
-      return res.status(400).json({ error: 'Role name is required' });
-    }
-
-    const role = createRole(workspaceId, name, description, req.user?.id, permissions || []);
-    res.status(201).json({ role });
-  } catch (err) {
-    console.error('[Enterprise] Role creation error:', err);
-    res.status(500).json({ error: 'Failed to create role' });
-  }
-});
+// ========== PHASE 4: ENTERPRISE SSO + RBAC (closed-source module) ==========
+// Workspace-level SSO config + RBAC role endpoints live in src/routes/enterprise.js;
+// absent in MyApi Open.
+const enterpriseModule = optionalRequire('./routes/enterprise');
+if (enterpriseModule) enterpriseModule.registerEnterpriseRoutes(app, { authenticate });
 
 // ========== PHASE 5: PRIVACY RETENTION & COMPLIANCE ==========
 
@@ -12472,11 +13925,14 @@ app.use((req, res) => {
 
 // Global error handler - return JSON
 app.use((err, req, res, next) => {
+  const status = err.status || 500;
   console.error('Error:', err.message);
-  res.status(err.status || 500).json({
-    error: err.message || 'Internal Server Error',
+  // Never leak internal error details (stack traces, DB messages) to clients.
+  const clientMessage = status < 500 ? (err.message || 'Bad request') : 'Internal Server Error';
+  res.status(status).json({
+    error: clientMessage,
     code: err.code || 'INTERNAL_ERROR',
-    status: err.status || 500
+    status,
   });
 });
 
@@ -12576,7 +14032,23 @@ if (process.env.NODE_ENV !== 'test') {
           return require('crypto').createHash('sha256').update('chatgpt-oauth-secret:' + base).digest('hex');
         })();
         const secretHash = await require('bcrypt').hash(rawSecret, 10);
-        const redirectUris = (process.env.CHATGPT_OAUTH_REDIRECT_URIS || 'https://chat.openai.com/aip/g-*/oauth/callback,https://chatgpt.com/aip/g-*/oauth/callback').split(',').map(s => s.trim());
+        // Covers both Custom GPT Actions (/aip/g-*/oauth/callback) and the newer
+        // ChatGPT Connectors/Apps platform (connector_platform_oauth_redirect), so a
+        // user never has to edit .env to register their GPT's callback — the wildcards
+        // already match any GPT id.
+        const DEFAULT_CHATGPT_REDIRECTS = [
+          'https://chat.openai.com/aip/g-*/oauth/callback',
+          'https://chatgpt.com/aip/g-*/oauth/callback',
+          'https://chatgpt.com/connector_platform_oauth_redirect',
+          'https://chatgpt.com/backend-api/aip/connectors/links/oauth/callback',
+        ].join(',');
+        const redirectUris = (process.env.CHATGPT_OAUTH_REDIRECT_URIS || DEFAULT_CHATGPT_REDIRECTS)
+          .split(',').map(s => s.trim()).filter(Boolean);
+        // Always include the connector-platform callbacks even if the env var only
+        // lists custom-GPT callbacks (older deployments), so the newer UI keeps working.
+        for (const must of ['https://chatgpt.com/connector_platform_oauth_redirect', 'https://chatgpt.com/backend-api/aip/connectors/links/oauth/callback']) {
+          if (!redirectUris.includes(must)) redirectUris.push(must);
+        }
         upsertOAuthServerClient({
           clientId: chatgptClientId,
           clientSecretHash: secretHash,
@@ -12670,6 +14142,30 @@ if (process.env.NODE_ENV !== 'test') {
     runRetentionCleanup();
     setInterval(runRetentionCleanup, 24 * 60 * 60 * 1000); // daily
     console.log('✅ Retention cleanup scheduled (daily)');
+
+    // Beta inactive-user lifecycle: warn never-active users, delete after the
+    // grace period, backfill freed seats from the waitlist. No-op when BETA
+    // mode is off or ENABLE_INACTIVITY_SWEEP=false.
+    if (String(process.env.ENABLE_INACTIVITY_SWEEP || 'true').toLowerCase() !== 'false') {
+      const { sweepInactiveUsers } = require('./lib/userLifecycle');
+      const runLifecycleSweep = () => {
+        try { sweepInactiveUsers(); } catch (err) { console.error('[Lifecycle] sweep error:', err.message); }
+      };
+      setTimeout(runLifecycleSweep, 60 * 1000); // let startup settle first
+      setInterval(runLifecycleSweep, 24 * 60 * 60 * 1000); // daily
+      console.log('✅ Inactive-user lifecycle sweep scheduled (daily)');
+    }
+
+    // Report completed-day API usage to Stripe's overage meter (Pro plan).
+    // Lives in the closed-source billing module; absent in MyApi Open.
+    if (billingRoutes) billingRoutes.startOverageReporter();
+
+    // Automations engine — scheduler + worker for proactive triggers.
+    try {
+      require('./lib/triggerEngine').start();
+    } catch (err) {
+      console.error('[Automations] failed to start engine:', err.message);
+    }
     });
 
     // Global error handlers to prevent crashes

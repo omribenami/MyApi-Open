@@ -56,7 +56,7 @@ try {
 }
 
 const MigrationRunner = require('./lib/migrationRunner');
-const { getCurrentRequestId } = require('./lib/request-context');
+const { getCurrentRequestId, getRequestActor, markAudited } = require('./lib/request-context');
 const {
   encrypt,
   decrypt,
@@ -144,9 +144,21 @@ function initDatabase() {
   }
   
   // SQLite mode: create tables
-  // Phase 3.5 Pre-Migration: Drop old notification tables before schema initialization
+  // Phase 3.5 Pre-Migration: replace the LEGACY notifications schema (no workspace_id
+  // column) with the current one. This must only drop the old-shape table — an
+  // unconditional drop here ran on EVERY startup and silently wiped all user
+  // notifications each time the server restarted.
   try { db.exec('DROP TABLE IF EXISTS notification_settings'); } catch (e) {}
-  try { db.exec('DROP TABLE IF EXISTS notifications'); } catch (e) {}
+  try {
+    const notifTable = db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'notifications'`).get();
+    if (notifTable) {
+      const cols = db.prepare('PRAGMA table_info(notifications)').all().map(c => c.name);
+      if (!cols.includes('workspace_id')) {
+        db.exec('DROP TABLE notifications');
+        console.warn('[Database] Dropped legacy notifications table (pre phase-3.5 schema)');
+      }
+    }
+  } catch (e) {}
   
   db.exec(`
     CREATE TABLE IF NOT EXISTS vault_tokens (
@@ -164,6 +176,25 @@ function initDatabase() {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS vault_credentials (
+      id TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      username TEXT NOT NULL,
+      encrypted_password TEXT NOT NULL,
+      url TEXT,
+      encrypted_notes TEXT,
+      encrypted_totp_secret TEXT,
+      service TEXT,
+      owner_id TEXT NOT NULL DEFAULT 'owner',
+      workspace_id TEXT,
+      encryption_version INTEGER DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_vault_credentials_owner ON vault_credentials(owner_id);
+    CREATE INDEX IF NOT EXISTS idx_vault_credentials_workspace ON vault_credentials(workspace_id);
 
     CREATE TABLE IF NOT EXISTS access_tokens (
       id TEXT PRIMARY KEY,
@@ -734,6 +765,129 @@ function initDatabase() {
   // Per-user extended identity storage (JSON blob for fields beyond the core users columns)
   safeMigration("ALTER TABLE users ADD COLUMN profile_metadata TEXT DEFAULT NULL");
 
+  // ===== B2B: Organizations layer =====
+  // Org sits above workspaces. users.org_id NULL = plain B2C user, all org
+  // features bypassed. settings JSON keys: sso_required, ip_allowlist[],
+  // agent_ip_allowlist_exempt, session_max_hours, token_max_ttl_days,
+  // service_policy_default ('allow'|'deny'), domain_capture ('auto'|'request'|'off'),
+  // audit_retention_days, pooled quota overrides.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS organizations (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL UNIQUE,
+      plan TEXT NOT NULL DEFAULT 'business',
+      status TEXT NOT NULL DEFAULT 'active',
+      owner_user_id TEXT REFERENCES users(id),
+      settings TEXT NOT NULL DEFAULT '{}',
+      stripe_customer_id TEXT,
+      stripe_subscription_id TEXT,
+      seats_licensed INTEGER DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      suspended_at TEXT,
+      deleted_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS org_domains (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      domain TEXT NOT NULL UNIQUE,
+      txt_token TEXT NOT NULL,
+      verified_at TEXT,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS org_sso_configs (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL UNIQUE REFERENCES organizations(id) ON DELETE CASCADE,
+      type TEXT NOT NULL CHECK (type IN ('oidc','saml')),
+      config_encrypted TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 0,
+      enforce INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS org_scim_tokens (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL,
+      label TEXT,
+      created_at TEXT NOT NULL,
+      last_used_at TEXT,
+      revoked_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS org_audit_sinks (
+      id TEXT PRIMARY KEY,
+      org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      type TEXT NOT NULL CHECK (type IN ('webhook','s3')),
+      config_encrypted TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      last_delivery_at TEXT,
+      failure_count INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS org_service_policy (
+      org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      service TEXT NOT NULL,
+      allowed INTEGER NOT NULL,
+      PRIMARY KEY (org_id, service)
+    );
+
+    CREATE TABLE IF NOT EXISTS asc_enroll_codes (
+      id TEXT PRIMARY KEY,
+      code_hash TEXT NOT NULL UNIQUE,
+      user_id TEXT NOT NULL,
+      scope TEXT,
+      label TEXT,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      used_at TEXT,
+      created_ip TEXT,
+      used_ip TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS org_connection_grants (
+      org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      service TEXT NOT NULL,
+      owner_user_id TEXT NOT NULL,
+      created_by TEXT,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (org_id, service)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_org_domains_org ON org_domains(org_id);
+    CREATE INDEX IF NOT EXISTS idx_org_scim_tokens_org ON org_scim_tokens(org_id);
+    CREATE INDEX IF NOT EXISTS idx_org_audit_sinks_org ON org_audit_sinks(org_id);
+  `);
+  safeMigration("ALTER TABLE access_tokens ADD COLUMN last_used_at TEXT");
+  // NOTE: approved_devices.scope is NOT migrated here — 20260412000001_device_scope.sql
+  // owns that column (adding it here first makes that migration fail with
+  // "duplicate column name" and aborts the whole migration batch). Scoped ASC
+  // keys reuse the column with JSON-array values; legacy 'read'/'full' preserved.
+  safeMigration("ALTER TABLE users ADD COLUMN org_id TEXT");
+  safeMigration("ALTER TABLE users ADD COLUMN org_role TEXT");
+  safeMigration("ALTER TABLE users ADD COLUMN auth_method TEXT");
+  safeMigration("ALTER TABLE users ADD COLUMN idp_subject TEXT");
+  safeMigration("ALTER TABLE users ADD COLUMN scim_external_id TEXT");
+  safeMigration("ALTER TABLE workspaces ADD COLUMN org_id TEXT");
+  safeMigration("CREATE INDEX IF NOT EXISTS idx_users_org ON users(org_id)");
+  safeMigration("CREATE INDEX IF NOT EXISTS idx_workspaces_org ON workspaces(org_id)");
+
+  // Per-user preferences (durable, isolated). Replaces the in-memory vault.preferences
+  // map that was per-user but lost on every restart. Keyed by user_id so it works for
+  // real users AND the bootstrap 'owner'.
+  try {
+    db.exec(`CREATE TABLE IF NOT EXISTS user_preferences (
+      user_id TEXT PRIMARY KEY,
+      prefs_json TEXT NOT NULL DEFAULT '{}',
+      updated_at INTEGER NOT NULL
+    )`);
+  } catch (_) {}
+
   // Migration tracking (non-destructive, rollback-friendly)
   try {
     db.exec(`
@@ -753,6 +907,7 @@ function initDatabase() {
   // Encryption metadata columns
   safeMigration("ALTER TABLE vault_tokens ADD COLUMN encryption_version INTEGER DEFAULT 1");
   safeMigration("ALTER TABLE oauth_tokens ADD COLUMN encryption_version INTEGER DEFAULT 1");
+  safeMigration("ALTER TABLE oauth_tokens ADD COLUMN login_only INTEGER DEFAULT 0");
   safeMigration("ALTER TABLE users ADD COLUMN pii_encrypted INTEGER DEFAULT 0");
   safeMigration("ALTER TABLE conversations ADD COLUMN encryption_version INTEGER DEFAULT 1");
 
@@ -880,8 +1035,18 @@ function initDatabase() {
   safeMigration("ALTER TABLE audit_log ADD COLUMN actor_type TEXT");
   safeMigration("ALTER TABLE audit_log ADD COLUMN endpoint TEXT");
   safeMigration("ALTER TABLE audit_log ADD COLUMN http_method TEXT");
+  // Actor attribution (June 2026): who acted — auth mechanism (session/bearer/asc),
+  // token label, and the approved device (device management) that made the call.
+  // device_id + user_agent may already exist from older inline migrations.
+  safeMigration("ALTER TABLE audit_log ADD COLUMN auth_type TEXT");
+  safeMigration("ALTER TABLE audit_log ADD COLUMN token_label TEXT");
+  safeMigration("ALTER TABLE audit_log ADD COLUMN device_id TEXT");
+  safeMigration("ALTER TABLE audit_log ADD COLUMN device_name TEXT");
+  safeMigration("ALTER TABLE audit_log ADD COLUMN user_agent TEXT");
   db.exec('CREATE INDEX IF NOT EXISTS idx_audit_log_workspace_ts ON audit_log(workspace_id, timestamp DESC)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_audit_log_action_ts ON audit_log(action, timestamp DESC)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_audit_log_device_id ON audit_log(device_id)');
+  db.exec('CREATE INDEX IF NOT EXISTS idx_audit_log_auth_type ON audit_log(auth_type)');
 
   // Multi-tenant ownership columns (security isolation)
   const ownerMigrations = [
@@ -1159,6 +1324,8 @@ function initDatabase() {
   db.exec('CREATE INDEX IF NOT EXISTS idx_billing_subscriptions_workspace ON billing_subscriptions(workspace_id)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_usage_daily_workspace_date ON usage_daily(workspace_id, date)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_usage_daily_date ON usage_daily(date)');
+  // Stripe overage metering: marks a completed day already reported to the meter.
+  try { db.exec('ALTER TABLE usage_daily ADD COLUMN meter_reported_at TEXT'); } catch (_) {}
   db.exec('CREATE INDEX IF NOT EXISTS idx_invoices_workspace_created ON invoices(workspace_id, created_at)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_notifications_workspace_user ON notifications(workspace_id, user_id, created_at DESC)');
   db.exec('CREATE INDEX IF NOT EXISTS idx_notifications_workspace_user_read ON notifications(workspace_id, user_id, is_read)');
@@ -1238,6 +1405,27 @@ function initDatabase() {
         expires_at INTEGER NOT NULL,
         used INTEGER DEFAULT 0
       );
+      -- Long-lived refresh tokens so OAuth clients (ChatGPT) renew access tokens
+      -- silently instead of re-running the authorization/consent flow each time.
+      CREATE TABLE IF NOT EXISTS oauth_server_refresh_tokens (
+        id TEXT PRIMARY KEY,
+        token_hash TEXT NOT NULL,
+        client_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        scope TEXT,
+        created_at TEXT NOT NULL,
+        last_used_at TEXT,
+        revoked INTEGER DEFAULT 0
+      );
+      -- Remembered consent: once a user authorizes a client, re-authorization is
+      -- auto-approved (no consent click) as long as they have an active session.
+      CREATE TABLE IF NOT EXISTS oauth_server_grants (
+        client_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        scope TEXT,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (client_id, user_id)
+      );
     `);
   } catch (e) { /* tables already exist */ }
 
@@ -1278,6 +1466,82 @@ function initDatabase() {
       CREATE INDEX IF NOT EXISTS idx_afp_command_log_device ON afp_command_log(device_id);
       CREATE INDEX IF NOT EXISTS idx_afp_command_log_user ON afp_command_log(user_id);
       CREATE INDEX IF NOT EXISTS idx_afp_command_log_created ON afp_command_log(created_at);
+
+      -- One-line installer enrollment codes: short-lived, single-use. The code
+      -- is exchanged by the install script for device credentials, so the user
+      -- never handles a long-lived token during setup.
+      CREATE TABLE IF NOT EXISTS afp_enroll_codes (
+        id TEXT PRIMARY KEY,
+        code_hash TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        used_at TEXT,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_afp_enroll_codes_user ON afp_enroll_codes(user_id);
+
+      -- Automations (Triggers): user-defined "when X → do Y" rules + their runs.
+      CREATE TABLE IF NOT EXISTS triggers (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        owner_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        kind TEXT NOT NULL,
+        schedule_json TEXT,
+        timezone TEXT DEFAULT 'UTC',
+        event_toolkit TEXT,
+        event_type TEXT,
+        action_type TEXT NOT NULL,
+        action_json TEXT NOT NULL,
+        ai_mode TEXT DEFAULT 'platform',
+        ai_model TEXT,
+        ai_vault_token_id TEXT,
+        next_run_at TEXT,
+        last_run_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_triggers_due ON triggers(enabled, next_run_at);
+      CREATE INDEX IF NOT EXISTS idx_triggers_event ON triggers(enabled, event_toolkit, event_type);
+      CREATE INDEX IF NOT EXISTS idx_triggers_owner ON triggers(owner_id);
+
+      CREATE TABLE IF NOT EXISTS trigger_runs (
+        id TEXT PRIMARY KEY,
+        trigger_id TEXT NOT NULL,
+        workspace_id TEXT NOT NULL,
+        owner_id TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'queued',
+        trigger_kind TEXT,
+        payload_json TEXT,
+        result_json TEXT,
+        approval_id TEXT,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        locked_at TEXT,
+        created_at TEXT NOT NULL,
+        finished_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_trigger_runs_claim ON trigger_runs(status, locked_at);
+      CREATE INDEX IF NOT EXISTS idx_trigger_runs_trigger ON trigger_runs(trigger_id, created_at);
+
+      CREATE TABLE IF NOT EXISTS ai_usage_events (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        workspace_id TEXT,
+        trigger_id TEXT,
+        key_mode TEXT NOT NULL DEFAULT 'platform',
+        provider TEXT,
+        model TEXT,
+        input_tokens INTEGER NOT NULL DEFAULT 0,
+        output_tokens INTEGER NOT NULL DEFAULT 0,
+        cost_cents INTEGER NOT NULL DEFAULT 0,
+        credits INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        reported_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_ai_usage_user_month ON ai_usage_events(user_id, created_at);
+      CREATE INDEX IF NOT EXISTS idx_ai_usage_unreported ON ai_usage_events(reported_at, created_at);
     `);
   } catch (e) { /* tables already exist */ }
   // Add afp_root column if it doesn't exist yet (safe migration)
@@ -1319,6 +1583,63 @@ function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_pending_approvals_token ON pending_approvals(token_id);
     CREATE INDEX IF NOT EXISTS idx_pending_approvals_status ON pending_approvals(status);
   `);
+
+  // Agent identity v2 — OAuth tokens identified by client_id, not device fingerprint.
+  // Alert cool-down avoids spamming users when an AI agent's UA/IP flaps.
+  safeMigration("ALTER TABLE access_tokens ADD COLUMN oauth_client_id TEXT");
+  safeMigration("ALTER TABLE device_approvals_pending ADD COLUMN last_alert_sent_at TEXT");
+
+  // Token suspension (security monitor). These columns historically came from
+  // config/database.js's migrations, which only run where that module is
+  // initialized — fresh DBs (tests, new installs) never got them, and the
+  // fail-closed suspension gate in the auth path then 500s on every request.
+  // The main schema must own them.
+  safeMigration("ALTER TABLE access_tokens ADD COLUMN suspended_at TEXT");
+  safeMigration("ALTER TABLE access_tokens ADD COLUMN suspension_reason TEXT");
+  safeMigration("ALTER TABLE tokens ADD COLUMN suspended_at INTEGER");
+  safeMigration("ALTER TABLE tokens ADD COLUMN suspension_reason TEXT");
+
+  // Per-agent usage limits + counters. agent_id is the identity the auth layer
+  // puts in req.tokenMeta.tokenId — an access_tokens.id for Bearer tokens or an
+  // ASC key fingerprint for keypair agents — so one table covers both.
+  // Counters are per UTC day per service ('' = non-service API traffic) so both
+  // daily and monthly windows can be summed from the same rows.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS agent_limits (
+      agent_id TEXT PRIMARY KEY,
+      limits TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS agent_usage_counters (
+      agent_id TEXT NOT NULL,
+      day TEXT NOT NULL,
+      service TEXT NOT NULL DEFAULT '',
+      calls INTEGER NOT NULL DEFAULT 0,
+      tokens_used INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (agent_id, day, service)
+    );
+    CREATE INDEX IF NOT EXISTS idx_agent_usage_agent_day ON agent_usage_counters(agent_id, day);
+  `);
+
+  // Notification queue hygiene (idempotent). Historic rows were inserted 'pending'
+  // and nothing ever processed them: in-app delivery is the notifications row
+  // itself, and email delivery is tracked in email_queue. Close them out and drop
+  // rows whose parent notification no longer exists.
+  try {
+    db.prepare(`
+      UPDATE notification_queue SET status = 'delivered', sent_at = COALESCE(sent_at, created_at)
+      WHERE channel = 'in-app' AND status = 'pending'
+    `).run();
+    db.prepare(`
+      UPDATE notification_queue SET status = 'delivered', sent_at = COALESCE(sent_at, created_at)
+      WHERE channel = 'email' AND status = 'pending'
+        AND notification_id IN (SELECT notification_id FROM email_queue WHERE status = 'sent' AND notification_id IS NOT NULL)
+    `).run();
+    db.prepare(`
+      DELETE FROM notification_queue
+      WHERE notification_id NOT IN (SELECT id FROM notifications)
+    `).run();
+  } catch (_) {}
 
   // Seed initial pricing plans if table is empty
   seedDefaultPricingPlans();
@@ -1506,6 +1827,175 @@ function deleteVaultToken(id, ownerId = 'owner', workspaceId = null) {
   return result.changes > 0;
 }
 
+// ============================================================================
+// Vault Credentials (username/password + optional URL, notes, TOTP)
+// Same AES-256-GCM/VAULT_KEY model as vault_tokens.
+// ============================================================================
+
+function _vaultEncrypt(plaintext) {
+  if (plaintext == null || plaintext === '') return null;
+  const vaultKey = String(process.env.VAULT_KEY || '').trim();
+  if (!vaultKey) {
+    throw new Error('VAULT_KEY is required to store vault credentials securely');
+  }
+  const masterHex = crypto.createHash('sha256').update(vaultKey).digest('hex');
+  const salt = generateSalt();
+  const key = deriveKey(masterHex, salt);
+  const payload = encrypt(String(plaintext), key);
+  return JSON.stringify({ ...payload, salt: salt.toString('hex') });
+}
+
+function _vaultDecrypt(blob) {
+  if (!blob) return null;
+  const vaultKey = String(process.env.VAULT_KEY || '').trim();
+  if (!vaultKey) return null;
+  try {
+    const p = JSON.parse(blob);
+    if (p && p.ciphertext && (p.nonce || p.iv) && p.authTag && p.salt) {
+      const masterHex = crypto.createHash('sha256').update(vaultKey).digest('hex');
+      const key = deriveKey(masterHex, Buffer.from(p.salt, 'hex'));
+      return decrypt(p, key);
+    }
+  } catch (_) {}
+  return null;
+}
+
+function createVaultCredential({ label, username, password, url = null, notes = null, totpSecret = null, service = null, ownerId = 'owner', workspaceId = null }) {
+  if (!label || !username || !password) {
+    throw new Error('label, username, and password are required');
+  }
+  const id = 'vc_' + crypto.randomBytes(16).toString('hex');
+  const now = new Date().toISOString();
+
+  const stmt = db.prepare(`
+    INSERT INTO vault_credentials (
+      id, label, username, encrypted_password, url, encrypted_notes, encrypted_totp_secret,
+      service, owner_id, workspace_id, encryption_version, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  stmt.run(
+    id,
+    label,
+    username,
+    _vaultEncrypt(password),
+    url || null,
+    notes ? _vaultEncrypt(notes) : null,
+    totpSecret ? _vaultEncrypt(totpSecret) : null,
+    service || null,
+    ownerId,
+    workspaceId,
+    ENCRYPTION_VERSION,
+    now,
+    now
+  );
+
+  return getVaultCredential(id, ownerId, workspaceId, false);
+}
+
+function _mapCredentialRow(row, includeSecrets = false) {
+  if (!row) return null;
+  const base = {
+    id: row.id,
+    label: row.label,
+    username: row.username,
+    url: row.url,
+    service: row.service,
+    hasNotes: !!row.encrypted_notes,
+    hasTotp: !!row.encrypted_totp_secret,
+    workspaceId: row.workspace_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+  if (!includeSecrets) return base;
+  return {
+    ...base,
+    password: _vaultDecrypt(row.encrypted_password),
+    notes: row.encrypted_notes ? _vaultDecrypt(row.encrypted_notes) : null,
+    totpSecret: row.encrypted_totp_secret ? _vaultDecrypt(row.encrypted_totp_secret) : null,
+  };
+}
+
+function getVaultCredentials(ownerId = 'owner', workspaceId = null) {
+  let query = `
+    SELECT id, label, username, url, service, encrypted_notes, encrypted_totp_secret,
+           workspace_id, created_at, updated_at
+    FROM vault_credentials
+    WHERE owner_id = ?
+  `;
+  const params = [ownerId];
+  if (workspaceId) {
+    query += ' AND (workspace_id = ? OR workspace_id IS NULL)';
+    params.push(workspaceId);
+  }
+  query += ' ORDER BY created_at DESC';
+  return db.prepare(query).all(...params).map(r => _mapCredentialRow(r, false));
+}
+
+function getVaultCredential(id, ownerId = 'owner', workspaceId = null, includeSecrets = false) {
+  let query = 'SELECT * FROM vault_credentials WHERE id = ? AND owner_id = ?';
+  const params = [id, ownerId];
+  if (workspaceId) {
+    query += ' AND (workspace_id = ? OR workspace_id IS NULL)';
+    params.push(workspaceId);
+  }
+  const row = db.prepare(query).get(...params);
+  return _mapCredentialRow(row, includeSecrets);
+}
+
+function decryptVaultCredential(id, ownerId = 'owner', workspaceId = null) {
+  return getVaultCredential(id, ownerId, workspaceId, true);
+}
+
+function updateVaultCredential(id, fields, ownerId = 'owner', workspaceId = null) {
+  let selectQuery = 'SELECT * FROM vault_credentials WHERE id = ? AND owner_id = ?';
+  const selectParams = [id, ownerId];
+  if (workspaceId) {
+    selectQuery += ' AND (workspace_id = ? OR workspace_id IS NULL)';
+    selectParams.push(workspaceId);
+  }
+  const existing = db.prepare(selectQuery).get(...selectParams);
+  if (!existing) return null;
+
+  const next = {
+    label: fields.label !== undefined ? fields.label : existing.label,
+    username: fields.username !== undefined ? fields.username : existing.username,
+    encrypted_password: fields.password !== undefined ? _vaultEncrypt(fields.password) : existing.encrypted_password,
+    url: fields.url !== undefined ? (fields.url || null) : existing.url,
+    encrypted_notes: fields.notes !== undefined
+      ? (fields.notes ? _vaultEncrypt(fields.notes) : null)
+      : existing.encrypted_notes,
+    encrypted_totp_secret: fields.totpSecret !== undefined
+      ? (fields.totpSecret ? _vaultEncrypt(fields.totpSecret) : null)
+      : existing.encrypted_totp_secret,
+    service: fields.service !== undefined ? (fields.service || null) : existing.service,
+    updated_at: new Date().toISOString(),
+  };
+
+  db.prepare(`
+    UPDATE vault_credentials
+    SET label = ?, username = ?, encrypted_password = ?, url = ?,
+        encrypted_notes = ?, encrypted_totp_secret = ?, service = ?, updated_at = ?
+    WHERE id = ? AND owner_id = ?
+  `).run(
+    next.label, next.username, next.encrypted_password, next.url,
+    next.encrypted_notes, next.encrypted_totp_secret, next.service, next.updated_at,
+    id, ownerId
+  );
+  return getVaultCredential(id, ownerId, workspaceId, false);
+}
+
+function deleteVaultCredential(id, ownerId = 'owner', workspaceId = null) {
+  let query = 'DELETE FROM vault_credentials WHERE id = ? AND owner_id = ?';
+  const params = [id, ownerId];
+  if (workspaceId) {
+    query += ' AND workspace_id = ?';
+    params.push(workspaceId);
+  }
+  const result = db.prepare(query).run(...params);
+  return result.changes > 0;
+}
+
 // Access Tokens
 
 /**
@@ -1576,7 +2066,7 @@ function decryptRawToken(encryptedJson) {
   return null;
 }
 
-function createAccessToken(hash, ownerId, scope, label, expiresAt = null, allowedPersonas = null, workspaceId = null, rawToken = null, tokenType = 'guest') {
+function createAccessToken(hash, ownerId, scope, label, expiresAt = null, allowedPersonas = null, workspaceId = null, rawToken = null, tokenType = 'guest', oauthClientId = null) {
   const id = 'tok_' + crypto.randomBytes(16).toString('hex');
   const now = new Date().toISOString();
   const allowedPersonasJson = allowedPersonas && allowedPersonas.length > 0
@@ -1587,11 +2077,11 @@ function createAccessToken(hash, ownerId, scope, label, expiresAt = null, allowe
   const encryptedToken = rawToken ? encryptRawToken(rawToken) : null;
 
   const stmt = db.prepare(`
-    INSERT INTO access_tokens (id, hash, owner_id, scope, label, created_at, revoked_at, expires_at, allowed_personas, workspace_id, encrypted_token, token_type)
-    VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)
+    INSERT INTO access_tokens (id, hash, owner_id, scope, label, created_at, revoked_at, expires_at, allowed_personas, workspace_id, encrypted_token, token_type, oauth_client_id)
+    VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)
   `);
 
-  stmt.run(id, hash, ownerId, scope, label, now, expiresAt, allowedPersonasJson, workspaceId, encryptedToken, tokenType);
+  stmt.run(id, hash, ownerId, scope, label, now, expiresAt, allowedPersonasJson, workspaceId, encryptedToken, tokenType, oauthClientId);
   return id;
 }
 
@@ -1671,6 +2161,41 @@ function revokeAccessToken(id) {
   const stmt = db.prepare('UPDATE access_tokens SET revoked_at = ? WHERE id = ?');
   const result = stmt.run(new Date().toISOString(), id);
   return result.changes > 0;
+}
+
+// Revoke every other active access token for the same OAuth client of a user.
+// OAuth delegations (ChatGPT etc.) re-issue a token on every authorization and every
+// refresh; without this, a single client accumulates dozens of live tokens (and, since
+// devices key on token_id, dozens of "devices"). Keeping exactly one active token per
+// (user, client) is the production-correct behavior.
+// ── Per-user preferences (durable + isolated) ──────────────────────────────────
+function getUserPreferences(userId) {
+  if (!userId) return {};
+  try {
+    const row = db.prepare('SELECT prefs_json FROM user_preferences WHERE user_id = ?').get(String(userId));
+    if (row?.prefs_json) return JSON.parse(row.prefs_json);
+  } catch (_) {}
+  return {};
+}
+
+function setUserPreferences(userId, prefsObj) {
+  const json = JSON.stringify(prefsObj || {});
+  db.prepare(`
+    INSERT INTO user_preferences (user_id, prefs_json, updated_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(user_id) DO UPDATE SET prefs_json = excluded.prefs_json, updated_at = excluded.updated_at
+  `).run(String(userId), json, Date.now());
+  return prefsObj || {};
+}
+
+function revokeAccessTokensForClient(userId, clientId, exceptId = null) {
+  if (!userId || !clientId) return 0;
+  const now = new Date().toISOString();
+  const sql = `UPDATE access_tokens SET revoked_at = ?
+               WHERE owner_id = ? AND oauth_client_id = ? AND revoked_at IS NULL`
+              + (exceptId ? ' AND id != ?' : '');
+  const args = exceptId ? [now, userId, clientId, exceptId] : [now, userId, clientId];
+  return db.prepare(sql).run(...args).changes;
 }
 
 // Scope Definitions
@@ -1838,24 +2363,34 @@ function getConnectors() {
 }
 
 // Audit Log
+// Memoized column checks — once a migration-added column is seen it never goes
+// away; while it is still missing (migration not yet run) we re-check cheaply.
+let _auditHasRequestId = false;
+let _auditHasActorCols = false;
+function _checkAuditColumns() {
+  if (_auditHasRequestId && _auditHasActorCols) return;
+  try {
+    const cols = new Set(db.prepare('PRAGMA table_info(audit_log)').all().map(c => c.name));
+    _auditHasRequestId = cols.has('request_id');
+    _auditHasActorCols = cols.has('device_id') && cols.has('auth_type');
+  } catch { /* keep previous values */ }
+}
+
 function createAuditLog(entry) {
-  // Gracefully handle missing request_id column (before migration runs)
-  const hasRequestId = (() => {
-    try {
-      const cols = db.prepare('PRAGMA table_info(audit_log)').all();
-      return cols.some(c => c.name === 'request_id');
-    } catch { return false; }
-  })();
+  _checkAuditColumns();
 
-  const sql = hasRequestId
-    ? `INSERT INTO audit_log (timestamp, requester_id, workspace_id, actor_id, actor_type, action, resource, endpoint, http_method, status_code, scope, ip, details, request_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    : `INSERT INTO audit_log (timestamp, requester_id, workspace_id, actor_id, actor_type, action, resource, endpoint, http_method, status_code, scope, ip, details) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-
+  // Actor attribution: default actor_id to the OWNING USER of the calling token
+  // (from the request context) when not explicitly provided. This makes every
+  // audit row answer "whose account did this belong to", so per-user dashboard
+  // and activity views scope to exactly that user's own activity — never the
+  // whole platform's. Explicit entry.actorId still wins.
+  const _ctxActor = getRequestActor() || {};
+  const cols = ['timestamp', 'requester_id', 'workspace_id', 'actor_id', 'actor_type', 'action', 'resource', 'endpoint', 'http_method', 'status_code', 'scope', 'ip', 'details'];
   const params = [
     entry.timestamp || new Date().toISOString(),
     entry.requesterId || null,
     entry.workspaceId || null,
-    entry.actorId || null,
+    entry.actorId || _ctxActor.ownerId || null,
     entry.actorType || null,
     entry.action,
     entry.resource,
@@ -1866,22 +2401,47 @@ function createAuditLog(entry) {
     entry.ip || null,
     entry.details ? JSON.stringify(entry.details) : null,
   ];
-  if (hasRequestId) params.push(entry.requestId || getCurrentRequestId() || null);
+  if (_auditHasRequestId) {
+    cols.push('request_id');
+    params.push(entry.requestId || getCurrentRequestId() || null);
+  }
+  if (_auditHasActorCols) {
+    // Actor attribution: explicit entry fields win; otherwise pull from the
+    // request context populated by the auth + device-approval middleware, so
+    // every audit row records the auth mechanism and the initiating device.
+    const actor = getRequestActor() || {};
+    cols.push('auth_type', 'token_label', 'device_id', 'device_name', 'user_agent');
+    params.push(
+      entry.authType || actor.authType || null,
+      entry.tokenLabel || actor.tokenLabel || null,
+      entry.deviceId || actor.deviceId || null,
+      entry.deviceName || actor.deviceName || null,
+      entry.userAgent || actor.userAgent || null,
+    );
+  }
 
-  db.prepare(sql).run(...params);
+  db.prepare(`INSERT INTO audit_log (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`).run(...params);
+  markAudited();
 }
 
-function getAuditLogs(limit = 50, offset = 0) {
+function getAuditLogs(limit = 50, offset = 0, actorId = null) {
+  // When actorId is given, scope to that user's own activity (rows attributed to
+  // them as the owning actor). createAuditLog defaults actor_id to the owning
+  // user of the calling token, so this answers "show me MY signals" — never the
+  // whole platform's traffic.
+  const where = actorId ? 'WHERE actor_id = ?' : '';
   const stmt = db.prepare(`
     SELECT * FROM audit_log
+    ${where}
     ORDER BY timestamp DESC
     LIMIT ? OFFSET ?
   `);
 
-  const countStmt = db.prepare('SELECT COUNT(*) as count FROM audit_log');
-  const total = countStmt.get().count;
+  const countStmt = db.prepare(`SELECT COUNT(*) as count FROM audit_log ${where}`);
+  const total = actorId ? countStmt.get(actorId).count : countStmt.get().count;
 
-  const logs = stmt.all(limit, offset).map(row => ({
+  const rows = actorId ? stmt.all(actorId, limit, offset) : stmt.all(limit, offset);
+  const logs = rows.map(row => ({
     id: row.id,
     timestamp: row.timestamp,
     requesterId: row.requester_id,
@@ -1895,6 +2455,10 @@ function getAuditLogs(limit = 50, offset = 0) {
     statusCode: row.status_code || row.status || null,
     scope: row.scope,
     ip: row.ip,
+    authType: row.auth_type || null,
+    tokenLabel: row.token_label || null,
+    deviceId: row.device_id || null,
+    deviceName: row.device_name || null,
     details: row.details ? JSON.parse(row.details) : null
   }));
 
@@ -2461,9 +3025,10 @@ function encryptOAuthTokenValue(plainText, keyBytes) {
   return JSON.stringify(payload);
 }
 
-function storeOAuthToken(serviceName, userId, accessToken, refreshToken, expiresAt, scope) {
+function storeOAuthToken(serviceName, userId, accessToken, refreshToken, expiresAt, scope, loginOnly = false) {
   const id = 'oauth_' + crypto.randomBytes(16).toString('hex');
   const now = new Date().toISOString();
+  const loginOnlyInt = loginOnly ? 1 : 0;
 
   // Encrypt tokens using AES-256-GCM
   const encryptionKey = String(process.env.VAULT_KEY || '').trim();
@@ -2479,31 +3044,37 @@ function storeOAuthToken(serviceName, userId, accessToken, refreshToken, expires
   if (refreshToken) {
     refreshTokenEncrypted = encryptOAuthTokenValue(refreshToken, key);
   }
-  
-  // Upsert: replace existing token for same service+user instead of creating duplicates
-  const existing = db.prepare('SELECT id FROM oauth_tokens WHERE service_name = ? AND user_id = ?').get(serviceName, userId);
-  
+
+  // Upsert by (service, user, login_only). Login-flow tokens and connect-flow tokens
+  // live in separate rows so they never overwrite each other. A single user can have
+  // up to two rows per service: one identity-scoped (login_only=1) for sign-in, one
+  // full-scoped (login_only=0) for service API calls.
+  const existing = db.prepare(
+    'SELECT id FROM oauth_tokens WHERE service_name = ? AND user_id = ? AND COALESCE(login_only, 0) = ?'
+  ).get(serviceName, userId, loginOnlyInt);
+
   if (existing) {
     db.prepare(`
       UPDATE oauth_tokens SET access_token = ?, refresh_token = ?, expires_at = ?, scope = ?, updated_at = ?
-      WHERE service_name = ? AND user_id = ?
-    `).run(accessTokenEncrypted, refreshTokenEncrypted, expiresAt, scope, now, serviceName, userId);
-    return { id: existing.id, serviceName, userId, expiresAt, scope, createdAt: now, updated: true };
+      WHERE id = ?
+    `).run(accessTokenEncrypted, refreshTokenEncrypted, expiresAt, scope, now, existing.id);
+    return { id: existing.id, serviceName, userId, expiresAt, scope, loginOnly: !!loginOnlyInt, createdAt: now, updated: true };
   }
-  
+
   const stmt = db.prepare(`
-    INSERT INTO oauth_tokens (id, service_name, user_id, access_token, refresh_token, expires_at, scope, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO oauth_tokens (id, service_name, user_id, access_token, refresh_token, expires_at, scope, login_only, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
-  
-  stmt.run(id, serviceName, userId, accessTokenEncrypted, refreshTokenEncrypted, expiresAt, scope, now, now);
-  
+
+  stmt.run(id, serviceName, userId, accessTokenEncrypted, refreshTokenEncrypted, expiresAt, scope, loginOnlyInt, now, now);
+
   return {
     id,
     serviceName,
     userId,
     expiresAt,
     scope,
+    loginOnly,
     createdAt: now
   };
 }
@@ -2512,12 +3083,11 @@ function storeOAuthToken(serviceName, userId, accessToken, refreshToken, expires
 function countConnectedOAuthServices(userId) {
   if (!userId) return 0;
 
-  // Count only services with a currently readable/decryptable token.
-  // This avoids inflated counts from stale/corrupted rows.
+  // Count only services with a currently readable/decryptable token (exclude login-only tokens).
   const rows = db.prepare(`
     SELECT DISTINCT service_name
     FROM oauth_tokens
-    WHERE user_id = ?
+    WHERE user_id = ? AND (login_only IS NULL OR login_only = 0)
   `).all(String(userId));
 
   let count = 0;
@@ -2534,20 +3104,60 @@ function countConnectedOAuthServices(userId) {
 }
 
 function getOAuthToken(serviceName, userId) {
+  // Returns the full-access service token only (login_only=0). Login-only tokens
+  // are intentionally excluded here — they hold identity scopes only and will be
+  // rejected by the provider for any service API call. Use getOAuthLoginToken for
+  // sign-in flows that need the identity token.
+  const own = _readOAuthTokenRow(serviceName, userId, 0);
+  if (own) return own;
+
+  // B2B org-shared connections: members without their own connection fall back
+  // to a connection an org admin explicitly shared org-wide. The grant row
+  // points at the sharing admin's oauth_tokens row; refresh writes land on the
+  // grantor's row, keeping one live credential for the whole org.
+  try {
+    const grantorId = resolveOrgConnectionGrantor(serviceName, userId);
+    if (grantorId) return _readOAuthTokenRow(serviceName, grantorId, 0);
+  } catch (_) { /* org lookup must never break B2C token reads */ }
+  return null;
+}
+
+/** Returns the sharing admin's user id when the caller's org shares `serviceName`. */
+function resolveOrgConnectionGrantor(serviceName, userId) {
+  const user = db.prepare('SELECT org_id FROM users WHERE id = ?').get(String(userId));
+  if (!user?.org_id) return null;
+  const grant = db.prepare(`
+    SELECT g.owner_user_id FROM org_connection_grants g
+    JOIN organizations o ON o.id = g.org_id
+    WHERE g.org_id = ? AND g.service = ? AND o.status = 'active' AND o.deleted_at IS NULL
+  `).get(user.org_id, String(serviceName).toLowerCase());
+  if (!grant || grant.owner_user_id === String(userId)) return null;
+  // Grantor must still be an org member — offboarded admins lose sharing rights
+  const grantor = db.prepare('SELECT org_id FROM users WHERE id = ?').get(grant.owner_user_id);
+  return grantor?.org_id === user.org_id ? grant.owner_user_id : null;
+}
+
+function getOAuthLoginToken(serviceName, userId) {
+  // Returns the sign-in token (login_only=1). Used by the login confirmation flow
+  // and the /oauth/status endpoint to show a service as "signed in" in the UI.
+  return _readOAuthTokenRow(serviceName, userId, 1);
+}
+
+function _readOAuthTokenRow(serviceName, userId, loginOnlyInt) {
   const stmt = db.prepare(`
     SELECT * FROM oauth_tokens
-    WHERE service_name = ? AND user_id = ?
+    WHERE service_name = ? AND user_id = ? AND COALESCE(login_only, 0) = ?
     ORDER BY created_at DESC
     LIMIT 1
   `);
 
-  const row = stmt.get(serviceName, userId);
+  const row = stmt.get(serviceName, userId, loginOnlyInt);
   if (!row) {
-    console.log(`[getOAuthToken] No row found for ${serviceName}/${userId.slice(0,8)}`);
+    console.log(`[getOAuthToken] No ${loginOnlyInt ? 'login-only' : 'service'} row for ${serviceName}/${userId.slice(0,8)}`);
     return null;
   }
 
-  console.log(`[getOAuthToken] Found token for ${serviceName}/${userId.slice(0,8)}, attempting decryption...`);
+  console.log(`[getOAuthToken] Found ${loginOnlyInt ? 'login-only' : 'service'} token for ${serviceName}/${userId.slice(0,8)}, attempting decryption...`);
 
   const accessData = JSON.parse(row.access_token);
   const refreshData = row.refresh_token ? JSON.parse(row.refresh_token) : null;
@@ -2633,6 +3243,7 @@ function getOAuthToken(serviceName, userId) {
     refreshToken: decryptedRefresh,
     expiresAt: row.expires_at,
     scope: row.scope,
+    loginOnly: !!row.login_only,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     lastApiCall: row.last_api_call  // Phase 5.4: Track last API call
@@ -2699,7 +3310,9 @@ async function refreshOAuthToken(serviceName, userId, tokenUrl, clientId, client
     });
 
     if (result.status !== 200 || result.body.error) {
-      return { ok: false, error: result.body.error_description || result.body.error || 'Refresh failed', status: result.status };
+      const errMsg = result.body.error_description || result.body.error || 'Refresh failed';
+      _notifyOAuthReconnectRequired(serviceName, userId, errMsg);
+      return { ok: false, error: errMsg, status: result.status };
     }
 
     const newAccessToken = result.body.access_token;
@@ -2710,11 +3323,38 @@ async function refreshOAuthToken(serviceName, userId, tokenUrl, clientId, client
     const newScope = result.body.scope || existing.scope;
 
     storeOAuthToken(serviceName, userId, newAccessToken, newRefreshToken, newExpiresAt, newScope);
-    
+
     return { ok: true, refreshed: true, token: getOAuthToken(serviceName, userId) };
   } catch (err) {
+    _notifyOAuthReconnectRequired(serviceName, userId, err.message);
     return { ok: false, error: err.message };
   }
+}
+
+// A failed OAuth refresh means the service silently stops working until the user
+// reconnects it — surface that instead of leaving them to discover dead requests.
+// Deduped: at most one notification per (user, service) per 24h.
+function _notifyOAuthReconnectRequired(serviceName, userId, reason) {
+  try {
+    const dayAgo = Math.floor(Date.now() / 1000) - 24 * 60 * 60;
+    const recent = db.prepare(`
+      SELECT id FROM notifications
+      WHERE user_id = ? AND type = 'oauth_reconnect_required'
+        AND created_at > ? AND data LIKE ?
+      LIMIT 1
+    `).get(String(userId), dayAgo, `%"serviceName":"${serviceName}"%`);
+    if (recent) return;
+
+    const NotificationService = require('./services/notificationService');
+    const pretty = serviceName.charAt(0).toUpperCase() + serviceName.slice(1);
+    NotificationService.emitNotification(
+      String(userId),
+      'oauth_reconnect_required',
+      `${pretty} Needs Reconnection`,
+      `MyApi could not refresh your ${pretty} access (${reason}). Requests to ${pretty} will fail until you reconnect it.`,
+      { data: { serviceName, reason } }
+    ).catch(() => {});
+  } catch (_) {}
 }
 
 function revokeOAuthToken(serviceName, userId) {
@@ -4672,6 +5312,26 @@ function createPendingApproval(tokenId, userId, fingerprintHash, deviceInfo, ipA
   return id;
 }
 
+// Returns the most recent alert timestamp for a (token, fingerprint) pair.
+// Used by the cool-down check so we don't email the user every request when
+// an OAuth agent's UA flaps. null = never alerted.
+function getLastAlertSentAt(tokenId, fingerprintHash) {
+  const row = db.prepare(`
+    SELECT last_alert_sent_at FROM device_approvals_pending
+    WHERE token_id = ? AND device_fingerprint_hash = ?
+    ORDER BY created_at DESC LIMIT 1
+  `).get(tokenId, fingerprintHash);
+  return row?.last_alert_sent_at || null;
+}
+
+function markAlertSent(approvalId) {
+  if (!approvalId) return;
+  const now = new Date().toISOString();
+  try {
+    db.prepare(`UPDATE device_approvals_pending SET last_alert_sent_at = ? WHERE id = ?`).run(now, approvalId);
+  } catch (_) {}
+}
+
 function getPendingApprovals(userId, tokenId = null, limit = null) {
   // Include legacy 'owner' records alongside the real user's records.
   // Tokens created before the users table used owner_id='owner'; those approvals
@@ -4734,7 +5394,8 @@ function approvePendingDevice(approvalId, deviceName) {
       deviceInfo.public_key || '',
       resolvedName,
       deviceInfo,
-      approval.ip_address
+      approval.ip_address,
+      deviceInfo.scope || null
     );
   } else {
     deviceId = createApprovedDevice(
@@ -4754,11 +5415,18 @@ function approvePendingDevice(approvalId, deviceName) {
     WHERE id = ?
   `).run(now, approvalId);
 
-  // Security alert approval: unsuspend the token and reset its baseline
+  // Security alert approval: unsuspend the token and LEARN the network/UA that
+  // tripped the alert, so the same legitimate origin is never flagged again.
+  // (Previously this DELETEd the baseline, which made a multi-homed agent token
+  // re-trip on its very next request from the other network — the churn loop.)
   if (approval.approval_type === 'security_alert') {
     unsuspendToken(approval.token_id);
     try {
-      db.prepare(`DELETE FROM token_security_baselines WHERE token_id = ?`).run(approval.token_id);
+      const { learnNetwork } = require('./lib/tokenSecurityMonitor');
+      const info = JSON.parse(approval.device_info_json || '{}');
+      const crypto = require('crypto');
+      const uaHash = info.userAgent ? crypto.createHash('sha256').update(info.userAgent).digest('hex').slice(0, 16) : null;
+      learnNetwork(db, approval.token_id, info.orgType || null, uaHash);
     } catch (_) {}
   }
 
@@ -4767,25 +5435,45 @@ function approvePendingDevice(approvalId, deviceName) {
 
 // ─── Token Security ───────────────────────────────────────────────────────────
 
+// The legacy gateway `tokens` table only exists on DBs where config/database.js
+// ran (it owns that table). Fresh installs only have access_tokens — these
+// helpers must not blow up the fail-closed auth gate over the optional table.
+let _legacyTokensTableExists = null; // memoized; the table only ever appears during startup
+function _hasLegacyTokensTable() {
+  if (_legacyTokensTableExists === null) {
+    try {
+      _legacyTokensTableExists = !!db.prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'tokens'`).get();
+    } catch (_) {
+      _legacyTokensTableExists = false;
+    }
+  }
+  return _legacyTokensTableExists;
+}
+
 function suspendToken(tokenId, reason) {
   const now = new Date().toISOString();
   const nowMs = Date.now();
   // Try both tables; only the one that owns this token will change a row
   db.prepare(`UPDATE access_tokens SET suspended_at = ?, suspension_reason = ? WHERE id = ? AND suspended_at IS NULL`).run(now, reason, tokenId);
-  db.prepare(`UPDATE tokens SET suspended_at = ?, suspension_reason = ? WHERE id = ? AND suspended_at IS NULL`).run(nowMs, reason, tokenId);
+  if (_hasLegacyTokensTable()) {
+    db.prepare(`UPDATE tokens SET suspended_at = ?, suspension_reason = ? WHERE id = ? AND suspended_at IS NULL`).run(nowMs, reason, tokenId);
+  }
 }
 
 function unsuspendToken(tokenId) {
   db.prepare(`UPDATE access_tokens SET suspended_at = NULL, suspension_reason = NULL WHERE id = ?`).run(tokenId);
-  db.prepare(`UPDATE tokens SET suspended_at = NULL, suspension_reason = NULL WHERE id = ?`).run(tokenId);
+  if (_hasLegacyTokensTable()) {
+    db.prepare(`UPDATE tokens SET suspended_at = NULL, suspension_reason = NULL WHERE id = ?`).run(tokenId);
+  }
 }
 
 function getTokenSuspension(tokenId) {
-  return (
-    db.prepare(`SELECT suspended_at, suspension_reason FROM access_tokens WHERE id = ? AND suspended_at IS NOT NULL`).get(tokenId) ||
-    db.prepare(`SELECT suspended_at, suspension_reason FROM tokens WHERE id = ? AND suspended_at IS NOT NULL AND suspended_at != 0`).get(tokenId) ||
-    null
-  );
+  const fromAccessTokens = db.prepare(`SELECT suspended_at, suspension_reason FROM access_tokens WHERE id = ? AND suspended_at IS NOT NULL`).get(tokenId);
+  if (fromAccessTokens) return fromAccessTokens;
+  if (_hasLegacyTokensTable()) {
+    return db.prepare(`SELECT suspended_at, suspension_reason FROM tokens WHERE id = ? AND suspended_at IS NOT NULL AND suspended_at != 0`).get(tokenId) || null;
+  }
+  return null;
 }
 
 function getTokenOwnerId(tokenId) {
@@ -4856,15 +5544,18 @@ function expireOldDeviceCodes() {
 
 // ─── ASC: approved device with public key ────────────────────────────────────
 
-function createApprovedDeviceASC(tokenId, userId, keyFingerprint, publicKey, deviceName, summary, ipAddress) {
+function createApprovedDeviceASC(tokenId, userId, keyFingerprint, publicKey, deviceName, summary, ipAddress, scope = null) {
   const id = `device_${crypto.randomBytes(16).toString('hex')}`;
   const now = new Date().toISOString();
+  // Scoped ASC binding: scope is a JSON array string of the registering token's
+  // scopes (e.g. '["services:gmail:read"]'). NULL = full access (legacy).
+  const scopeJson = Array.isArray(scope) && scope.length ? JSON.stringify(scope) : (typeof scope === 'string' && scope !== 'full' ? scope : null);
   // Use key_fingerprint as the device_fingerprint_hash so existing lookup paths work
   db.prepare(`
     INSERT INTO approved_devices
       (id, token_id, user_id, device_fingerprint, device_fingerprint_hash, device_name,
-       device_info_json, ip_address, approved_at, created_at, connection_type, public_key, key_fingerprint)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'asc', ?, ?)
+       device_info_json, ip_address, approved_at, created_at, connection_type, public_key, key_fingerprint, scope)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'asc', ?, ?, ?)
   `).run(
     id, tokenId, userId,
     keyFingerprint, keyFingerprint,
@@ -4872,15 +5563,111 @@ function createApprovedDeviceASC(tokenId, userId, keyFingerprint, publicKey, dev
     JSON.stringify(summary || {}),
     ipAddress || 'unknown',
     now, now,
-    publicKey, keyFingerprint
+    publicKey, keyFingerprint, scopeJson
   );
+  // Mirror named scopes into access_token_scopes keyed by the fingerprint so
+  // requireScopes()/hasScope() (table-based checks) also enforce the binding.
+  if (scopeJson) {
+    try {
+      const names = JSON.parse(scopeJson);
+      if (Array.isArray(names) && names.length) grantScopes(keyFingerprint, names);
+    } catch (_) {}
+  }
   return id;
+}
+
+/**
+ * Restore a previously-approved ASC device (including revoked ones).
+ * Called when the MCP proves private-key ownership via Ed25519 signature.
+ * Returns the device row if restoration succeeded, null if the fingerprint
+ * was never approved for any user (must go through normal registration flow).
+ */
+function wasAscKeyEverApproved(keyFingerprint) {
+  return !!db.prepare(
+    "SELECT 1 FROM approved_devices WHERE key_fingerprint = ? AND connection_type = 'asc' LIMIT 1"
+  ).get(keyFingerprint);
+}
+
+function restoreASCDevice(keyFingerprint, publicKey, ipAddress) {
+  const now = new Date().toISOString();
+  // Find any past approved_devices row for this fingerprint — including revoked ones
+  const existing = db.prepare(
+    "SELECT * FROM approved_devices WHERE key_fingerprint = ? AND connection_type = 'asc' ORDER BY approved_at DESC LIMIT 1"
+  ).get(keyFingerprint);
+  if (!existing) return null; // never approved — must go through normal registration
+  if (!existing.revoked_at) return existing; // already active, nothing to do
+  // Replaced keys are permanently dead: the machine enrolled a successor key
+  // (Quick Connect re-enroll), so restoring the old one would resurrect the
+  // access level the user explicitly replaced.
+  try {
+    if (JSON.parse(existing.device_info_json || '{}').replaced_by) return null;
+  } catch (_) {}
+  // Re-activate by clearing revoked_at
+  db.prepare(
+    "UPDATE approved_devices SET revoked_at = NULL, approved_at = ?, ip_address = ? WHERE id = ?"
+  ).run(now, ipAddress || 'unknown', existing.id);
+  return { ...existing, revoked_at: null, approved_at: now };
+}
+
+// Revoke a device permanently because its key was replaced by a successor
+// (Quick Connect re-enroll). replaced_by blocks restoreASCDevice and the
+// auth middleware's inline auto-restore from ever resurrecting it.
+function markDeviceReplaced(deviceId, newFingerprint) {
+  const now = new Date().toISOString();
+  const row = db.prepare('SELECT device_info_json FROM approved_devices WHERE id = ?').get(deviceId);
+  let info = {};
+  try { info = JSON.parse(row?.device_info_json || '{}'); } catch (_) {}
+  info.replaced_by = newFingerprint;
+  return db.prepare(
+    'UPDATE approved_devices SET revoked_at = ?, device_info_json = ? WHERE id = ?'
+  ).run(now, JSON.stringify(info), deviceId);
 }
 
 function getApprovedDeviceByKeyFingerprint(userId, keyFingerprint) {
   return db.prepare(
     'SELECT * FROM approved_devices WHERE user_id = ? AND key_fingerprint = ?'
   ).get(userId, keyFingerprint);
+}
+
+function getApprovedDeviceByKeyFingerprintGlobal(keyFingerprint) {
+  return db.prepare(
+    "SELECT * FROM approved_devices WHERE key_fingerprint = ? AND revoked_at IS NULL AND connection_type = 'asc'"
+  ).get(keyFingerprint);
+}
+
+function getPendingApprovalByFingerprintGlobal(keyFingerprint) {
+  return db.prepare(
+    "SELECT status FROM device_approvals_pending WHERE device_fingerprint_hash = ? ORDER BY created_at DESC LIMIT 1"
+  ).get(keyFingerprint);
+}
+
+// Self-registration: MCP submits its public key without an existing token.
+// Uses a sentinel token_id ('asc_self_reg') so the NOT NULL constraint is satisfied
+// while making it clear this entry came from unauthenticated self-registration.
+function createAscSelfRegistration(userId, keyFingerprint, publicKey, label, ipAddress, boundScope = null) {
+  const existing = db.prepare(
+    "SELECT id FROM device_approvals_pending WHERE device_fingerprint_hash = ? AND user_id = ? AND status = 'pending'"
+  ).get(keyFingerprint, userId);
+  if (existing) return existing.id;
+
+  const id = 'asc_reg_' + crypto.randomBytes(16).toString('hex');
+  const now = new Date().toISOString();
+  const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+  const deviceInfo = JSON.stringify({
+    name: label || 'AI Agent (ASC)',
+    type: 'asc',
+    key_fingerprint: keyFingerprint,
+    public_key: publicKey,
+    // Scoped ASC: registering with a scoped token binds the key to that scope
+    scope: Array.isArray(boundScope) && boundScope.length ? boundScope : undefined,
+  });
+  db.prepare(`
+    INSERT INTO device_approvals_pending
+      (id, device_fingerprint, device_fingerprint_hash, token_id, user_id, device_info_json,
+       ip_address, status, created_at, expires_at, approval_type)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, 'asc')
+  `).run(id, publicKey, keyFingerprint, 'asc_self_reg', userId, deviceInfo, ipAddress || 'unknown', now, expiresAt);
+  return id;
 }
 
 function cleanupExpiredApprovals() {
@@ -5080,12 +5867,16 @@ function createNotification(workspaceId, userId, type, title, message, data = nu
 }
 
 function getNotifications(workspaceId, userId, filters = {}) {
+  // Scoped by user only (workspaceId kept for call compatibility): notifications
+  // are personal, and rows are created under whatever workspace the event
+  // happened in — filtering by workspace made the bell list/count miss rows
+  // that mark-read/delete (user-scoped) could still touch.
   let query = `
     SELECT id, workspace_id, user_id, type, title, message, data, is_read, created_at, expires_at
     FROM notifications
-    WHERE workspace_id = ? AND user_id = ?
+    WHERE user_id = ?
   `;
-  const params = [workspaceId, userId];
+  const params = [userId];
   
   // Filter by read status
   if (filters.read !== undefined) {
@@ -5146,11 +5937,13 @@ function deleteNotification(notificationId, workspaceId, userId) {
 }
 
 function getUnreadNotificationCount(workspaceId, userId) {
+  // User-scoped to stay consistent with getNotifications/markNotificationAsRead —
+  // otherwise the badge counts rows the dropdown can never show or clear.
   const result = db.prepare(`
     SELECT COUNT(*) as count FROM notifications
-    WHERE workspace_id = ? AND user_id = ? AND is_read = 0
-  `).get(workspaceId, userId);
-  
+    WHERE user_id = ? AND is_read = 0
+  `).get(userId);
+
   return result?.count || 0;
 }
 
@@ -5248,12 +6041,13 @@ function updateNotificationPreferences(workspaceId, userId, channel, updates) {
 }
 
 function deleteAllNotifications(workspaceId, userId) {
-  // Remove queue entries first (FK constraint)
-  const notifIds = db.prepare(`SELECT id FROM notifications WHERE workspace_id = ? AND user_id = ?`).all(workspaceId, userId).map(r => r.id);
+  // User-scoped like deleteNotification: clear-all must remove everything the
+  // bell shows, regardless of which workspace each row was created under.
+  const notifIds = db.prepare(`SELECT id FROM notifications WHERE user_id = ?`).all(userId).map(r => r.id);
   for (const nid of notifIds) {
     db.prepare(`DELETE FROM notification_queue WHERE notification_id = ?`).run(nid);
   }
-  return db.prepare(`DELETE FROM notifications WHERE workspace_id = ? AND user_id = ?`).run(workspaceId, userId).changes;
+  return db.prepare(`DELETE FROM notifications WHERE user_id = ?`).run(userId).changes;
 }
 
 function updateNotificationTypeSettings(workspaceId, userId, channel, typeKey, enabled) {
@@ -5269,20 +6063,26 @@ function updateNotificationTypeSettings(workspaceId, userId, channel, typeKey, e
 function queueNotificationForDelivery(notificationId, channels = ['in-app']) {
   const deliveryChannels = Array.isArray(channels) ? channels : [channels];
   const queued = [];
-  
+
   for (const channel of deliveryChannels) {
     const id = 'queue_' + crypto.randomBytes(16).toString('hex');
     const now = Math.floor(Date.now() / 1000);
-    
+
+    // In-app delivery IS the notifications row itself — there is no worker for the
+    // 'in-app' channel, so record it as delivered immediately. Email rows stay
+    // 'pending' and are closed by markEmailAsSent() when the email_queue worker
+    // actually sends the message. (Previously every row sat 'pending' forever.)
+    const status = channel === 'in-app' ? 'delivered' : 'pending';
+    const sentAt = channel === 'in-app' ? now : null;
     const stmt = db.prepare(`
-      INSERT INTO notification_queue (id, notification_id, channel, status, created_at)
-      VALUES (?, ?, ?, 'pending', ?)
+      INSERT INTO notification_queue (id, notification_id, channel, status, sent_at, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
     `);
-    
-    stmt.run(id, notificationId, channel, now);
+
+    stmt.run(id, notificationId, channel, status, sentAt, now);
     queued.push(id);
   }
-  
+
   return queued;
 }
 
@@ -5375,6 +6175,17 @@ function getPendingEmails(limit = 100) {
 }
 
 function markEmailAsSent(emailId) {
+  // Close the matching notification_queue email row so queued notification emails
+  // don't sit 'pending' forever after the email actually went out.
+  try {
+    const row = db.prepare(`SELECT notification_id FROM email_queue WHERE id = ?`).get(emailId);
+    if (row?.notification_id) {
+      db.prepare(`
+        UPDATE notification_queue SET status = 'delivered', sent_at = ?
+        WHERE notification_id = ? AND channel = 'email' AND status = 'pending'
+      `).run(Math.floor(Date.now() / 1000), row.notification_id);
+    }
+  } catch (_) {}
   return db.prepare(`
     UPDATE email_queue
     SET status = 'sent', sent_at = ?
@@ -5975,27 +6786,211 @@ function getUsageDaily(workspaceId, fromDate, toDate) {
   `).all(workspaceId, fromDate, toDate);
 }
 
+// ── Stripe overage metering helpers ───────────────────────────────────────────
+// (usage_daily.meter_reported_at is added in initDatabase, next to the table.)
+
+// Active paid subscriptions joined with their Stripe customer id, for usage
+// reporting. plan_id filter is applied by the caller.
+function getActiveBillingSubscriptions() {
+  try {
+    return db.prepare(`
+      SELECT s.workspace_id, s.plan_id, s.status, s.stripe_subscription_id, c.stripe_customer_id
+      FROM billing_subscriptions s
+      JOIN billing_customers c ON c.workspace_id = s.workspace_id
+      WHERE s.status IN ('active', 'trialing')
+    `).all();
+  } catch (_) { return []; }
+}
+
+// Completed days (date < today) with usage not yet reported to the meter.
+function getUnreportedUsageDays(workspaceId, today) {
+  return db.prepare(`
+    SELECT date, api_calls FROM usage_daily
+    WHERE workspace_id = ? AND date < ? AND api_calls > 0 AND meter_reported_at IS NULL
+    ORDER BY date ASC
+  `).all(workspaceId, today);
+}
+
+function markUsageDayReported(workspaceId, date) {
+  db.prepare('UPDATE usage_daily SET meter_reported_at = ? WHERE workspace_id = ? AND date = ?')
+    .run(new Date().toISOString(), workspaceId, date);
+}
+
+// ── Automations (Triggers) ────────────────────────────────────────────────────
+
+function createTrigger(t) {
+  const id = 'trg_' + crypto.randomBytes(12).toString('hex');
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO triggers (id, workspace_id, owner_id, name, enabled, kind, schedule_json,
+      timezone, event_toolkit, event_type, action_type, action_json, ai_mode, ai_model,
+      ai_vault_token_id, next_run_at, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id, t.workspaceId, t.ownerId, t.name, t.enabled === false ? 0 : 1, t.kind,
+    t.scheduleJson ? JSON.stringify(t.scheduleJson) : null, t.timezone || 'UTC',
+    t.eventToolkit || null, t.eventType || null, t.actionType,
+    JSON.stringify(t.actionJson || {}), t.aiMode || 'platform', t.aiModel || null,
+    t.aiVaultTokenId || null, t.nextRunAt || null, now, now
+  );
+  return getTriggerById(id);
+}
+
+function getTriggerById(id) {
+  return db.prepare('SELECT * FROM triggers WHERE id = ?').get(id) || null;
+}
+
+function listTriggers(ownerId, workspaceId = null) {
+  if (workspaceId) {
+    return db.prepare('SELECT * FROM triggers WHERE owner_id = ? AND workspace_id = ? ORDER BY created_at DESC')
+      .all(ownerId, workspaceId);
+  }
+  return db.prepare('SELECT * FROM triggers WHERE owner_id = ? ORDER BY created_at DESC').all(ownerId);
+}
+
+function updateTrigger(id, fields = {}) {
+  const cur = getTriggerById(id);
+  if (!cur) return null;
+  const map = {
+    name: 'name', enabled: 'enabled', scheduleJson: 'schedule_json', timezone: 'timezone',
+    eventToolkit: 'event_toolkit', eventType: 'event_type', actionType: 'action_type',
+    actionJson: 'action_json', aiMode: 'ai_mode', aiModel: 'ai_model',
+    aiVaultTokenId: 'ai_vault_token_id', nextRunAt: 'next_run_at', lastRunAt: 'last_run_at',
+  };
+  const sets = [], vals = [];
+  for (const [k, col] of Object.entries(map)) {
+    if (!(k in fields)) continue;
+    let v = fields[k];
+    if (k === 'enabled') v = v ? 1 : 0;
+    else if (k === 'scheduleJson' || k === 'actionJson') v = v == null ? null : JSON.stringify(v);
+    sets.push(`${col} = ?`); vals.push(v);
+  }
+  if (!sets.length) return cur;
+  sets.push('updated_at = ?'); vals.push(new Date().toISOString());
+  vals.push(id);
+  db.prepare(`UPDATE triggers SET ${sets.join(', ')} WHERE id = ?`).run(...vals);
+  return getTriggerById(id);
+}
+
+function deleteTrigger(id) {
+  db.prepare('DELETE FROM trigger_runs WHERE trigger_id = ?').run(id);
+  return db.prepare('DELETE FROM triggers WHERE id = ?').run(id).changes > 0;
+}
+
+// Enabled schedule triggers whose next_run_at is due.
+function getDueScheduleTriggers(nowIso) {
+  return db.prepare(`
+    SELECT * FROM triggers
+    WHERE enabled = 1 AND kind = 'schedule' AND next_run_at IS NOT NULL AND next_run_at <= ?
+  `).all(nowIso);
+}
+
+function getEnabledEventTriggers(toolkit, eventType) {
+  return db.prepare(`
+    SELECT * FROM triggers WHERE enabled = 1 AND kind = 'event' AND event_toolkit = ? AND event_type = ?
+  `).all(toolkit, eventType);
+}
+
+function createTriggerRun(r) {
+  const id = 'run_' + crypto.randomBytes(12).toString('hex');
+  db.prepare(`
+    INSERT INTO trigger_runs (id, trigger_id, workspace_id, owner_id, status, trigger_kind,
+      payload_json, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, r.triggerId, r.workspaceId, r.ownerId, r.status || 'queued', r.triggerKind || null,
+         r.payloadJson ? JSON.stringify(r.payloadJson) : '{}', new Date().toISOString());
+  return getTriggerRunById(id);
+}
+
+function getTriggerRunById(id) {
+  return db.prepare('SELECT * FROM trigger_runs WHERE id = ?').get(id) || null;
+}
+
+function listTriggerRuns(triggerId, limit = 25) {
+  return db.prepare('SELECT * FROM trigger_runs WHERE trigger_id = ? ORDER BY created_at DESC LIMIT ?')
+    .all(triggerId, Math.min(Number(limit) || 25, 200));
+}
+
+// Atomically claim up to `limit` queued runs (lease via locked_at). better-sqlite3
+// is synchronous so there's no in-process race; the lease recovers crashed runs.
+function claimQueuedTriggerRuns(limit = 5, staleMs = 5 * 60 * 1000) {
+  const now = Date.now();
+  const staleBefore = new Date(now - staleMs).toISOString();
+  const nowIso = new Date(now).toISOString();
+  const rows = db.prepare(`
+    SELECT * FROM trigger_runs
+    WHERE status = 'queued' OR (status = 'running' AND (locked_at IS NULL OR locked_at < ?))
+    ORDER BY created_at ASC LIMIT ?
+  `).all(staleBefore, limit);
+  const claimed = [];
+  const claim = db.prepare(`UPDATE trigger_runs SET status='running', locked_at=?, attempts=attempts+1 WHERE id=? AND status IN ('queued','running')`);
+  for (const r of rows) {
+    if (claim.run(nowIso, r.id).changes > 0) claimed.push({ ...r, status: 'running' });
+  }
+  return claimed;
+}
+
+function finishTriggerRun(id, status, resultJson = null) {
+  db.prepare('UPDATE trigger_runs SET status=?, result_json=?, finished_at=?, locked_at=NULL WHERE id=?')
+    .run(status, resultJson ? JSON.stringify(resultJson) : null, new Date().toISOString(), id);
+  return getTriggerRunById(id);
+}
+
+// ── AI usage ledger (MyApi-mode runs only — BYO is the user's own cost) ───────
+function recordAiUsageEvent({ userId, workspaceId, triggerId, keyMode = 'platform', provider, model, inputTokens = 0, outputTokens = 0, costCents = 0, credits = 0 }) {
+  const id = 'aiu_' + crypto.randomBytes(10).toString('hex');
+  db.prepare(`INSERT INTO ai_usage_events
+      (id, user_id, workspace_id, trigger_id, key_mode, provider, model, input_tokens, output_tokens, cost_cents, credits, created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(id, String(userId), workspaceId || null, triggerId || null, keyMode, provider || null, model || null,
+         Math.round(inputTokens) || 0, Math.round(outputTokens) || 0, Math.round(costCents) || 0, Math.round(credits) || 0,
+         new Date().toISOString());
+  return id;
+}
+
+// Month-to-date platform AI usage for a user: { credits, runs, costCents }.
+function getMonthlyAiUsage(userId, sinceIso) {
+  const row = db.prepare(`SELECT COALESCE(SUM(credits),0) AS credits, COUNT(*) AS runs, COALESCE(SUM(cost_cents),0) AS costCents
+       FROM ai_usage_events WHERE user_id=? AND key_mode='platform' AND created_at >= ?`)
+    .get(String(userId), sinceIso);
+  return { credits: row?.credits || 0, runs: row?.runs || 0, costCents: row?.costCents || 0 };
+}
+
+// Unreported platform AI events (for the Stripe meter reporter).
+function getUnreportedAiUsage(limit = 500) {
+  return db.prepare(`SELECT * FROM ai_usage_events WHERE key_mode='platform' AND reported_at IS NULL AND credits > 0 ORDER BY created_at ASC LIMIT ?`).all(limit);
+}
+function markAiUsageReported(ids = []) {
+  if (!ids.length) return 0;
+  const now = new Date().toISOString();
+  const stmt = db.prepare('UPDATE ai_usage_events SET reported_at=? WHERE id=?');
+  const tx = db.transaction((rows) => { for (const id of rows) stmt.run(now, id); });
+  tx(ids);
+  return ids.length;
+}
+
 function seedDefaultPricingPlans() {
   try {
     // Check if plans already exist
     const now = new Date().toISOString();
+    // Personal / Pro $9 / Heavy $29 (June 2026). Internal IDs unchanged.
     const plans = [
       {
         id: 'free',
-        name: 'Free',
+        name: 'Personal',
         price_cents: 0,
-        description: 'Perfect for individuals getting started',
+        description: 'For personal use — free forever.',
         features: [
           '2 AI Personas',
-          '3 Service Connections',
+          'Up to 5 connected services',
+          '1,000 API calls/month',
           '10 MB Knowledge Base',
           '5 Token Vault entries',
           'Attach up to 4 Skills per Persona',
-          '1,000 API calls/month',
           'Up to 2 team members'
         ],
         monthly_api_call_limit: 1000,
-        max_services: 3,
+        max_services: 5,
         max_team_members: 2,
         max_skills_per_persona: 4,
         stripe_product_id: null,
@@ -6005,19 +7000,22 @@ function seedDefaultPricingPlans() {
       {
         id: 'pro',
         name: 'Pro',
-        price_cents: 2900,
-        description: 'For creators and small teams',
+        price_cents: 900,
+        description: 'All services, generous quota, pay only for what you use beyond it.',
         features: [
-          '5 AI Personas',
-          'Unlimited Service Connections',
+          'All services — unlimited connections',
+          '10,000 API calls/month included',
+          '$0.25 per 1,000 calls beyond that — never blocked',
+          '10 AI Personas',
           '50 MB Knowledge Base',
           'Unlimited Token Vault entries',
           'Attach unlimited Skills per Persona',
-          '100,000 API calls/month',
+          'AI agent connections (MCP / ASC)',
+          'AFP — API File Protocol (remote file & shell operations)',
           'Up to 10 team members',
           'Priority support'
         ],
-        monthly_api_call_limit: 100000,
+        monthly_api_call_limit: 10000,
         max_services: -1, // unlimited
         max_team_members: 10,
         max_skills_per_persona: -1, // unlimited
@@ -6027,20 +7025,20 @@ function seedDefaultPricingPlans() {
       },
       {
         id: 'enterprise',
-        name: 'Enterprise',
-        price_cents: 9900,
-        description: 'Scale with higher limits and custom support',
+        name: 'Heavy',
+        price_cents: 2900,
+        description: 'For heavy automation — unlimited API calls, no overage ever.',
         features: [
+          'All services — unlimited connections',
+          'Unlimited API calls — no overage, ever',
           '20 AI Personas',
-          'Unlimited Service Connections',
           '200 MB Knowledge Base',
           'Unlimited Token Vault entries',
           'Attach unlimited Skills per Persona',
-          'Unlimited API calls/month',
+          'AI agent connections (MCP / ASC)',
+          'AFP — API File Protocol (remote file & shell operations)',
           'Unlimited team members',
-          'Priority 24/7 support',
-          'Custom SLA & onboarding',
-          'Dedicated infrastructure option'
+          'Priority 24/7 support'
         ],
         monthly_api_call_limit: -1, // unlimited
         max_services: -1, // unlimited
@@ -6140,6 +7138,22 @@ async function runMigrations(retries = 20, delayMs = 3000) {
       if (result.failed && result.failed.length > 0) {
         console.warn('[Migrations] Failed migrations:', result.failed);
       }
+
+      // Post-migration schema fixups (SQLite path only). These must run AFTER the
+      // .sql migrations, not in initDatabase, because they repair columns that a
+      // later table-rebuild migration dropped.
+      //
+      // approved_devices.scope: added by 20260412000001_device_scope.sql, then
+      // silently dropped by the table rebuild in
+      // 20260418000001_approved_devices_token_scoped.sql (its new CREATE omitted
+      // the column). The migrations table still records device_scope as applied,
+      // so it never re-runs — leaving PATCH /devices/:id/scope to 500 with
+      // "no such column: scope". Re-add idempotently. safeMigration ignores the
+      // duplicate-column error on DBs where the column survived.
+      if (!db.pool) {
+        safeMigration("ALTER TABLE approved_devices ADD COLUMN scope TEXT DEFAULT 'full'");
+      }
+
       return result;
     } catch (error) {
       const isTransient = ['EAI_AGAIN', 'ENOTFOUND', 'ECONNREFUSED', 'ETIMEDOUT', 'ECONNRESET', '57P01', 'EPIPE'].includes(error.code)
@@ -6866,6 +7880,44 @@ function peekOAuthServerAuthCode(code) {
   return row;
 }
 
+// ── OAuth server refresh tokens ───────────────────────────────────────────────
+
+function createOAuthServerRefreshToken({ id, tokenHash, clientId, userId, scope }) {
+  db.prepare(`
+    INSERT INTO oauth_server_refresh_tokens (id, token_hash, client_id, user_id, scope, created_at, revoked)
+    VALUES (?, ?, ?, ?, ?, ?, 0)
+  `).run(id, tokenHash, clientId, userId, scope || 'full', new Date().toISOString());
+}
+
+function getOAuthServerRefreshTokenById(id) {
+  return db.prepare('SELECT * FROM oauth_server_refresh_tokens WHERE id = ? AND revoked = 0').get(id) || null;
+}
+
+function touchOAuthServerRefreshToken(id) {
+  db.prepare('UPDATE oauth_server_refresh_tokens SET last_used_at = ? WHERE id = ?')
+    .run(new Date().toISOString(), id);
+}
+
+function revokeOAuthServerRefreshToken(id) {
+  db.prepare('UPDATE oauth_server_refresh_tokens SET revoked = 1 WHERE id = ?').run(id);
+}
+
+// ── OAuth server remembered consent ───────────────────────────────────────────
+
+function recordOAuthServerGrant({ clientId, userId, scope }) {
+  db.prepare(`
+    INSERT INTO oauth_server_grants (client_id, user_id, scope, created_at)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(client_id, user_id) DO UPDATE SET scope = excluded.scope
+  `).run(clientId, String(userId), scope || 'full', new Date().toISOString());
+}
+
+function hasOAuthServerGrant(clientId, userId) {
+  if (!clientId || !userId) return false;
+  return !!db.prepare('SELECT 1 FROM oauth_server_grants WHERE client_id = ? AND user_id = ?')
+    .get(clientId, String(userId));
+}
+
 // ── AFP (API File Protocol) helpers ───────────────────────────────────────────
 
 function createAfpDevice(userId, deviceName, hostname, platform, arch, capabilities, tokenHash, afpRoot) {
@@ -6940,6 +7992,243 @@ function clearUserOnboarding(userId) {
   setUserNeedsOnboarding(userId, false);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// B2B: Organizations
+
+function orgRowToObject(row) {
+  if (!row) return null;
+  let settings = {};
+  try { settings = JSON.parse(row.settings || '{}'); } catch (_) {}
+  return {
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    plan: row.plan,
+    status: row.status,
+    ownerUserId: row.owner_user_id,
+    settings,
+    seatsLicensed: row.seats_licensed,
+    stripeCustomerId: row.stripe_customer_id,
+    stripeSubscriptionId: row.stripe_subscription_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    suspendedAt: row.suspended_at,
+    deletedAt: row.deleted_at,
+  };
+}
+
+function createOrganization({ name, slug, ownerUserId, plan = 'business' }) {
+  if (!name || !slug) throw new Error('Organization name and slug are required');
+  const slugRegex = /^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$/;
+  if (!slugRegex.test(slug)) {
+    throw new Error('Slug must be 3-50 characters, lowercase alphanumeric with hyphens');
+  }
+  if (db.prepare('SELECT id FROM organizations WHERE slug = ?').get(slug)) {
+    throw new Error(`Organization with slug "${slug}" already exists`);
+  }
+  const owner = ownerUserId ? db.prepare('SELECT id, org_id FROM users WHERE id = ?').get(ownerUserId) : null;
+  if (ownerUserId && !owner) throw new Error('Owner user not found');
+  if (owner && owner.org_id) throw new Error('User already belongs to an organization');
+
+  const id = 'org_' + crypto.randomBytes(12).toString('hex');
+  const now = new Date().toISOString();
+  db.transaction(() => {
+    db.prepare(`
+      INSERT INTO organizations (id, name, slug, plan, status, owner_user_id, settings, created_at, updated_at)
+      VALUES (?, ?, ?, ?, 'active', ?, '{}', ?, ?)
+    `).run(id, name, slug, plan, ownerUserId || null, now, now);
+    if (ownerUserId) {
+      db.prepare("UPDATE users SET org_id = ?, org_role = 'owner' WHERE id = ?").run(id, ownerUserId);
+    }
+  });
+  return getOrganizationById(id);
+}
+
+function getOrganizationById(orgId) {
+  return orgRowToObject(db.prepare('SELECT * FROM organizations WHERE id = ? AND deleted_at IS NULL').get(orgId));
+}
+
+function getOrganizationBySlug(slug) {
+  return orgRowToObject(db.prepare('SELECT * FROM organizations WHERE slug = ? AND deleted_at IS NULL').get(slug));
+}
+
+function updateOrganization(orgId, { name, plan, status, settings, seatsLicensed, stripeCustomerId, stripeSubscriptionId } = {}) {
+  const org = getOrganizationById(orgId);
+  if (!org) throw new Error('Organization not found');
+  const now = new Date().toISOString();
+  const merged = settings !== undefined ? { ...org.settings, ...settings } : org.settings;
+  db.prepare(`
+    UPDATE organizations SET
+      name = COALESCE(?, name),
+      plan = COALESCE(?, plan),
+      status = COALESCE(?, status),
+      settings = ?,
+      seats_licensed = COALESCE(?, seats_licensed),
+      stripe_customer_id = COALESCE(?, stripe_customer_id),
+      stripe_subscription_id = COALESCE(?, stripe_subscription_id),
+      suspended_at = CASE WHEN ? = 'suspended' THEN COALESCE(suspended_at, ?) WHEN ? = 'active' THEN NULL ELSE suspended_at END,
+      updated_at = ?
+    WHERE id = ?
+  `).run(
+    name ?? null, plan ?? null, status ?? null,
+    JSON.stringify(merged),
+    seatsLicensed ?? null, stripeCustomerId ?? null, stripeSubscriptionId ?? null,
+    status ?? null, now, status ?? null,
+    now, orgId
+  );
+  return getOrganizationById(orgId);
+}
+
+function getOrgMembers(orgId) {
+  return db.prepare(`
+    SELECT id, username, display_name, email, org_role, auth_method, status, created_at
+    FROM users WHERE org_id = ? ORDER BY created_at ASC
+  `).all(orgId).map(r => ({
+    id: r.id,
+    username: r.username,
+    displayName: r.display_name,
+    email: r.email,
+    orgRole: r.org_role || 'member',
+    authMethod: r.auth_method,
+    status: r.status,
+    createdAt: r.created_at,
+  }));
+}
+
+function countOrgMembers(orgId) {
+  return db.prepare('SELECT COUNT(*) AS n FROM users WHERE org_id = ?').get(orgId).n;
+}
+
+function addUserToOrg(userId, orgId, role = 'member') {
+  const user = db.prepare('SELECT id, org_id FROM users WHERE id = ?').get(userId);
+  if (!user) throw new Error('User not found');
+  if (user.org_id && user.org_id !== orgId) throw new Error('User already belongs to another organization');
+  if (!['owner', 'admin', 'member'].includes(role)) throw new Error('Invalid org role');
+  db.prepare('UPDATE users SET org_id = ?, org_role = ? WHERE id = ?').run(orgId, role, userId);
+  try { require('./lib/orgBilling').scheduleSeatSync(orgId); } catch (_) {}
+}
+
+function setOrgMemberRole(orgId, userId, role) {
+  if (!['owner', 'admin', 'member'].includes(role)) throw new Error('Invalid org role');
+  const res = db.prepare('UPDATE users SET org_role = ? WHERE id = ? AND org_id = ?').run(role, userId, orgId);
+  if (res.changes === 0) throw new Error('User is not a member of this organization');
+}
+
+function isOrgAdmin(userId, orgId) {
+  const u = db.prepare('SELECT org_id, org_role FROM users WHERE id = ?').get(userId);
+  return !!u && u.org_id === orgId && (u.org_role === 'owner' || u.org_role === 'admin');
+}
+
+function getUserOrg(userId) {
+  const u = db.prepare('SELECT org_id FROM users WHERE id = ?').get(userId);
+  return u && u.org_id ? getOrganizationById(u.org_id) : null;
+}
+
+/**
+ * Offboard a member: revoke every access token, drop workspace memberships in
+ * org workspaces, and detach from the org. Single code path — SCIM deactivate,
+ * admin removal, and org deletion all route through here.
+ */
+function offboardOrgMember(orgId, userId, { deactivate = false } = {}) {
+  const user = db.prepare('SELECT id, org_id FROM users WHERE id = ?').get(userId);
+  if (!user || user.org_id !== orgId) throw new Error('User is not a member of this organization');
+  const now = new Date().toISOString();
+  const rawDb = db.getRawDB ? db.getRawDB() : db;
+  const tokensRevoked = rawDb.transaction(() => {
+    const revoked = db.prepare(
+      'UPDATE access_tokens SET revoked_at = ? WHERE owner_id = ? AND revoked_at IS NULL'
+    ).run(now, userId).changes;
+    db.prepare(`
+      DELETE FROM workspace_members
+      WHERE user_id = ? AND workspace_id IN (SELECT id FROM workspaces WHERE org_id = ?)
+    `).run(userId, orgId);
+    db.prepare("UPDATE users SET org_id = NULL, org_role = NULL, status = CASE WHEN ? THEN 'deactivated' ELSE status END WHERE id = ?")
+      .run(deactivate ? 1 : 0, userId);
+    return revoked;
+  })();
+  try { require('./lib/orgBilling').scheduleSeatSync(orgId); } catch (_) {}
+  return { userId, tokensRevoked, deactivated: !!deactivate };
+}
+
+// ── Org domains ──
+
+function addOrgDomain(orgId, domain) {
+  const normalized = String(domain || '').trim().toLowerCase();
+  if (!/^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$/.test(normalized)) {
+    throw new Error('Invalid domain');
+  }
+  const existing = db.prepare('SELECT * FROM org_domains WHERE domain = ?').get(normalized);
+  if (existing) {
+    if (existing.org_id !== orgId) throw new Error('Domain already claimed by another organization');
+    return { id: existing.id, domain: existing.domain, txtToken: existing.txt_token, verifiedAt: existing.verified_at };
+  }
+  const id = 'dom_' + crypto.randomBytes(8).toString('hex');
+  const txtToken = 'myapi-verify=' + crypto.randomBytes(16).toString('hex');
+  db.prepare('INSERT INTO org_domains (id, org_id, domain, txt_token, created_at) VALUES (?, ?, ?, ?, ?)')
+    .run(id, orgId, normalized, txtToken, new Date().toISOString());
+  return { id, domain: normalized, txtToken, verifiedAt: null };
+}
+
+function getOrgDomains(orgId) {
+  return db.prepare('SELECT * FROM org_domains WHERE org_id = ?').all(orgId).map(r => ({
+    id: r.id, domain: r.domain, txtToken: r.txt_token, verifiedAt: r.verified_at, createdAt: r.created_at,
+  }));
+}
+
+function markOrgDomainVerified(orgId, domain) {
+  const res = db.prepare('UPDATE org_domains SET verified_at = ? WHERE org_id = ? AND domain = ?')
+    .run(new Date().toISOString(), orgId, String(domain).toLowerCase());
+  if (res.changes === 0) throw new Error('Domain not found for this organization');
+}
+
+function deleteOrgDomain(orgId, domain) {
+  db.prepare('DELETE FROM org_domains WHERE org_id = ? AND domain = ?').run(orgId, String(domain).toLowerCase());
+}
+
+/** Verified-domain lookup used by signup capture and SSO discovery. */
+function findOrgByEmailDomain(email) {
+  const domain = String(email || '').split('@')[1]?.toLowerCase();
+  if (!domain) return null;
+  const row = db.prepare(`
+    SELECT o.* FROM organizations o
+    JOIN org_domains d ON d.org_id = o.id
+    WHERE d.domain = ? AND d.verified_at IS NOT NULL AND o.deleted_at IS NULL AND o.status = 'active'
+  `).get(domain);
+  return orgRowToObject(row);
+}
+
+// ── Org usage rollup ──
+
+function getOrgUsage(orgId, { from, to } = {}) {
+  const memberIds = db.prepare('SELECT id FROM users WHERE org_id = ?').all(orgId).map(r => r.id);
+  if (memberIds.length === 0) return { apiCalls: 0, aiCostCents: 0, aiEvents: 0, members: 0, perMember: [] };
+  const ph = memberIds.map(() => '?').join(',');
+  const fromDate = from || '0000-00-00';
+  const toDate = to || '9999-99-99';
+
+  // audit_log is the per-user API-call source of truth (usage_daily is workspace-keyed)
+  const perMember = db.prepare(`
+    SELECT actor_id AS user_id, COUNT(*) AS calls
+    FROM audit_log
+    WHERE actor_id IN (${ph}) AND substr(timestamp, 1, 10) BETWEEN ? AND ?
+    GROUP BY actor_id
+  `).all(...memberIds, fromDate, toDate);
+
+  const ai = db.prepare(`
+    SELECT COALESCE(SUM(cost_cents), 0) AS cost, COUNT(*) AS events
+    FROM ai_usage_events
+    WHERE user_id IN (${ph}) AND substr(created_at, 1, 10) BETWEEN ? AND ?
+  `).get(...memberIds, fromDate, toDate);
+
+  return {
+    apiCalls: perMember.reduce((s, r) => s + r.calls, 0),
+    aiCostCents: ai.cost,
+    aiEvents: ai.events,
+    members: memberIds.length,
+    perMember,
+  };
+}
+
 module.exports = {
   db,
   initDatabase,
@@ -6947,6 +8236,12 @@ module.exports = {
   createVaultToken,
   getVaultTokens,
   deleteVaultToken,
+  createVaultCredential,
+  getVaultCredentials,
+  getVaultCredential,
+  decryptVaultCredential,
+  updateVaultCredential,
+  deleteVaultCredential,
   decryptVaultToken,
   createAccessToken,
   getAccessTokens,
@@ -6954,6 +8249,9 @@ module.exports = {
   encryptRawToken,
   decryptRawToken,
   revokeAccessToken,
+  revokeAccessTokensForClient,
+  getUserPreferences,
+  setUserPreferences,
   // Scopes
   seedDefaultScopes,
   validateScope,
@@ -7002,6 +8300,7 @@ module.exports = {
   deletePersona,
   storeOAuthToken,
   getOAuthToken,
+  getOAuthLoginToken,
   countConnectedOAuthServices,
   isTokenExpired,
   refreshOAuthToken,
@@ -7116,6 +8415,8 @@ module.exports = {
   denyPendingApproval,
   cleanupExpiredApprovals,
   getDeviceApprovalHistory,
+  getLastAlertSentAt,
+  markAlertSent,
   // OAuth Device Flow (RFC 8628)
   createDeviceCode,
   getDeviceCodeByDeviceCode,
@@ -7127,6 +8428,12 @@ module.exports = {
   // ASC (Agentic Secure Connection)
   createApprovedDeviceASC,
   getApprovedDeviceByKeyFingerprint,
+  getApprovedDeviceByKeyFingerprintGlobal,
+  restoreASCDevice,
+  markDeviceReplaced,
+  wasAscKeyEverApproved,
+  createAscSelfRegistration,
+  getPendingApprovalByFingerprintGlobal,
   // Service Preferences (Phase 3)
   createServicePreference,
   getServicePreference,
@@ -7181,6 +8488,25 @@ module.exports = {
   upsertInvoice,
   incrementUsageDaily,
   getUsageDaily,
+  getActiveBillingSubscriptions,
+  getUnreportedUsageDays,
+  markUsageDayReported,
+  createTrigger,
+  getTriggerById,
+  listTriggers,
+  updateTrigger,
+  deleteTrigger,
+  getDueScheduleTriggers,
+  getEnabledEventTriggers,
+  createTriggerRun,
+  getTriggerRunById,
+  listTriggerRuns,
+  claimQueuedTriggerRuns,
+  finishTriggerRun,
+  recordAiUsageEvent,
+  getMonthlyAiUsage,
+  getUnreportedAiUsage,
+  markAiUsageReported,
   // Pricing Plans
   seedDefaultPricingPlans,
   // Phase 4: SSO & RBAC
@@ -7228,6 +8554,12 @@ module.exports = {
   createOAuthServerAuthCode,
   consumeOAuthServerAuthCode,
   peekOAuthServerAuthCode,
+  createOAuthServerRefreshToken,
+  getOAuthServerRefreshTokenById,
+  touchOAuthServerRefreshToken,
+  revokeOAuthServerRefreshToken,
+  recordOAuthServerGrant,
+  hasOAuthServerGrant,
   // AFP (API File Protocol)
   createAfpDevice,
   getAfpDevices,
@@ -7242,4 +8574,23 @@ module.exports = {
   unsuspendToken,
   getTokenSuspension,
   getTokenOwnerId,
+  // B2B: Organizations
+  createOrganization,
+  getOrganizationById,
+  getOrganizationBySlug,
+  updateOrganization,
+  getOrgMembers,
+  countOrgMembers,
+  addUserToOrg,
+  setOrgMemberRole,
+  isOrgAdmin,
+  getUserOrg,
+  offboardOrgMember,
+  addOrgDomain,
+  getOrgDomains,
+  markOrgDomainVerified,
+  deleteOrgDomain,
+  findOrgByEmailDomain,
+  getOrgUsage,
+  resolveOrgConnectionGrantor,
 };

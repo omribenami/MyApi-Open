@@ -1,212 +1,151 @@
-# MyApi
+# MyApi Open
 
-**The privacy-first personal API platform and AI agent gateway.**
+**Community edition of the MyApi agent gateway.**
 
-[![CI](https://github.com/omribenami/MyApi/actions/workflows/ci.yml/badge.svg)](https://github.com/omribenami/MyApi/actions/workflows/ci.yml)
+[![CI](https://github.com/omribenami/MyApi-Open/actions/workflows/ci.yml/badge.svg)](https://github.com/omribenami/MyApi-Open/actions/workflows/ci.yml)
 [![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](https://nodejs.org)
 [![Docker](https://img.shields.io/badge/docker-supported-2496ed)](https://docs.docker.com)
 [![Discord](https://img.shields.io/badge/discord-join-5865f2)](https://discord.gg/WPp4sCN4xB)
 
-Connect your services once. Issue scoped tokens to AI agents. Keep full control over who accesses what — with a full audit trail of every action.
+Connect your services once. Issue scoped access to AI agents. Keep auditability and revocation in one place.
 
-> **Prefer zero-ops?** A fully managed, always-updated instance is available at **[myapiai.com](https://www.myapiai.com)** — sign up for free and skip the server setup entirely.
-
----
-
-## What is MyApi?
-
-Most AI agent setups suffer from the same fundamental flaws: raw credentials scattered across local environments, zero audit trails, and the inability to revoke access without rotating every key you own. Whether you're using **OpenClaw**, **Hermes**, or **Claude Code**, your security is only as strong as your last `.env` file.
-
-**MyApi flips the equation.** Instead of configuring every agent individually, MyApi acts as a privacy-first gateway and central hub between your sensitive data and the agents that use it. Connect your services once; authorize your agents forever.
-
-### Core Advantages
-
-* **Unified Connection:** Your agents across different platforms share the same data and services seamlessly.
-* **Agent Management:** Centrally manage personas, specialized skills, and knowledge bases from a single dashboard.
-* **Multiple Agents - One Brain:** Ensure all your agents have a consistent "memory" and context by connecting them to a single source of truth.
-* **Shareable Scoped Tokens:** Grant an agent access to a **"Bundle"** (Persona + unique skills + unique knowledge base) rather than giving them raw, unfettered access to your entire infrastructure.
-* **Secure Infrastructure:** Provide agents with a hardened connection to your services and workstations via one secure, audited API.
-* **Instant Revocation:** Kill access for a single agent or tool instantly without touching your primary service credentials.
-
-<p align="center">
-<img width="1268" height="1080" alt="image" align="center" src="https://github.com/user-attachments/assets/62ebccc0-2b70-4097-b9db-59672f5b19ab" />
-</p>
-
-You connect your services (Google, GitHub, Slack, and 30+ more) through MyApi once. Agents get a scoped token — or better yet, authenticate via **cryptographic keypair signing (ASC)** so no raw secret ever crosses the wire. Your credentials are never exposed, every action is logged, and a one-click ZIP export means your entire agent setup is always backed up and portable.
+> Prefer zero-ops? The official managed service lives at **[myapiai.com](https://www.myapiai.com)**.
+> This repository is the **AGPL community edition**. The managed cloud offering includes additional hosted-only modules, operations, and commercial terms that are **not** all part of this repository.
 
 ---
 
-## Features
+## Edition model
 
-| Feature | Description |
-|---|---|
-| **OAuth Aggregation** | Connect 30+ (and counting) services (Google, GitHub, Slack, Notion, Salesforce, Jira...) in one place. Tokens auto-refresh. Agents proxy through MyApi — never touch credentials. |
-| **AI Agent Gateway** | Issue scoped Bearer tokens to any AI agent. First access requires your approval. Every request is logged. |
-| **Persona System** | Multiple AI identities, each with its own soul content (SOUL.md), attached knowledge docs, and skills. Active persona shapes every API response. |
-| **Knowledge Base** | Upload or write Markdown/PDF documents. Attach them to specific personas for grounded, contextual responses. |
-| **Skills & Marketplace** | Build reusable capability modules. Install community skills from the marketplace. Publish your own. |
-| **Token Vault** | AES-256-GCM encrypted storage for third-party API keys (OpenAI, Stripe, AWS, etc.). Rotate once, updated everywhere. |
-| **AFP Connector** | API File Protocol — desktop daemon (Windows/macOS/Linux) for persistent local agent connections with scoped filesystem and shell access. |
-| **ASC — Secure Agent Auth** | Agentic Secure Connection — agents authenticate via Ed25519 keypair signing instead of raw tokens. Signatures are timestamp-bound; replayed requests are rejected within 60 seconds. |
-| **Backup & Import** | One-click ZIP export of your full agent ecosystem (personas, knowledge, skills, memory). Import back on any instance in seconds. Checksums included. |
-| **Team Workspaces** | Multi-tenancy with Owner/Admin/Member/Viewer roles. Fully isolated contexts per workspace. |
-| **Device Management** | Every new device (browser, CLI, AFP daemon, ASC agent) requires approval before access. Revoke instantly. |
-| **Immutable Audit Log** | Append-only log of every API action — what, when, by which token, with what result. |
-| **2FA & Scoped Tokens** | TOTP-based two-factor auth, session management, and fine-grained token scopes (`basic`, `knowledge`, `services:write`, etc.). |
+MyApi is intentionally run as an **open-core** product.
 
----
+| Area | MyApi Open (this repo) | MyApi Cloud / Commercial |
+|---|---|---|
+| Core API gateway | Yes | Yes |
+| OAuth and scoped agent access patterns | Yes | Yes |
+| ASC / AFP / self-hosting primitives | Yes | Yes |
+| Generic connector and toolkit framework | Yes | Yes |
+| Managed hosting, upgrades, backups, abuse handling | No | Yes |
+| Billing, subscriptions, and cloud account operations | No | Yes |
+| Hosted-only enterprise controls and managed ops | No | Yes |
+| Official cloud legal terms and privacy operations | Reference only | Yes |
 
-## Architecture
-
-<p align="center">
-  <img width="512" src="https://github.com/user-attachments/assets/5bf8bf21-dfca-4afe-b724-9cee6eab8470" alt="MyApi Stack">
-</p>
-**Request flow:**
-```
-Request → auth middleware → scope validator → RBAC → device approval gate
-        → route handler → brain/vault → database → response
-```
+A fuller boundary document lives in [`docs/OPEN_CORE_BOUNDARY.md`](docs/OPEN_CORE_BOUNDARY.md).
 
 ---
 
-## Quick Start
+## What stays open
+
+MyApi Open is the place for:
+
+- the agent gateway itself
+- scoped auth and approval flows
+- self-hosting and local deployment
+- generic service / connector plumbing
+- personas, knowledge, skills, and token-scoped automation primitives
+- community contributions and extension points
+
+## What stays closed
+
+The managed MyApi Cloud offering may include:
+
+- hosted billing and subscription operations
+- commercial cloud-only admin and enterprise controls
+- managed abuse / fraud / trust & safety operations
+- proprietary operational tooling and deployment glue
+- hosted tenant provisioning and other internal service orchestration
+
+This separation is deliberate. The goal is to keep the platform credible and hackable for developers while preserving a real commercial product.
+
+---
+
+## Composio policy
+
+Our position on Composio is:
+
+- **Open:** generic Composio adapter code, toolkit discovery patterns, schema mapping, and self-hosting instructions
+- **Closed / hosted-only:** MyApi's managed Composio tenant operations, paid auth-config provisioning, hosted defaults, commercial support flows, and internal abuse/risk controls
+
+In plain English: we are comfortable exposing the **integration surface**, but not every piece of the **hosted business and operations layer** around it.
+
+---
+
+## Quick start
 
 ### Docker (recommended)
 
 ```bash
-# 1. Clone
-git clone https://github.com/omribenami/MyApi.git
-cd MyApi
-
-# 2. Configure
+git clone https://github.com/omribenami/MyApi-Open.git
+cd MyApi-Open
 cp src/.env.example src/.env
-# Edit src/.env — set ENCRYPTION_KEY, VAULT_KEY, JWT_SECRET, SESSION_SECRET
+# edit src/.env
 
-# 3. Start (development — hot reload on both frontend and backend)
 docker-compose -f docker-compose.dev.yml up --build
-# Dashboard  →  http://localhost:5173
-# API        →  http://localhost:4500
-
-# 4. Start (production)
-docker-compose -f docker-compose.prod.yml up -d --build
-# Dashboard + API  →  http://localhost:4500/dashboard/
+# Dashboard  -> http://localhost:5173
+# API        -> http://localhost:4500
 ```
 
-### Manual (bare metal)
+### Production
 
 ```bash
-# Backend
+docker-compose -f docker-compose.prod.yml up -d --build
+# Dashboard + API -> http://localhost:4500/dashboard/
+```
+
+### Bare metal
+
+```bash
 cd src
 npm install
-node scripts/init-db.js       # create database schema
-node index.js                 # start server on port 4500
-
-# Frontend (development)
-cd src/public/dashboard-app
-npm install
-npm run dev                   # Vite dev server on port 5173
-
-# Frontend (production build — served by Express at /dashboard/)
-npm run build                 # output → src/public/dist/
-```
-
-> The master token is printed to the server logs on first startup. Copy it to log in.
-
----
-
-## Configuration
-
-Copy `src/.env.example` to `src/.env` and fill in your values.
-
-### Required
-
-| Variable | Description |
-|---|---|
-| `PORT` | Server port (default: `4500`) |
-| `NODE_ENV` | `development` or `production` |
-| `ENCRYPTION_KEY` | 32-character key — AES-256 encryption for OAuth tokens |
-| `VAULT_KEY` | 32-character key — Token Vault encryption |
-| `JWT_SECRET` | JWT signing secret |
-| `SESSION_SECRET` | Express session secret |
-
-### Optional
-
-| Variable | Description |
-|---|---|
-| `DB_PATH` | SQLite database path (default: `./data/myapi.db`) |
-| `SESSION_COOKIE_SECURE` | `true` in production (HTTPS), `false` for local dev |
-| `RATE_LIMIT_MAX_REQUESTS` | Requests per window per IP (default: `100`) |
-| `RATE_LIMIT_WINDOW_MS` | Rate limit window in ms (default: `900000` / 15 min) |
-| `EMAIL_PROVIDER` | `smtp` or `sendgrid` for outbound email notifications |
-| `CORS_ORIGIN` | Comma-separated allowed origins |
-| `POWER_USER_EMAIL` | Email address granted User Management access in the dashboard |
-
-### OAuth service credentials
-
-OAuth providers follow the pattern `{SERVICE}_CLIENT_ID` / `{SERVICE}_CLIENT_SECRET` with a corresponding `ENABLE_OAUTH_{SERVICE}=true` feature flag. See [`docs/SERVICES_MANUAL.md`](docs/SERVICES_MANUAL.md) for the full configuration reference covering all 45+ supported services.
-
----
-
-## Self-Hosting
-
-MyApi is fully self-hostable. For a production deployment you'll need:
-
-- A server with Docker + Docker Compose (or Node.js 18+)
-- A domain with HTTPS — e.g. `https://your.domain.com` (nginx + Let's Encrypt, or Cloudflare Tunnel)
-- The environment variables above filled in for your domain
-
-See the full deployment guide: [`DEPLOYMENT_GUIDE.md`](DEPLOYMENT_GUIDE.md)
-
-```bash
-# Example: nginx reverse proxy to port 4500
-# See docs/SERVICES_MANUAL.md for the full nginx + SSL config block
+node scripts/init-db.js
+node index.js
 ```
 
 ---
 
-## Hosted Service
+## Legal scope of this repository
 
-**Don't want to manage your own server?**
+- Code in this repository is licensed under **AGPL-3.0**.
+- The legal documents in this repository that mention the hosted service are provided so self-hosters can understand the hosted product boundary.
+- If you deploy your own instance, **you** are responsible for your own terms, privacy, data processing disclosures, and compliance posture.
+- If you use **myapiai.com**, the hosted-service legal terms published by Agentic Integration LLC apply.
 
-[**myapiai.com**](https://www.myapiai.com) is the official managed version of this project — always running the latest release, with automatic backups, SSL, and email included out of the box.
+---
 
-- Free tier available
-- Same open-source codebase, zero infrastructure work
-- Pro and Enterprise tiers for teams
+## Documentation
 
-## Roadmap
-
-- Expanded agent capabilities (streaming responses, webhook triggers)
-- Additional OAuth providers (target 60+, including more enterprise services)
-- Additional enterprise features on [myapiai.com](https://www.myapiai.com)
+- [`docs/OPEN_CORE_BOUNDARY.md`](docs/OPEN_CORE_BOUNDARY.md) — explicit Open / Closed / Maybe boundary
+- [`docs/legal/TERMS_OF_USE.md`](docs/legal/TERMS_OF_USE.md) — hosted-service terms scope note
+- [`docs/legal/PRIVACY_POLICY.md`](docs/legal/PRIVACY_POLICY.md) — hosted-service privacy scope note
+- [`docs/SERVICES_MANUAL.md`](docs/SERVICES_MANUAL.md) — service configuration reference
+- [`DEPLOYMENT_GUIDE.md`](DEPLOYMENT_GUIDE.md) — deployment guide
 
 ---
 
 ## Contributing
 
-Contributions are welcome.
+Contributions are welcome for the community edition.
 
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feat/your-feature`
-3. Run the tests: `npm test` (from `src/`)
-4. Make sure `cd src/public/dashboard-app && npm run lint` passes
-5. Open a pull request against `main`
+3. Run the relevant tests
+4. Open a pull request against `main`
 
-For security issues, see [`SECURITY.md`](SECURITY.md) for the responsible disclosure process.
+For security issues, use [`SECURITY.md`](SECURITY.md).
 
 ---
 
-## Community & Support
+## Community & support
 
-- **Discord**: [discord.gg/WPp4sCN4xB](https://discord.gg/WPp4sCN4xB)
-- **Issues**: [GitHub Issues](https://github.com/omribenami/MyApi/issues)
-- **Documentation**: [`docs/`](docs/) — architecture, API reference, services guide, compliance
+- Discord: https://discord.gg/WPp4sCN4xB
+- Issues: https://github.com/omribenami/MyApi-Open/issues
+- Managed service: https://www.myapiai.com
 
 ---
 
 ## License
 
-Copyright © 2026 MyApi. Licensed under the [GNU Affero General Public License v3.0](LICENSE).
+Copyright © 2026 MyApi.
+Licensed under the [GNU Affero General Public License v3.0](LICENSE).
 
-This means you can self-host, modify, and distribute MyApi freely — but any modified version you run as a network service must also be made available under AGPL-3.0. See the [LICENSE](LICENSE) file for the full terms.
+If you run a modified network service based on this repository, AGPL obligations apply to that modified version.

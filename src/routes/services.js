@@ -6,6 +6,7 @@ const SERVICE_METHODS = require('./service-methods');
 const {
   getServicePreference,
   getServicePreferences,
+  createServicePreference,
   updateServicePreference,
   deleteServicePreference,
   createAuditLog,
@@ -14,62 +15,145 @@ const {
   refreshOAuthToken,
   getAccessTokens,
 } = require('../database');
+const {
+  isComposioConfigured,
+  getComposioServiceCatalog,
+  getComposioServiceByName,
+  getComposioCategories,
+  isComposioToolkitSlug,
+  isComposioVirtualService,
+  isComposioConnectedService,
+  proxyComposioService,
+} = require('../services/composio-integration');
+
+// Native catalog entries shadowed by a Composio toolkit (github, facebook, box,
+// canva, dropbox, zoom, figma) are hidden — Composio owns the clean name. When
+// Composio isn't configured the native connectors remain so nothing disappears.
+//
+// 'google' is hidden too: Google products are connected via Composio's per-product
+// toolkits (gmail, googlecalendar, googledrive, googledocs, ...), not the native
+// catch-all connector. The native 'google' SERVICE_CATALOG entry is kept (not
+// deleted) so the Sign-in-with-Google LOGIN flow and the native Gmail proxy
+// fallback still resolve a 'google' service — it's only removed from the
+// connectable services list shown to users.
+const NATIVE_HIDDEN_WHEN_COMPOSIO = new Set(['google']);
+function visibleNativeCatalog() {
+  if (!isComposioConfigured()) return SERVICE_CATALOG;
+  return SERVICE_CATALOG.filter(
+    (svc) => !isComposioToolkitSlug(svc.id) && !NATIVE_HIDDEN_WHEN_COMPOSIO.has(svc.id)
+  );
+}
+const { getAfpDevices } = require('../database');
+const { afpConnections } = require('../lib/afp-state');
+
+// ── AFP as a discoverable service ─────────────────────────────────────────────
+// AFP (remote PC/server file system + shell) is not an OAuth service, but agents
+// must find it the same way they find everything else: GET /services →
+// /services/afp → /services/afp/methods. Requires a master token to USE
+// (enforced by the /afp routes), and a master token to see device details.
+function isMasterReq(req) {
+  if (req.session?.user) return true;
+  const m = req.tokenMeta;
+  return Boolean(m && (m.scope === 'full' || m.tokenType === 'master' || String(m.tokenId || '').startsWith('sess_')));
+}
+
+function getAfpServiceEntry(req) {
+  if (!isMasterReq(req)) return null;
+  const userId = String(req.session?.user?.id || req.user?.id || req.tokenMeta?.ownerId || 'owner');
+  let devices = [];
+  try { devices = getAfpDevices(userId) || []; } catch { return null; }
+  if (devices.length === 0) return null;
+  const deviceList = devices.map((d) => ({
+    deviceId: d.id,
+    name: d.device_name,
+    hostname: d.hostname,
+    platform: d.platform,
+    status: afpConnections.has(d.id) ? 'online' : 'offline',
+  }));
+  const online = deviceList.filter((d) => d.status === 'online').length;
+  return {
+    id: 'afp',
+    name: 'afp',
+    label: 'AFP — Remote Devices',
+    category: 'developer-tools',
+    categoryLabel: 'Developer Tools',
+    auth_type: 'device',
+    description: `File system and shell access to ${devices.length} registered machine(s): ${deviceList.map((d) => `${d.name} (${d.platform}, ${d.status})`).join(', ')}. Run commands, read/write files — e.g. check Docker containers with POST /api/v1/afp/{deviceId}/exec {"cmd":"docker ps -a"}.`,
+    status: online > 0 ? 'connected' : 'available',
+    source: 'afp',
+    devices: deviceList,
+  };
+}
+
+function buildAfpMethods(afpEntry) {
+  const note = 'All paths are MyApi routes under /api/v1 (NOT the services proxy). Master token or ASC required. Pick deviceId from the devices list.';
+  return {
+    success: true,
+    serviceId: 'afp',
+    provider: 'afp',
+    status: afpEntry.status,
+    devices: afpEntry.devices,
+    data: [
+      { name: 'devices.list', description: 'List registered machines with online status', method: 'GET', endpoint: '/api/v1/afp/devices', scope: 'master token / ASC', parameters: {}, returns: 'devices[] with id, name, hostname, platform, status' },
+      { name: 'exec', description: 'Run a shell command on the machine (e.g. "docker ps -a", "df -h")', method: 'POST', endpoint: '/api/v1/afp/{deviceId}/exec', scope: 'master token / ASC', parameters: { cmd: { type: 'string', description: 'Shell command', optional: false }, cwd: { type: 'string', optional: true }, timeout: { type: 'number', description: 'ms, max 30000', optional: true } }, returns: '{ ok, stdout, stderr, exitCode }' },
+      { name: 'fs.ls', description: 'List a directory', method: 'GET', endpoint: '/api/v1/afp/{deviceId}/ls?path={dir}', scope: 'master token / ASC', parameters: { path: { type: 'string', optional: false } }, returns: 'directory entries' },
+      { name: 'fs.read', description: 'Read a file', method: 'GET', endpoint: '/api/v1/afp/{deviceId}/read?path={file}', scope: 'master token / ASC', parameters: { path: { type: 'string', optional: false } }, returns: 'file content' },
+      { name: 'fs.write', description: 'Write a file', method: 'POST', endpoint: '/api/v1/afp/{deviceId}/write', scope: 'master token / ASC', parameters: { path: { type: 'string', optional: false }, content: { type: 'string', optional: false }, encoding: { type: 'string', description: 'utf8|base64', optional: true } }, returns: '{ ok }' },
+      { name: 'fs.stat', description: 'File/directory metadata', method: 'GET', endpoint: '/api/v1/afp/{deviceId}/stat?path={path}', scope: 'master token / ASC', parameters: { path: { type: 'string', optional: false } }, returns: 'stat object' },
+      { name: 'fs.mkdir', description: 'Create a directory', method: 'POST', endpoint: '/api/v1/afp/{deviceId}/mkdir', scope: 'master token / ASC', parameters: { path: { type: 'string', optional: false } }, returns: '{ ok }' },
+      { name: 'fs.rm', description: 'Delete a file or directory', method: 'DELETE', endpoint: '/api/v1/afp/{deviceId}/rm', scope: 'master token / ASC', parameters: { path: { type: 'string', optional: false }, recursive: { type: 'boolean', optional: true } }, returns: '{ ok }' },
+    ],
+    count: 8,
+    note,
+    example: {
+      description: `Check Docker containers on ${afpEntry.devices[0]?.name || 'a device'}`,
+      request: { method: 'POST', url: `/api/v1/afp/${afpEntry.devices[0]?.deviceId || '{deviceId}'}/exec`, body: { cmd: 'docker ps -a --format "{{.Names}}: {{.Status}}"' } },
+    },
+  };
+}
 
 // Token URLs for auto-refresh (keyed by service id)
 const TOKEN_REFRESH_URLS = {
   google:     { tokenUrl: 'https://oauth2.googleapis.com/token',          clientId: () => process.env.GOOGLE_CLIENT_ID,     clientSecret: () => process.env.GOOGLE_CLIENT_SECRET },
   github:     { tokenUrl: 'https://github.com/login/oauth/access_token',  clientId: () => process.env.GITHUB_CLIENT_ID,     clientSecret: () => process.env.GITHUB_CLIENT_SECRET },
-  slack:      { tokenUrl: 'https://slack.com/api/oauth.v2.access',        clientId: () => process.env.SLACK_CLIENT_ID,      clientSecret: () => process.env.SLACK_CLIENT_SECRET },
-  discord:    { tokenUrl: 'https://discord.com/api/oauth2/token',         clientId: () => process.env.DISCORD_CLIENT_ID,    clientSecret: () => process.env.DISCORD_CLIENT_SECRET },
-  notion:     { tokenUrl: 'https://api.notion.com/v1/oauth/token',        clientId: () => process.env.NOTION_CLIENT_ID,     clientSecret: () => process.env.NOTION_CLIENT_SECRET },
-  linkedin:   { tokenUrl: 'https://www.linkedin.com/oauth/v2/accessToken',clientId: () => process.env.LINKEDIN_CLIENT_ID,   clientSecret: () => process.env.LINKEDIN_CLIENT_SECRET },
   dropbox:    { tokenUrl: 'https://api.dropboxapi.com/oauth2/token',      clientId: () => process.env.DROPBOX_CLIENT_ID,    clientSecret: () => process.env.DROPBOX_CLIENT_SECRET },
   zoom:       { tokenUrl: 'https://zoom.us/oauth/token',                  clientId: () => process.env.ZOOM_CLIENT_ID,       clientSecret: () => process.env.ZOOM_CLIENT_SECRET },
-  hubspot:    { tokenUrl: 'https://api.hubapi.com/oauth/v1/token',        clientId: () => process.env.HUBSPOT_CLIENT_ID,    clientSecret: () => process.env.HUBSPOT_CLIENT_SECRET },
-  confluence: { tokenUrl: 'https://auth.atlassian.com/oauth/token',       clientId: () => process.env.CONFLUENCE_CLIENT_ID, clientSecret: () => process.env.CONFLUENCE_CLIENT_SECRET },
-  asana:      { tokenUrl: 'https://app.asana.com/-/oauth_token',          clientId: () => process.env.ASANA_CLIENT_ID,      clientSecret: () => process.env.ASANA_CLIENT_SECRET },
-  linear:     { tokenUrl: 'https://api.linear.app/oauth/token',           clientId: () => process.env.LINEAR_CLIENT_ID,     clientSecret: () => process.env.LINEAR_CLIENT_SECRET },
   box:        { tokenUrl: 'https://api.box.com/oauth2/token',             clientId: () => process.env.BOX_CLIENT_ID,        clientSecret: () => process.env.BOX_CLIENT_SECRET },
-  airtable:   { tokenUrl: 'https://airtable.com/oauth2/v1/token',        clientId: () => process.env.AIRTABLE_CLIENT_ID,   clientSecret: () => process.env.AIRTABLE_CLIENT_SECRET },
   figma:      { tokenUrl: 'https://www.figma.com/api/oauth/token',        clientId: () => process.env.FIGMA_CLIENT_ID,      clientSecret: () => process.env.FIGMA_CLIENT_SECRET },
   canva:      { tokenUrl: 'https://www.canva.com/api/oauth/token',        clientId: () => process.env.CANVA_CLIENT_ID,      clientSecret: () => process.env.CANVA_CLIENT_SECRET },
-  intercom:   { tokenUrl: 'https://api.intercom.io/auth/eagle/token',     clientId: () => process.env.INTERCOM_CLIENT_ID,   clientSecret: () => process.env.INTERCOM_CLIENT_SECRET },
-  clickup:    { tokenUrl: 'https://app.clickup.com/api/v2/oauth/token',   clientId: () => process.env.CLICKUP_CLIENT_ID,    clientSecret: () => process.env.CLICKUP_CLIENT_SECRET },
-  monday:     { tokenUrl: 'https://auth.monday.com/oauth2/token',         clientId: () => process.env.MONDAY_CLIENT_ID,     clientSecret: () => process.env.MONDAY_CLIENT_SECRET },
   // TikTok uses client_key instead of client_id in token requests
   tiktok:     { tokenUrl: 'https://open.tiktokapis.com/v2/oauth/token/',  clientId: () => process.env.TIKTOK_CLIENT_KEY,    clientSecret: () => process.env.TIKTOK_CLIENT_SECRET, clientIdParam: 'client_key' },
 };
 
+// Native services. Where a service is also offered as a Composio toolkit
+// (composio-toolkits.json), the Composio version is preferred and the native
+// entry is removed here to avoid duplicates — except github, google, and
+// facebook, which keep their native entries alongside Composio.
 const SERVICE_CATALOG = [
   { id: 'github', name: 'GitHub', description: 'Version control and collaboration', icon: 'github', category: 'Developer Tools', auth_type: 'oauth2', api_endpoint: 'https://api.github.com' },
   { id: 'google', name: 'Google', description: 'Email, Calendar, Drive, Sheets, Docs', icon: 'google', category: 'Productivity', auth_type: 'oauth2', api_endpoint: 'https://www.googleapis.com' },
-  { id: 'slack', name: 'Slack', description: 'Team messaging and collaboration', icon: 'slack', category: 'Communication', auth_type: 'oauth2', api_endpoint: 'https://slack.com/api' },
-  { id: 'discord', name: 'Discord', description: 'Voice, video, and text communication', icon: 'discord', category: 'Communication', auth_type: 'oauth2', api_endpoint: 'https://discord.com/api/v10' },
   { id: 'tiktok', name: 'TikTok', description: 'Short-form video platform', icon: 'tiktok', category: 'Social Media', auth_type: 'oauth2', api_endpoint: 'https://open.tiktokapis.com' },
-  { id: 'linkedin', name: 'LinkedIn', description: 'Professional networking', icon: 'linkedin', category: 'Social Media', auth_type: 'oauth2', api_endpoint: 'https://api.linkedin.com/v2' },
   { id: 'facebook', name: 'Facebook', description: 'Social media platform', icon: 'facebook', category: 'Social Media', auth_type: 'oauth2', api_endpoint: 'https://graph.facebook.com' },
-  { id: 'instagram', name: 'Instagram', description: 'Photo and video sharing', icon: 'instagram', category: 'Social Media', auth_type: 'oauth2', api_endpoint: 'https://graph.instagram.com' },
   { id: 'twitter', name: 'Twitter/X', description: 'Social media platform', icon: 'twitter', category: 'Social Media', auth_type: 'oauth2', api_endpoint: 'https://api.twitter.com/2' },
-  { id: 'notion', name: 'Notion', description: 'Workspace and documentation', icon: 'notion', category: 'Productivity', auth_type: 'oauth2', api_endpoint: 'https://api.notion.com/v1' },
   { id: 'microsoft365', name: 'Microsoft 365', description: 'Outlook, Calendar, OneDrive, and Microsoft Graph', icon: 'microsoft365', category: 'Productivity', auth_type: 'oauth2', api_endpoint: 'https://graph.microsoft.com' },
   { id: 'dropbox', name: 'Dropbox', description: 'Cloud file storage and sync', icon: 'dropbox', category: 'Productivity', auth_type: 'oauth2', api_endpoint: 'https://api.dropboxapi.com/2' },
-  { id: 'trello', name: 'Trello', description: 'Boards, cards, and task workflows', icon: 'trello', category: 'Productivity', auth_type: 'oauth2', api_endpoint: 'https://api.trello.com/1' },
   { id: 'zoom', name: 'Zoom', description: 'Meetings, users, and recording metadata', icon: 'zoom', category: 'Communication', auth_type: 'oauth2', api_endpoint: 'https://api.zoom.us/v2' },
-  { id: 'hubspot', name: 'HubSpot', description: 'CRM contacts, companies, and deals', icon: 'hubspot', category: 'Business', auth_type: 'oauth2', api_endpoint: 'https://api.hubapi.com' },
-  { id: 'salesforce', name: 'Salesforce', description: 'Enterprise CRM records and workflows', icon: 'salesforce', category: 'Business', auth_type: 'oauth2', api_endpoint: 'https://login.salesforce.com' },
-  { id: 'jira', name: 'Jira', description: 'Issue tracking and project management', icon: 'jira', category: 'Developer Tools', auth_type: 'oauth2', api_endpoint: 'https://api.atlassian.com' },
-  { id: 'confluence', name: 'Confluence', description: 'Team wiki, docs, and knowledge base', icon: 'confluence', category: 'Developer Tools', auth_type: 'oauth2', api_endpoint: 'https://api.atlassian.com' },
-  { id: 'asana', name: 'Asana', description: 'Project and task management', icon: 'asana', category: 'Productivity', auth_type: 'oauth2', api_endpoint: 'https://app.asana.com/api/1.0' },
-  { id: 'linear', name: 'Linear', description: 'Issue tracking for software teams', icon: 'linear', category: 'Developer Tools', auth_type: 'oauth2', api_endpoint: 'https://api.linear.app' },
   { id: 'box', name: 'Box', description: 'Cloud content management and file sharing', icon: 'box', category: 'Productivity', auth_type: 'oauth2', api_endpoint: 'https://api.box.com/2.0' },
-  { id: 'airtable', name: 'Airtable', description: 'Flexible database and spreadsheet hybrid', icon: 'airtable', category: 'Productivity', auth_type: 'oauth2', api_endpoint: 'https://api.airtable.com/v0' },
   { id: 'figma', name: 'Figma', description: 'Collaborative design and prototyping', icon: 'figma', category: 'Developer Tools', auth_type: 'oauth2', api_endpoint: 'https://api.figma.com/v1' },
   { id: 'canva', name: 'Canva', description: 'Visual design and content creation', icon: 'canva', category: 'Productivity', auth_type: 'oauth2', api_endpoint: 'https://api.canva.com/rest/v1' },
-  { id: 'zendesk', name: 'Zendesk', description: 'Customer support and ticketing', icon: 'zendesk', category: 'Business', auth_type: 'oauth2', api_endpoint: 'https://developer.zendesk.com' },
-  { id: 'intercom', name: 'Intercom', description: 'Customer messaging and engagement', icon: 'intercom', category: 'Business', auth_type: 'oauth2', api_endpoint: 'https://api.intercom.io' },
-  { id: 'clickup', name: 'ClickUp', description: 'All-in-one project management', icon: 'clickup', category: 'Productivity', auth_type: 'oauth2', api_endpoint: 'https://api.clickup.com/api/v2' },
-  { id: 'monday', name: 'Monday.com', description: 'Work management and team workflows', icon: 'monday', category: 'Productivity', auth_type: 'oauth2', api_endpoint: 'https://api.monday.com/v2' },
   { id: 'fal', name: 'fal', description: 'fal AI inference APIs (HTTP MVP, MCP phase-2)', icon: 'fal', category: 'Developer Tools', auth_type: 'api_key', api_endpoint: 'https://fal.run' },
+  {
+    id: 'homeassistant', name: 'homeassistant', label: 'Home Assistant',
+    description: 'Control your Home Assistant instance — read entity states, call services (lights, switches, climate, scenes), query history and render templates through the full HA REST API.',
+    icon: 'https://cdn.simpleicons.org/homeassistant/18BCF2', category: 'Smart Home',
+    auth_type: 'api_key', connect_method: 'instance', api_endpoint: null,
+    authFields: require('../lib/homeassistant').AUTH_FIELDS,
+    setup_hint: 'Enter your instance URL (Nabu Casa / DuckDNS / public address) and a Long-Lived Access Token from Profile → Security.',
+  },
+  // Native LinkedIn Pages connector (organization/company pages). MyApi's own
+  // integration — distinct from Composio's `linkedin` toolkit, which is the
+  // personal-profile connector.
+  { id: 'linkedin_pages', name: 'LinkedIn Pages', description: 'Post and read on LinkedIn company Pages you administer (organization access)', icon: 'linkedin', category: 'Social Media', auth_type: 'oauth2', api_endpoint: 'https://api.linkedin.com' },
 ];
 
 function createServicesRoutes() {
@@ -93,66 +177,6 @@ function createServicesRoutes() {
         if (t.hash && await bcrypt.compare(rawToken, t.hash).catch(() => false)) {
           req.tokenMeta = t;
           req.user = req.user || { id: t.ownerId };
-
-// Service methods registry — documents what operations available for each service
-const SERVICE_METHODS = {
-  google: [
-    {
-      name: 'gmail.messages.list',
-      description: 'List Gmail messages from inbox',
-      method: 'GET',
-      endpoint: '/services/google/gmail/messages',
-      scope: 'services:read or services:google:read or master',
-      parameters: {
-        maxResults: { type: 'number', description: 'Max messages to return (default: 10)', optional: true },
-        pageToken: { type: 'string', description: 'Pagination token from previous response', optional: true }
-      },
-      returns: 'messages array with id, subject, from, to, date, snippet, threadId'
-    },
-    {
-      name: 'gmail.messages.get',
-      description: 'Get full Gmail message by ID',
-      method: 'GET',
-      endpoint: '/services/google/gmail/messages/:messageId',
-      scope: 'services:read or services:google:read or master',
-      parameters: {
-        messageId: { type: 'string', description: 'Message ID from messages.list', optional: false }
-      },
-      returns: 'full message object with body, headers, attachments, labels'
-    },
-    {
-      name: 'gmail.messages.send',
-      description: 'Send an email via Gmail',
-      method: 'POST',
-      endpoint: '/services/google/gmail/send',
-      scope: 'services:write or services:google:write or master',
-      parameters: {
-        to: { type: 'string', description: 'Recipient email address', optional: false },
-        subject: { type: 'string', description: 'Email subject', optional: false },
-        body: { type: 'string', description: 'Plain text email body', optional: false },
-        cc: { type: 'string', description: 'CC email address(es)', optional: true },
-        bcc: { type: 'string', description: 'BCC email address(es)', optional: true },
-      },
-      returns: 'messageId and threadId of sent message'
-    },
-    {
-      name: 'gmail.messages.trash',
-      description: 'Move a Gmail message to Trash',
-      method: 'DELETE',
-      endpoint: '/services/google/gmail/messages/:messageId',
-      scope: 'services:write or services:google:write or master',
-      parameters: {
-        messageId: { type: 'string', description: 'Message ID to trash', optional: false }
-      },
-      returns: 'messageId and trashed: true'
-    }
-  ],
-  github: [],
-  slack: [],
-  discord: [],
-  notion: [],
-  microsoft365: [],
-};
           return next();
         }
       }
@@ -215,6 +239,16 @@ const SERVICE_METHODS = {
   }
 
   async function getConnectionMetadata(serviceId, userId) {
+    if (serviceId === 'homeassistant') {
+      const conn = require('../lib/homeassistant').getConnection(userId);
+      return {
+        connected: Boolean(conn),
+        status: conn ? 'connected' : 'available',
+        created_at: conn?.createdAt || null,
+        expires_at: null,
+        instance_url: conn?.baseUrl || null,
+      };
+    }
     if (serviceId === 'fal') {
       const prefs = getServicePreference(userId, 'fal');
       const perUserKey = String(prefs?.preferences?.fal_api_key || prefs?.preferences?.api_key || '').trim();
@@ -256,13 +290,30 @@ const SERVICE_METHODS = {
     return { connected: false, created_at: null, expires_at: null };
   }
 
+  // Returns true if the token carries any per-service scope (services:{name}:...).
+  // Such tokens may list/inspect the services they are scoped for, even without
+  // the global services:read scope — output is filtered down to those services.
+  function hasAnyPerServiceScope(req) {
+    const meta = req.tokenMeta;
+    if (!meta) return false;
+    let scopes = [];
+    try {
+      const parsed = JSON.parse(meta.scope);
+      scopes = Array.isArray(parsed) ? parsed : [];
+    } catch { return false; }
+    return scopes.some((s) => /^services:[^:]+:(read|write|\*)$/.test(s));
+  }
+
   // GET /api/v1/services - List all services with their connection status
-  router.get('/', requireAuth, requireServiceScope(null, 'read'), async (req, res) => {
+  router.get('/', requireAuth, (req, res, next) => {
+    if (hasAnyPerServiceScope(req)) return next();
+    return requireServiceScope(null, 'read')(req, res, next);
+  }, async (req, res) => {
     try {
       const userId = resolveUserId(req);
 
       const servicesWithStatus = await Promise.all(
-        SERVICE_CATALOG.map(async (svc) => {
+        visibleNativeCatalog().map(async (svc) => {
           const conn = await getConnectionMetadata(svc.id, userId);
           return {
             ...svc,
@@ -274,11 +325,42 @@ const SERVICE_METHODS = {
         })
       );
 
+      // Composio: one virtual service per toolkit (connected + available), each
+      // carrying its real category (Developer Tools, Communication, ...). The
+      // root 'composio' connector is intentionally not listed.
+      if (isComposioConfigured()) {
+        try {
+          const composioCatalog = await getComposioServiceCatalog(userId);
+          for (const svc of composioCatalog) {
+            servicesWithStatus.push({
+              ...svc,
+              status: svc.status || 'available',
+              connectedAt: null,
+              expiresAt: null,
+              configMissing: [],
+            });
+          }
+        } catch (composioError) {
+          logger.warn('[Services] Composio catalog unavailable:', composioError.message);
+        }
+      }
+
+      // AFP devices (remote PC/server access) appear as a service so agents
+      // discover them in the standard catalog.
+      const afpEntry = getAfpServiceEntry(req);
+      if (afpEntry) servicesWithStatus.push({ ...afpEntry, connectedAt: null, expiresAt: null, configMissing: [] });
+
+      // Narrow per-service-scoped tokens (no global services:read) only see the
+      // services they are actually scoped for.
+      const visible = hasServiceScope(req, null, 'read')
+        ? servicesWithStatus
+        : servicesWithStatus.filter((s) => hasServiceScope(req, String(s.id || s.name || '').toLowerCase(), 'read'));
+
       res.json({
         success: true,
-        data: servicesWithStatus,
-        total: servicesWithStatus.length,
-        connected: servicesWithStatus.filter((s) => s.status === 'connected').length,
+        data: visible,
+        total: visible.length,
+        connected: visible.filter((s) => s.status === 'connected').length,
       });
     } catch (error) {
       logger.error('[Services] Error fetching services:', error);
@@ -287,13 +369,21 @@ const SERVICE_METHODS = {
   });
 
   // GET /api/v1/services/categories
+  // Category keys are slugified (lowercase, non-alphanumerics -> '-') and must
+  // match the `category` field on each service so frontend filter tabs work.
   router.get('/categories', requireAuth, (req, res) => {
     try {
+      const slugify = (label) => String(label || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
       const map = new Map();
       for (const svc of SERVICE_CATALOG) {
-        const key = svc.category.toLowerCase().replace(/\s+/g, '-');
+        const key = slugify(svc.category);
         if (!map.has(key)) {
           map.set(key, { name: key, label: svc.category });
+        }
+      }
+      if (isComposioConfigured()) {
+        for (const category of getComposioCategories()) {
+          if (!map.has(category.name)) map.set(category.name, category);
         }
       }
       res.json({ success: true, data: Array.from(map.values()) });
@@ -303,6 +393,98 @@ const SERVICE_METHODS = {
     }
   });
 
+  // GET /api/v1/services/resource-capabilities — which services support resource
+  // sub-scopes and what kinds (boards/channels/repos/...) each offers. Feeds the
+  // dashboard token-creation picker. Registered before /:serviceName so the
+  // catch-all doesn't shadow it.
+  router.get('/resource-capabilities', requireAuth, (req, res) => {
+    const { getResourceCapabilities } = require('../lib/service-resource-scopes');
+    res.json({ success: true, data: getResourceCapabilities() });
+  });
+
+  // ── Home Assistant: instance connect (URL + long-lived token) ──────────────
+  // POST validates the pair by probing GET {base}/api/ before storing anything.
+  router.post('/homeassistant/connect', requireAuth, async (req, res) => {
+    if (!isMasterReq(req)) {
+      return res.status(403).json({ error: 'Only the account owner can connect Home Assistant' });
+    }
+    const ha = require('../lib/homeassistant');
+    // Accept both flat body and the {fields:{...}} shape the connect modal sends.
+    const body = req.body?.fields && typeof req.body.fields === 'object' ? req.body.fields : (req.body || {});
+    const token = String(body.token || '').trim();
+
+    let baseUrl;
+    try {
+      baseUrl = ha.normalizeBaseUrl(body.base_url);
+    } catch (e) {
+      return res.status(400).json({ error: e.message });
+    }
+    if (!token) {
+      return res.status(400).json({ error: 'token is required — create a Long-Lived Access Token in Home Assistant under Profile → Security.' });
+    }
+    if (ha.isPrivateHostname(new URL(baseUrl).hostname) && !ha.allowPrivateHosts()) {
+      return res.status(400).json({
+        error: 'That URL points to a private/LAN address which this server cannot (or must not) reach. Use your public Home Assistant address (Nabu Casa, DuckDNS, or reverse proxy).',
+      });
+    }
+
+    let probe = await ha.probeInstance(baseUrl, token);
+    if (!probe.ok) {
+      // Users often paste a deep link (e.g. .../profile/security, the page where
+      // the token is created). If a sub-path URL fails, retry at the origin —
+      // that's the real API root for everything except sub-path proxy installs.
+      const origin = new URL(baseUrl).origin;
+      if (origin !== baseUrl) {
+        const originProbe = await ha.probeInstance(origin, token);
+        if (originProbe.ok) {
+          baseUrl = origin;
+          probe = originProbe;
+        }
+      }
+    }
+    if (!probe.ok) {
+      return res.status(400).json({ error: probe.error || 'Could not validate the Home Assistant connection' });
+    }
+
+    const userId = resolveUserId(req);
+    createServicePreference(userId, 'homeassistant', { base_url: baseUrl, token });
+
+    createAuditLog({
+      requesterId: req.tokenMeta?.tokenId || `sess_${userId}`,
+      action: 'service_connected',
+      resource: '/services/homeassistant/connect',
+      ip: req.ip,
+      details: { service: 'homeassistant', instance: baseUrl },
+    });
+
+    res.json({
+      success: true,
+      data: {
+        service: 'homeassistant',
+        connected: true,
+        instance_url: baseUrl,
+        message: probe.message,
+        next: 'Call it via POST /api/v1/services/homeassistant/proxy with {path, method, body} — e.g. {"path": "/states"} to list all entities.',
+      },
+    });
+  });
+
+  router.delete('/homeassistant/connect', requireAuth, (req, res) => {
+    if (!isMasterReq(req)) {
+      return res.status(403).json({ error: 'Only the account owner can disconnect Home Assistant' });
+    }
+    const userId = resolveUserId(req);
+    deleteServicePreference(userId, 'homeassistant');
+    createAuditLog({
+      requesterId: req.tokenMeta?.tokenId || `sess_${userId}`,
+      action: 'service_disconnected',
+      resource: '/services/homeassistant/connect',
+      ip: req.ip,
+      details: { service: 'homeassistant' },
+    });
+    res.json({ success: true, data: { service: 'homeassistant', connected: false } });
+  });
+
   // GET /api/v1/services/:serviceName - Service detail.
   // Reserved names (available/preferences/categories) must short-circuit to the
   // next matching route BEFORE the broad scope middleware runs — otherwise a
@@ -310,17 +492,38 @@ const SERVICE_METHODS = {
   // actually wanted /preferences, which has its own scope handling downstream.
   router.get('/:serviceName', requireAuth, (req, res, next) => {
     const blocked = new Set(['available', 'preferences', 'categories']);
-    if (blocked.has(String(req.params.serviceName || '').toLowerCase())) {
+    const serviceName = String(req.params.serviceName || '').toLowerCase();
+    if (blocked.has(serviceName)) {
       return next('route');
     }
+    // A standalone per-service scope grants detail access to that one service.
+    if (hasServiceScope(req, serviceName, 'read')) return next();
     return requireServiceScope(null, 'read')(req, res, next);
   }, async (req, res, next) => {
     try {
       const userId = resolveUserId(req);
       const serviceName = String(req.params.serviceName || '').toLowerCase();
-      const service = SERVICE_CATALOG.find((s) => s.id === serviceName || s.name.toLowerCase() === serviceName);
+      // Composio wins: if the clean name maps to a toolkit, resolve it via Composio
+      // even when a (now-hidden) native connector of the same name still exists.
+      const service = (isComposioConfigured() && isComposioToolkitSlug(serviceName))
+        ? null
+        : SERVICE_CATALOG.find((s) => s.id === serviceName || s.name.toLowerCase() === serviceName);
 
       if (!service) {
+        if (serviceName === 'afp') {
+          const afpEntry = getAfpServiceEntry(req);
+          if (afpEntry) return res.json({ success: true, data: afpEntry });
+          return res.status(404).json({
+            error: 'No AFP devices registered',
+            hint: 'Install the AFP connector on a machine from /dashboard/connectors, then it appears here.',
+          });
+        }
+        if (isComposioConfigured()) {
+          const composioService = await getComposioServiceByName(userId, serviceName);
+          if (composioService) {
+            return res.json({ success: true, data: composioService });
+          }
+        }
         return res.status(404).json({ error: 'Service not found' });
       }
 
@@ -345,17 +548,86 @@ const SERVICE_METHODS = {
 
 
   // GET /api/v1/services/:serviceId/methods - List available methods for a service
-  router.get('/:serviceId/methods', requireAuth, requireServiceScope(':serviceId', 'read'), async (req, res) => {
+  // Use the per-param variant so a narrow `services:{id}:read` token is resolved
+  // against the actual serviceId from the URL — passing the literal ':serviceId'
+  // string would never match a per-service scope and wrongly 403 scoped tokens.
+  // Every service (native or Composio) also supports the generic proxy — surface it
+  // alongside the documented methods so agents always have a working call path.
+  function buildProxyMethodDoc(serviceId, label) {
+    return {
+      name: 'proxy.request',
+      description: `Proxy any ${label || serviceId} API request through MyApi using the stored credentials. Works for every connected service, including Composio-backed ones.`,
+      method: 'POST',
+      endpoint: `/services/${serviceId}/proxy`,
+      scope: `services:read (GET) / services:write (POST/PUT/PATCH/DELETE), or standalone per-service scope services:${serviceId}:read|write`,
+      parameters: {
+        path: { type: 'string', description: 'Provider-native REST path (e.g. "/gmail/v1/users/me/messages" or "/user/repos")', optional: false },
+        method: { type: 'string', description: 'HTTP method for the provider call (default: GET)', optional: true },
+        body: { type: 'object', description: 'JSON body for write requests', optional: true },
+        query: { type: 'object', description: 'Query string parameters as key/value pairs', optional: true },
+        headers: { type: 'object', description: 'Provider request headers as key/value pairs (e.g. {"LinkedIn-Version":"202606","X-Restli-Protocol-Version":"2.0.0"}). Authorization/Host/Cookie are managed by MyApi and cannot be overridden.', optional: true },
+      },
+      returns: 'provider response wrapped as { ok, statusCode, data, meta }',
+    };
+  }
+
+  // Service-specific prerequisites surfaced on /:serviceId/methods so agents
+  // learn non-obvious authorization gates without re-discovering them by trial.
+  const SERVICE_ACCESS_NOTES = {
+    // Composio `linkedin` toolkit = personal/member profile only.
+    linkedin: [
+      'This is the personal LinkedIn PROFILE connector (member identity + personal posting). Scopes: openid profile email w_member_social. Example: GET /v2/userinfo, POST /v2/ugcPosts with author=urn:li:person:<id>.',
+      'For company/organization Pages (posting & analytics on Pages you administer) use the separate "linkedin_pages" connector — POST /api/v1/services/linkedin_pages/proxy — not this one.',
+      'All /rest calls require headers {"LinkedIn-Version":"<YYYYMM>","X-Restli-Protocol-Version":"2.0.0"} — pass them via the proxy "headers" field.',
+    ],
+    // Native MyApi connector = organization/company Pages.
+    linkedin_pages: [
+      'This is the LinkedIn PAGES connector — MyApi\'s native integration for company/organization Pages you administer. Distinct from the personal-profile "linkedin" connector (Composio).',
+      'Scopes: r_organization_admin, rw_organization_admin, r_organization_social, w_organization_social (plus openid profile email). Set LINKEDIN_PAGES_SCOPE to override.',
+      'Organization access is gated by LinkedIn\'s "Community Management API" PRODUCT, not just scope strings — errors decorated "partnerApi*" mean the product/verification is missing, not a wrong path. In the LinkedIn Developer Portal request the "Community Management API" product and VERIFY the app against the Page you administer, then disconnect + reconnect LinkedIn Pages in MyApi to re-consent.',
+      'All /rest calls require headers {"LinkedIn-Version":"<YYYYMM>","X-Restli-Protocol-Version":"2.0.0"} — pass them via the proxy "headers" field.',
+      'Probe order after reconnect: GET /v2/userinfo (200 sanity) → GET /rest/organizationAcls?q=roleAssignee&role=ADMINISTRATOR&state=APPROVED (lists orgs you admin as urn:li:organization:<id>) → GET /rest/organizations?q=vanityName&vanityName=<vanity> → POST /rest/posts with author=urn:li:organization:<id> (needs w_organization_social).',
+    ],
+  };
+
+  router.get('/:serviceId/methods', requireAuth, requireServiceScopeParam('serviceId', 'read'), async (req, res) => {
     try {
       const { serviceId } = req.params;
-      const methods = SERVICE_METHODS[serviceId] || [];
-      
+
+      if (serviceId === 'afp') {
+        const afpEntry = getAfpServiceEntry(req);
+        if (!afpEntry) {
+          return res.status(404).json({ error: 'No AFP devices registered', hint: 'Install the AFP connector from /dashboard/connectors.' });
+        }
+        return res.json(buildAfpMethods(afpEntry));
+      }
+
+      let methods = [...(SERVICE_METHODS[serviceId] || [])];
+      let composioService = null;
+
+      if (isComposioConfigured() && isComposioVirtualService(serviceId)) {
+        composioService = await getComposioServiceByName(resolveUserId(req), serviceId);
+        if (!composioService) {
+          return res.status(404).json({ error: 'Service not found' });
+        }
+      }
+
+      methods.push(buildProxyMethodDoc(serviceId, composioService?.label));
+
       res.json({
         success: true,
         serviceId,
+        ...(composioService ? {
+          provider: 'composio',
+          toolkitSlug: composioService.toolkitSlug,
+          status: composioService.status,
+        } : {}),
         data: methods,
         count: methods.length,
-        note: methods.length === 0 ? 'No methods documented yet for this service' : `Use these methods under /api/v1/services/`
+        ...(SERVICE_ACCESS_NOTES[serviceId] ? { accessNotes: SERVICE_ACCESS_NOTES[serviceId] } : {}),
+        note: composioService
+          ? `${composioService.label} is connected through Composio. Call it exactly like a native service: POST /api/v1/services/${serviceId}/proxy with {path, method, body, query, headers} — MyApi relays the request via Composio with the stored credentials. Pass provider request headers via "headers" (e.g. LinkedIn needs {"LinkedIn-Version":"202606","X-Restli-Protocol-Version":"2.0.0"} for /rest endpoints); Authorization/Host/Cookie are managed by MyApi and cannot be overridden.`
+          : 'Use these methods under /api/v1/services/. Every connected service also accepts the generic proxy.request call.',
       });
     } catch (error) {
       logger.error(`[Services] Error fetching methods for ${req.params.serviceId}:`, error);
@@ -366,8 +638,8 @@ const SERVICE_METHODS = {
     try {
       res.json({
         success: true,
-        services: SERVICE_CATALOG.map(({ id, name, description }) => ({ id, name, description })),
-        total: SERVICE_CATALOG.length,
+        services: visibleNativeCatalog().map(({ id, name, description }) => ({ id, name, description })),
+        total: visibleNativeCatalog().length,
       });
     } catch (error) {
       logger.error('[Services] Error fetching available services:', error);
@@ -515,6 +787,21 @@ const SERVICE_METHODS = {
     return token?.accessToken || null;
   }
 
+  // Gmail GET transport that works regardless of HOW Gmail was connected:
+  // prefers the native Google OAuth token, but falls back to the Composio "gmail"
+  // toolkit (same provider-native paths, same response shape) when Gmail was
+  // connected through Composio instead of native Google. Returns { status, body }
+  // like gmailGet, or null when Gmail is not connected by either path.
+  async function gmailGetForUser(userId, path) {
+    const accessToken = await getGoogleAccessToken(userId);
+    if (accessToken) return gmailGet(accessToken, path);
+    if (isComposioConfigured() && await isComposioConnectedService(userId, 'gmail')) {
+      const r = await proxyComposioService({ userId, serviceName: 'gmail', apiPath: path, httpMethod: 'GET' });
+      return { status: r.statusCode || (r.ok ? 200 : 502), body: r.data };
+    }
+    return null;
+  }
+
   // Helper: make a GET request to the Gmail API
   function gmailGet(accessToken, path) {
     return new Promise((resolve, reject) => {
@@ -571,14 +858,6 @@ const SERVICE_METHODS = {
   router.get('/google/gmail/messages', requireAuth, requireServiceScope('google', 'read'), async (req, res) => {
     try {
       const userId = resolveUserId(req);
-      const accessToken = await getGoogleAccessToken(userId);
-
-      if (!accessToken) {
-        return res.status(403).json({
-          error: 'Google not connected',
-          message: 'Connect your Google account first via /api/v1/oauth/connect/google',
-        });
-      }
 
       const maxResults = Math.min(Number(req.query.maxResults) || 5, 20);
       const q = req.query.q || '';
@@ -588,7 +867,13 @@ const SERVICE_METHODS = {
       if (q) listPath += `&q=${encodeURIComponent(q)}`;
       if (pageToken) listPath += `&pageToken=${encodeURIComponent(pageToken)}`;
 
-      const listResp = await gmailGet(accessToken, listPath);
+      const listResp = await gmailGetForUser(userId, listPath);
+      if (!listResp) {
+        return res.status(403).json({
+          error: 'Gmail not connected',
+          message: 'Connect Gmail first — either via Composio (POST /api/v1/services/gmail connect) or native Google (/api/v1/oauth/connect/google).',
+        });
+      }
       if (listResp.status !== 200) {
         return res.status(listResp.status).json({ error: 'Gmail API error', details: listResp.body });
       }
@@ -598,11 +883,11 @@ const SERVICE_METHODS = {
       // Fetch metadata for each message in parallel (headers only, no body)
       const details = await Promise.all(
         messages.map(async (msg) => {
-          const r = await gmailGet(
-            accessToken,
+          const r = await gmailGetForUser(
+            userId,
             `/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Date`
           );
-          if (r.status !== 200) return { id: msg.id, threadId: msg.threadId };
+          if (!r || r.status !== 200) return { id: msg.id, threadId: msg.threadId };
 
           const headers = {};
           for (const h of (r.body.payload?.headers || [])) {
@@ -640,17 +925,18 @@ const SERVICE_METHODS = {
   router.get('/google/gmail/messages/:messageId', requireAuth, requireServiceScope('google', 'read'), async (req, res) => {
     try {
       const userId = resolveUserId(req);
-      const accessToken = await getGoogleAccessToken(userId);
 
-      if (!accessToken) {
-        return res.status(403).json({ error: 'Google not connected' });
-      }
-
-      const r = await gmailGet(
-        accessToken,
+      const r = await gmailGetForUser(
+        userId,
         `/gmail/v1/users/me/messages/${req.params.messageId}?format=full`
       );
 
+      if (!r) {
+        return res.status(403).json({
+          error: 'Gmail not connected',
+          message: 'Connect Gmail first — via Composio or native Google (/api/v1/oauth/connect/google).',
+        });
+      }
       if (r.status !== 200) {
         return res.status(r.status).json({ error: 'Gmail API error', details: r.body });
       }
@@ -680,6 +966,68 @@ const SERVICE_METHODS = {
         return '';
       }
 
+      // Recursively collect attachment metadata. Never inline data — agents must
+      // fetch each attachment via the dedicated endpoint to avoid blowing past
+      // the MCP stdio response size limit (which truncates large JSON to "...").
+      function collectAttachments(part, out = []) {
+        if (!part) return out;
+        const fname = part.filename;
+        const attId = part.body?.attachmentId;
+        const inlineData = part.body?.data;
+        // Gmail returns attachment metadata in two shapes:
+        //   (1) body.attachmentId (typical for >~5KB attachments — fetch via /attachments/:id)
+        //   (2) body.data (small inline attachments — base64url payload sits right here)
+        // Treat any part with a filename as an attachment, regardless. Also catch
+        // unnamed binary parts that still carry an attachmentId (e.g. some forwarded
+        // mail). Skip the text/plain + text/html body parts.
+        const isBodyText = (part.mimeType === 'text/plain' || part.mimeType === 'text/html')
+                           && !fname;
+        if (!isBodyText && (fname || attId || (inlineData && part.mimeType && !part.mimeType.startsWith('text/')))) {
+          let inline = false;
+          for (const h of (part.headers || [])) {
+            const name = (h.name || '').toLowerCase();
+            if (name === 'content-disposition' && /inline/i.test(h.value || '')) inline = true;
+            if (name === 'content-id') inline = true;
+          }
+          const entry = {
+            attachmentId: attId || null,
+            filename: fname || null,
+            mimeType: part.mimeType || 'application/octet-stream',
+            size: part.body?.size || (inlineData ? Buffer.byteLength(inlineData, 'base64') : 0),
+            partId: part.partId || null,
+            inline,
+          };
+          if (inlineData && !attId) {
+            // Re-encode base64url -> base64 so common decoders work without surprises.
+            entry.dataBase64 = String(inlineData).replace(/-/g, '+').replace(/_/g, '/');
+            entry.note = 'Inline attachment — data is included here. No second fetch needed.';
+          }
+          out.push(entry);
+        }
+        if (part.parts) {
+          for (const p of part.parts) collectAttachments(p, out);
+        }
+        return out;
+      }
+
+      const attachments = collectAttachments(msg.payload);
+
+      // Debug shape — never includes attachment data, just mime types and
+      // presence flags. Lets agents (and us) confirm what the Gmail payload
+      // looked like when attachments[] comes back empty unexpectedly.
+      function shapeOf(part, depth = 0) {
+        if (!part || depth > 6) return null;
+        return {
+          mime: part.mimeType || null,
+          filename: part.filename || null,
+          partId: part.partId || null,
+          hasAttachmentId: !!part.body?.attachmentId,
+          hasInlineData: !!part.body?.data,
+          size: part.body?.size || 0,
+          parts: (part.parts || []).map((p) => shapeOf(p, depth + 1)).filter(Boolean),
+        };
+      }
+
       res.json({
         success: true,
         message: {
@@ -693,6 +1041,11 @@ const SERVICE_METHODS = {
           body: extractBody(msg.payload),
           labelIds: msg.labelIds || [],
           isUnread: (msg.labelIds || []).includes('UNREAD'),
+          attachments,
+          attachmentHint: attachments.length
+            ? `Fetch each attachment (when attachmentId is set) via GET /api/v1/services/google/gmail/messages/${msg.id}/attachments/{attachmentId}. Inline attachments already contain dataBase64.`
+            : null,
+          payloadShape: shapeOf(msg.payload),
         },
       });
     } catch (error) {
@@ -700,6 +1053,69 @@ const SERVICE_METHODS = {
       res.status(500).json({ error: 'Failed to fetch Gmail message', message: error.message });
     }
   });
+
+  // GET /api/v1/services/google/gmail/messages/:messageId/attachments/:attachmentId
+  // Returns full attachment payload (base64) — never truncated.
+  // Optional query: ?filename=...&mimeType=...  (the message endpoint includes these
+  // in attachments[]; pass them back so the response is self-describing).
+  router.get(
+    '/google/gmail/messages/:messageId/attachments/:attachmentId',
+    requireAuth,
+    requireServiceScope('google', 'read'),
+    async (req, res) => {
+      try {
+        const userId = resolveUserId(req);
+        const accessToken = await getGoogleAccessToken(userId);
+        if (!accessToken) return res.status(403).json({ error: 'Google not connected' });
+
+        const { messageId, attachmentId } = req.params;
+        const r = await gmailGet(
+          accessToken,
+          `/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(attachmentId)}`
+        );
+
+        if (r.status !== 200) {
+          return res.status(r.status).json({ error: 'Gmail API error', details: r.body });
+        }
+
+        // Gmail returns data in base64url. Re-encode to standard base64 so the
+        // common `Buffer.from(data, 'base64')` / browser atob() decode path works
+        // without surprises.
+        const rawData = r.body?.data || '';
+        const dataBase64 = rawData.replace(/-/g, '+').replace(/_/g, '/');
+        const buf = Buffer.from(dataBase64, 'base64');
+
+        // If the client asks for raw bytes, stream them back directly. Useful
+        // when the caller already has the metadata from the message endpoint
+        // and just wants the file (e.g. to forward to WhatsApp).
+        if ((req.query.format || '').toLowerCase() === 'binary') {
+          res.setHeader('Content-Type', req.query.mimeType || 'application/octet-stream');
+          if (req.query.filename) {
+            res.setHeader(
+              'Content-Disposition',
+              `attachment; filename="${String(req.query.filename).replace(/"/g, '')}"`
+            );
+          }
+          return res.send(buf);
+        }
+
+        res.json({
+          success: true,
+          attachmentId,
+          messageId,
+          filename: req.query.filename || null,
+          mimeType: req.query.mimeType || null,
+          size: r.body?.size || buf.length,
+          dataBase64,
+          encoding: 'base64',
+          note: 'Decode with Buffer.from(dataBase64, "base64") or atob() to get the original file bytes.',
+        });
+      } catch (error) {
+        logger.error('[Gmail] Error fetching attachment:', error);
+        res.status(500).json({ error: 'Failed to fetch Gmail attachment', message: error.message });
+      }
+    }
+  );
 
   // POST /api/v1/services/google/gmail/send
   // Body: { to, subject, body, cc?, bcc? }
@@ -789,12 +1205,35 @@ const SERVICE_METHODS = {
     });
   }
 
+  // Unified Drive/Calendar transport: prefers the native Google OAuth token; if Google
+  // was connected through Composio instead, falls back to the matching Composio toolkit.
+  // Composio's googledrive/googlecalendar proxies are based at .../drive/v3 and
+  // .../calendar/v3, so the version prefix is stripped from the path for them (verified
+  // live). Returns { status, body } like driveRequest, or null when neither is connected.
+  const GOOGLE_COMPOSIO = {
+    drive:    { toolkit: 'googledrive',    toComposioPath: (p) => p.replace(/^\/drive\/v3/, '') },
+    calendar: { toolkit: 'googlecalendar', toComposioPath: (p) => p.replace(/^\/calendar\/v3/, '') },
+  };
+  async function googleApiForUser(userId, kind, method, path, body = null, extraHeaders = {}) {
+    const accessToken = await getGoogleAccessToken(userId);
+    if (accessToken) return driveRequest(accessToken, method, path, body, extraHeaders);
+    const cfg = GOOGLE_COMPOSIO[kind];
+    if (cfg && isComposioConfigured() && await isComposioConnectedService(userId, cfg.toolkit)) {
+      const r = await proxyComposioService({ userId, serviceName: cfg.toolkit, apiPath: cfg.toComposioPath(path), httpMethod: method, reqBody: body });
+      return { status: r.statusCode || (r.ok ? 200 : 502), body: r.data };
+    }
+    return null;
+  }
+
+  const googleNotConnected = (res, what) => res.status(403).json({
+    error: `Google ${what} not connected`,
+    message: `Connect ${what} first — via Composio or native Google (/api/v1/oauth/connect/google).`,
+  });
+
   // GET /api/v1/services/google/drive/files?q=&pageSize=
   router.get('/google/drive/files', requireAuth, requireServiceScope('google', 'read'), async (req, res) => {
     try {
       const userId = resolveUserId(req);
-      const accessToken = await getGoogleAccessToken(userId);
-      if (!accessToken) return res.status(401).json({ error: 'Google account not connected', hint: 'Connect via /api/v1/oauth/connect/google' });
 
       const pageSize = Math.min(Number(req.query.pageSize) || 20, 100);
       const q = req.query.q || '';
@@ -803,7 +1242,8 @@ const SERVICE_METHODS = {
       if (q) path += `&q=${encodeURIComponent(q)}`;
       if (pageToken) path += `&pageToken=${encodeURIComponent(pageToken)}`;
 
-      const r = await driveRequest(accessToken, 'GET', path);
+      const r = await googleApiForUser(userId, 'drive', 'GET', path);
+      if (!r) return googleNotConnected(res, 'Drive');
       if (r.status !== 200) return res.status(r.status).json({ error: 'Drive API error', details: r.body });
       res.json({ success: true, files: r.body.files, nextPageToken: r.body.nextPageToken || null });
     } catch (e) {
@@ -816,7 +1256,13 @@ const SERVICE_METHODS = {
     try {
       const userId = resolveUserId(req);
       const accessToken = await getGoogleAccessToken(userId);
-      if (!accessToken) return res.status(401).json({ error: 'Google account not connected', hint: 'Connect via /api/v1/oauth/connect/google' });
+      // Upload is a resumable multipart call that the Composio drive proxy can't relay,
+      // so this one operation still needs a native Google connection (read/delete work
+      // via Composio). List + open files instead if Drive was connected through Composio.
+      if (!accessToken) return res.status(403).json({
+        error: 'Native Google required for upload',
+        message: 'Uploading to Drive requires a native Google connection (/api/v1/oauth/connect/google). Listing and deleting files work via Composio.',
+      });
 
       const { name, content, mimeType = 'text/plain', encoding = 'utf8', folderId } = req.body;
       if (!name || content === undefined) return res.status(400).json({ error: 'name and content are required' });
@@ -868,13 +1314,79 @@ const SERVICE_METHODS = {
   router.delete('/google/drive/files/:fileId', requireAuth, requireServiceScope('google', 'write'), async (req, res) => {
     try {
       const userId = resolveUserId(req);
-      const accessToken = await getGoogleAccessToken(userId);
-      if (!accessToken) return res.status(401).json({ error: 'Google account not connected' });
-      const r = await driveRequest(accessToken, 'DELETE', `/drive/v3/files/${req.params.fileId}`);
+      const r = await googleApiForUser(userId, 'drive', 'DELETE', `/drive/v3/files/${req.params.fileId}`);
+      if (!r) return googleNotConnected(res, 'Drive');
       if (r.status !== 204 && r.status !== 200) return res.status(r.status).json({ error: 'Delete failed', details: r.body });
       res.json({ success: true });
     } catch (e) {
       res.status(500).json({ error: 'Failed to delete Drive file', message: e.message });
+    }
+  });
+
+  // GET /api/v1/services/google/calendar/events?timeMin=&timeMax=&q=&maxResults=&calendarId=
+  // Upcoming events by default. Works via native Google OR the Composio googlecalendar toolkit.
+  router.get('/google/calendar/events', requireAuth, requireServiceScope('google', 'read'), async (req, res) => {
+    try {
+      const userId = resolveUserId(req);
+      const calendarId = encodeURIComponent(req.query.calendarId || 'primary');
+      const maxResults = Math.min(Number(req.query.maxResults) || 10, 50);
+      const timeMin = req.query.timeMin || new Date().toISOString();
+      let path = `/calendar/v3/calendars/${calendarId}/events?maxResults=${maxResults}&singleEvents=true&orderBy=startTime&timeMin=${encodeURIComponent(timeMin)}`;
+      if (req.query.timeMax) path += `&timeMax=${encodeURIComponent(req.query.timeMax)}`;
+      if (req.query.q) path += `&q=${encodeURIComponent(req.query.q)}`;
+
+      const r = await googleApiForUser(userId, 'calendar', 'GET', path);
+      if (!r) return googleNotConnected(res, 'Calendar');
+      if (r.status !== 200) return res.status(r.status).json({ error: 'Calendar API error', details: r.body });
+
+      const events = (r.body.items || []).map((e) => ({
+        id: e.id,
+        summary: e.summary || '(no title)',
+        description: e.description || '',
+        location: e.location || '',
+        start: e.start?.dateTime || e.start?.date || null,
+        end: e.end?.dateTime || e.end?.date || null,
+        allDay: !e.start?.dateTime,
+        status: e.status,
+        attendees: (e.attendees || []).map((a) => a.email),
+        htmlLink: e.htmlLink,
+        organizer: e.organizer?.email || null,
+      }));
+      res.json({ success: true, events, nextPageToken: r.body.nextPageToken || null });
+    } catch (e) {
+      res.status(500).json({ error: 'Failed to list calendar events', message: e.message });
+    }
+  });
+
+  // POST /api/v1/services/google/calendar/events
+  // Body: { summary, start, end, description?, location?, attendees?[], calendarId?, timeZone? }
+  // start/end accept an ISO datetime (timed event) or YYYY-MM-DD (all-day).
+  router.post('/google/calendar/events', requireAuth, requireServiceScope('google', 'write'), async (req, res) => {
+    try {
+      const userId = resolveUserId(req);
+      const { summary, start, end, description, location, attendees, calendarId = 'primary', timeZone } = req.body || {};
+      if (!summary || !start || !end) {
+        return res.status(400).json({ error: 'summary, start and end are required' });
+      }
+      const toPoint = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v))
+        ? { date: v }
+        : { dateTime: new Date(v).toISOString(), ...(timeZone ? { timeZone } : {}) });
+      const body = {
+        summary,
+        ...(description ? { description } : {}),
+        ...(location ? { location } : {}),
+        start: toPoint(start),
+        end: toPoint(end),
+        ...(Array.isArray(attendees) && attendees.length ? { attendees: attendees.map((email) => ({ email })) } : {}),
+      };
+      const path = `/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`;
+
+      const r = await googleApiForUser(userId, 'calendar', 'POST', path, body);
+      if (!r) return googleNotConnected(res, 'Calendar');
+      if (r.status !== 200 && r.status !== 201) return res.status(r.status).json({ error: 'Failed to create event', details: r.body });
+      res.json({ success: true, event: { id: r.body.id, summary: r.body.summary, htmlLink: r.body.htmlLink, start: r.body.start, end: r.body.end } });
+    } catch (e) {
+      res.status(500).json({ error: 'Failed to create calendar event', message: e.message });
     }
   });
 

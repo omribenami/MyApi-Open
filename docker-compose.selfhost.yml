@@ -1,0 +1,53 @@
+# ============================================================================
+# MyApi — Self-Hosted (B2B) Docker Compose
+# ============================================================================
+# Runs the full MyApi platform inside your own infrastructure. No data leaves
+# your network except the third-party API calls your agents make.
+#
+# QUICK START (see docs/SELF_HOSTING.md for the full guide):
+#   1. node src/scripts/setup-selfhost.js          # generates src/.env with keys
+#   2. Edit src/.env: APP_BASE_URL, MYAPI_LICENSE, OAuth app credentials
+#   3. docker compose -f docker-compose.selfhost.yml up -d --build
+#   4. First-run master token is printed in: docker logs myapi-selfhost
+#   5. Open http://localhost:4500/dashboard/ and create your organization
+#
+# UPGRADES: git pull && docker compose -f docker-compose.selfhost.yml up -d --build
+#           (data lives in ./data on the host; migrations run on boot)
+# ============================================================================
+
+services:
+  myapi:
+    build:
+      context: .
+      dockerfile: src/Dockerfile
+    image: myapi-selfhost:latest
+    container_name: myapi-selfhost
+    restart: unless-stopped
+
+    env_file:
+      - src/.env
+
+    environment:
+      DB_PATH: /app/data/myapi.db
+      MYAPI_SELF_HOSTED: "true"
+      NODE_ENV: production
+
+    # Bind to localhost; put your own reverse proxy / TLS in front
+    ports:
+      - "127.0.0.1:${PORT:-4500}:${PORT:-4500}"
+
+    volumes:
+      - ./data:/app/data
+      - myapi-selfhost-logs:/app/logs
+
+    healthcheck:
+      test: ["CMD", "node", "-e",
+             "require('http').get('http://localhost:${PORT:-4500}/health', r => { if (r.statusCode !== 200) throw new Error(r.statusCode) })"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  myapi-selfhost-logs:
+    driver: local

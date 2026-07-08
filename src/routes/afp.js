@@ -16,6 +16,7 @@ const {
   updateAfpDeviceStatus,
   logAfpCommand,
   createAuditLog,
+  db,
 } = require('../database');
 const { pendingRequests, afpConnections } = require('../lib/afp-state');
 
@@ -55,10 +56,10 @@ function requireAfpPlan(req, res, next) {
   const plan = resolveRequesterPlan(req);
   if (plan !== 'pro' && plan !== 'enterprise') {
     return res.status(403).json({
-      error: 'AFP connectors require a Pro or Enterprise plan',
+      error: 'AFP connectors require a Pro or Heavy plan',
       plan,
       feature: 'afp',
-      upgradeHint: 'Upgrade to Pro or Enterprise to use AFP connectors',
+      upgradeHint: 'Upgrade to Pro ($9/mo) or Heavy ($29/mo) to use AFP connectors',
     });
   }
   next();
@@ -241,6 +242,244 @@ router.post('/devices/register', requireMaster, requireAfpPlan, async (req, res)
   res.status(isNew ? 201 : 200).json({ ok: true, deviceId, deviceToken: rawToken });
 });
 
+// ── One-line installer enrollment ─────────────────────────────────────────────
+// Flow: dashboard POSTs /enroll-code → user copy-pastes one command on the
+// server → install.sh downloads the binary and exchanges the code at /enroll
+// for device credentials. The code is random, expires in 15 minutes, and is
+// single-use — the user never touches a long-lived token during setup.
+
+const ENROLL_CODE_TTL_MS = 15 * 60 * 1000;
+const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
+
+// POST /api/v1/afp/enroll-code — create a one-time enrollment code (auth required)
+router.post('/enroll-code', requireMaster, requireAfpPlan, (req, res) => {
+  try {
+    const userId = req.tokenMeta.ownerId;
+    const block = () => crypto.randomBytes(4).toString('hex').toUpperCase();
+    const code = `AFP-${block()}-${block()}`;
+    const now = new Date();
+    db.prepare(`
+      INSERT INTO afp_enroll_codes (id, code_hash, user_id, created_at, expires_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run('aec_' + crypto.randomBytes(8).toString('hex'), sha256(code), userId,
+           now.toISOString(), new Date(now.getTime() + ENROLL_CODE_TTL_MS).toISOString());
+
+    const host = req.headers.host || 'www.myapiai.com';
+    const base = `https://${host}`;
+    createAuditLog({ requesterId: userId, action: 'afp:enroll_code_created', resource: 'afp', ip: req.ip });
+    res.json({
+      ok: true,
+      code,
+      expiresInMinutes: ENROLL_CODE_TTL_MS / 60000,
+      command: `curl -fsSL ${base}/api/v1/afp/install.sh | sudo bash -s -- ${code}`,
+      commandUnix: `curl -fsSL ${base}/api/v1/afp/install.sh | sudo bash -s -- ${code}`,
+      // Windows PowerShell one-liner (run in an elevated PowerShell).
+      commandWindows: `irm ${base}/api/v1/afp/install.ps1 | iex; Install-MyApiAfp ${code}`,
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: 'Failed to create enrollment code' });
+  }
+});
+
+// POST /api/v1/afp/enroll — exchange an enrollment code for device credentials.
+// PUBLIC (called by install.sh from the target machine before it has any
+// credentials). Security: code is unguessable (64 bits), single-use, 15-min TTL.
+router.post('/enroll', (req, res) => {
+  try {
+    const { code, deviceName, hostname, platform, arch, capabilities, afpRoot } = req.body || {};
+    if (!code || typeof code !== 'string') {
+      return res.status(400).json({ ok: false, error: 'code is required' });
+    }
+    const row = db.prepare('SELECT * FROM afp_enroll_codes WHERE code_hash = ?').get(sha256(code.trim()));
+    if (!row || row.used_at || new Date(row.expires_at) <= new Date()) {
+      return res.status(403).json({ ok: false, error: 'Invalid, expired, or already-used enrollment code. Generate a new one from the Connectors page.' });
+    }
+    db.prepare('UPDATE afp_enroll_codes SET used_at = ? WHERE id = ?').run(new Date().toISOString(), row.id);
+
+    const userId = row.user_id;
+    const name = String(deviceName || hostname || 'Linux Server').trim().slice(0, 80);
+    const rawToken = 'afpd_' + crypto.randomBytes(32).toString('hex');
+    const tokenHash = bcrypt.hashSync(rawToken, 10);
+
+    let deviceId;
+    const existing = hostname ? findAfpDeviceByHostname(userId, hostname, platform || null) : null;
+    if (existing) {
+      rotateAfpDeviceToken(existing.id, name, arch || null, capabilities || ['fs', 'exec'], tokenHash, afpRoot || null);
+      deviceId = existing.id;
+    } else {
+      deviceId = createAfpDevice(userId, name, hostname || null, platform || null, arch || null,
+                                 capabilities || ['fs', 'exec'], tokenHash, afpRoot || null);
+    }
+
+    createAuditLog({
+      requesterId: userId,
+      action: 'afp:device_enrolled',
+      resource: deviceId,
+      ip: req.ip,
+      details: { deviceName: name, hostname, platform, via: 'install.sh' },
+    });
+    res.status(201).json({ ok: true, deviceId, deviceToken: rawToken });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: 'Enrollment failed' });
+  }
+});
+
+// GET /api/v1/afp/install.sh — one-line installer for Linux/macOS servers.
+// PUBLIC. Usage: curl -fsSL https://host/api/v1/afp/install.sh | sudo bash -s -- AFP-XXXX-XXXX
+router.get('/install.sh', (req, res) => {
+  const host = req.headers.host || 'www.myapiai.com';
+  const base = `https://${host}`;
+  res.type('text/x-shellscript').send(`#!/usr/bin/env bash
+# MyApi AFP connector — one-line installer (Linux / macOS, systemd or launchd)
+# Downloads the daemon, enrolls this machine with your one-time code, writes its
+# config, and installs it as a service. Nothing else to configure.
+set -euo pipefail
+
+CODE="\${1:-\${MYAPI_ENROLL_CODE:-}}"
+BASE_URL="\${MYAPI_URL:-${base}}"
+BIN=/usr/local/bin/myapi-afp
+
+if [ -z "$CODE" ]; then
+  echo "Usage: curl -fsSL $BASE_URL/api/v1/afp/install.sh | sudo bash -s -- AFP-XXXX-XXXX" >&2
+  echo "Generate a code on the Connectors page: $BASE_URL/dashboard/connectors" >&2
+  exit 1
+fi
+if [ "$(id -u)" -ne 0 ]; then
+  echo "Run with sudo — the installer writes to /usr/local/bin and installs a service." >&2
+  exit 1
+fi
+
+OS="$(uname -s)"; ARCH="$(uname -m)"
+case "$OS" in
+  Linux)  PLATFORM=linux;  DL=linux ;;
+  Darwin) PLATFORM=darwin; if [ "$ARCH" = "arm64" ]; then DL=mac-arm; else DL=mac; fi ;;
+  *) echo "Unsupported OS: $OS" >&2; exit 1 ;;
+esac
+
+TARGET_USER="\${SUDO_USER:-root}"
+TARGET_HOME="$(eval echo "~$TARGET_USER")"
+
+echo "→ Downloading daemon ($DL)..."
+curl -fSL "$BASE_URL/api/v1/afp/download/$DL" -o "$BIN.tmp"
+chmod +x "$BIN.tmp" && mv "$BIN.tmp" "$BIN"
+
+echo "→ Enrolling this machine..."
+RESP="$(curl -fsS -X POST "$BASE_URL/api/v1/afp/enroll" \\
+  -H 'Content-Type: application/json' \\
+  -d "{\\"code\\":\\"$CODE\\",\\"deviceName\\":\\"$(hostname)\\",\\"hostname\\":\\"$(hostname)\\",\\"platform\\":\\"$PLATFORM\\",\\"arch\\":\\"$ARCH\\"}")"
+DEVICE_ID="$(printf '%s' "$RESP" | sed -n 's/.*"deviceId":"\\([^"]*\\)".*/\\1/p')"
+DEVICE_TOKEN="$(printf '%s' "$RESP" | sed -n 's/.*"deviceToken":"\\([^"]*\\)".*/\\1/p')"
+if [ -z "$DEVICE_ID" ] || [ -z "$DEVICE_TOKEN" ]; then
+  echo "Enrollment failed: $RESP" >&2
+  exit 1
+fi
+
+echo "→ Writing config for $TARGET_USER..."
+CONF_DIR="$TARGET_HOME/.myapi-afp"
+mkdir -p "$CONF_DIR"
+cat > "$CONF_DIR/config.json" <<CONF
+{
+  "serverUrl": "$BASE_URL",
+  "deviceId": "$DEVICE_ID",
+  "deviceToken": "$DEVICE_TOKEN",
+  "deviceName": "$(hostname)"
+}
+CONF
+chown -R "$TARGET_USER" "$CONF_DIR"
+chmod 600 "$CONF_DIR/config.json"
+
+if [ "$PLATFORM" = "linux" ]; then
+  echo "→ Installing systemd service..."
+  cat > /etc/systemd/system/myapi-afp.service <<UNIT
+[Unit]
+Description=MyApi AFP Connector
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=simple
+User=$TARGET_USER
+ExecStart=$BIN
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+  systemctl daemon-reload
+  systemctl enable --now myapi-afp
+  echo "✓ Installed and running. Check: systemctl status myapi-afp"
+else
+  echo "→ Installing launchd agent..."
+  PLIST="$TARGET_HOME/Library/LaunchAgents/com.myapi.afp.plist"
+  mkdir -p "$(dirname "$PLIST")"
+  cat > "$PLIST" <<PL
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.myapi.afp</string>
+  <key>ProgramArguments</key><array><string>$BIN</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+</dict></plist>
+PL
+  chown "$TARGET_USER" "$PLIST"
+  sudo -u "$TARGET_USER" launchctl load -w "$PLIST" 2>/dev/null || true
+  echo "✓ Installed and running (launchd)."
+fi
+
+echo "✓ Done — this machine will appear under Connected Devices on the Connectors page within a minute."
+`);
+});
+
+// GET /api/v1/afp/install.ps1 — one-line installer for Windows.
+// PUBLIC. Usage (elevated PowerShell):
+//   irm https://host/api/v1/afp/install.ps1 | iex; Install-MyApiAfp AFP-XXXX-XXXX
+router.get('/install.ps1', (req, res) => {
+  const host = req.headers.host || 'www.myapiai.com';
+  const base = `https://${host}`;
+  res.type('text/plain').send(`# MyApi AFP connector — one-line installer (Windows)
+# Downloads the daemon, enrolls this machine with your one-time code, writes its
+# config, and registers an auto-start task. Run in an elevated PowerShell:
+#   irm ${base}/api/v1/afp/install.ps1 | iex; Install-MyApiAfp AFP-XXXX-XXXX
+
+function Install-MyApiAfp {
+  param([Parameter(Mandatory=$true)][string]$Code)
+  $ErrorActionPreference = 'Stop'
+  $Base = '${base}'
+
+  $dir = Join-Path $env:APPDATA 'MyApi-AFP'
+  New-Item -ItemType Directory -Force -Path $dir | Out-Null
+  $bin = Join-Path $dir 'myapi-afp.exe'
+
+  Write-Host '-> Downloading daemon...'
+  Invoke-WebRequest -Uri ($Base + '/api/v1/afp/download/win') -OutFile $bin -UseBasicParsing
+
+  Write-Host '-> Enrolling this machine...'
+  $arch = if ($env:PROCESSOR_ARCHITECTURE) { $env:PROCESSOR_ARCHITECTURE } else { 'x64' }
+  $payload = @{ code=$Code; deviceName=$env:COMPUTERNAME; hostname=$env:COMPUTERNAME; platform='win32'; arch=$arch } | ConvertTo-Json -Compress
+  $resp = Invoke-RestMethod -Uri ($Base + '/api/v1/afp/enroll') -Method Post -ContentType 'application/json' -Body $payload
+  if (-not $resp.deviceToken) { throw 'Enrollment failed — generate a new code on the Connectors page.' }
+
+  Write-Host '-> Writing config...'
+  $cfg = @{ serverUrl=$Base; deviceId=$resp.deviceId; deviceToken=$resp.deviceToken; deviceName=$env:COMPUTERNAME } | ConvertTo-Json
+  # WriteAllText with a no-BOM UTF8 encoding — Windows PowerShell 5.1's
+  # Set-Content -Encoding UTF8 emits a BOM that breaks the daemon's JSON.parse.
+  $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+  [System.IO.File]::WriteAllText((Join-Path $dir 'config.json'), $cfg, $utf8NoBom)
+
+  Write-Host '-> Registering auto-start task...'
+  $tr = '"' + $bin + '"'
+  schtasks /Create /TN 'MyApiAFP' /TR $tr /SC ONLOGON /RL LIMITED /F | Out-Null
+  Start-Process -FilePath $bin -WindowStyle Hidden
+
+  Write-Host '+ Installed and running. This machine will appear under Connected Devices shortly.'
+}
+`);
+});
+
 // DELETE /api/v1/afp/devices/:deviceId — revoke a daemon
 router.delete('/devices/:deviceId', requireMaster, requireAfpPlan, (req, res) => {
   const userId = req.tokenMeta.ownerId;
@@ -357,22 +596,58 @@ const INSTALLER_DIR = process.env.NODE_ENV === 'production'
   ? '/app/connectors/afp-app/dist'
   : path.join(__dirname, '..', '..', 'connectors', 'afp-app', 'dist');
 
+// Candidate files per platform, in preference order. The first one present on
+// disk is served — so a CI-built signed installer (.exe / .dmg) wins, with a
+// portable .zip as a fallback for environments where the packaged installer
+// isn't built (e.g. NSIS needs Windows/wine).
 const INSTALLER_FILES = {
-  win: { file: 'MyApi-AFP-win-x64.exe', name: 'MyApi-AFP-win-x64.exe', mime: 'application/vnd.microsoft.portable-executable' },
+  win:       { files: ['MyApi-AFP-win-x64.exe', 'MyApi-AFP-win-x64.zip'] },
+  'mac-arm': { files: ['MyApi-AFP-mac-arm64.dmg', 'MyApi-AFP-mac-arm64.zip'] },
+  mac:       { files: ['MyApi-AFP-mac-x64.dmg', 'MyApi-AFP-mac-x64.zip'] },
+};
+const INSTALLER_MIME = {
+  '.exe': 'application/vnd.microsoft.portable-executable',
+  '.dmg': 'application/x-apple-diskimage',
+  '.zip': 'application/zip',
 };
 
-router.get('/download/installer/:platform', (req, res) => {
-  const meta = INSTALLER_FILES[req.params.platform];
-  if (!meta) {
-    return res.status(400).json({ error: 'Unknown platform. Available: win' });
+// Resolve the best available installer file for a platform (or the preferred
+// candidate marked missing when none exist yet).
+function resolveInstaller(platform) {
+  const meta = INSTALLER_FILES[platform];
+  if (!meta) return null;
+  for (const f of meta.files) {
+    const p = path.join(INSTALLER_DIR, f);
+    try { if (fs.existsSync(p)) return { name: f, path: p, mime: INSTALLER_MIME[path.extname(f)] || 'application/octet-stream' }; } catch (_) {}
   }
-  const filePath = path.join(INSTALLER_DIR, meta.file);
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).json({ error: 'Installer not yet available. Check back soon.' });
+  const f = meta.files[0];
+  return { name: f, path: path.join(INSTALLER_DIR, f), mime: INSTALLER_MIME[path.extname(f)] || 'application/octet-stream', missing: true };
+}
+
+router.get('/download/installer/:platform', (req, res) => {
+  if (!INSTALLER_FILES[req.params.platform]) {
+    return res.status(400).json({ error: `Unknown platform. Available: ${Object.keys(INSTALLER_FILES).join(', ')}` });
+  }
+  const meta = resolveInstaller(req.params.platform);
+  if (meta.missing) {
+    return res.status(404).json({ error: 'Installer not yet available for this platform.' });
   }
   res.setHeader('Content-Disposition', `attachment; filename="${meta.name}"`);
   res.setHeader('Content-Type', meta.mime);
-  res.sendFile(filePath);
+  res.sendFile(meta.path);
+});
+
+// GET /api/v1/afp/installer-info — which desktop installers are actually built,
+// so the UI shows a real Download button only when an artifact exists (a packaged
+// installer or a portable zip). macOS auto-activates when its artifact is published.
+router.get('/installer-info', (req, res) => {
+  const platforms = Object.keys(INSTALLER_FILES).map((platform) => {
+    const meta = resolveInstaller(platform);
+    let size = null;
+    if (!meta.missing) { try { size = fs.statSync(meta.path).size; } catch (_) {} }
+    return { platform, filename: meta.name, available: size !== null, size };
+  });
+  res.json({ ok: true, platforms });
 });
 
 // GET /api/v1/afp/download-info — return available platforms + file sizes
@@ -385,5 +660,10 @@ router.get('/download-info', (req, res) => {
   });
   res.json({ ok: true, platforms });
 });
+
+// Exposed for the trigger executor (in-process AFP calls) — non-breaking: the
+// module still exports the router for app.use(). Callers MUST verify device
+// ownership before invoking (see actionExecutor).
+router.dispatchCommand = dispatchCommand;
 
 module.exports = router;

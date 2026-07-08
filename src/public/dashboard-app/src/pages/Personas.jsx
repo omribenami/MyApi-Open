@@ -258,7 +258,7 @@ function Personas() {
           <h1 className="font-serif text-[22px] sm:text-[34px] leading-[1.05] tracking-tight ink font-medium">One brain, many voices.</h1>
           <p className="mt-2 text-[15px] ink-2 max-w-[60ch]">Each persona is a soul file plus the knowledge and skills attached to it. The active persona shapes every API response until you switch.</p>
         </div>
-        <div className="flex items-center gap-2 pt-1">
+        <div className="flex items-center gap-2 pt-1" data-tour="persona-new">
           <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>+ New persona</button>
         </div>
       </div>
@@ -280,7 +280,7 @@ function Personas() {
         /* 2-col grid */
         <div className="grid grid-cols-12 gap-6">
           {/* Left: persona list */}
-          <div className="col-span-12 lg:col-span-4 space-y-2">
+          <div className="col-span-12 lg:col-span-4 space-y-2" data-tour="persona-list">
             <input
               className="ui-input mb-3 w-full"
               placeholder="Search personas…"
@@ -333,7 +333,7 @@ function Personas() {
           </div>
 
           {/* Right: detail panel */}
-          <div className="col-span-12 lg:col-span-8">
+          <div className="col-span-12 lg:col-span-8" data-tour="persona-detail">
             {selectedPersona ? (
               <div className="card">
                 {/* Header */}

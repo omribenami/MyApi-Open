@@ -6,8 +6,13 @@
 name: CI
 
 on:
+  # NOTE: `main` is intentionally excluded from the push trigger.
+  # Pushes to main run CI via deploy.yml (which calls this workflow with
+  # `workflow_call`). Triggering standalone CI on main too would land both
+  # runs in the same `ci-refs/heads/main` concurrency group and cancel each
+  # other, killing the deploy. PRs targeting main still get CI below.
   push:
-    branches: [main, develop]
+    branches: [develop]
   pull_request:
     branches: [main, develop]
   workflow_call: {}
@@ -17,7 +22,7 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   # ===========================================================================
@@ -64,6 +69,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Prebuilt better-sqlite3 binary requires GLIBC_2.38, which is not present
+      # on the GitHub-hosted runner image used for the Node 20 lane. Rebuild
+      # from source against the runner's actual glibc (mirrors src/Dockerfile).
+      - name: Rebuild native modules from source
+        run: npm rebuild better-sqlite3 --build-from-source
+
       - name: Run tests
         run: npm test ${{ matrix.node-version == '22' && '--coverage' || '' }}
         env:
@@ -75,8 +86,8 @@ jobs:
           DB_PATH: ':memory:'
 
       - name: Upload coverage
-        if: matrix.node-version == '22' && always()
-        uses: actions/upload-artifact@v6
+        if: matrix.node-version == '22'
+        uses: actions/upload-artifact@v4
         with:
           name: coverage-report
           path: coverage/
@@ -115,7 +126,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Create placeholder connector dist dirs
         run: mkdir -p connectors/afp-daemon/dist connectors/afp-oauth/dist

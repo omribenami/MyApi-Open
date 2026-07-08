@@ -21,10 +21,15 @@ describe('Phase 3 Audit/Security', () => {
     const login = await agent.post('/api/v1/auth/login').send({ email, password });
     expect(login.status).toBe(200);
 
+    // Use the real user id (usr_...) for attribution — audit rows are scoped per
+    // user by actor_id/requester_id, matching how the server attributes them.
+    const userId = register.body?.data?.user?.id || login.body?.data?.user?.id;
+    expect(userId).toBeTruthy();
+
     createAuditLog({
-      requesterId: `sess_${user}`,
+      requesterId: `sess_${userId}`,
       workspaceId: 'ws_test',
-      actorId: user,
+      actorId: userId,
       actorType: 'user',
       action: 'phase3_test_action',
       resource: '/api/v1/test',
@@ -46,6 +51,48 @@ describe('Phase 3 Audit/Security', () => {
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body?.data)).toBe(true);
     expect(res.body.data.some((row) => row.action === 'phase3_test_action')).toBe(true);
+  });
+
+  it('does NOT leak another user\'s audit rows (per-user isolation)', async () => {
+    // A second, unrelated user seeds a private audit row.
+    const otherAgent = request.agent(app);
+    const otherUser = `phase3b_${Date.now()}`;
+    const otherEmail = `${otherUser}@example.com`;
+    const reg = await otherAgent.post('/api/v1/auth/register').send({
+      username: otherUser, password, displayName: 'Other', email: otherEmail,
+    });
+    expect([200, 201]).toContain(reg.status);
+    const otherId = reg.body?.data?.user?.id;
+    expect(otherId).toBeTruthy();
+
+    createAuditLog({
+      requesterId: `sess_${otherId}`,
+      workspaceId: 'ws_other',
+      actorId: otherId,
+      actorType: 'user',
+      action: 'other_user_secret_action',
+      resource: '/api/v1/secret',
+      endpoint: '/api/v1/secret',
+      httpMethod: 'GET',
+      statusCode: 200,
+      scope: 'full',
+      ip: '127.0.0.1',
+    });
+
+    // The FIRST user must never see the second user's row — not in the feed,
+    // not via an actor filter, not in the summary counts.
+    const feed = await agent.get('/api/v1/audit/logs').query({ limit: 200 });
+    expect(feed.status).toBe(200);
+    expect(feed.body.data.some((r) => r.action === 'other_user_secret_action')).toBe(false);
+
+    const byActor = await agent.get('/api/v1/audit/logs').query({ actor: otherId });
+    expect(byActor.status).toBe(200);
+    expect(byActor.body.data.length).toBe(0);
+
+    // And conversely the owner of the secret row sees it.
+    const ownFeed = await otherAgent.get('/api/v1/audit/logs').query({ action: 'other_user_secret_action' });
+    expect(ownFeed.status).toBe(200);
+    expect(ownFeed.body.data.some((r) => r.action === 'other_user_secret_action')).toBe(true);
   });
 
   it('lists sessions and revokes non-current sessions', async () => {

@@ -90,30 +90,93 @@ jobs:
           path: connectors/afp-app/dist/MyApi-AFP-win-x64.exe
           retention-days: 7
 
+  # ─── macOS Build (x64 + arm64) ───────────────────────────────────────────────
+  # Signs + notarizes when the Apple Developer secrets are present; otherwise
+  # produces an unsigned .dmg (open via right-click → Open the first time).
+  # Required secrets for signing/notarization: CSC_LINK (base64 .p12),
+  # CSC_KEY_PASSWORD, APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID.
+  build-mac:
+    name: Build macOS (x64 + arm64)
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: connectors/afp-app
+        run: npm ci
+
+      - name: Build DMGs (signed + notarized if Apple secrets set)
+        working-directory: connectors/afp-app
+        run: npm run build:mac
+        env:
+          CSC_LINK:                    ${{ secrets.CSC_LINK || '' }}
+          CSC_KEY_PASSWORD:            ${{ secrets.CSC_KEY_PASSWORD || '' }}
+          APPLE_ID:                    ${{ secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID:               ${{ secrets.APPLE_TEAM_ID || '' }}
+
+      - name: Rename artifacts to fixed names
+        working-directory: connectors/afp-app/dist
+        run: |
+          arm=$(ls *arm64*.dmg 2>/dev/null | head -1 || true)
+          x64=$(ls *.dmg 2>/dev/null | grep -v arm64 | head -1 || true)
+          [ -n "$arm" ] && mv "$arm" "MyApi-AFP-mac-arm64.dmg" && echo "arm64: $arm"
+          [ -n "$x64" ] && mv "$x64" "MyApi-AFP-mac-x64.dmg" && echo "x64: $x64"
+          ls -la *.dmg
+
+      - name: Upload mac artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-dmg
+          path: |
+            connectors/afp-app/dist/MyApi-AFP-mac-arm64.dmg
+            connectors/afp-app/dist/MyApi-AFP-mac-x64.dmg
+          retention-days: 7
+          if-no-files-found: warn
+
   # ─── Deploy to server ────────────────────────────────────────────────────────
   deploy:
-    name: Deploy installer to server
+    name: Deploy installers to server
     runs-on: ubuntu-latest
-    needs: [build-win]
+    needs: [build-win, build-mac]
 
     steps:
       - name: Download win artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: win-exe
           path: dist/
 
+      - name: Download mac artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: mac-dmg
+          path: dist/
+        continue-on-error: true
+
       - name: Setup SSH
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Upload installer to server
+      - name: Upload installers to server
         run: |
           ssh -i ~/.ssh/id_ed25519 ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
             "mkdir -p /opt/MyApi/connectors/afp-app/dist"
-          scp -i ~/.ssh/id_ed25519 dist/MyApi-AFP-win-x64.exe \
-            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/opt/MyApi/connectors/afp-app/dist/MyApi-AFP-win-x64.exe
+          for f in MyApi-AFP-win-x64.exe MyApi-AFP-mac-arm64.dmg MyApi-AFP-mac-x64.dmg; do
+            if [ -f "dist/$f" ]; then
+              scp -i ~/.ssh/id_ed25519 "dist/$f" \
+                ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/opt/MyApi/connectors/afp-app/dist/"$f"
+              echo "uploaded $f"
+            fi
+          done
           echo "Deployed successfully"

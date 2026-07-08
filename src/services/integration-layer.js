@@ -86,6 +86,15 @@ const OAUTH_PROVIDER_DETAILS = {
     apiRoot: 'https://api.linkedin.com',
     docsUrl: 'https://learn.microsoft.com/linkedin/shared/authentication/authorization-code-flow',
   },
+  // Native LinkedIn Pages connector (organization/company posting + analytics).
+  // Composio's `linkedin` toolkit covers the personal profile; this one uses
+  // MyApi's own LinkedIn OAuth app with Community Management (organization) scopes.
+  linkedin_pages: {
+    authUrl: 'https://www.linkedin.com/oauth/v2/authorization',
+    tokenUrl: 'https://www.linkedin.com/oauth/v2/accessToken',
+    apiRoot: 'https://api.linkedin.com',
+    docsUrl: 'https://learn.microsoft.com/linkedin/marketing/community-management',
+  },
   fal: {
     authUrl: null,
     tokenUrl: null,

@@ -7,8 +7,9 @@ export default function PlanLimitModal() {
 
   if (!visible) return null;
 
+  const PLAN_NAMES = { free: 'Personal', pro: 'Pro', enterprise: 'Heavy', beta: 'Beta' };
   const planLabel = plan
-    ? plan.charAt(0).toUpperCase() + plan.slice(1)
+    ? (PLAN_NAMES[String(plan).toLowerCase()] || plan.charAt(0).toUpperCase() + plan.slice(1))
     : 'Current';
 
   const handleUpgrade = () => {

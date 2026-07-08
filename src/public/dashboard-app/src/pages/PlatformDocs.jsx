@@ -33,6 +33,13 @@ const NAV_GROUPS = [
     ],
   },
   {
+    label: 'Automation',
+    items: [
+      { id: 'automations', title: 'Automations' },
+      { id: 'billing',     title: 'Plans & Billing' },
+    ],
+  },
+  {
     label: 'Access & Security',
     items: [
       { id: 'access-tokens', title: 'Access Tokens & Scopes' },
@@ -146,6 +153,36 @@ function PlatformDocs() {
   const [activeId, setActiveId] = useState('what-is-myapi');
 
   useEffect(() => {
+    if (typeof document === "undefined") return;
+    const title = "MyApi docs — Official docs for the personal API gateway for AI agents";
+    const description = "Official MyApi documentation for the personal API gateway for AI agents: connected services, scoped access, personas, memory, approvals, and audit trails.";
+    document.title = title;
+
+    const ensureMeta = (selector, attrs) => {
+      let el = document.head.querySelector(selector);
+      if (!el) {
+        el = document.createElement("meta");
+        document.head.appendChild(el);
+      }
+      Object.entries(attrs).forEach(([key, value]) => el.setAttribute(key, value));
+    };
+
+    ensureMeta('meta[name="description"]', { name: "description", content: description });
+    ensureMeta('meta[property="og:title"]', { property: "og:title", content: title });
+    ensureMeta('meta[property="og:description"]', { property: "og:description", content: description });
+    ensureMeta('meta[property="og:url"]', { property: "og:url", content: "https://www.myapiai.com/dashboard/platform-docs" });
+    ensureMeta('meta[name="robots"]', { name: "robots", content: "index,follow,max-image-preview:large" });
+
+    let canonical = document.head.querySelector('link[rel="canonical"]');
+    if (!canonical) {
+      canonical = document.createElement("link");
+      canonical.setAttribute("rel", "canonical");
+      document.head.appendChild(canonical);
+    }
+    canonical.setAttribute("href", "https://www.myapiai.com/dashboard/platform-docs");
+  }, []);
+
+  useEffect(() => {
     const allIds = NAV_GROUPS.flatMap(g => g.items.map(i => i.id));
     const observer = new IntersectionObserver(
       (entries) => {
@@ -165,9 +202,10 @@ function PlatformDocs() {
   return (
     <div className="max-w-7xl mx-auto">
       <div className="mb-8">
-        <h1 className="font-serif text-[20px] sm:text-[28px] font-medium tracking-tight ink">Platform Documentation</h1>
+        <div className="micro mb-2">RESOURCES · PLATFORM</div>
+        <h1 className="font-serif text-[20px] sm:text-[28px] font-medium tracking-tight ink">How MyApi works.</h1>
         <p className="ink-3 mt-2">
-          Everything you need to know about MyApi — what each feature does, how to use it, and real-world examples.
+          Official documentation for MyApi, the personal API gateway for AI agents — connected services, scoped access, approvals, shared context, and audit trails.
         </p>
       </div>
 
@@ -249,21 +287,23 @@ function PlatformDocs() {
               <DocsTable
                 headers={['Concept', 'What it is']}
                 rows={[
-                  ['Services', 'OAuth integrations (Google, GitHub, Slack, etc.) that MyApi can proxy on your behalf'],
+                  ['Services', '100+ integrations (native OAuth + Composio-managed) that MyApi proxies on your behalf'],
                   ['Personas', 'AI identities with distinct personalities, attached knowledge, and skills'],
                   ['Skills', 'Capability modules you can build, install, and attach to personas'],
                   ['Tokens', 'Scoped API keys you issue to agents — they control exactly what can be accessed'],
                   ['Knowledge', 'Documents and memory that ground your AI interactions in your actual context'],
+                  ['Automations', 'Scheduled, proactive AI tasks that run across your services on their own'],
                 ]}
               />
             </Block>
 
             <Block title="Typical workflow">
               <ol className="list-decimal pl-5 space-y-2">
-                <li><span className="ink font-medium">Connect your services</span> — link Google, GitHub, Slack, or any of the 45+ supported integrations via OAuth</li>
+                <li><span className="ink font-medium">Connect your services</span> — link Google, GitHub, Slack, or any of the 100+ supported integrations (native OAuth or one-click Composio)</li>
                 <li><span className="ink font-medium">Build your personas</span> — create AI identities tailored to different roles (engineer, assistant, support agent)</li>
                 <li><span className="ink font-medium">Add knowledge and memory</span> — attach documents and long-term context that personas can draw on</li>
                 <li><span className="ink font-medium">Issue a guest token</span> — create a scoped key for each agent or app, with only the permissions they need</li>
+                <li><span className="ink font-medium">Automate the routine</span> — schedule proactive tasks (e.g. a morning email digest) that run across your services on their own</li>
                 <li><span className="ink font-medium">Monitor and adjust</span> — watch the activity log, approve new devices, revoke access at any time</li>
               </ol>
             </Block>
@@ -272,7 +312,7 @@ function PlatformDocs() {
               <div className="grid sm:grid-cols-3 gap-4">
                 <div className="ui-card p-3">
                   <p className="font-semibold mb-1 ink">AI developers</p>
-                  <p className="text-xs ink-3">Building agents that need real user data — get a unified proxy to 45+ services with one token</p>
+                  <p className="text-xs ink-3">Building agents that need real user data — get a unified proxy to 100+ services with one token</p>
                 </div>
                 <div className="ui-card p-3">
                   <p className="font-semibold mb-1 ink">Power users</p>
@@ -566,29 +606,31 @@ function PlatformDocs() {
               your raw credentials.
             </p>
 
-            <Block title="OAuth vs. API key">
+            <Block title="How services connect">
               <DocsTable
                 headers={['Type', 'How it works', 'Examples']}
                 rows={[
-                  ['OAuth', 'You authorize MyApi via the provider\'s consent flow. Tokens are stored encrypted and auto-refreshed.', 'Google, GitHub, Slack, Notion, LinkedIn'],
+                  ['Native OAuth', 'You authorize MyApi via the provider\'s consent flow. Tokens are stored encrypted and auto-refreshed.', 'Google, GitHub, Slack, Facebook, LinkedIn'],
+                  ['Composio (managed)', 'One-click connect — MyApi connects through Composio with managed auth, so there\'s no app setup. 100+ toolkits.', 'Gmail, Notion, Linear, HubSpot, Calendar, Drive'],
                   ['API Key / Vault', 'You paste the credential once into the Token Vault. MyApi retrieves it securely for each proxy request.', 'Stripe, fal.ai, custom services'],
                 ]}
               />
             </Block>
 
-            <Block title="45+ supported services">
-              <DocsTable
-                headers={['Category', 'Services']}
-                rows={[
-                  ['Productivity', 'Google (Gmail, Drive, Calendar, Sheets), Notion, Microsoft 365, Dropbox, Asana, Trello, ClickUp'],
-                  ['Developer', 'GitHub, GitLab, Travis CI'],
-                  ['Communication', 'Slack, Discord, WhatsApp, Twitch, Mastodon, Bluesky'],
-                  ['Social', 'Twitter/X, Facebook, Instagram, LinkedIn, TikTok, Reddit, YouTube'],
-                  ['Business', 'HubSpot, Salesforce, Jira, Zendesk, Zoom'],
-                  ['Finance', 'Stripe (API key via Vault)'],
-                  ['AI / Media', 'fal.ai (image generation)'],
-                ]}
-              />
+            <Block title="100+ services, one consistent interface">
+              <p>
+                Whether a service is native OAuth or Composio-backed, you call it the <span className="ink font-medium">same way</span> and
+                by its <span className="ink font-medium">clean name</span> (e.g. <code className="mono">gmail</code>, <code className="mono">notion</code>, <code className="mono">slack</code>) — no
+                special prefixes. Browse and connect everything from the <span className="ink font-medium">Services</span> page, grouped by
+                category (Productivity, Developer Tools, Communication, Social, Business & CRM, …).
+              </p>
+              <CodeSnip>{`POST /api/v1/services/gmail/proxy
+{ "path": "/gmail/v1/users/me/messages", "method": "GET", "query": { "maxResults": 5 } }`}</CodeSnip>
+              <p>
+                <code className="mono">GET /api/v1/services</code> lists everything with live status;
+                <code className="mono"> GET /api/v1/services/&#123;name&#125;/methods</code> documents a service's operations.
+                MyApi attaches your stored credentials — agents never see provider tokens.
+              </p>
             </Block>
 
             <Block title="Connecting a service">
@@ -638,9 +680,19 @@ function PlatformDocs() {
 
             <Block title="Installing AFP">
               <p>
-                Go to <span className="ink font-medium">Connectors</span> in the sidebar and download the AFP
-                desktop app or daemon binary for your platform (Windows, macOS, or Linux). The installer guides
-                you through connecting it to your MyApi instance via OAuth — no token pasting required.
+                Go to <span className="ink font-medium">Connectors</span> in the sidebar. The fastest path is the
+                <span className="ink font-medium"> one-line installer</span> — copy the generated command and run it on
+                the target machine (Linux/macOS or Windows PowerShell). It downloads the daemon, enrolls it with a
+                short-lived code, and connects it to your account — no token pasting:
+              </p>
+              <CodeSnip>{`# Linux / macOS
+curl -fsSL https://www.myapiai.com/api/v1/afp/install.sh | bash -s -- <enroll-code>
+
+# Windows (PowerShell)
+irm https://www.myapiai.com/api/v1/afp/install.ps1 | iex`}</CodeSnip>
+              <p>
+                Prefer a GUI? Download the desktop app instead (Windows, macOS Intel/Apple Silicon). Either way the
+                new device appears in <span className="ink font-medium">Device Management</span> for you to approve.
               </p>
             </Block>
 
@@ -653,7 +705,95 @@ function PlatformDocs() {
             </Block>
 
             <Callout type="warning">
-              Shell command execution via AFP requires a Pro or Enterprise plan. File system access is available on all plans.
+              Shell command execution via AFP requires a Pro or Heavy plan. File system access is available on all plans.
+            </Callout>
+          </Section>
+
+          {/* ── Automations ── */}
+          <Section id="automations" title="Automations">
+            <p className="ink-2 text-[15px]">
+              Automations let MyApi do things <em>for you</em> on a schedule — even when you're offline.
+              You describe a task in plain English, pick which connected apps it can use, and choose when it
+              runs. MyApi's AI assistant performs it and notifies you with the result.
+            </p>
+
+            <Block title="Build one in 3 steps (Dashboard → Automations)">
+              <ul className="list-disc pl-5 space-y-1">
+                <li><span className="ink font-medium">When</span> — a calendar + time, and how often (once, daily, weekly, monthly, or every few hours).</li>
+                <li><span className="ink font-medium">Which apps</span> — pick one or more connected services (e.g. Google Calendar <em>and</em> Gmail).</li>
+                <li><span className="ink font-medium">What to do</span> — choose a suggestion or type your own instruction (e.g. "Summarize today's meetings and email them to me").</li>
+              </ul>
+            </Block>
+
+            <Block title="AI engine — bring your own key (free) or use MyApi (credits)">
+              <p>Each automation runs on an AI model. You choose the provider (<span className="ink font-medium">Anthropic, OpenAI, or OpenRouter</span>) and the model:</p>
+              <ul className="list-disc pl-5 space-y-1">
+                <li><span className="ink font-medium">Your own API key</span> — free; runs on your provider account.</li>
+                <li><span className="ink font-medium">MyApi AI assistant</span> — billed as credits (1 credit = $0.01). Each paid plan includes a monthly allowance.</li>
+              </ul>
+              <p>Email is always sent through your own connected mailbox (e.g. Gmail) — wrapped in a MyApi template — never a system address.</p>
+            </Block>
+
+            <Block title="Spend controls (Settings)">
+              <ul className="list-disc pl-5 space-y-1">
+                <li><span className="ink font-medium">Usage</span> — credits used this month vs your included allowance and prepaid balance.</li>
+                <li><span className="ink font-medium">Charge limit</span> — pause MyApi AI after a set monthly spend.</li>
+                <li><span className="ink font-medium">Alert</span> — get notified at a chosen % of your limit/allowance.</li>
+                <li><span className="ink font-medium">Auto-reload</span> — top up your balance from your saved card when it runs low.</li>
+              </ul>
+            </Block>
+
+            <Block title="API (agents can create automations too)">
+              <CodeSnip>{`POST /api/v1/triggers
+{
+  "name": "Morning email digest",
+  "kind": "schedule",
+  "schedule": { "type": "daily", "atHour": 7, "atMinute": 0 },
+  "timezone": "America/New_York",
+  "actionType": "ai_prompt",
+  "action": {
+    "prompt": "Summarize my unread email and send it to me",
+    "services": ["gmail"],
+    "keyMode": "platform"   // or "byo" to use your own key (free)
+  }
+}`}</CodeSnip>
+              <DocsTable
+                headers={['Endpoint', 'Purpose']}
+                rows={[
+                  ['GET /api/v1/triggers', 'List automations'],
+                  ['POST /api/v1/triggers', 'Create an automation'],
+                  ['POST /api/v1/triggers/:id/run', 'Run now (test)'],
+                  ['GET /api/v1/triggers/:id/runs', 'Run history'],
+                  ['PATCH/DELETE /api/v1/triggers/:id', 'Edit / delete'],
+                  ['GET /api/v1/triggers/ai/settings', 'AI providers/models + credit wallet'],
+                ]}
+              />
+            </Block>
+
+            <Callout type="info">
+              Automations require a <span className="ink font-medium">Pro or Heavy</span> plan. Every run counts
+              against your plan's API-call quota; MyApi-provided AI additionally consumes credits (your own key is free).
+            </Callout>
+          </Section>
+
+          {/* ── Plans & Billing ── */}
+          <Section id="billing" title="Plans & Billing">
+            <DocsTable
+              headers={['Plan', 'Price', 'Services', 'API calls / mo', 'Automations & AI']}
+              rows={[
+                ['Personal', 'Free', 'Up to 5', '1,000', '—'],
+                ['Pro', '$9/mo', 'All', '10,000 (+$0.25 / 1,000 over)', 'Included + 150 AI credits/mo'],
+                ['Heavy', '$29/mo', 'All', 'Unlimited', 'Included + 500 AI credits/mo'],
+              ]}
+            />
+            <Block title="How usage is metered">
+              <ul className="list-disc pl-5 space-y-1">
+                <li><span className="ink font-medium">API calls</span> — every request (including each service action an automation performs) counts toward your monthly quota. Pro bills overage; Heavy is unlimited.</li>
+                <li><span className="ink font-medium">AI credits</span> — only MyApi-provided AI. 1 credit = $0.01 of charged usage (provider cost × markup). Your included allowance is free each month; beyond it you spend your prepaid balance. Using your own API key costs no credits.</li>
+              </ul>
+            </Block>
+            <Callout type="tip">
+              Prefer no AI charges? Add your own Anthropic / OpenAI / OpenRouter key in Automations → Settings — those runs are free (you still use API-call quota for the service actions).
             </Callout>
           </Section>
 
@@ -835,7 +975,7 @@ function PlatformDocs() {
             </Block>
 
             <Callout type="info">
-              Multi-workspace support and team collaboration features are available on the Enterprise plan.
+              Multi-workspace support and team collaboration features are available on the Heavy plan.
             </Callout>
           </Section>
 

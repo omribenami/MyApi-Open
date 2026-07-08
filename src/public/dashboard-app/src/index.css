@@ -396,6 +396,58 @@
   /* Density */
   [data-density="compact"] .density-row { padding-top: 6px; padding-bottom: 6px; }
   [data-density="roomy"]   .density-row { padding-top: 14px; padding-bottom: 14px; }
+
+  /* Main content padding — tighter on phones so content isn't crushed */
+  .main-pad { padding: 32px; }
+  @media (max-width: 768px) { .main-pad { padding: 20px 16px; } }
+  @media (max-width: 480px) { .main-pad { padding: 16px 12px; } }
+
+  /* ── Dashboard responsive grids ──────────────────────────────────────
+     These replace hard-coded inline grid-template-columns so the home
+     dashboard collapses cleanly on tablet/phone instead of squishing. */
+  .dash-kpis  { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .dash-hero  { display: grid; grid-template-columns: 1.18fr 1fr; gap: 12px; }
+  .dash-thead,
+  .dash-trow  {
+    display: grid;
+    grid-template-columns: 1.7fr 0.9fr 1.5fr 0.8fr 0.9fr 36px;
+    gap: 12px;
+  }
+
+  /* Stack the donut + detail panel once they get too narrow side-by-side */
+  @media (max-width: 1024px) {
+    .dash-hero { grid-template-columns: 1fr; }
+  }
+
+  /* Phone/tablet: collapse the 6-column device table into stacked rows.
+     !important is required to beat the inline grid-template-columns that
+     the insights grid still sets for its dynamic column count. */
+  @media (max-width: 768px) {
+    .dash-insights { grid-template-columns: 1fr !important; }
+    .dash-thead { display: none; }
+    .dash-trow {
+      grid-template-columns: 1fr auto;
+      grid-template-areas:
+        "device  chev"
+        "calls   status"
+        "service errors";
+      row-gap: 10px;
+      column-gap: 12px;
+      align-items: center;
+      padding: 12px 14px !important;
+    }
+    .dc-device  { grid-area: device; }
+    .dc-status  { grid-area: status;  justify-self: end; }
+    .dc-calls   { grid-area: calls; }
+    .dc-service { grid-area: service; }
+    .dc-errors  { grid-area: errors;  justify-self: end; }
+    .dc-chev    { grid-area: chev; }
+  }
+
+  /* Narrow phones: two-up KPI cards instead of four squished columns */
+  @media (max-width: 560px) {
+    .dash-kpis { grid-template-columns: repeat(2, 1fr); }
+  }
 }
 
 /* ── Animations ────────────────────────────────────────────────────── */

@@ -1,48 +1,17 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import apiClient from '../utils/apiClient';
 import { useAuthStore } from '../stores/authStore';
+import {
+  CopyBlock,
+  OAuthInstallerPanel,
+  AscKeypairPanel,
+  QuickConnectPanel,
+  MasterTokenPanel,
+  CompareMethodsPanel,
+} from '../components/AgentConnectorPanels';
 
-// ─── CopyBlock ─────────────────────────────────────────────────────────────────
-function CopyBlock({ text, label, accent = 'blue' }) {
-  const [copied, setCopied] = useState(false);
-  const isViolet = accent === 'violet';
-  const copy = useCallback(() => {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  }, [text]);
-
-  return (
-    <div style={{ background: 'var(--bg-sunk)', border: '1px solid var(--line)', borderRadius: '6px', overflow: 'hidden' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', borderBottom: '1px solid var(--line)' }}>
-        <span className="micro" style={{ color: 'var(--ink-4)' }}>{label}</span>
-        <button
-          onClick={copy}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '4px',
-            fontSize: '10px', fontWeight: 500, padding: '3px 8px', borderRadius: '4px',
-            background: 'transparent', border: 'none', cursor: 'pointer',
-            color: isViolet ? '#a78bfa' : 'var(--accent)',
-            transition: 'opacity 0.15s',
-          }}
-          onMouseEnter={e => e.currentTarget.style.opacity = '0.8'}
-          onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-        >
-          {copied ? (
-            <><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>Copied</>
-          ) : (
-            <><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>Copy</>
-          )}
-        </button>
-      </div>
-      <pre className="mono" style={{ fontSize: '11px', color: 'var(--ink-2)', padding: '12px', overflowX: 'auto', lineHeight: '1.6', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}><code>{text}</code></pre>
-    </div>
-  );
-}
-
-// ─── Data ──────────────────────────────────────────────────────────────────────
-const CONNECTORS = [
+// ─── Assistants ────────────────────────────────────────────────────────────────
+const ASSISTANTS = [
   {
     id: 'chatgpt', name: 'ChatGPT', provider: 'OpenAI', status: 'available',
     href: 'https://chatgpt.com/g/g-69a90f35a0888191ae6346c9b129b9a8-myapi-assistant',
@@ -69,7 +38,6 @@ const LinuxLogo = ({ className, style }) => (<svg viewBox="0 0 24 24" className=
 const AppleLogo = ({ className, style }) => (<svg viewBox="0 0 24 24" className={className} style={style} fill="currentColor"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg>);
 const WindowsLogo = ({ className, style }) => (<svg viewBox="0 0 24 24" className={className} style={style} fill="currentColor"><path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg>);
 
-// ─── Helpers ───────────────────────────────────────────────────────────────────
 function getPlatformMeta(platform) {
   switch (platform) {
     case 'linux':  return { label: 'Linux',   Logo: LinuxLogo,   iconColor: 'var(--amber)',  iconBg: 'rgba(210,153,34,0.15)'  };
@@ -79,729 +47,701 @@ function getPlatformMeta(platform) {
   }
 }
 
-function fmtRelTime(isoStr) {
-  if (!isoStr) return 'never';
-  const s = Math.floor((Date.now() - new Date(isoStr).getTime()) / 1000);
-  if (s < 60)    return 'just now';
-  if (s < 3600)  return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  return `${Math.floor(s / 86400)}d ago`;
-}
-
 function fmtBytes(bytes) {
   if (!bytes) return '';
   return `${Math.round(bytes / 1024 / 1024)} MB`;
 }
 
-// ─── DeviceRow ─────────────────────────────────────────────────────────────────
-function DeviceRow({ device, onRevoke }) {
-  const [confirming, setConfirming] = useState(false);
-  const pm = getPlatformMeta(device.platform);
-  const isOnline = device.status === 'online';
+// Desktop installers. Availability is resolved at runtime from
+// /afp/installer-info — a platform shows a Download button once its binary is
+// published (macOS auto-activates when the signed .dmg lands), otherwise
+// "Coming soon". No code change needed when macOS builds start shipping.
+const DESKTOP_PLATFORMS = [
+  {
+    platform: 'mac-arm', label: 'macOS', sublabel: 'Apple Silicon',
+    Logo: AppleLogo, iconColor: 'var(--ink-2)', iconBg: 'rgba(145,152,161,0.15)',
+    href: '/api/v1/afp/download/installer/mac-arm',
+  },
+  {
+    platform: 'mac', label: 'macOS', sublabel: 'Intel',
+    Logo: AppleLogo, iconColor: 'var(--ink-2)', iconBg: 'rgba(145,152,161,0.15)',
+    href: '/api/v1/afp/download/installer/mac',
+  },
+  {
+    platform: 'win', label: 'Windows', sublabel: 'x86-64',
+    Logo: WindowsLogo, iconColor: 'var(--accent)', iconBg: 'var(--accent-bg)',
+    href: '/api/v1/afp/download/installer/win',
+  },
+];
 
-  return (
-    <div style={{
-      position: 'relative',
-      display: 'flex', alignItems: 'center', gap: '12px',
-      paddingLeft: '20px', paddingRight: '16px', paddingTop: '12px', paddingBottom: '12px',
-      borderRadius: '6px',
-      border: `1px solid ${isOnline ? 'rgba(63,185,80,0.25)' : 'var(--line)'}`,
-      background: isOnline ? 'rgba(46,160,67,0.08)' : 'var(--bg-raised)',
-      overflow: 'hidden',
-    }}>
-      <div style={{
-        position: 'absolute', left: 0, top: 0, bottom: 0, width: '3px', borderRadius: '6px 0 0 6px',
-        background: isOnline ? 'var(--green)' : 'transparent', opacity: 0.6,
-      }} />
-      <div style={{
-        width: '32px', height: '32px', borderRadius: '6px', flexShrink: 0,
-        background: pm.iconBg, border: '1px solid var(--line)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-        {pm.Logo
-          ? <pm.Logo style={{ width: '16px', height: '16px', color: pm.iconColor }} />
-          : <span style={{ fontSize: '11px', color: 'var(--ink-3)' }}>{(device.platform || '?')[0].toUpperCase()}</span>
-        }
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{device.name}</span>
-          <span style={{ fontSize: '11px', color: 'var(--ink-4)' }}>{device.hostname}</span>
-          <span style={{
-            fontSize: '10px', padding: '1px 6px', borderRadius: '999px',
-            border: '1px solid',
-            fontWeight: 500,
-            ...(device.privileges === 'full'
-              ? { background: 'rgba(167,139,250,0.15)', color: '#a78bfa', borderColor: 'rgba(167,139,250,0.3)' }
-              : { background: 'rgba(210,153,34,0.15)', color: 'var(--amber)', borderColor: 'rgba(210,153,34,0.3)' }
-            ),
-          }}>
-            {device.privileges === 'full' ? 'Full access' : 'Restricted'}
-          </span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '2px' }}>
-          <span style={{ fontSize: '11px', color: 'var(--ink-3)' }}>{pm.label} · {device.arch}</span>
-          <span style={{ fontSize: '11px', color: 'var(--ink-4)' }}>Last seen {fmtRelTime(device.lastSeenAt)}</span>
-        </div>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-        <span style={{
-          display: 'flex', alignItems: 'center', gap: '6px',
-          fontSize: '10px', padding: '3px 8px', borderRadius: '999px', fontWeight: 500,
-          background: isOnline ? 'var(--green-bg)' : 'var(--bg-hover)',
-          color: isOnline ? 'var(--green)' : 'var(--ink-3)',
-        }}>
-          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: isOnline ? 'var(--green)' : 'var(--ink-4)' }} />
-          {device.status}
-        </span>
-        {confirming ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <button onClick={() => { onRevoke(device.id); setConfirming(false); }} className="ui-button-danger" style={{ fontSize: '11px', padding: '4px 10px' }}>Confirm</button>
-            <button onClick={() => setConfirming(false)} className="btn" style={{ fontSize: '11px', padding: '4px 10px' }}>Cancel</button>
-          </div>
-        ) : (
-          <button onClick={() => setConfirming(true)} style={{
-            width: '28px', height: '28px', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: 'transparent', border: 'none', cursor: 'pointer',
-            color: 'var(--ink-4)', transition: 'color 0.15s, background 0.15s',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.color = 'var(--red)'; e.currentTarget.style.background = 'var(--red-bg)'; }}
-          onMouseLeave={e => { e.currentTarget.style.color = 'var(--ink-4)'; e.currentTarget.style.background = 'transparent'; }}>
-            <svg viewBox="0 0 24 24" style={{ width: '14px', height: '14px' }} fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── OS platform configs ───────────────────────────────────────────────────────
+// CLI sign-in (browser auth) binaries, tucked into the advanced section.
 const OS_PLATFORMS = [
-  { platform: 'linux',   label: 'Linux',   sublabel: 'x86-64',       Logo: LinuxLogo,   iconColor: 'var(--amber)',  iconBg: 'rgba(210,153,34,0.15)'  },
+  { platform: 'linux',   label: 'Linux',   sublabel: 'x86-64',        Logo: LinuxLogo,   iconColor: 'var(--amber)',  iconBg: 'rgba(210,153,34,0.15)'  },
   { platform: 'mac',     label: 'macOS',   sublabel: 'Intel',         Logo: AppleLogo,   iconColor: 'var(--ink-2)', iconBg: 'rgba(145,152,161,0.15)' },
   { platform: 'mac-arm', label: 'macOS',   sublabel: 'Apple Silicon', Logo: AppleLogo,   iconColor: 'var(--ink-2)', iconBg: 'rgba(145,152,161,0.15)' },
   { platform: 'win',     label: 'Windows', sublabel: 'x86-64',        Logo: WindowsLogo, iconColor: 'var(--accent)', iconBg: 'var(--accent-bg)'      },
 ];
 
-const DESKTOP_PLATFORMS = [
+// ─── Small building blocks ─────────────────────────────────────────────────────
+function TrustBadge({ children, icon }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', padding: '5px 11px', borderRadius: '999px', border: '1px solid var(--line)', background: 'var(--bg-raised)', fontSize: '12px', color: 'var(--ink-2)' }}>
+      {icon}
+      {children}
+    </span>
+  );
+}
+
+function Collapse({ open, onToggle, icon, label, children }) {
+  return (
+    <div style={{ border: '1px solid var(--line)', borderRadius: '8px', overflow: 'hidden' }}>
+      <button onClick={onToggle} style={{
+        width: '100%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        gap: '8px', padding: '12px 16px', background: 'transparent', border: 'none', textAlign: 'left',
+        transition: 'background 0.15s',
+      }}
+      onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+          {icon}
+          <span style={{ fontSize: '12.5px', color: 'var(--ink-2)' }}>{label}</span>
+        </span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--ink-4)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', flexShrink: 0 }}><path d="M6 9l6 6 6-6" /></svg>
+      </button>
+      {open && (
+        <div style={{ padding: '16px', borderTop: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Goal chooser ──────────────────────────────────────────────────────────────
+const GOALS = [
   {
-    platform: 'win', label: 'Windows', sublabel: 'x86-64',
-    Logo: WindowsLogo, iconColor: 'var(--accent)', iconBg: 'var(--accent-bg)',
-    href: '/api/v1/afp/download/installer/win', filename: 'MyApi-AFP-win-x64.exe',
+    id: 'chat', title: 'Chat with your data', effort: 'Easiest · nothing to install', tone: 'var(--green)',
+    iconBg: 'var(--green-bg)', iconColor: 'var(--green)',
+    iconPath: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z',
+    plain: 'Use an AI you already have — ask ChatGPT or Claude about your MyApi data. Authorize once.',
   },
   {
-    platform: 'mac-arm', label: 'macOS', sublabel: 'Apple Silicon',
-    Logo: AppleLogo, iconColor: 'var(--ink-4)', iconBg: 'rgba(145,152,161,0.07)',
-    comingSoon: true,
+    id: 'computer', title: 'Let an agent use this computer', effort: '~2 min · one download', tone: 'var(--accent)', badge: 'Pro',
+    iconBg: 'var(--accent-bg)', iconColor: 'var(--accent)',
+    iconPath: 'M3 4h18v13H3zM8 21h8M12 17v4',
+    plain: 'Give an AI agent safe, sandboxed access to the files and apps on your machine.',
   },
   {
-    platform: 'mac', label: 'macOS', sublabel: 'Intel',
-    Logo: AppleLogo, iconColor: 'var(--ink-4)', iconBg: 'rgba(145,152,161,0.07)',
-    comingSoon: true,
+    id: 'dev', title: 'Connect Agentic AIs', effort: 'For developers', tone: '#a78bfa',
+    iconBg: 'rgba(167,139,250,0.15)', iconColor: '#a78bfa',
+    iconPath: 'M8 6l-6 6 6 6M16 6l6 6-6 6',
+    plain: 'Wire up an MCP agent, a server worker, or your own build — each gets its own key you can revoke anytime.',
   },
 ];
 
-// ─── AfpConnectorCard ──────────────────────────────────────────────────────────
-function AfpConnectorCard() {
+function GoalCard({ goal, selected, onClick }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <button onClick={onClick}
+      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      style={{
+        textAlign: 'left', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '12px',
+        padding: '16px', borderRadius: '8px',
+        border: `1px solid ${selected || hover ? 'var(--accent)' : 'var(--line)'}`,
+        background: selected ? 'var(--accent-bg)' : 'var(--bg-raised)',
+        transition: 'border-color 0.12s, background 0.12s', position: 'relative', minHeight: '150px',
+      }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ width: '40px', height: '40px', borderRadius: '9px', display: 'grid', placeItems: 'center', background: goal.iconBg, color: goal.iconColor, border: '1px solid var(--line)' }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d={goal.iconPath} /></svg>
+        </span>
+        {goal.badge && !selected && (
+          <span style={{ fontSize: '9.5px', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', padding: '2px 7px', borderRadius: '999px', background: 'var(--accent-bg)', color: 'var(--accent)', border: '1px solid rgba(56,139,253,0.3)' }}>{goal.badge}</span>
+        )}
+        {selected && (
+          <span style={{ width: '20px', height: '20px', borderRadius: '999px', display: 'grid', placeItems: 'center', background: 'var(--accent-2)', color: '#fff' }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+          </span>
+        )}
+      </div>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--ink)', lineHeight: 1.25 }}>{goal.title}</div>
+        <p style={{ margin: '6px 0 0', fontSize: '12.5px', lineHeight: 1.5, color: 'var(--ink-3)' }}>{goal.plain}</p>
+      </div>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 600, color: goal.tone }}>
+        <span className="tick" style={{ background: goal.tone }} />{goal.effort}
+      </span>
+    </button>
+  );
+}
+
+// ─── Detail: CHAT ──────────────────────────────────────────────────────────────
+function ChatSection() {
+  return (
+    <section data-tour="conn-assistants" style={{ display: 'flex', flexDirection: 'column', gap: '14px', border: '1px solid var(--line)', borderRadius: '10px', background: 'var(--bg-raised)', padding: '22px' }}>
+      <div>
+        <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: 'var(--ink)' }}>Pick an assistant to connect</h3>
+        <p style={{ margin: '5px 0 0', fontSize: '13px', lineHeight: 1.5, color: 'var(--ink-3)', maxWidth: '62ch' }}>
+          You’ll authorize it once in a browser tab — no keys, tokens, or installs. It can then read what you allow and nothing more.
+        </p>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        {ASSISTANTS.map(a => (
+          <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '14px 16px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)' }}>
+            <span style={{ width: '36px', height: '36px', borderRadius: '8px', flexShrink: 0, display: 'grid', placeItems: 'center', background: a.iconBg, color: a.iconColor, border: '1px solid var(--line)' }}>
+              {a.logo}
+            </span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--ink)' }}>{a.name}</span>
+                <span style={{ fontSize: '11px', color: 'var(--ink-4)' }}>{a.provider}</span>
+              </div>
+              <p style={{ margin: '3px 0 0', fontSize: '12px', lineHeight: 1.45, color: 'var(--ink-3)' }}>{a.description}</p>
+            </div>
+            {a.status === 'available' ? (
+              <a href={a.href} target="_blank" rel="noreferrer" className="btn-primary" style={{ flexShrink: 0, textDecoration: 'none', whiteSpace: 'nowrap', padding: '8px 16px', borderRadius: '6px', fontSize: '13px', fontWeight: 500 }}>
+                Connect →
+              </a>
+            ) : (
+              <span style={{ flexShrink: 0, fontSize: '11px', color: 'var(--ink-4)', fontWeight: 500, whiteSpace: 'nowrap', padding: '0 4px' }}>Coming soon</span>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// ─── Detail: COMPUTER (AFP) ────────────────────────────────────────────────────
+const COMPUTER_STEPS = [
+  { n: '1', title: 'Download & open', body: 'Grab the app for your device below and open it.' },
+  { n: '2', title: 'Sign in', body: 'Your browser opens once — log in and click Authorize.' },
+  { n: '3', title: 'You’re connected', body: 'It shows a green dot and appears in Your connections.' },
+];
+
+function ComputerSection({ onDevicesChanged }) {
   const { user } = useAuthStore();
   const isAfpEnabled = ['pro', 'enterprise'].includes(String(user?.plan || 'free').toLowerCase());
-  const [devices, setDevices]                     = useState([]);
-  const [downloadInfo, setDownloadInfo]           = useState([]);
+  const [installerAvail, setInstallerAvail]       = useState({});
   const [downloadOAuthInfo, setDownloadOAuthInfo] = useState([]);
-  const [loading, setLoading]                     = useState(true);
   const [downloading, setDownloading]             = useState(null);
-  const [edition, setEdition]                     = useState('desktop');
-  const [installOpen, setInstallOpen]             = useState(false);
-  const [linuxOpen, setLinuxOpen]                 = useState(false);
+  const [advOpen, setAdvOpen]                     = useState(false);
+  const [cliOpen, setCliOpen]                     = useState(false);
+  const [svcOpen, setSvcOpen]                     = useState(false);
+  const [enroll, setEnroll]                       = useState(null);   // { command, commandWindows, code }
+  const [enrollBusy, setEnrollBusy]               = useState(false);
+  const [enrollError, setEnrollError]             = useState('');
 
   useEffect(() => {
+    if (!isAfpEnabled) return;
     Promise.all([
-      apiClient.get('/afp/devices').catch(() => ({ data: { devices: [] } })),
-      apiClient.get('/afp/download-info').catch(() => ({ data: { platforms: [] } })),
+      apiClient.get('/afp/installer-info').catch(() => ({ data: { platforms: [] } })),
       apiClient.get('/afp/download-oauth-info').catch(() => ({ data: { platforms: [] } })),
-    ]).then(([devRes, dlRes, oauthRes]) => {
-      setDevices(devRes.data?.devices || []);
-      setDownloadInfo(dlRes.data?.platforms || []);
+    ]).then(([instRes, oauthRes]) => {
+      setInstallerAvail(Object.fromEntries((instRes.data?.platforms || []).map(p => [p.platform, p.available])));
       setDownloadOAuthInfo(oauthRes.data?.platforms || []);
-    }).finally(() => setLoading(false));
-  }, []);
+    });
+  }, [isAfpEnabled]);
 
-  const onlineCount = devices.filter(d => d.status === 'online').length;
-  const totalCount  = devices.length;
-
-  function getSize(info, platform) {
-    const found = info.find(p => p.platform === platform);
-    return found?.available ? fmtBytes(found.size) : null;
+  async function generateEnrollCommand() {
+    setEnrollBusy(true); setEnrollError('');
+    try {
+      const res = await apiClient.post('/afp/enroll-code');
+      const d = res.data || {};
+      setEnroll({
+        command: d.commandUnix || d.command,
+        commandWindows: d.commandWindows || null,
+        code: d.code,
+      });
+      onDevicesChanged?.();
+    } catch (e) {
+      setEnrollError(e?.response?.data?.error || 'Failed to generate install command');
+    } finally { setEnrollBusy(false); }
   }
 
-  async function handleDownload(type, platform) {
-    const key = `${type}-${platform}`;
-    setDownloading(key);
-    const url = type === 'oauth' ? `/api/v1/afp/download-oauth/${platform}` : `/api/v1/afp/download/${platform}`;
+  async function handleOAuthDownload(platform) {
+    setDownloading(platform);
     try {
-      const response = await fetch(url, { credentials: 'include' });
+      const response = await fetch(`/api/v1/afp/download-oauth/${platform}`, { credentials: 'include' });
       if (!response.ok) { const err = await response.json().catch(() => ({})); alert(err.error || 'Download failed.'); return; }
       const blob = await response.blob();
       const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       const cd = response.headers.get('Content-Disposition') || '';
       const nameMatch = cd.match(/filename="?([^"]+)"?/);
-      a.href = blobUrl; a.download = nameMatch ? nameMatch[1] : `afp-${type}-${platform}`;
+      a.href = blobUrl; a.download = nameMatch ? nameMatch[1] : `afp-oauth-${platform}`;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(blobUrl);
     } finally { setDownloading(null); }
   }
 
-  const installSteps = {
-    oauth: [
-      { title: 'Download', body: 'Pick your OS below and save the file. No dependencies required.' },
-      { title: 'Run it', body: 'Double-click (Windows) or run from terminal (Mac/Linux). Your browser opens automatically.' },
-      { title: 'Sign in', body: 'Log in and click Authorize. The daemon connects and stays running in the background.' },
-      { title: 'Done', body: 'Your PC appears in Connected Devices below.' },
-    ],
-    daemon: [
-      { title: 'Download', body: 'Pick your OS and save the file.' },
-      { title: 'Run it', body: 'Double-click (Windows) or run from terminal. A wizard asks for your server URL and API token.' },
-      { title: 'Auto-start', body: 'The wizard can install it as a background service.' },
-      { title: 'Done', body: 'Your PC appears in Connected Devices below.' },
-    ],
-    desktop: [
-      { title: 'Download', body: 'Pick your platform. macOS: open the DMG and drag to Applications. Windows: run the installer.' },
-      { title: 'First launch', body: 'The app icon appears in your menu bar (Mac) or system tray (Windows) and your browser opens to sign in.' },
-      { title: 'Authorize', body: 'Log in and click Authorize. The app connects and shows a green dot when ready.' },
-      { title: 'Done', body: 'Your device appears in Connected Devices below.' },
-    ],
-  };
-
   if (!isAfpEnabled) {
     return (
-      <div style={{ borderRadius: '6px', border: '1px solid var(--line)', background: 'var(--bg-raised)', padding: '32px 24px', textAlign: 'center' }}>
-        <p style={{ fontSize: '12px', fontWeight: 600, color: 'var(--amber)', marginBottom: '8px' }}>Pro &amp; Enterprise only</p>
+      <section style={{ borderRadius: '10px', border: '1px solid var(--line)', background: 'var(--bg-raised)', padding: '32px 24px', textAlign: 'center' }}>
+        <p style={{ fontSize: '12px', fontWeight: 600, color: 'var(--amber)', marginBottom: '8px' }}>Pro &amp; Heavy only</p>
         <p style={{ fontSize: '13px', color: 'var(--ink-2)', maxWidth: '360px', margin: '0 auto 16px' }}>AFP connectors let AI agents access your local files and shell. Upgrade to unlock.</p>
         <a href="/dashboard/settings?section=billing" className="btn-primary" style={{ display: 'inline-block', textDecoration: 'none' }}>Upgrade Plan</a>
-      </div>
+      </section>
     );
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-      {/* Edition toggle */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px', background: 'var(--bg-sunk)', border: '1px solid var(--line)', borderRadius: '6px', width: 'fit-content', flexWrap: 'wrap' }}>
-        {[
-          { id: 'desktop', label: 'Desktop App',  badge: 'New',         badgeStyle: { background: 'var(--green-bg)', color: 'var(--green)' } },
-          { id: 'oauth',   label: 'CLI Sign-in',  badge: 'Recommended', badgeStyle: { background: 'rgba(167,139,250,0.15)', color: '#a78bfa' } },
-          { id: 'daemon',  label: 'CLI Token',    badge: 'Self-hosted', badgeStyle: { background: 'var(--bg-hover)', color: 'var(--ink-3)' } },
-        ].map(e => (
-          <button key={e.id} onClick={() => setEdition(e.id)} style={{
-            display: 'flex', alignItems: 'center', gap: '6px',
-            padding: '6px 12px', borderRadius: '4px',
-            fontSize: '12px', fontWeight: 500, cursor: 'pointer', border: 'none',
-            background: edition === e.id ? 'var(--bg-hover)' : 'transparent',
-            color: edition === e.id ? 'var(--ink)' : 'var(--ink-3)',
-            transition: 'background 0.15s, color 0.15s',
-          }}>
-            {e.label}
-            <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '3px', fontWeight: 600, ...e.badgeStyle }}>{e.badge}</span>
-          </button>
+    <section data-tour="conn-install" style={{ display: 'flex', flexDirection: 'column', gap: '16px', border: '1px solid var(--line)', borderRadius: '10px', background: 'var(--bg-raised)', padding: '22px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
+        <div>
+          <div className="micro" style={{ marginBottom: '6px' }}>AFP · AGENT FILE PROTOCOL</div>
+          <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: 'var(--ink)' }}>Install the AFP connector on your computer</h3>
+          <p style={{ margin: '5px 0 0', fontSize: '13px', lineHeight: 1.5, color: 'var(--ink-3)', maxWidth: '62ch' }}>
+            AFP — the Agent File Protocol — runs quietly in your menu bar or tray and gives agents sandboxed access
+            to your files, only when you say so. Three steps, about two minutes.
+          </p>
+        </div>
+        <span style={{ flexShrink: 0, fontSize: '9.5px', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', padding: '3px 8px', borderRadius: '999px', background: 'var(--accent-bg)', color: 'var(--accent)', border: '1px solid rgba(56,139,253,0.3)' }}>Pro</span>
+      </div>
+
+      {/* Steps */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
+        {COMPUTER_STEPS.map(s => (
+          <div key={s.n} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '14px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)' }}>
+            <span className="mono" style={{ width: '24px', height: '24px', borderRadius: '999px', display: 'grid', placeItems: 'center', background: 'var(--accent-bg)', color: 'var(--accent)', fontSize: '12px', fontWeight: 700 }}>{s.n}</span>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ink)' }}>{s.title}</div>
+            <p style={{ margin: 0, fontSize: '12px', lineHeight: 1.45, color: 'var(--ink-3)' }}>{s.body}</p>
+          </div>
         ))}
       </div>
 
-      {/* Download grid */}
-      {edition === 'desktop' ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-            {DESKTOP_PLATFORMS.map(os =>
-              os.comingSoon ? (
-                <div key={os.platform} style={{
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
-                  padding: '16px', borderRadius: '6px',
-                  background: 'var(--bg-raised)', border: '1px solid var(--line)',
-                  opacity: 0.4, cursor: 'not-allowed',
-                }}>
-                  <div style={{ width: '36px', height: '36px', borderRadius: '6px', background: os.iconBg, border: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <os.Logo style={{ width: '16px', height: '16px', color: os.iconColor }} />
-                  </div>
-                  <div style={{ textAlign: 'center' }}>
-                    <p style={{ fontSize: '12px', fontWeight: 500, color: 'var(--ink-2)' }}>{os.label}</p>
-                    <p style={{ fontSize: '10px', color: 'var(--ink-4)' }}>{os.sublabel}</p>
-                  </div>
-                  <span style={{ fontSize: '10px', padding: '1px 8px', borderRadius: '999px', background: 'var(--bg-hover)', border: '1px solid var(--line)', color: 'var(--ink-3)', fontWeight: 500 }}>Coming soon</span>
+      {/* Download tiles */}
+      <div>
+        <div className="micro" style={{ marginBottom: '8px' }}>Download for your device</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '8px' }}>
+          {DESKTOP_PLATFORMS.map(os => {
+            const ready = installerAvail[os.platform] === true;
+            const inner = (
+              <>
+                <span style={{ width: '32px', height: '32px', borderRadius: '7px', flexShrink: 0, display: 'grid', placeItems: 'center', background: os.iconBg, color: os.iconColor, border: '1px solid var(--line)' }}>
+                  <os.Logo style={{ width: '16px', height: '16px' }} />
+                </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: ready ? 'var(--ink)' : 'var(--ink-2)' }}>{os.label}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--ink-4)' }}>{os.sublabel}</div>
                 </div>
-              ) : (
-                <a key={os.platform} href={os.href} download={os.filename} style={{
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
-                  padding: '16px', borderRadius: '6px',
-                  background: 'var(--bg-raised)', border: '1px solid var(--line)',
-                  textDecoration: 'none', transition: 'border-color 0.15s, background 0.15s',
-                }}
+                {ready ? (
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ink-4)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12" /><path d="M7 12l5 5 5-5" /><path d="M5 21h14" /></svg>
+                ) : (
+                  <span style={{ fontSize: '10px', padding: '1px 8px', borderRadius: '999px', background: 'var(--bg-hover)', border: '1px solid var(--line)', color: 'var(--ink-3)', fontWeight: 500, whiteSpace: 'nowrap' }}>Coming soon</span>
+                )}
+              </>
+            );
+            const tileStyle = {
+              display: 'flex', alignItems: 'center', gap: '11px', padding: '13px 14px', borderRadius: '8px',
+              border: '1px solid var(--line)', background: 'var(--bg)', textAlign: 'left',
+              transition: 'border-color 0.12s, background 0.12s', textDecoration: 'none',
+            };
+            return ready ? (
+              <a key={`${os.platform}`} href={os.href} style={tileStyle}
                 onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--line-2)'; e.currentTarget.style.background = 'var(--bg-hover)'; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.background = 'var(--bg-raised)'; }}>
-                  <div style={{ width: '36px', height: '36px', borderRadius: '6px', background: os.iconBg, border: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <os.Logo style={{ width: '16px', height: '16px', color: os.iconColor }} />
-                  </div>
-                  <div style={{ textAlign: 'center' }}>
-                    <p style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink)' }}>{os.label}</p>
-                    <p style={{ fontSize: '10px', color: 'var(--ink-3)' }}>{os.sublabel}</p>
-                  </div>
-                  <svg style={{ width: '14px', height: '14px', color: 'var(--ink-4)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                </a>
-              )
-            )}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', borderRadius: '6px', border: '1px solid rgba(210,153,34,0.25)', background: 'rgba(210,153,34,0.08)', padding: '10px 12px' }}>
-            <svg style={{ width: '14px', height: '14px', color: 'var(--amber)', marginTop: '1px', flexShrink: 0 }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
-            <p style={{ fontSize: '11px', color: 'var(--amber)', lineHeight: '1.5' }}>
-              Unsigned build — Windows: click "More info" → "Run anyway" in SmartScreen. macOS coming soon.
-            </p>
-          </div>
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
-          {OS_PLATFORMS.map(os => {
-            const info = edition === 'oauth' ? downloadOAuthInfo : downloadInfo;
-            const size = getSize(info, os.platform);
-            const key  = `${edition}-${os.platform}`;
-            const isLoading = downloading === key;
-            return (
-              <button key={os.platform} onClick={() => handleDownload(edition, os.platform)} disabled={!!downloading} style={{
-                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
-                padding: '16px', borderRadius: '6px',
-                background: 'var(--bg-raised)', border: '1px solid var(--line)',
-                cursor: downloading ? 'wait' : 'pointer', opacity: downloading ? 0.5 : 1,
-                transition: 'border-color 0.15s, background 0.15s',
-              }}
-              onMouseEnter={e => { if (!downloading) { e.currentTarget.style.borderColor = 'var(--line-2)'; e.currentTarget.style.background = 'var(--bg-hover)'; } }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.background = 'var(--bg-raised)'; }}>
-                <div style={{ width: '36px', height: '36px', borderRadius: '6px', background: os.iconBg, border: '1px solid var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  {isLoading
-                    ? <svg style={{ width: '16px', height: '16px', color: 'var(--ink-3)' }} className="animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                    : <os.Logo style={{ width: '16px', height: '16px', color: os.iconColor }} />
-                  }
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <p style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink)' }}>{os.label}</p>
-                  <p style={{ fontSize: '10px', color: 'var(--ink-3)' }}>{os.sublabel}</p>
-                  {size && <p style={{ fontSize: '10px', color: 'var(--ink-4)', marginTop: '2px' }}>{size}</p>}
-                </div>
-                {!isLoading && <svg style={{ width: '14px', height: '14px', color: 'var(--ink-4)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>}
-              </button>
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.background = 'var(--bg)'; }}>
+                {inner}
+              </a>
+            ) : (
+              <div key={`${os.platform}`} style={{ ...tileStyle, opacity: 0.45, cursor: 'not-allowed' }}>{inner}</div>
             );
           })}
         </div>
-      )}
-
-      {/* How to install */}
-      <div style={{ borderRadius: '6px', border: '1px solid var(--line)', overflow: 'hidden' }}>
-        <button onClick={() => setInstallOpen(o => !o)} style={{
-          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '12px 16px', background: 'transparent', border: 'none', cursor: 'pointer',
-          transition: 'background 0.15s',
-        }}
-        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-          <span className="micro" style={{ color: 'var(--ink-3)' }}>How to install</span>
-          <svg style={{ width: '16px', height: '16px', color: 'var(--ink-4)', transform: installOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-        </button>
-        {installOpen && (
-          <div style={{ padding: '12px 16px 20px', borderTop: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {installSteps[edition].map((s, i) => (
-              <div key={i} style={{ display: 'flex', gap: '12px' }}>
-                <span style={{
-                  width: '20px', height: '20px', borderRadius: '50%',
-                  background: 'var(--bg-hover)', border: '1px solid var(--line)',
-                  color: 'var(--ink-3)', fontSize: '11px', fontWeight: 700,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: '2px',
-                }}>{i + 1}</span>
-                <div>
-                  <p style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink)' }}>{s.title}</p>
-                  <p style={{ fontSize: '12px', color: 'var(--ink-3)', marginTop: '2px', lineHeight: '1.5' }}>{s.body}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', borderRadius: '6px', border: '1px solid rgba(210,153,34,0.25)', background: 'rgba(210,153,34,0.08)', padding: '10px 12px', marginTop: '8px' }}>
+          <svg style={{ width: '14px', height: '14px', color: 'var(--amber)', marginTop: '1px', flexShrink: 0 }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+          <p style={{ fontSize: '11px', color: 'var(--amber)', lineHeight: 1.5 }}>
+            Unsigned build — Windows: click "More info" → "Run anyway" in SmartScreen. On macOS, right-click the app → Open the first time.
+          </p>
+        </div>
       </div>
 
-      {/* Linux service management */}
-      {edition !== 'desktop' && (
-        <div style={{ borderRadius: '6px', border: '1px solid var(--line)', overflow: 'hidden' }}>
-          <button onClick={() => setLinuxOpen(o => !o)} style={{
-            width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '12px 16px', background: 'transparent', border: 'none', cursor: 'pointer',
-            transition: 'background 0.15s',
-          }}
-          onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <LinuxLogo style={{ width: '14px', height: '14px', color: 'var(--amber)' }} />
-              <span className="micro" style={{ color: 'var(--ink-3)' }}>Linux — Service Management</span>
-            </div>
-            <svg style={{ width: '16px', height: '16px', color: 'var(--ink-4)', transform: linuxOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+      {/* Advanced */}
+      <Collapse open={advOpen} onToggle={() => setAdvOpen(o => !o)}
+        icon={<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ink-3)" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 17l6-6-6-6" /><path d="M12 19h8" /></svg>}
+        label="Running a server or headless machine? Advanced install options">
+        <p style={{ margin: 0, fontSize: '12px', lineHeight: 1.5, color: 'var(--ink-3)' }}>
+          Prefer the command line? Generate a one-line installer for any Linux, macOS, or Windows machine — it
+          enrolls and installs an auto-starting service. The single-use code expires in 15 minutes; your account
+          token never leaves your machine.
+        </p>
+        {!enroll ? (
+          <button onClick={generateEnrollCommand} disabled={enrollBusy} className="ui-button-primary" style={{ width: 'fit-content', fontSize: '12px' }}>
+            {enrollBusy ? 'Generating…' : 'Generate install command'}
           </button>
-          {linuxOpen && (
-            <div style={{ padding: '12px 16px 20px', borderTop: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              <div>
-                <p style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink)', marginBottom: '8px' }}>Install as a systemd service</p>
-                <CopyBlock accent="blue" label="bash" text={`sudo mv ./afp-oauth-linux /usr/local/bin/myapi-afp
-sudo chmod +x /usr/local/bin/myapi-afp
+        ) : (
+          <>
+            <p style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ink-3)', margin: '0 0 -4px' }}>Linux / macOS</p>
+            <CopyBlock accent="green" label="bash · run on the target machine" text={enroll.command} />
+            {enroll.commandWindows && (
+              <>
+                <p style={{ fontSize: '11px', fontWeight: 600, color: 'var(--ink-3)', margin: '4px 0 -4px' }}>Windows</p>
+                <CopyBlock accent="blue" label="PowerShell (run as Administrator)" text={enroll.commandWindows} />
+              </>
+            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              <p style={{ fontSize: '11px', color: 'var(--ink-4)' }}>
+                Same code works on either OS · single-use · expires in 15 minutes · the machine appears in Your connections when done.
+              </p>
+              <button onClick={generateEnrollCommand} disabled={enrollBusy} className="btn" style={{ fontSize: '11px', padding: '3px 10px' }}>
+                {enrollBusy ? '…' : 'New code'}
+              </button>
+            </div>
+          </>
+        )}
+        {enrollError && <p style={{ fontSize: '12px', color: 'var(--red)' }}>{enrollError}</p>}
 
-sudo tee /etc/systemd/system/myapi-afp.service > /dev/null <<EOF
-[Unit]
-Description=MyApi AFP Connector
-After=network.target
+        {/* CLI browser sign-in binaries */}
+        <Collapse open={cliOpen} onToggle={() => setCliOpen(o => !o)}
+          icon={<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ink-3)" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 8v4l3 2" /></svg>}
+          label="CLI browser sign-in — standalone binaries">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '8px' }}>
+            {OS_PLATFORMS.map(os => {
+              const info = downloadOAuthInfo.find(p => p.platform === os.platform);
+              const size = info?.available ? fmtBytes(info.size) : null;
+              const isLoading = downloading === os.platform;
+              return (
+                <button key={os.platform} onClick={() => handleOAuthDownload(os.platform)} disabled={!!downloading} style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
+                  padding: '14px', borderRadius: '8px',
+                  background: 'var(--bg)', border: '1px solid var(--line)',
+                  cursor: downloading ? 'wait' : 'pointer', opacity: downloading ? 0.5 : 1,
+                  transition: 'border-color 0.15s, background 0.15s',
+                }}
+                onMouseEnter={e => { if (!downloading) { e.currentTarget.style.borderColor = 'var(--line-2)'; e.currentTarget.style.background = 'var(--bg-hover)'; } }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.background = 'var(--bg)'; }}>
+                  <span style={{ width: '32px', height: '32px', borderRadius: '7px', display: 'grid', placeItems: 'center', background: os.iconBg, color: os.iconColor, border: '1px solid var(--line)' }}>
+                    {isLoading
+                      ? <svg style={{ width: '16px', height: '16px', color: 'var(--ink-3)' }} className="animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                      : <os.Logo style={{ width: '16px', height: '16px' }} />}
+                  </span>
+                  <div style={{ textAlign: 'center' }}>
+                    <p style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink)' }}>{os.label}</p>
+                    <p style={{ fontSize: '10px', color: 'var(--ink-3)' }}>{os.sublabel}</p>
+                    {size && <p style={{ fontSize: '10px', color: 'var(--ink-4)', marginTop: '2px' }}>{size}</p>}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          <p style={{ margin: 0, fontSize: '11px', color: 'var(--ink-4)', lineHeight: 1.5 }}>
+            Run the binary from a terminal — your browser opens once to authorize, then the daemon stays connected in the background.
+          </p>
+        </Collapse>
 
-[Service]
-Type=simple
-User=$USER
-ExecStart=/usr/local/bin/myapi-afp
-Restart=on-failure
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sudo systemctl daemon-reload
-sudo systemctl enable --now myapi-afp`} />
-              </div>
-              <div>
-                <p style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink)', marginBottom: '8px' }}>Enable / Disable auto-start</p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <CopyBlock accent="blue" label="enable" text="sudo systemctl enable myapi-afp && sudo systemctl start myapi-afp" />
-                  <CopyBlock accent="blue" label="disable" text="sudo systemctl disable myapi-afp && sudo systemctl stop myapi-afp" />
-                </div>
-              </div>
-              <div>
-                <p style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink)', marginBottom: '8px' }}>Uninstall</p>
-                <CopyBlock accent="blue" label="bash" text={`sudo systemctl stop myapi-afp
+        {/* systemd service management */}
+        <Collapse open={svcOpen} onToggle={() => setSvcOpen(o => !o)}
+          icon={<LinuxLogo style={{ width: '14px', height: '14px', color: 'var(--amber)' }} />}
+          label="Linux — service management & uninstall">
+          <div>
+            <p style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink)', marginBottom: '8px' }}>Enable / Disable auto-start</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <CopyBlock accent="blue" label="enable" text="sudo systemctl enable myapi-afp && sudo systemctl start myapi-afp" />
+              <CopyBlock accent="blue" label="disable" text="sudo systemctl disable myapi-afp && sudo systemctl stop myapi-afp" />
+            </div>
+          </div>
+          <div>
+            <p style={{ fontSize: '12px', fontWeight: 600, color: 'var(--ink)', marginBottom: '8px' }}>Uninstall</p>
+            <CopyBlock accent="blue" label="bash" text={`sudo systemctl stop myapi-afp
 sudo systemctl disable myapi-afp
 sudo rm /etc/systemd/system/myapi-afp.service
 sudo rm /usr/local/bin/myapi-afp
 sudo systemctl daemon-reload`} />
-                <p style={{ fontSize: '11px', color: 'var(--ink-3)', marginTop: '8px' }}>Your credentials at <span className="mono" style={{ color: 'var(--ink-2)' }}>~/.myapi/</span> are not deleted.</p>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Connected devices */}
-      {!loading && totalCount > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <p className="micro" style={{ color: 'var(--ink-4)' }}>Connected Devices · {totalCount}</p>
-            {onlineCount > 0 && (
-              <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--green)' }}>
-                <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--green)' }} />{onlineCount} online
-              </span>
-            )}
+            <p style={{ fontSize: '11px', color: 'var(--ink-3)', marginTop: '8px' }}>Your credentials at <span className="mono" style={{ color: 'var(--ink-2)' }}>~/.myapi/</span> are not deleted.</p>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            {devices.map(device => (
-              <DeviceRow key={device.id} device={device}
-                onRevoke={id => apiClient.delete(`/afp/devices/${id}`).then(() => setDevices(ds => ds.filter(d => d.id !== id))).catch(() => alert('Failed to revoke'))} />
-            ))}
-          </div>
-        </div>
-      )}
-      {!loading && totalCount === 0 && (
-        <p style={{ fontSize: '12px', color: 'var(--ink-4)', textAlign: 'center', padding: '16px 0' }}>No devices connected yet. Download and run the app above to get started.</p>
-      )}
-    </div>
+        </Collapse>
+      </Collapse>
+    </section>
   );
 }
 
-// ─── Step ──────────────────────────────────────────────────────────────────────
-function Step({ n, title, children }) {
-  return (
-    <div style={{ display: 'flex', gap: '14px', paddingBottom: '20px' }}>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
-        <span style={{
-          width: '20px', height: '20px', borderRadius: '50%',
-          background: 'var(--bg-hover)', border: '1px solid var(--line)',
-          color: 'var(--ink-3)', fontSize: '11px', fontWeight: 700,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>{n}</span>
-        <div style={{ width: '1px', flex: 1, background: 'var(--line)', minHeight: '16px', marginTop: '4px' }} />
-      </div>
-      <div style={{ flex: 1, minWidth: 0, paddingTop: '2px' }}>
-        <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--ink)', marginBottom: '8px' }}>{title}</p>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-// ─── OAuthInstallerPanel ───────────────────────────────────────────────────────
-function OAuthInstallerPanel() {
-  return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', borderRadius: '6px', border: '1px solid var(--accent-bg)', background: 'var(--accent-bg)', padding: '12px 16px', marginBottom: '20px' }}>
-        <svg style={{ width: '16px', height: '16px', color: 'var(--accent)', marginTop: '2px', flexShrink: 0 }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-        <p style={{ fontSize: '12px', color: 'var(--accent)', lineHeight: '1.5' }}>
-          <strong style={{ fontWeight: 600 }}>You run this on your machine</strong> — not the agent. Agents in sandboxes can't receive localhost callbacks.
-        </p>
-      </div>
-
-      <Step n="1" title="Run the installer on your machine">
-        <CopyBlock label="terminal" accent="blue" text="curl -sL https://www.myapiai.com/api/v1/agent-auth/install.js | node" />
-        <p style={{ fontSize: '12px', color: 'var(--ink-3)', marginTop: '8px', lineHeight: '1.5' }}>Your browser opens. Once you authorize, the terminal prints a token starting with <span className="mono" style={{ color: 'var(--ink)' }}>myapi_</span></p>
-      </Step>
-
-      <Step n="2" title="Give the token to your agent">
-        <CopyBlock label="agent prompt" accent="blue" text={`I ran the MyApi agent auth installer on my machine and got this access token:
-
-myapi_PASTE_TOKEN_HERE
-
-Please save this as your MyApi Bearer token and use it for all API requests:
-  Authorization: Bearer myapi_PASTE_TOKEN_HERE
-  Base URL: https://www.myapiai.com/api/v1/
-
-Do not ask me to run the installer — I already ran it. Just use this token.`} />
-      </Step>
-
-      <div style={{ borderRadius: '6px', background: 'var(--bg-raised)', border: '1px solid var(--line)', padding: '14px 16px' }}>
-        <p className="micro" style={{ color: 'var(--ink-4)', marginBottom: '8px' }}>Optional flags</p>
-        <div className="mono" style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '12px', color: 'var(--ink-3)' }}>
-          <p><span style={{ color: 'var(--ink)' }}>--save</span>  → saves token to <span style={{ color: 'var(--ink-2)' }}>~/.myapi/agent-token.json</span></p>
-          <p><span style={{ color: 'var(--ink)' }}>--json</span>  → outputs <span style={{ color: 'var(--ink-2)' }}>{'{"token":"myapi_..."}'}</span> for scripting</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── AscKeypairPanel ───────────────────────────────────────────────────────────
-function AscKeypairPanel() {
-  return (
-    <div>
-      <Step n="1" title="Send this prompt to your agent">
-        <CopyBlock label="agent prompt" accent="violet" text={`Please set up an ASC (Agentic Secure Connection) to my MyApi account so you have a stable cryptographic identity across sessions and IPs.
-
-── SETUP (one time) ──────────────────────────────────────────
-
-1. Generate an Ed25519 keypair and extract the raw 32-byte public key:
-   const { generateKeyPairSync } = require('crypto');
-   const { privateKey, publicKey } = generateKeyPairSync('ed25519');
-   const pubKeyB64 = publicKey.export({ type: 'spki', format: 'der' }).slice(-32).toString('base64');
-   Save privateKey and pubKeyB64 to disk before continuing — never keep them only in memory.
-
-2. Fetch your token ID — you'll need it for signing:
-   GET https://www.myapiai.com/api/v1/auth/me
-   Authorization: Bearer <your-token>
-   → Save the value at bootstrap.tokenId (format: tok_xxxxxxxx...)
-   This ID is fixed for your token. Fetch it once on startup, not on every request.
-
-3. Register your public key:
-   POST https://www.myapiai.com/api/v1/agentic/asc/register
-   Authorization: Bearer <your-token>
-   Content-Type: application/json
-   Body: {"public_key":"<pubKeyB64>","label":"<your-agent-name>"}
-   Show me the key_fingerprint from the response — I need to approve it.
-
-── SIGNING (every request after approval) ────────────────────
-
-Add these 3 headers to every API request:
-  X-Agent-PublicKey:  <pubKeyB64>
-  X-Agent-Timestamp:  <current Unix seconds as string>
-  X-Agent-Signature:  base64( Ed25519_sign(privateKey, Buffer.from(timestamp + ":" + tokenId)) )
-
-Keep Authorization: Bearer <your-token> as well.
-
-── COMMON MISTAKES ───────────────────────────────────────────
-
-✗ tokenId is NOT the token secret (myapi_...), NOT the hash, NOT the fingerprint
-✓ tokenId looks like: tok_a44fbb8effb427b4bd51f32606e5d4f2
-
-✗ Do NOT regenerate the keypair on each session — load it from disk
-✓ Persist privateKey and pubKeyB64 to ~/.myapi-asc.key (or equivalent)
-
-✗ Do NOT hardcode tokenId — fetch it via /auth/me on startup
-✓ tokenId stays the same as long as the token is not revoked`} />
-      </Step>
-
-      <Step n="2" title="Approve the key">
-        <p style={{ fontSize: '14px', color: 'var(--ink-2)', lineHeight: '1.6' }}>
-          Your agent shows you a short key fingerprint. Go to <a href="/dashboard/devices" style={{ color: '#a78bfa', textDecoration: 'underline', textUnderlineOffset: '2px' }}>Dashboard → Devices</a>, find the pending ASC request, and click Approve.
-        </p>
-      </Step>
-
-      <div style={{ borderRadius: '6px', background: 'var(--bg-raised)', border: '1px solid var(--line)', padding: '14px 16px' }}>
-        <p className="micro" style={{ color: 'var(--ink-4)', marginBottom: '8px' }}>Signing — Node.js quick reference</p>
-        <pre className="mono" style={{ fontSize: '12px', color: 'var(--ink-3)', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>{`const ts  = String(Math.floor(Date.now() / 1000));
-const msg = Buffer.from(\`\${ts}:\${tokenId}\`);
-const sig = crypto.sign(null, msg, privateKey).toString('base64');
-// X-Agent-Timestamp: ts
-// X-Agent-Signature: sig
-// X-Agent-PublicKey: pubKeyB64`}</pre>
-      </div>
-    </div>
-  );
-}
-
-// ─── CompareMethodsPanel ───────────────────────────────────────────────────────
-function CellValue({ value }) {
-  if (value === '✓ Yes') return <span style={{ fontWeight: 600, color: 'var(--green)' }}>✓ Yes</span>;
-  if (value === '✗ No')  return <span style={{ fontWeight: 600, color: 'var(--red)' }}>✗ No</span>;
-  return <span style={{ color: 'var(--ink-2)' }}>{value}</span>;
-}
-
-function CompareMethodsPanel() {
-  const rows = [
-    ['Pre-existing token needed', '✓ Yes', '✗ No',  '✗ No' ],
-    ['Requires browser (once)',   '✗ No',  '✓ Yes', '✗ No' ],
-    ['Per-agent token',           '✗ No',  '✓ Yes', '✓ Yes'],
-    ['Revoke one agent only',     '✗ No',  '✓ Yes', '✓ Yes'],
-    ['Works across IPs',          '— Fingerprint', '✓ Yes', '✓ Yes'],
-    ['Cryptographic proof',       '✗ No',  '✗ No',  '✓ Yes'],
-    ['Setup complexity',          'None',  'Low',   'Medium'],
-  ];
-  return (
-    <div style={{ overflowX: 'auto', borderRadius: '6px', border: '1px solid var(--line)' }}>
-      <table style={{ width: '100%', fontSize: '12px', minWidth: '400px', borderCollapse: 'collapse' }}>
-        <thead>
-          <tr style={{ borderBottom: '1px solid var(--line)', background: 'var(--bg-raised)' }}>
-            <th style={{ textAlign: 'left', padding: '12px 16px', color: 'var(--ink-4)', fontWeight: 500, width: '176px' }}></th>
-            <th style={{ textAlign: 'center', padding: '12px 16px', color: 'var(--ink-2)', fontWeight: 600 }}>Master Token</th>
-            <th style={{ textAlign: 'center', padding: '12px 16px', color: 'var(--accent)', fontWeight: 600 }}>OAuth PKCE</th>
-            <th style={{ textAlign: 'center', padding: '12px 16px', color: '#a78bfa', fontWeight: 600 }}>ASC Keypair</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(([label, master, oauth, asc], i) => (
-            <tr key={label} style={{ borderBottom: i < rows.length - 1 ? '1px solid var(--line-2)' : 'none' }}>
-              <td style={{ padding: '10px 16px', color: 'var(--ink-2)' }}>{label}</td>
-              <td style={{ padding: '10px 16px', textAlign: 'center' }}><CellValue value={master} /></td>
-              <td style={{ padding: '10px 16px', textAlign: 'center' }}><CellValue value={oauth} /></td>
-              <td style={{ padding: '10px 16px', textAlign: 'center' }}><CellValue value={asc} /></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-// ─── Agent tabs config ─────────────────────────────────────────────────────────
-const AGENT_TABS = [
-  { id: 'oauth',   label: 'OAuth PKCE',  sub: 'Recommended · browser flow', activeColor: 'var(--accent)'  },
-  { id: 'asc',     label: 'ASC Keypair', sub: 'Advanced · fully headless',  activeColor: '#a78bfa'        },
-  { id: 'compare', label: 'Compare',     sub: 'Method comparison',          activeColor: 'var(--ink)'     },
+// ─── Detail: DEV ───────────────────────────────────────────────────────────────
+const DEV_METHODS = [
+  {
+    id: 'keypair', title: 'Signed keypair', badge: 'Most control',
+    badgeBg: 'rgba(167,139,250,0.15)', badgeColor: '#a78bfa', badgeBorder: 'rgba(167,139,250,0.4)',
+    desc: 'A local daemon signs every request with an Ed25519 key that never leaves the machine.',
+    bestFor: 'Production pipelines & untended servers',
+  },
+  {
+    id: 'oauth', title: 'OAuth PKCE', badge: 'Browser sign-in',
+    badgeBg: 'var(--accent-bg)', badgeColor: 'var(--accent)', badgeBorder: 'rgba(56,139,253,0.4)',
+    desc: 'Run a one-line installer; your browser authorizes once, then a per-agent token is printed.',
+    bestFor: 'Interactive setups with a human present',
+  },
+  {
+    id: 'master', title: 'Master token', badge: 'Quickest test',
+    badgeBg: 'rgba(210,153,34,0.15)', badgeColor: 'var(--amber)', badgeBorder: 'rgba(210,153,34,0.4)',
+    desc: 'Paste an existing token straight into the agent. Works instantly with any HTTP client.',
+    bestFor: 'Quick local experiments only',
+  },
 ];
+
+function DevSection({ initialMethod }) {
+  const [advOpen, setAdvOpen] = useState(!!initialMethod);
+  const [method, setMethod] = useState(initialMethod || 'keypair');
+  const [tableOpen, setTableOpen] = useState(false);
+
+  return (
+    <section data-tour="conn-agents" style={{ display: 'flex', flexDirection: 'column', gap: '16px', border: '1px solid var(--line)', borderRadius: '10px', background: 'var(--bg-raised)', padding: '22px' }}>
+      <div>
+        <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: 'var(--ink)' }}>Give your agent its own key</h3>
+        <p style={{ margin: '5px 0 0', fontSize: '13px', lineHeight: 1.5, color: 'var(--ink-3)', maxWidth: '62ch' }}>
+          For scripts, servers, and coding agents. Each one gets its own scoped identity — so you can see what it
+          did and shut it off on its own, without touching anything else.
+        </p>
+      </div>
+
+      {/* Recommended: Quick Connect */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', padding: '18px', borderRadius: '8px', border: '1px solid var(--accent)', background: 'var(--accent-bg)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '9.5px', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase', padding: '2px 7px', borderRadius: '999px', background: 'var(--accent-2)', color: '#fff' }}>Recommended</span>
+          <span style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--ink)' }}>Quick Connect</span>
+          <span style={{ fontSize: '12px', color: 'var(--ink-3)' }}>One MCP prompt · no token ever shared</span>
+        </div>
+        <QuickConnectPanel />
+      </div>
+
+      {/* Advanced compare */}
+      <Collapse open={advOpen} onToggle={() => setAdvOpen(o => !o)}
+        icon={<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ink-3)" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M8 6h13" /><path d="M8 12h13" /><path d="M8 18h13" /><path d="M3 6h.01M3 12h.01M3 18h.01" /></svg>}
+        label="Need more control? Compare all connection methods">
+        <p style={{ margin: 0, fontSize: '12px', color: 'var(--ink-4)' }}>Pick a method to set it up — you’re not just comparing, this is where you connect.</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px' }}>
+          {DEV_METHODS.map(m => {
+            const sel = m.id === method;
+            return (
+              <button key={m.id} onClick={() => setMethod(m.id)} style={{
+                textAlign: 'left', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '9px',
+                padding: '14px', borderRadius: '8px',
+                border: `1px solid ${sel ? 'var(--accent)' : 'var(--line)'}`,
+                background: sel ? 'var(--accent-bg)' : 'var(--bg)',
+                transition: 'border-color 0.12s, background 0.12s', position: 'relative',
+              }}
+              onMouseEnter={e => { if (!sel) e.currentTarget.style.borderColor = 'var(--accent)'; }}
+              onMouseLeave={e => { if (!sel) e.currentTarget.style.borderColor = 'var(--line)'; }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                  <span style={{ fontSize: '9.5px', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', padding: '2px 7px', borderRadius: '999px', background: m.badgeBg, color: m.badgeColor, border: `1px solid ${m.badgeBorder}` }}>{m.badge}</span>
+                  {sel && (
+                    <span style={{ width: '18px', height: '18px', borderRadius: '999px', display: 'grid', placeItems: 'center', background: 'var(--accent-2)', color: '#fff' }}>
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ink)' }}>{m.title}</div>
+                <p style={{ margin: 0, fontSize: '11.5px', lineHeight: 1.45, color: 'var(--ink-3)' }}>{m.desc}</p>
+                <div style={{ marginTop: '2px', paddingTop: '9px', borderTop: '1px solid var(--line)' }}>
+                  <div className="micro" style={{ marginBottom: '3px' }}>Best for</div>
+                  <div style={{ fontSize: '11.5px', color: 'var(--ink-2)', lineHeight: 1.4 }}>{m.bestFor}</div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        <div style={{ padding: '16px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg)' }}>
+          {method === 'keypair' && <AscKeypairPanel />}
+          {method === 'oauth'   && <OAuthInstallerPanel />}
+          {method === 'master'  && <MasterTokenPanel />}
+        </div>
+
+        <Collapse open={tableOpen} onToggle={() => setTableOpen(o => !o)}
+          icon={<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ink-3)" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9h18M3 15h18M9 3v18M15 3v18" /><rect x="3" y="3" width="18" height="18" rx="2" /></svg>}
+          label="Full comparison table">
+          <CompareMethodsPanel />
+        </Collapse>
+      </Collapse>
+    </section>
+  );
+}
+
+// ─── Your connections ──────────────────────────────────────────────────────────
+function ConnectionRow({ conn, onRevoke }) {
+  const [confirming, setConfirming] = useState(false);
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '13px', padding: '12px 14px', borderRadius: '8px', border: '1px solid var(--line)', background: 'var(--bg-raised)' }}>
+      <span style={{ width: '32px', height: '32px', borderRadius: '7px', flexShrink: 0, display: 'grid', placeItems: 'center', background: conn.iconBg, color: conn.iconColor, border: '1px solid var(--line)' }}>
+        {conn.icon}
+      </span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ink)' }}>{conn.name}</span>
+          <span style={{ fontSize: '11px', color: 'var(--ink-4)' }}>{conn.meta}</span>
+        </div>
+        <div style={{ fontSize: '11px', color: 'var(--ink-4)', marginTop: '1px' }}>{conn.kind}</div>
+      </div>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '10.5px', fontWeight: 500, padding: '3px 9px', borderRadius: '999px', background: conn.online ? 'var(--green-bg)' : 'var(--bg-hover)', color: conn.online ? 'var(--green)' : 'var(--ink-3)' }}>
+        <span className="tick" style={{ background: conn.online ? 'var(--green)' : 'var(--ink-4)' }} />
+        {conn.online ? 'Online' : 'Idle'}
+      </span>
+      {confirming ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+          <button onClick={() => { onRevoke(conn); setConfirming(false); }} className="ui-button-danger" style={{ fontSize: '11px', padding: '4px 10px' }}>Revoke</button>
+          <button onClick={() => setConfirming(false)} className="btn" style={{ fontSize: '11px', padding: '4px 10px' }}>Cancel</button>
+        </div>
+      ) : (
+        <button onClick={() => setConfirming(true)} title="Revoke" style={{
+          width: '28px', height: '28px', borderRadius: '6px', display: 'grid', placeItems: 'center',
+          background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--ink-4)', flexShrink: 0,
+          transition: 'color 0.15s, background 0.15s',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.color = 'var(--red)'; e.currentTarget.style.background = 'var(--red-bg)'; }}
+        onMouseLeave={e => { e.currentTarget.style.color = 'var(--ink-4)'; e.currentTarget.style.background = 'transparent'; }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 18 18 6M6 6l12 12" /></svg>
+        </button>
+      )}
+    </div>
+  );
+}
+
+const AGENT_KEY_ICON = (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M8 6l-6 6 6 6M16 6l6 6-6 6" /></svg>
+);
+
+function ConnectionsSection({ refreshKey }) {
+  const { user } = useAuthStore();
+  const isAfpEnabled = ['pro', 'enterprise'].includes(String(user?.plan || 'free').toLowerCase());
+  const [connections, setConnections] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      const [afpRes, ascRes] = await Promise.all([
+        isAfpEnabled ? apiClient.get('/afp/devices').catch(() => null) : Promise.resolve(null),
+        apiClient.get('/devices/approved').catch(() => null),
+      ]);
+      if (cancelled) return;
+      const list = [];
+      for (const d of afpRes?.data?.devices || []) {
+        const pm = getPlatformMeta(d.platform);
+        list.push({
+          id: `afp-${d.id}`, type: 'afp', deviceId: d.id,
+          name: d.name, meta: `${pm.label} · ${d.arch || ''}`.replace(/ · $/, ''),
+          kind: d.privileges === 'full' ? 'This computer · AFP · full access' : 'This computer · AFP · restricted',
+          online: d.status === 'online',
+          icon: pm.Logo ? <pm.Logo style={{ width: '16px', height: '16px' }} /> : AGENT_KEY_ICON,
+          iconBg: pm.iconBg, iconColor: pm.iconColor,
+          lastSeen: d.lastSeenAt,
+        });
+      }
+      for (const d of ascRes?.data?.devices || []) {
+        const info = d.info || {};
+        if (info.type !== 'asc' && info.enrolledVia !== 'quick_connect') continue;
+        const scoped = d.scope && d.scope !== 'full';
+        list.push({
+          id: `asc-${d.id}`, type: 'asc', deviceId: d.id,
+          name: d.name || 'AI Agent',
+          meta: info.enrolledVia === 'quick_connect' ? 'Quick Connect' : 'Signed keypair',
+          kind: scoped ? 'Coding agent · scoped key · Ed25519' : 'Coding agent · full access · Ed25519',
+          online: d.lastUsedAt ? (Date.now() - new Date(d.lastUsedAt).getTime()) < 5 * 60 * 1000 : false,
+          icon: AGENT_KEY_ICON,
+          iconBg: 'rgba(167,139,250,0.15)', iconColor: '#a78bfa',
+          lastSeen: d.lastUsedAt,
+        });
+      }
+      setConnections(list);
+      setLoading(false);
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [isAfpEnabled, refreshKey]);
+
+  async function revoke(conn) {
+    try {
+      if (conn.type === 'afp') await apiClient.delete(`/afp/devices/${conn.deviceId}`);
+      else await apiClient.post(`/devices/${conn.deviceId}/revoke`);
+      setConnections(cs => cs.filter(c => c.id !== conn.id));
+    } catch {
+      alert('Failed to revoke');
+    }
+  }
+
+  const onlineCount = connections.filter(c => c.online).length;
+
+  return (
+    <section data-tour="conn-connections" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+        <h2 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--ink)', margin: 0 }}>Your connections</h2>
+        {onlineCount > 0 && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', fontSize: '12px', color: 'var(--green)' }}>
+            <span className="tick" style={{ background: 'var(--green)', animation: 'conn-pulse 1.6s ease-in-out infinite' }} />
+            {onlineCount} online
+          </span>
+        )}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        {connections.map(conn => <ConnectionRow key={conn.id} conn={conn} onRevoke={revoke} />)}
+        {!loading && connections.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '22px', border: '1px dashed var(--line)', borderRadius: '8px', fontSize: '12.5px', color: 'var(--ink-4)' }}>
+            Nothing connected yet. Pick a path above to get started.
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
 
 // ─── Page ──────────────────────────────────────────────────────────────────────
 export default function Connectors() {
-  const [agentTab, setAgentTab] = useState('compare');
+  // Deep links: #asc / #keypair / #quick / #dev open the developer path,
+  // #afp / #computer the computer path (AccessTokens links to /connectors#asc).
+  const hash = (typeof window !== 'undefined' ? window.location.hash : '').replace('#', '');
+  const initialGoal = ['asc', 'keypair', 'quick', 'dev', 'oauth', 'master'].includes(hash) ? 'dev'
+    : ['afp', 'computer'].includes(hash) ? 'computer'
+    : 'chat';
+  const initialMethod = ['asc', 'keypair'].includes(hash) ? 'keypair'
+    : hash === 'oauth' ? 'oauth'
+    : hash === 'master' ? 'master'
+    : null;
+  const [goal, setGoal] = useState(initialGoal);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   return (
-    <div className="ui-page">
+    <div className="ui-page" style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+      <style>{'@keyframes conn-pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }'}</style>
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start gap-4 mb-2">
-        <div className="flex-1 min-w-0">
-          <div className="micro mb-2">GATEWAY</div>
-          <h1 className="font-serif text-[22px] sm:text-[34px] leading-[1.05] tracking-tight ink font-medium">Connectors</h1>
-          <p className="mt-2 text-[15px] ink-2 max-w-[60ch]">Connect AI assistants, install the desktop daemon, and issue tokens to headless agents.</p>
-        </div>
-      </div>
-
-      {/* ── AI Assistants ─────────────────────────────────────────────── */}
-      <section style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      {/* ─── Hero ─── */}
+      <header style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
         <div>
-          <h2 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ink)' }}>AI Assistants</h2>
-          <p style={{ fontSize: '12px', color: 'var(--ink-3)', marginTop: '2px' }}>OAuth connections to external AI tools — authorize once, no tokens to paste.</p>
+          <div className="micro" style={{ marginBottom: '10px' }}>GATEWAY</div>
+          <h1 className="font-serif" style={{ fontSize: '32px', lineHeight: 1.08, letterSpacing: '-0.02em', color: 'var(--ink)', fontWeight: 500, margin: 0 }}>Connect an AI to your world.</h1>
+          <p style={{ margin: '10px 0 0', fontSize: '15px', lineHeight: 1.55, color: 'var(--ink-2)', maxWidth: '56ch' }}>
+            Give an assistant or agent secure access to your apps, files, and data — in a couple of clicks.
+            Pick what you want to connect and we’ll walk you through it.
+          </p>
         </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+          <TrustBadge icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--green)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 11h12v9H6z" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>}>
+            Your credentials are never shared
+          </TrustBadge>
+          <TrustBadge icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z" /></svg>}>
+            Scoped, least-privilege access
+          </TrustBadge>
+          <TrustBadge icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ink-3)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8" /><path d="M3 3v5h5" /></svg>}>
+            Revoke anytime, instantly
+          </TrustBadge>
+        </div>
+      </header>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          {CONNECTORS.map(c => (
-            <article key={c.id} style={{
-              display: 'flex', alignItems: 'center', gap: '14px',
-              paddingLeft: '20px', paddingRight: '16px', paddingTop: '14px', paddingBottom: '14px',
-              borderRadius: '6px', border: '1px solid var(--line)',
-              background: 'var(--bg-raised)',
-              overflow: 'hidden', transition: 'border-color 0.15s, background 0.15s',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--line-2)'; e.currentTarget.style.background = 'var(--bg-hover)'; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--line)'; e.currentTarget.style.background = 'var(--bg-raised)'; }}>
-              <div style={{
-                width: '32px', height: '32px', borderRadius: '6px', flexShrink: 0,
-                background: c.iconBg, border: '1px solid var(--line)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: c.iconColor,
-              }}>
-                {c.logo}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ink)' }}>{c.name}</span>
-                  <span style={{ fontSize: '11px', color: 'var(--ink-4)' }}>{c.provider}</span>
-                </div>
-                <p style={{ fontSize: '12px', color: 'var(--ink-3)', marginTop: '2px', lineHeight: '1.4' }}>{c.description}</p>
-              </div>
-              {c.status === 'available' ? (
-                <a href={c.href} target="_blank" rel="noreferrer" className="btn-primary" style={{ flexShrink: 0, textDecoration: 'none', whiteSpace: 'nowrap' }}>
-                  Connect →
-                </a>
-              ) : (
-                <span style={{ flexShrink: 0, fontSize: '11px', color: 'var(--ink-4)', fontWeight: 500, whiteSpace: 'nowrap' }}>Coming soon</span>
-              )}
-            </article>
-          ))}
+      {/* ─── Chooser ─── */}
+      <section data-tour="conn-goals" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+          <h2 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--ink)', margin: 0 }}>What do you want to connect?</h2>
+          <span style={{ fontSize: '12px', color: 'var(--ink-4)' }}>Not sure? Start with the first one.</span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+          {GOALS.map(g => <GoalCard key={g.id} goal={g} selected={g.id === goal} onClick={() => setGoal(g.id)} />)}
         </div>
       </section>
 
-      <div className="hairline" style={{ borderTopWidth: '1px', borderTopStyle: 'solid' }} />
+      {/* ─── Detail ─── */}
+      {goal === 'chat' && <ChatSection />}
+      {goal === 'computer' && <ComputerSection onDevicesChanged={() => setRefreshKey(k => k + 1)} />}
+      {goal === 'dev' && <DevSection initialMethod={initialMethod} />}
 
-      {/* ── AFP Daemon ────────────────────────────────────────────────── */}
-      <section style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <h2 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ink)' }}>AFP — Desktop Daemon</h2>
-            <span style={{ fontSize: '10px', fontWeight: 600, padding: '1px 6px', borderRadius: '3px', background: 'rgba(210,153,34,0.15)', color: 'var(--amber)', border: '1px solid rgba(210,153,34,0.3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Pro</span>
-          </div>
-          <p style={{ fontSize: '12px', color: 'var(--ink-3)', marginTop: '2px' }}>Give AI agents sandboxed access to your local files and shell.</p>
-        </div>
-        <AfpConnectorCard />
-      </section>
-
-      <div className="hairline" style={{ borderTopWidth: '1px', borderTopStyle: 'solid' }} />
-
-      {/* ── Agent Connections ─────────────────────────────────────────── */}
-      <section style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <h2 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ink)' }}>Agent Connections</h2>
-            <span style={{ fontSize: '10px', fontWeight: 600, padding: '1px 6px', borderRadius: '3px', background: 'rgba(210,153,34,0.15)', color: 'var(--amber)', border: '1px solid rgba(210,153,34,0.3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Beta</span>
-          </div>
-          <p style={{ fontSize: '12px', color: 'var(--ink-3)', marginTop: '2px' }}>Issue dedicated tokens to agents — no master token sharing, per-agent revocation.</p>
-        </div>
-
-        {/* Tab bar */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px', background: 'var(--bg-sunk)', border: '1px solid var(--line)', borderRadius: '6px', width: 'fit-content' }}>
-          {AGENT_TABS.map(tab => (
-            <button key={tab.id} onClick={() => setAgentTab(tab.id)} style={{
-              padding: '8px 14px', borderRadius: '4px', textAlign: 'left',
-              background: agentTab === tab.id ? 'var(--bg-hover)' : 'transparent',
-              border: 'none', cursor: 'pointer',
-              transition: 'background 0.15s',
-            }}>
-              <p style={{
-                fontSize: '12px', fontWeight: 600, lineHeight: 1,
-                color: agentTab === tab.id ? tab.activeColor : 'var(--ink-3)',
-              }}>{tab.label}</p>
-              <p style={{ fontSize: '10px', color: 'var(--ink-4)', marginTop: '2px', lineHeight: 1 }}>{tab.sub}</p>
-            </button>
-          ))}
-        </div>
-
-        {/* Tab content */}
-        <div style={{ maxWidth: '672px' }}>
-          {agentTab === 'oauth'   && <OAuthInstallerPanel />}
-          {agentTab === 'asc'     && <AscKeypairPanel />}
-          {agentTab === 'compare' && <CompareMethodsPanel />}
-        </div>
-      </section>
-
+      {/* ─── Manage ─── */}
+      <ConnectionsSection refreshKey={refreshKey} />
     </div>
   );
 }

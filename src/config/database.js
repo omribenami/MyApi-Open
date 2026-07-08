@@ -13,6 +13,14 @@ function initDatabase(dbPath) {
 
   db = new Database(dbPath, { verbose: process.env.NODE_ENV === 'development' ? console.log : undefined });
   db.pragma('journal_mode = WAL');
+  // This connection coexists with lib/db-abstraction.js's connection on the same
+  // file — wait out writer contention instead of failing with SQLITE_BUSY.
+  db.pragma('busy_timeout = 10000');
+  // Match the main connection (src/database.js): FK enforcement is intentionally OFF
+  // because legacy rows (owner_id='owner', workspace_id='system') predate the users/
+  // workspaces tables. better-sqlite3 turns FKs ON by default, which made the security
+  // monitor's notification inserts fail silently with FOREIGN KEY constraint errors.
+  db.pragma('foreign_keys = OFF');
 
   // Create tables
   createTables();
@@ -32,8 +40,20 @@ function runSecurityMigrations() {
     `ALTER TABLE access_tokens ADD COLUMN suspended_at TEXT`,
     `ALTER TABLE access_tokens ADD COLUMN suspension_reason TEXT`,
     `ALTER TABLE device_approvals_pending ADD COLUMN approval_type TEXT DEFAULT 'device'`,
+    `ALTER TABLE device_approvals_pending ADD COLUMN last_alert_sent_at TEXT`,
     // Token namespace prefix column (for fast prefix-based rejection)
     `ALTER TABLE tokens ADD COLUMN token_type_prefix TEXT`,
+    // compliance_audit_logs schema drift: src/database.js creates it with
+    // data_accessed, this module creates it with details — and writers exist for
+    // both column names (createComplianceAuditLog vs logComplianceEvent/monitor).
+    // Converge so every writer works regardless of which module created the table.
+    `ALTER TABLE compliance_audit_logs ADD COLUMN details TEXT`,
+    `ALTER TABLE compliance_audit_logs ADD COLUMN data_accessed TEXT`,
+    // Accumulating allow-lists so a legitimately multi-homed agent token (e.g. used
+    // from ChatGPT's datacenter AND a home residential ISP) is learned instead of
+    // ping-ponging through suspend → security-alert → re-approve forever.
+    `ALTER TABLE token_security_baselines ADD COLUMN known_org_types TEXT`,
+    `ALTER TABLE token_security_baselines ADD COLUMN known_ua_hashes TEXT`,
   ];
   for (const sql of alterStmts) {
     try { db.exec(sql); } catch (_) { /* column already exists */ }
@@ -46,6 +66,8 @@ function runSecurityMigrations() {
       baseline_asn  TEXT,
       baseline_asn_org TEXT,
       baseline_ua_hash TEXT,
+      known_org_types TEXT,
+      known_ua_hashes TEXT,
       created_at    TEXT NOT NULL,
       updated_at    TEXT NOT NULL
     );
@@ -137,41 +159,11 @@ function createTables() {
     )
   `);
 
-  // Vault - Identity data (encrypted)
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS identity_vault (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      key TEXT NOT NULL UNIQUE,
-      value_encrypted TEXT NOT NULL,
-      category TEXT NOT NULL,
-      updated_at INTEGER NOT NULL,
-      metadata TEXT
-    )
-  `);
-
-  // Preferences
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS preferences (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      key TEXT NOT NULL UNIQUE,
-      value TEXT NOT NULL,
-      category TEXT NOT NULL,
-      updated_at INTEGER NOT NULL
-    )
-  `);
-
-  // Connectors configuration
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS connectors (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      type TEXT NOT NULL,
-      config_encrypted TEXT NOT NULL,
-      enabled INTEGER DEFAULT 1,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    )
-  `);
+  // NOTE: identity_vault / preferences / connectors tables were removed here — they
+  // belonged to the legacy single-tenant Vault/PersonalBrain (src/vault/vault.js,
+  // src/brain/brain.js, src/routes/api.js) which was never mounted. Live per-user
+  // identity is served from users.profile_metadata, preferences from user_preferences,
+  // and connectors are owned by src/database.js. See project_prod_readiness memory.
 
   // Tickets — power-user-only complaint/issue tracking
   db.exec(`
@@ -200,7 +192,6 @@ function createTables() {
     CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp);
     CREATE INDEX IF NOT EXISTS idx_audit_token ON audit_log(token_id);
     CREATE INDEX IF NOT EXISTS idx_tokens_type ON tokens(type);
-    CREATE INDEX IF NOT EXISTS idx_identity_category ON identity_vault(category);
     CREATE INDEX IF NOT EXISTS idx_tickets_status ON tickets(status);
     CREATE INDEX IF NOT EXISTS idx_tickets_created_at ON tickets(created_at);
   `);

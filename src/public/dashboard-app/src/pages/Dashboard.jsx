@@ -1,604 +1,596 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import apiClient from '../utils/apiClient';
 import AlertBanner from '../components/AlertBanner';
 import PendingInvitations from '../components/PendingInvitations';
 import { useAuthStore } from '../stores/authStore';
-import { isOnboardingActive, wasChecklistDismissed, dismissChecklist, completeOnboarding } from '../utils/onboardingUtils';
 
+// ─────────────────────────────────────────────────────────────────────────
+// Device Activity — a personal control surface for the Gateway.
+// "Which of my devices & agents are calling the API — and what are they
+//  calling?" The hero donut splits calls by device; click a slice (or a
+// table row / legend item) to drill into that device's calls by service.
+// All panels stay linked to the selection. Every number is real, pulled from
+// /dashboard/device-activity (the user's own audit log — never dashboard
+// browsing). Admin broadcasts surface in the Insights & alerts strip.
+// ─────────────────────────────────────────────────────────────────────────
+
+const MONO = "'JetBrains Mono', ui-monospace, monospace";
+const MENU_SHADOW = '0 8px 24px rgba(0,0,0,0.4)';
+
+// ── service catalog (the things a device can call) ───────────────────────
+const SVC_META = {
+  github: { label: 'GitHub', color: 'var(--ink-2)', chip: '#30363d', glyph: 'GH' },
+  google: { label: 'Google', color: 'var(--accent)', chip: '#4285F4', glyph: 'G' },
+  gmail: { label: 'Gmail', color: 'var(--red)', chip: '#EA4335', glyph: 'M' },
+  slack: { label: 'Slack', color: '#36C5F0', chip: '#1f6feb', glyph: 'S' },
+  notion: { label: 'Notion', color: 'var(--ink)', chip: '#161b22', glyph: 'N' },
+  linear: { label: 'Linear', color: 'var(--violet)', chip: '#5E6AD2', glyph: 'L' },
+  stripe: { label: 'Stripe', color: 'var(--amber)', chip: '#635bff', glyph: 'St' },
+  calendar: { label: 'Calendar', color: 'var(--green)', chip: '#0F9D58', glyph: 'C' },
+  drive: { label: 'Drive', color: 'var(--amber)', chip: '#FBBC05', glyph: 'D' },
+};
+const SVC_PALETTE = ['var(--accent)', 'var(--violet)', 'var(--green)', 'var(--amber)', '#36C5F0', '#B0326E', 'var(--ink-3)'];
+const DEV_COLORS = ['var(--accent)', 'var(--violet)', 'var(--green)', 'var(--amber)', '#36C5F0', 'var(--ink-3)', '#B0326E'];
+
+const titleCase = (s) => String(s || '').replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+const hashIdx = (s, n) => ([...String(s || '?')].reduce((a, c) => a + c.charCodeAt(0), 0)) % n;
+function svcMeta(key) {
+  if (SVC_META[key]) return SVC_META[key];
+  const color = SVC_PALETTE[hashIdx(key, SVC_PALETTE.length)];
+  return { label: titleCase(key), color, chip: '#30363d', glyph: (key[0] || '?').toUpperCase() };
+}
+
+const fmtN = (n) => (n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(n >= 1e4 ? 0 : 1) + 'k' : String(n));
+const fmtFull = (n) => Number(n || 0).toLocaleString();
+
+const STATUS = {
+  active: { tone: 'success', label: 'Active', live: true, color: 'var(--green)', bg: 'var(--green-bg)' },
+  idle: { tone: 'warning', label: 'Idle', live: false, color: 'var(--amber)', bg: 'var(--amber-bg)' },
+  paused: { tone: 'neutral', label: 'Dormant', live: false, color: 'var(--ink-3)', bg: 'var(--bg-sunk)' },
+};
+
+// ── tiny inline-SVG chart primitives (theme-aware, no chart lib) ──────────
+function Ico({ d, size = 16, stroke = 1.7, style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" style={style}>
+      <path d={d} />
+    </svg>
+  );
+}
+
+function Sparkline({ data = [], color = 'var(--accent)', w = 210, h = 34 }) {
+  const path = (pts) => pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+  if (!data || data.length < 2) {
+    return <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ display: 'block', width: '100%' }}>
+      <line x1="0" y1={h - 3} x2={w} y2={h - 3} stroke="var(--line)" strokeWidth="1" /></svg>;
+  }
+  const max = Math.max(...data, 1), min = Math.min(...data);
+  const span = max - min || 1;
+  const pts = data.map((v, i) => [(i / (data.length - 1)) * w, h - 3 - ((v - min) / span) * (h - 6)]);
+  const id = 'sg' + Math.random().toString(36).slice(2, 8);
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" style={{ display: 'block', width: '100%', overflow: 'visible' }}>
+      <defs><linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor={color} stopOpacity="0.22" /><stop offset="100%" stopColor={color} stopOpacity="0" />
+      </linearGradient></defs>
+      <path d={`${path(pts)} L ${w} ${h} L 0 ${h} Z`} fill={`url(#${id})`} />
+      <path d={path(pts)} fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={pts[pts.length - 1][0]} cy={pts[pts.length - 1][1]} r="2.4" fill={color} />
+    </svg>
+  );
+}
+
+function BarChart({ data = [], labels = [], color = 'var(--accent)', height = 150, fmt = fmtFull }) {
+  const [hi, setHi] = useState(null);
+  const max = Math.max(...data, 1);
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height, position: 'relative' }}>
+        {data.map((v, i) => (
+          <div key={i} onMouseEnter={() => setHi(i)} onMouseLeave={() => setHi(null)}
+            style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: '100%', position: 'relative' }}>
+            {hi === i && (
+              <div style={{ position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)', marginBottom: 6, zIndex: 5,
+                background: 'var(--bg-raised)', border: '1px solid var(--line)', borderRadius: 6, padding: '3px 7px', whiteSpace: 'nowrap', boxShadow: MENU_SHADOW }}>
+                <span style={{ fontFamily: MONO, fontSize: 11, color: 'var(--ink)' }}>{fmt(v)}</span>
+                {labels[i] && <span style={{ fontSize: 10, color: 'var(--ink-3)', marginLeft: 5 }}>{labels[i]}</span>}
+              </div>
+            )}
+            <div style={{ height: `${(v / max) * 100}%`, background: hi === i ? color : 'var(--accent-2)', opacity: hi === i ? 1 : 0.55,
+              borderRadius: '3px 3px 0 0', transition: 'opacity .1s, background .1s', minHeight: 2 }} />
+          </div>
+        ))}
+      </div>
+      {labels.length > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontFamily: MONO, fontSize: 10, color: 'var(--ink-4)' }}>
+          {labels.filter((_, i) => i % Math.ceil(labels.length / 7) === 0).map((l, i) => <span key={i}>{l}</span>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HBars({ items = [], color = 'var(--accent)' }) {
+  const max = Math.max(...items.map((i) => i.value), 1);
+  if (items.length === 0) return <div style={{ fontSize: 12.5, color: 'var(--ink-4)' }}>No service calls recorded in this window.</div>;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '11px' }}>
+      {items.map((it, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: 108, flexShrink: 0 }}>
+            <span style={{ width: 18, height: 18, borderRadius: 5, background: it.chip, display: 'grid', placeItems: 'center', color: '#fff', fontSize: 9, fontWeight: 700, fontFamily: MONO, flexShrink: 0 }}>{it.glyph}</span>
+            <span style={{ fontSize: 13, color: 'var(--ink)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.label}</span>
+          </div>
+          <div style={{ flex: 1, height: 8, background: 'var(--bg-sunk)', borderRadius: 99, overflow: 'hidden' }}>
+            <div style={{ width: `${(it.value / max) * 100}%`, height: '100%', background: it.color || color, borderRadius: 99 }} />
+          </div>
+          <span style={{ fontFamily: MONO, fontSize: 12, color: 'var(--ink-2)', width: 52, textAlign: 'right', flexShrink: 0 }}>{fmtFull(it.value)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// DrillDonut — clickable donut that drills from device → its services.
+function DrillDonut({ groups, selectedKey = null, onSelect, size = 248, thickness = 38, fmt = fmtN }) {
+  const [hi, setHi] = useState(null);
+  const sel = groups.find((g) => g.key === selectedKey) || null;
+  const level = sel ? sel.children : groups;
+  const drillable = !sel;
+  const total = level.reduce((s, x) => s + x.value, 0) || 1;
+  const cx = size / 2, rOut = size / 2 - 4, rIn = rOut - thickness;
+  let a = -Math.PI / 2;
+  const arcs = level.map((seg) => {
+    const frac = seg.value / total;
+    const a0 = a, a1 = a + frac * Math.PI * 2;
+    a = a1;
+    return { ...seg, a0, a1, frac, mid: (a0 + a1) / 2 };
+  });
+  const polar = (r, ang) => [cx + r * Math.cos(ang), size / 2 + r * Math.sin(ang)];
+  const arcPath = (a0, a1) => {
+    const large = a1 - a0 > Math.PI ? 1 : 0;
+    const [x0o, y0o] = polar(rOut, a0), [x1o, y1o] = polar(rOut, a1);
+    const [x1i, y1i] = polar(rIn, a1), [x0i, y0i] = polar(rIn, a0);
+    return `M${x0o.toFixed(2)} ${y0o.toFixed(2)} A${rOut} ${rOut} 0 ${large} 1 ${x1o.toFixed(2)} ${y1o.toFixed(2)} L${x1i.toFixed(2)} ${y1i.toFixed(2)} A${rIn} ${rIn} 0 ${large} 0 ${x0i.toFixed(2)} ${y0i.toFixed(2)} Z`;
+  };
+  const active = hi != null ? arcs[hi] : null;
+  const centerVal = active ? active.value : total;
+  const centerLab = active ? active.label : sel ? sel.label : 'All devices';
+  const centerSub = active ? `${Math.round(active.frac * 100)}% of ${sel ? 'device' : 'calls'}` : sel ? 'CALLS' : 'TOTAL CALLS';
+
+  if (total <= 0 || arcs.length === 0) {
+    return <div style={{ height: size, display: 'grid', placeItems: 'center', color: 'var(--ink-4)', fontSize: 13 }}>No API calls in this window.</div>;
+  }
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 22, flexWrap: 'wrap' }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ flexShrink: 0 }} onMouseLeave={() => setHi(null)}>
+        {arcs.map((s, i) => {
+          const isHi = hi === i;
+          const dx = Math.cos(s.mid) * (isHi ? 5 : 0), dy = Math.sin(s.mid) * (isHi ? 5 : 0);
+          return (
+            <path key={s.key} d={arcPath(s.a0, s.a1)} fill={s.color} stroke="var(--bg-raised)" strokeWidth="2" strokeLinejoin="round"
+              onMouseEnter={() => setHi(i)} onClick={() => drillable && onSelect && onSelect(s.key)}
+              style={{ cursor: drillable ? 'pointer' : 'default', transform: `translate(${dx.toFixed(2)}px, ${dy.toFixed(2)}px)`, transition: 'transform .12s ease, opacity .12s', opacity: hi == null || isHi ? 1 : 0.55 }} />
+          );
+        })}
+        <g onClick={() => sel && onSelect && onSelect(null)} style={{ cursor: sel ? 'pointer' : 'default' }}>
+          <circle cx={cx} cy={cx} r={rIn - 1} fill="transparent" />
+          {sel && <text x={cx} y={cx - 26} textAnchor="middle" style={{ fontSize: 10.5, fill: 'var(--accent)', fontFamily: MONO, letterSpacing: '0.04em' }}>‹ ALL DEVICES</text>}
+          <text x={cx} y={cx - 2} textAnchor="middle" style={{ fontSize: 26, fontWeight: 700, fill: 'var(--ink)', letterSpacing: '-0.02em' }}>{fmt(centerVal)}</text>
+          <text x={cx} y={cx + 16} textAnchor="middle" style={{ fontSize: 11.5, fill: 'var(--ink-2)' }}>{centerLab}</text>
+          <text x={cx} y={cx + 31} textAnchor="middle" style={{ fontSize: 9.5, fill: 'var(--ink-4)', fontFamily: MONO, letterSpacing: '0.06em' }}>{centerSub}</text>
+        </g>
+      </svg>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 7, minWidth: 150, flex: 1 }}>
+        {arcs.map((s, i) => (
+          <div key={s.key} onMouseEnter={() => setHi(i)} onMouseLeave={() => setHi(null)} onClick={() => drillable && onSelect && onSelect(s.key)}
+            style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '3px 6px', borderRadius: 6, minWidth: 0, cursor: drillable ? 'pointer' : 'default', background: hi === i ? 'var(--bg-hover)' : 'transparent', transition: 'background .1s' }}>
+            <span style={{ width: 9, height: 9, borderRadius: 3, background: s.color, flexShrink: 0 }} />
+            <span style={{ fontSize: 12.5, color: 'var(--ink-2)', flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.label}</span>
+            <span style={{ fontFamily: MONO, fontSize: 11.5, color: 'var(--ink)', fontWeight: 500 }}>{fmt(s.value)}</span>
+            <span style={{ fontFamily: MONO, fontSize: 10.5, color: 'var(--ink-4)', width: 34, textAlign: 'right' }}>{Math.round(s.frac * 100)}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── small building blocks ────────────────────────────────────────────────
+function Badge({ tone = 'neutral', dot, live, children }) {
+  const map = {
+    success: { c: 'var(--green)', bg: 'var(--green-bg)', b: 'rgba(63,185,80,0.4)' },
+    warning: { c: 'var(--amber)', bg: 'var(--amber-bg)', b: 'rgba(210,153,34,0.4)' },
+    neutral: { c: 'var(--ink-3)', bg: 'var(--bg-sunk)', b: 'var(--line)' },
+  }[tone] || { c: 'var(--ink-3)', bg: 'var(--bg-sunk)', b: 'var(--line)' };
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 8px', fontSize: 11, borderRadius: 5, border: `1px solid ${map.b}`, background: map.bg, color: map.c }}>
+      {dot && <span className={live ? 'tick live-dot' : 'tick'} style={{ background: map.c }} />}{children}
+    </span>
+  );
+}
+
+function Panel({ title, hint, right, children, pad = 18 }) {
+  return (
+    <div className="card" style={{ overflow: 'hidden' }}>
+      <div style={{ padding: `13px ${pad}px`, borderBottom: '1px solid var(--line-2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ minWidth: 0 }}>
+          <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>{title}</h3>
+          {hint && <p style={{ margin: '3px 0 0', fontSize: 12, color: 'var(--ink-3)' }}>{hint}</p>}
+        </div>
+        {right}
+      </div>
+      <div style={{ padding: pad }}>{children}</div>
+    </div>
+  );
+}
+
+function Kpi({ label, value, sub, delta, spark, color = 'var(--accent)', tone }) {
+  const up = (delta || 0) >= 0;
+  const dCol = tone === 'inverse' ? (up ? 'var(--red)' : 'var(--green)') : (up ? 'var(--green)' : 'var(--red)');
+  return (
+    <div className="card" style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <span className="micro" style={{ whiteSpace: 'nowrap' }}>{label}</span>
+        {delta != null && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontFamily: MONO, fontSize: 11, fontWeight: 600, color: dCol }}>
+            <Ico d={up ? 'M7 14l5-5 5 5' : 'M7 10l5 5 5-5'} size={12} stroke={2.2} />{Math.abs(delta)}%
+          </span>
+        )}
+      </div>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 27, fontWeight: 700, color: 'var(--ink)', lineHeight: 1.05, letterSpacing: '-0.02em' }}>{value}</div>
+        {sub && <div style={{ fontSize: 11.5, color: 'var(--ink-3)', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>}
+      </div>
+      <Sparkline data={spark} color={color} />
+    </div>
+  );
+}
+
+function DevGlyph({ d, size = 26 }) {
+  const ICONS = {
+    Agent: 'M12 2a5 5 0 0 1 5 5c0 1.5 2 2.5 2 5a7 7 0 0 1-14 0c0-2.5 2-3.5 2-5a5 5 0 0 1 5-5z',
+    Device: 'M4 4h16v12H4zM2 20h20',
+    'API token': 'M21 2l-2 2m-7.6 7.6a5 5 0 1 0 .8.8l4.6-4.6 2.4 2.4 2-2-2.4-2.4 2.4-2.4-2-2-4.6 4.6z',
+    Automation: 'M13 2L3 14h7v8l10-12h-7z',
+    Dashboard: 'M3 13h8V3H3zM13 21h8V8h-8zM13 3v3h8V3z',
+  };
+  return (
+    <span style={{ width: size, height: size, borderRadius: 7, flexShrink: 0, display: 'grid', placeItems: 'center', background: 'var(--bg-sunk)', border: '1px solid var(--line)', color: 'var(--ink-2)' }}>
+      <Ico d={ICONS[d.type] || ICONS.Device} size={size * 0.58} />
+    </span>
+  );
+}
+
+function Chip({ children }) {
+  return <span style={{ fontFamily: MONO, fontSize: 11, color: 'var(--ink-2)', background: 'var(--bg-sunk)', border: '1px solid var(--line-2)', borderRadius: 5, padding: '2px 7px', whiteSpace: 'nowrap' }}>{children}</span>;
+}
+
+// Map a service-breakdown array onto themed HBar items.
+const toBars = (services) => services.map((s) => {
+  const m = svcMeta(s.key);
+  return { label: m.label, value: s.value, chip: m.chip, glyph: m.glyph, color: m.color };
+});
+
+// ── detail panel (right of donut) — reflects the current selection ────────
+function DetailPanel({ device, aggregate, onClear, navigate }) {
+  if (!device) {
+    const { serviceTotals, busiest, grand } = aggregate;
+    const topSvc = serviceTotals[0];
+    return (
+      <Panel title="Across all devices" hint="What your fleet is calling, in aggregate">
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
+          <div style={{ background: 'var(--bg-sunk)', border: '1px solid var(--line-2)', borderRadius: 8, padding: '11px 13px' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>{busiest ? busiest.label : '—'}</div>
+            <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>Busiest client · {busiest && grand ? Math.round((busiest.value / grand) * 100) : 0}% of calls</div>
+          </div>
+          <div style={{ background: 'var(--bg-sunk)', border: '1px solid var(--line-2)', borderRadius: 8, padding: '11px 13px' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>{topSvc ? svcMeta(topSvc.key).label : '—'}</div>
+            <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>Top service · {topSvc ? fmtN(topSvc.value) : 0} calls</div>
+          </div>
+        </div>
+        <div className="micro" style={{ marginBottom: 11 }}>Calls by service</div>
+        <HBars items={toBars(serviceTotals)} />
+        <p style={{ fontSize: 11.5, color: 'var(--ink-4)', margin: '16px 0 0', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Ico d="M12 8v5M12 16h.01M12 3l9 16H3z" size={13} stroke={1.8} />Click any slice to see what a single device is calling.
+        </p>
+      </Panel>
+    );
+  }
+  const st = STATUS[device.status];
+  return (
+    <Panel
+      title={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 9 }}><DevGlyph d={device} size={24} />{device.label}</span>}
+      hint={`${device.type} client`}
+      right={<button className="btn btn-ghost text-[12px]" onClick={onClear} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Ico d="M15 18l-6-6 6-6" size={13} />All</button>}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+        <Badge tone={st.tone} dot live={st.live}>{st.label}</Badge>
+        <Badge tone="neutral">{device.type}</Badge>
+        <span style={{ fontSize: 11.5, color: 'var(--ink-3)', marginLeft: 'auto', fontFamily: MONO }}>{device.lastSeen}</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 16 }}>
+        {[
+          { label: 'Calls', value: fmtN(device.value), col: 'var(--ink)' },
+          { label: 'Error rate', value: device.errPct + '%', col: device.errPct >= 2 ? 'var(--red)' : 'var(--ink)' },
+          { label: 'Rate-limited', value: device.limited, col: device.limited >= 20 ? 'var(--amber)' : 'var(--ink)' },
+        ].map((m) => (
+          <div key={m.label} style={{ background: 'var(--bg-sunk)', border: '1px solid var(--line-2)', borderRadius: 8, padding: '10px 12px' }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: m.col, lineHeight: 1.1, fontFamily: MONO }}>{m.value}</div>
+            <div style={{ fontSize: 10.5, color: 'var(--ink-3)', marginTop: 3 }}>{m.label}</div>
+          </div>
+        ))}
+      </div>
+      <div className="micro" style={{ marginBottom: 11 }}>Calls by service</div>
+      <HBars items={toBars(device.services)} />
+      {device.scopes.length > 0 && (<>
+        <div className="micro" style={{ margin: '18px 0 9px' }}>Scopes in use</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {device.scopes.map((s) => <Chip key={s}>{s}</Chip>)}
+        </div>
+      </>)}
+      <div style={{ display: 'flex', gap: 8, marginTop: 18, borderTop: '1px solid var(--line-2)', paddingTop: 16 }}>
+        <button className="btn text-[12px]" onClick={() => navigate('/activity')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <Ico d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0zM12 7v5l3 2" size={13} />Audit log
+        </button>
+        <button className="btn text-[12px]" onClick={() => navigate('/device-management')} style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <Ico d="M9 5l7 7-7 7" size={12} />Manage
+        </button>
+      </div>
+    </Panel>
+  );
+}
+
+function InsightCard({ ins, onOpen, onDismiss }) {
+  const tones = { warning: 'var(--amber)', danger: 'var(--red)', neutral: 'var(--ink-3)', accent: 'var(--accent)' };
+  const bgs = { warning: 'var(--amber-bg)', danger: 'var(--red-bg)', neutral: 'var(--bg-sunk)', accent: 'var(--accent-bg)' };
+  const c = tones[ins.tone];
+  return (
+    <div className="card" style={{ padding: 15, display: 'flex', flexDirection: 'column', gap: 9, minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+        <span style={{ width: 28, height: 28, borderRadius: 7, flexShrink: 0, display: 'grid', placeItems: 'center', background: bgs[ins.tone], color: c }}>
+          <Ico d={ins.icon} size={15} stroke={1.8} />
+        </span>
+        <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.3, paddingTop: 2 }}>{ins.title}</div>
+      </div>
+      <p style={{ margin: 0, fontSize: 12, color: 'var(--ink-3)', lineHeight: 1.45 }}>{ins.body}</p>
+      <button onClick={() => (ins.notifId ? onDismiss(ins.notifId) : onOpen(ins.dev))}
+        style={{ alignSelf: 'flex-start', marginTop: 2, background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12.5, fontWeight: 500, color: 'var(--accent)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        {ins.cta}<Ico d="M5 12h14M13 6l6 6-6 6" size={13} />
+      </button>
+    </div>
+  );
+}
+
+function DeviceRow({ d, color, selected, onSelect }) {
+  const [hover, setHover] = useState(false);
+  const st = STATUS[d.status];
+  const top = d.services[0];
+  const topMeta = top ? svcMeta(top.key) : null;
+  return (
+    <div onClick={() => onSelect(selected ? null : d.id)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      className="dash-trow"
+      style={{ alignItems: 'center', padding: '11px 18px', cursor: 'pointer',
+        borderBottom: '1px solid var(--line-2)', borderLeft: `2px solid ${selected ? color : 'transparent'}`,
+        background: selected ? 'var(--bg-hover)' : hover ? 'var(--bg-sunk)' : 'transparent', transition: 'background .1s' }}>
+      <div className="dc-device" style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+        <DevGlyph d={d} />
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 13.5, color: 'var(--ink)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.label}</div>
+          <div style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: MONO }}>{d.type} · {d.lastSeen}</div>
+        </div>
+      </div>
+      <div className="dc-status"><Badge tone={st.tone} dot live={st.live}>{st.label}</Badge></div>
+      <div className="dc-calls" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ fontFamily: MONO, fontSize: 13, color: 'var(--ink)', width: 52, flexShrink: 0 }}>{fmtN(d.value)}</span>
+        <div style={{ flex: 1, minWidth: 40, maxWidth: 120 }}><Sparkline data={d.daily} color={color} w={120} h={26} /></div>
+      </div>
+      <div className="dc-service" style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+        {topMeta && <span style={{ width: 8, height: 8, borderRadius: 2, background: topMeta.color, flexShrink: 0 }} />}
+        <span style={{ fontSize: 12.5, color: 'var(--ink-2)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{topMeta ? topMeta.label : '—'}</span>
+      </div>
+      <span className="dc-errors" style={{ fontFamily: MONO, fontSize: 12.5, color: d.errPct >= 2 ? 'var(--red)' : 'var(--ink-2)', textAlign: 'right' }}>{d.errPct}%</span>
+      <span className="dc-chev" style={{ color: selected ? 'var(--accent)' : 'var(--ink-4)', display: 'grid', placeItems: 'center', justifySelf: 'end' }}>
+        <Ico d={selected ? 'M15 18l-6-6 6-6' : 'M9 18l6-6-6-6'} size={15} />
+      </span>
+    </div>
+  );
+}
+
+// ── page ─────────────────────────────────────────────────────────────────
 function Dashboard() {
   const navigate = useNavigate();
-  const masterToken = useAuthStore((state) => state.masterToken);
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const currentWorkspace = useAuthStore((state) => state.currentWorkspace);
-  const user = useAuthStore((state) => state.user);
-  const wsRef = useRef(null);
-  const reconnectTimeoutRef = useRef(null);
+  const masterToken = useAuthStore((s) => s.masterToken);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const currentWorkspace = useAuthStore((s) => s.currentWorkspace);
 
-  // State management
-  const [metrics, setMetrics] = useState({
-    approvedDevices: 0,
-    pendingApprovals: 0,
-    securityAlerts: 0,
-    securityAlertDetails: [],
-    connectedServices: 0,
-    activeTokens: 0,
-    recentActivity: [],
-    personas: 0,
-    skills: 0,
-    marketplace: 0,
-    knowledge: 0,
-    memories: 0,
-  });
-  const [connectorsSummary, setConnectorsSummary] = useState({ afpDevices: 0, afpOnline: 0, names: [], chatgptActive: false });
-
-  const [alerts, setAlerts] = useState([]);
+  const [range, setRange] = useState('7d');
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [twoFAEnabled, setTwoFAEnabled] = useState(null);
-  const [checklistHidden, setChecklistHidden] = useState(() => wasChecklistDismissed());
-  const [onboardingActive, setOnboardingActive] = useState(() => Boolean(user?.needsOnboarding) || isOnboardingActive());
+  const [selId, setSelId] = useState(null);
+  const [broadcasts, setBroadcasts] = useState([]);
 
-  // New state
-  const [activePersona, setActivePersona] = useState(null);
-  const [billingUsed, setBillingUsed] = useState(0);
-  const [billingLimit, setBillingLimit] = useState(1000);
-  const [billingPlan, setBillingPlan] = useState('free');
-  const [dailyUsage, setDailyUsage] = useState([]);
-  const [connectedServicesList, setConnectedServicesList] = useState([]);
-  const [adminBroadcastCards, setAdminBroadcastCards] = useState([]);
+  // WebSocket-driven live alerts (device approvals, rate-limit warnings).
+  const [alerts, setAlerts] = useState([]);
+  const wsRef = useRef(null);
+  const reconnectRef = useRef(null);
 
-  const dismissChecklistPermanently = () => {
-    dismissChecklist();
-    setChecklistHidden(true);
-    setOnboardingActive(false);
-  };
-
-  useEffect(() => {
-    if (user?.needsOnboarding) {
-      setOnboardingActive(true);
-      setChecklistHidden(wasChecklistDismissed());
-    }
-  }, [user?.needsOnboarding]);
-
-  useEffect(() => {
-    const onOpen = () => {
-      setOnboardingActive(true);
-      setChecklistHidden(false);
-    };
-    window.addEventListener('myapi:open-onboarding', onOpen);
-    return () => window.removeEventListener('myapi:open-onboarding', onOpen);
-  }, []);
-
-  // Fetch 2FA status
-  const fetch2FAStatus = async () => {
-    try {
-      const response = await apiClient.get('/auth/2fa/status');
-      setTwoFAEnabled(response.data?.data?.enabled || response.data?.enabled || false);
-    } catch (err) {
-      console.error('Failed to fetch 2FA status:', err);
-      setTwoFAEnabled(false);
-    }
-  };
-
-  const fetchAdminBroadcasts = async () => {
-    try {
-      const res = await apiClient.get('/notifications?type=admin_attention_broadcast&read=false&limit=3');
-      const list = res.data?.notifications || res.data?.data || [];
-      setAdminBroadcastCards(Array.isArray(list) ? list : []);
-    } catch {
-      // non-critical, silently ignore
-    }
-  };
-
-  const dismissAdminCard = async (notifId) => {
-    setAdminBroadcastCards((prev) => prev.filter((c) => c.id !== notifId));
-    try {
-      await apiClient.post(`/notifications/${notifId}/read`);
-    } catch { /* ignore */ }
-  };
-
-  // Fetch AFP devices + check for active ChatGPT token
-  const fetchConnectorsSummary = async () => {
+  const fetchActivity = async (r = range) => {
     if (!isAuthenticated) return;
     try {
-      const [afpRes, tokensRes] = await Promise.all([
-        apiClient.get('/afp/devices').catch(() => null),
-        apiClient.get('/tokens').catch(() => null),
-      ]);
-      const afpDevices = afpRes?.data?.devices || afpRes?.data?.data || [];
-      const afpOnline = afpDevices.filter((d) => d.status === 'online');
-
-      const allTokens = tokensRes?.data?.data || [];
-      const chatgptActive = allTokens.some((t) => {
-        const label = (t.label || '').toLowerCase();
-        const notRevoked = !t.revokedAt && !t.revoked_at;
-        return notRevoked && (label.includes('chatgpt') || label.includes('openai') || label.includes('gpt'));
-      });
-
-      setConnectorsSummary({
-        afpDevices: afpDevices.length,
-        afpOnline: afpOnline.length,
-        names: afpDevices.slice(0, 4).map((d) => d.device_name || d.name || d.id),
-        chatgptActive,
-      });
-    } catch (err) {
-      console.error('Failed to fetch connectors summary:', err);
-    }
-  };
-
-  // Fetch dashboard metrics from backend
-  const fetchMetrics = async () => {
-    if (!isAuthenticated) return;
-    try {
-      const headers = masterToken ? { Authorization: `Bearer ${masterToken}` } : {};
-
-      const [metricsRes, personasRes, billingRes, billingUsageRes, servicesRes] = await Promise.all([
-        apiClient.get('/dashboard/metrics'),
-        apiClient.get('/personas', { headers }).catch(() => null),
-        apiClient.get('/billing/current', { headers }).catch(() => null),
-        apiClient.get('/billing/usage?range=30d', { headers }).catch(() => null),
-        fetch('/api/v1/services', { credentials: 'include', headers: masterToken ? { Authorization: `Bearer ${masterToken}` } : {} }).catch(() => null),
-      ]);
-
-      setMetrics(metricsRes.data?.data || metricsRes.data);
-
-      // Connected services list
-      if (servicesRes?.ok) {
-        const sd = await servicesRes.json().catch(() => null);
-        const slist = sd?.data || sd?.services || sd || [];
-        if (Array.isArray(slist)) {
-          setConnectedServicesList(slist.filter(s => s.status === 'connected' || s.connected));
-        }
-      }
-
-      // Active persona
-      if (personasRes?.data) {
-        const d = personasRes.data;
-        const list = d.data || d;
-        if (Array.isArray(list)) {
-          const found = list.find((p) => p.active);
-          setActivePersona(found || null);
-        }
-      }
-
-      // Billing plan + limits
-      if (billingRes?.data) {
-        const b = billingRes.data?.data || billingRes.data;
-        if (b) {
-          setBillingPlan(b.plan || 'free');
-          const rawLimit = b.limits?.monthlyApiCalls ?? b.limit ?? b.requests_limit ?? null;
-          setBillingLimit(rawLimit === null ? Infinity : Number(rawLimit));
-        }
-      }
-      // Billing actual usage
-      if (billingUsageRes?.data) {
-        const u = billingUsageRes.data?.data || billingUsageRes.data;
-        if (u?.totals?.monthlyApiCalls !== undefined) {
-          setBillingUsed(Number(u.totals.monthlyApiCalls) || 0);
-        }
-        if (Array.isArray(u?.daily) && u.daily.length > 0) {
-          setDailyUsage(u.daily);
-        }
-      }
-
+      const res = await apiClient.get(`/dashboard/device-activity?range=${r}`);
+      setData(res.data?.data || res.data);
       setError(null);
     } catch (err) {
-      if (err?.code === 'MYAPI_LOGOUT_IN_PROGRESS' || err?.code === 'MYAPI_RATE_LIMIT_BACKOFF') {
-        return;
-      }
-      if (err.response?.status === 401 || err.response?.status === 403) {
-        setLoading(false);
-        return;
-      }
-      if (err.response?.status === 429) {
-        setError('Rate limited. Retrying automatically.');
-        return;
-      }
-      console.error('Failed to fetch dashboard metrics:', err);
-      setError('Failed to load dashboard metrics');
+      if (err?.code === 'MYAPI_LOGOUT_IN_PROGRESS' || err?.code === 'MYAPI_RATE_LIMIT_BACKOFF') return;
+      if (err.response?.status === 401 || err.response?.status === 403) { setLoading(false); return; }
+      console.error('Failed to load device activity:', err);
+      setError('Failed to load device activity');
     } finally {
       setLoading(false);
     }
   };
 
-  // Setup WebSocket for real-time alerts
-  const setupWebSocket = () => {
-    const wsEnabled = typeof window !== 'undefined' && window.__MYAPI_WS_ENABLED === true;
-    if (!wsEnabled) return;
-
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      return;
-    }
-
+  const fetchBroadcasts = async () => {
     try {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/api/v1/ws`;
-
-      const ws = new WebSocket(wsUrl);
-
-      ws.onopen = () => {
-        console.log('WebSocket connected');
-        if (masterToken) {
-          ws.send(JSON.stringify({
-            type: 'auth',
-            token: masterToken,
-          }));
-        }
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-
-          if (data.type === 'device:pending_approval') {
-            const newAlert = {
-              id: `alert-${Date.now()}`,
-              severity: 'critical',
-              title: 'New Device Requesting Access',
-              message: `${data.deviceName} is requesting access from ${data.ip}`,
-              details: `User Agent: ${data.userAgent}`,
-              deviceId: data.deviceId,
-              timestamp: new Date(),
-            };
-            setAlerts((prev) => [newAlert, ...prev]);
-            fetchMetrics();
-          } else if (data.type === 'rate_limit:warning') {
-            const newAlert = {
-              id: `alert-${Date.now()}`,
-              severity: 'warning',
-              title: 'Rate Limit Warning',
-              message: `You're approaching rate limits: ${data.message}`,
-              timestamp: new Date(),
-            };
-            setAlerts((prev) => [newAlert, ...prev]);
-          } else if (data.type === 'service:status') {
-            if (data.status === 'error') {
-              const newAlert = {
-                id: `alert-${Date.now()}`,
-                severity: 'warning',
-                title: `${data.serviceName} Service Error`,
-                message: data.message,
-                timestamp: new Date(),
-              };
-              setAlerts((prev) => [newAlert, ...prev]);
-            }
-          }
-        } catch (err) {
-          console.error('Failed to parse WebSocket message:', err);
-        }
-      };
-
-      ws.onerror = (err) => {
-        console.error('WebSocket error:', err);
-      };
-
-      ws.onclose = () => {
-        console.log('WebSocket disconnected');
-        reconnectTimeoutRef.current = setTimeout(() => {
-          setupWebSocket();
-        }, 3000);
-      };
-
-      wsRef.current = ws;
-    } catch (err) {
-      console.error('Failed to setup WebSocket:', err);
-    }
+      const res = await apiClient.get('/notifications?type=admin_attention_broadcast&read=false&limit=3');
+      const list = res.data?.notifications || res.data?.data || [];
+      setBroadcasts(Array.isArray(list) ? list : []);
+    } catch { /* non-critical */ }
   };
 
-  // Dismiss alert
-  const handleDismissAlert = (alertId) => {
-    setAlerts((prev) => prev.filter((a) => a.id !== alertId));
+  const dismissBroadcast = async (notifId) => {
+    setBroadcasts((prev) => prev.filter((c) => c.id !== notifId));
+    try { await apiClient.post(`/notifications/${notifId}/read`); } catch { /* ignore */ }
   };
 
-  // Approve device from alert
-  const handleApproveDevice = async (deviceId) => {
-    try {
-      const headers = masterToken ? { Authorization: `Bearer ${masterToken}` } : {};
-      await apiClient.post(`/devices/approve/${deviceId}`,
-        { device_name: 'Approved Device' },
-        { headers }
-      );
-      fetchMetrics();
-      navigate('/device-management');
-    } catch (err) {
-      console.error('Failed to approve device:', err);
-    }
-  };
-
-  // Handle OAuth redirect params
+  // Handle OAuth redirect params landing on the dashboard root — forward to
+  // the destination page so it can show the connect-success state.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const oauthStatus = params.get('oauth_status');
     const oauthService = params.get('oauth_service');
-
     if (oauthStatus === 'pending_2fa') {
-      const storedOAuthParams = sessionStorage.getItem('pendingOAuthParams');
-      if (storedOAuthParams) {
-        sessionStorage.removeItem('pendingOAuthParams');
-        navigate(`/authorize?${storedOAuthParams}`, { replace: true });
-      }
+      const stored = sessionStorage.getItem('pendingOAuthParams');
+      if (stored) { sessionStorage.removeItem('pendingOAuthParams'); navigate(`/authorize?${stored}`, { replace: true }); }
       window.history.replaceState({}, document.title, '/dashboard/');
       return;
     }
-
     if (oauthStatus && oauthService) {
       const rawNext = params.get('next');
       let targetPath = '/services';
-
-      if (rawNext) {
-        const decoded = decodeURIComponent(rawNext);
-        const routerPath = decoded.replace(/^\/dashboard/, '') || '/services';
-        targetPath = routerPath || '/services';
-      }
-
-      const forwardedParams = new URLSearchParams();
-      forwardedParams.set('oauth_status', oauthStatus);
-      forwardedParams.set('oauth_service', oauthService);
-      if (params.get('mode')) forwardedParams.set('mode', params.get('mode'));
-      if (params.get('error')) forwardedParams.set('error', params.get('error'));
-
-      navigate(`${targetPath}?${forwardedParams.toString()}`, { replace: true });
+      if (rawNext) targetPath = decodeURIComponent(rawNext).replace(/^\/dashboard/, '') || '/services';
+      const fwd = new URLSearchParams();
+      fwd.set('oauth_status', oauthStatus);
+      fwd.set('oauth_service', oauthService);
+      if (params.get('mode')) fwd.set('mode', params.get('mode'));
+      if (params.get('error')) fwd.set('error', params.get('error'));
+      navigate(`${targetPath}?${fwd.toString()}`, { replace: true });
     }
   }, [navigate]);
 
-  // Initial setup
+  const setupWebSocket = () => {
+    const wsEnabled = typeof window !== 'undefined' && window.__MYAPI_WS_ENABLED === true;
+    if (!wsEnabled || wsRef.current?.readyState === WebSocket.OPEN) return;
+    try {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const ws = new WebSocket(`${protocol}//${window.location.host}/api/v1/ws`);
+      ws.onopen = () => { if (masterToken) ws.send(JSON.stringify({ type: 'auth', token: masterToken })); };
+      ws.onmessage = (event) => {
+        try {
+          const d = JSON.parse(event.data);
+          if (d.type === 'device:pending_approval') {
+            setAlerts((p) => [{ id: `alert-${Date.now()}`, severity: 'critical', title: 'New Device Requesting Access', message: `${d.deviceName} is requesting access from ${d.ip}`, details: `User Agent: ${d.userAgent}`, deviceId: d.deviceId, timestamp: new Date() }, ...p]);
+            fetchActivity();
+          } else if (d.type === 'rate_limit:warning') {
+            setAlerts((p) => [{ id: `alert-${Date.now()}`, severity: 'warning', title: 'Rate Limit Warning', message: `You're approaching rate limits: ${d.message}`, timestamp: new Date() }, ...p]);
+          }
+        } catch { /* ignore */ }
+      };
+      ws.onclose = () => { reconnectRef.current = setTimeout(setupWebSocket, 3000); };
+      wsRef.current = ws;
+    } catch { /* ignore */ }
+  };
+
   useEffect(() => {
     if (!isAuthenticated) return undefined;
-
-    fetchMetrics();
-    fetchConnectorsSummary();
-    fetch2FAStatus();
-    fetchAdminBroadcasts();
+    setLoading(true);
+    fetchActivity(range);
+    fetchBroadcasts();
     setupWebSocket();
-
-    const metricsInterval = setInterval(() => { fetchMetrics(); fetchConnectorsSummary(); fetchAdminBroadcasts(); }, 30000);
-
+    const iv = setInterval(() => { fetchActivity(range); fetchBroadcasts(); }, 30000);
     return () => {
-      clearInterval(metricsInterval);
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
+      clearInterval(iv);
+      if (reconnectRef.current) clearTimeout(reconnectRef.current);
+      if (wsRef.current) wsRef.current.close();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [masterToken, isAuthenticated, currentWorkspace?.id]);
+  }, [masterToken, isAuthenticated, currentWorkspace?.id, range]);
 
-
-  const checklistItems = [
-    { done: !!(user?.displayName), label: 'Complete your profile', href: '/settings' },
-    { done: (metrics.personas || 0) > 0, label: 'Create a persona', href: '/personas' },
-    { done: twoFAEnabled === true, label: 'Secure your account with 2FA', href: '/settings' },
-    { done: (metrics.connectedServices || 0) > 0, label: 'Connect a service', href: '/services' },
-    { done: (metrics.knowledge || 0) > 0 || (metrics.memories || 0) > 0, label: 'Add knowledge or memory', href: '/knowledge' },
-    { done: (metrics.activeTokens || 0) > 0, label: 'Issue an access token', href: '/access-tokens' },
-  ];
-  const completedChecklistCount = checklistItems.filter((item) => item.done).length;
-  const isChecklistComplete = checklistItems.length > 0 && completedChecklistCount === checklistItems.length;
-
-  useEffect(() => {
-    if (onboardingActive && isChecklistComplete) {
-      completeOnboarding();
-      setChecklistHidden(true);
-      setOnboardingActive(false);
-    }
-  }, [onboardingActive, isChecklistComplete]);
-
-  // ── Helpers ──────────────────────────────────────────────────────────
-  const TINTS = ['#4493f8', '#3fb950', '#bc8cff', '#d29922', '#f85149', '#2ea043', '#1f6feb', '#8957e5'];
-  const personaTint = activePersona
-    ? TINTS[(activePersona.name || '?').charCodeAt(0) % TINTS.length]
-    : 'var(--ink-4)';
-  const isUnlimited = billingLimit === Infinity || billingLimit === null;
-  const usagePct = (!isUnlimited && billingLimit > 0) ? Math.round((billingUsed / billingLimit) * 100) : 0;
-  const dayLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }).toLowerCase();
-
-  const sparkData = dailyUsage.length > 0
-    ? dailyUsage.map(d => Number(d.api_calls || 0))
-    : [];
-
-  const SparkSVG = () => {
-    const w = 560, h = 64;
-    if (sparkData.length < 2) {
-      return (
-        <svg className="spark w-full" width={w} height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
-          <line x1="0" y1={h - 2} x2={w} y2={h - 2} stroke="var(--line)" strokeWidth="1" />
-        </svg>
-      );
-    }
-    const data = sparkData;
-    const max = Math.max(...data) || 1;
-    const step = w / (data.length - 1);
-    const pts = data.map((v, i) => [i * step, h - (v / max) * (h - 4) - 2]);
-    const line = pts.map((p, i) => (i === 0 ? `M${p[0]},${p[1]}` : `L${p[0]},${p[1]}`)).join(' ');
-    const area = `${line} L${w},${h} L0,${h} Z`;
-    return (
-      <svg className="spark w-full" width={w} height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
-        <path className="area" d={area} />
-        <path d={line} />
-      </svg>
-    );
+  const handleApproveDevice = async (deviceId) => {
+    try {
+      const headers = masterToken ? { Authorization: `Bearer ${masterToken}` } : {};
+      await apiClient.post(`/devices/approve/${deviceId}`, { device_name: 'Approved Device' }, { headers });
+      fetchActivity();
+      navigate('/device-management');
+    } catch (err) { console.error('Failed to approve device:', err); }
   };
 
-  const ServiceGlyph = ({ id = '', size = 26 }) => {
-    const palette = ['#3F6FD8', '#D84A4A', '#2E8A5F', '#C96A1F', '#6E4AB0', '#1F8DA8', '#5A5A5A', '#B0326E'];
-    const color = palette[[...id].reduce((a, c) => a + c.charCodeAt(0), 0) % palette.length];
-    return (
-      <div className="shrink-0 grid place-items-center border hairline bg-raised" style={{ width: size, height: size, color }}>
-        <span className="mono font-semibold" style={{ fontSize: '11px', color }}>{(id[0] || '?').toUpperCase()}</span>
-      </div>
-    );
-  };
-
-  const MetricCell = ({ label, value, unit }) => (
-    <div>
-      <div className="micro">{label}</div>
-      <div className="mt-0.5 flex items-baseline gap-1">
-        <span className="font-serif text-[20px] ink leading-none">{value}</span>
-        <span className="text-[11.5px] ink-3">{unit}</span>
-      </div>
-    </div>
-  );
-
-  const MiniStat = ({ label, value, tone }) => {
-    const c = tone === 'green' ? 'var(--green)' : tone === 'accent' ? 'var(--accent)' : tone === 'amber' ? 'var(--amber)' : 'var(--ink)';
-    return (
-      <div>
-        <div className="micro">{label}</div>
-        <div className="mono text-[18px] mt-0.5" style={{ color: c }}>{value}</div>
-      </div>
-    );
-  };
-
-  // Attention cards derived from real data
-  const attentionCards = adminBroadcastCards.map((n) => ({
-    tone: 'accent',
-    kicker: 'ANNOUNCEMENT',
-    title: n.title,
-    body: n.message,
-    href: null,
-    action: 'Dismiss →',
-    _notifId: n.id,
+  // ── derive view models from real data ──────────────────────────────────
+  const devices = (data?.devices || []).map((d, i) => ({
+    ...d,
+    color: DEV_COLORS[i % DEV_COLORS.length],
+    key: d.id,
+    children: d.services.map((s) => ({ key: s.key, label: svcMeta(s.key).label, value: s.value, color: svcMeta(s.key).color })),
   }));
-  if ((metrics.securityAlerts || 0) > 0) {
-    const first = metrics.securityAlertDetails?.[0];
-    attentionCards.push({
-      tone: 'danger',
-      kicker: 'SECURITY ALERT',
-      title: first?.title || `${metrics.securityAlerts} unread security alert${metrics.securityAlerts > 1 ? 's' : ''}`,
-      body: first?.message || 'Suspicious activity was detected on your account. Review and take action immediately.',
-      href: '/device-management',
-      action: 'Review now →',
-    });
-  }
-  if (metrics.pendingApprovals > 0) {
-    attentionCards.push({
-      tone: 'amber',
-      kicker: 'DEVICE APPROVAL',
-      title: `${metrics.pendingApprovals} device${metrics.pendingApprovals > 1 ? 's' : ''} pending approval`,
-      body: 'New devices are waiting for access approval before they can connect to your workspace.',
-      href: '/device-management',
-      action: 'Review devices →',
-    });
-  }
-  if (twoFAEnabled === false) {
-    attentionCards.push({
-      tone: 'amber',
-      kicker: 'SECURITY',
-      title: 'Two-factor authentication is off',
-      body: 'Your account is protected only by password. Enable 2FA in Settings → Security.',
-      href: '/settings?tab=security',
-      action: 'Enable 2FA →',
-    });
-  }
-  if ((metrics.connectedServices || 0) === 0) {
-    attentionCards.push({
-      tone: 'default',
-      kicker: 'GETTING STARTED',
-      title: 'No services connected yet',
-      body: 'Connect OAuth services to let agents access your data through scoped tokens.',
-      href: '/services',
-      action: 'Connect a service →',
-    });
-  }
-  if ((metrics.activeTokens || 0) === 0) {
-    attentionCards.push({
-      tone: 'default',
-      kicker: 'ACCESS TOKENS',
-      title: 'No active tokens issued',
-      body: 'Create a scoped access token to let agents and tools connect to your workspace.',
-      href: '/access-tokens',
-      action: 'Issue a token →',
-    });
-  }
-  if ((metrics.personas || 0) === 0) {
-    attentionCards.push({
-      tone: 'default',
-      kicker: 'PERSONA',
-      title: 'No personas configured',
-      body: 'Personas shape how agents see your data. Create one to get started.',
-      href: '/personas',
-      action: 'Create persona →',
-    });
-  }
-  // Always show at least placeholder cards if nothing is wrong
-  const displayCards = attentionCards.length > 0
-    ? attentionCards.slice(0, 3)
-    : [
-        {
-          tone: 'default',
-          kicker: 'BACKUP READY',
-          title: 'Weekly snapshot is available',
-          body: 'Personas, knowledge, skills, memory. Manage schedule and retention in Backup settings.',
-          href: '/settings?section=dataPrivacy',
-          action: 'Go to Backup settings →',
-        },
-        {
-          tone: 'accent',
-          kicker: 'MARKETPLACE',
-          title: `${metrics.marketplace || 0} skills available`,
-          body: 'Browse the marketplace to add composable skill modules to your personas.',
-          href: '/marketplace',
-          action: 'Browse skills →',
-        },
-        {
-          tone: 'default',
-          kicker: 'API DOCS',
-          title: 'Platform documentation',
-          body: 'Learn how to integrate MyApi, manage scopes, and build agent workflows.',
-          href: '/platform-docs',
-          action: 'Read docs →',
-        },
-      ];
+  const groups = devices.filter((d) => d.value > 0);
+  const selected = devices.find((d) => d.id === selId) || null;
+  const labels = data?.bucketLabels || [];
+  const trend = selected ? selected.daily : (data?.allDaily || []);
+  const trendColor = selected ? selected.color : 'var(--accent)';
+  const serviceTotals = data?.serviceTotals || [];
 
-  const accentMap = {
-    accent: 'var(--accent)',
-    amber: 'var(--amber)',
-    danger: 'var(--red)',
-    default: 'var(--ink-3)',
+  const aggregate = {
+    serviceTotals,
+    busiest: groups[0] ? { label: groups[0].label, value: groups[0].value } : null,
+    grand: data?.grand || 0,
   };
 
-  if (loading) {
+  // Insights & alerts — admin broadcasts first, then anomalies derived from
+  // the real device data (rate-limits, error spikes, idle clients).
+  const insights = [];
+  broadcasts.forEach((n) => insights.push({
+    tone: 'accent', icon: 'M22 8.5V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h7M16 11l5-3v8l-5-3z',
+    title: n.title, body: n.message, notifId: n.id, cta: 'Dismiss',
+  }));
+  const mostLimited = [...devices].filter((d) => d.limited > 0).sort((a, b) => b.limited - a.limited)[0];
+  if (mostLimited) insights.push({
+    tone: 'danger', icon: 'M12 8v5M12 16h.01M12 3l9 16H3z',
+    title: `${mostLimited.label} rate-limited ${mostLimited.limited}×`,
+    body: `Hit ${mostLimited.limited} rate-limit response${mostLimited.limited > 1 ? 's' : ''} in this window. Consider backing off the schedule.`,
+    dev: mostLimited.id, cta: 'Open device',
+  });
+  const worstErr = [...devices].filter((d) => d.errPct >= 2 && d.value > 5).sort((a, b) => b.errPct - a.errPct)[0];
+  if (worstErr && worstErr.id !== mostLimited?.id) insights.push({
+    tone: 'warning', icon: 'M22 12h-4l-3 9L9 3l-3 9H2',
+    title: `${worstErr.label}: ${worstErr.errPct}% error rate`,
+    body: `Elevated error responses — the outlier across your clients. Confirm it's expected.`,
+    dev: worstErr.id, cta: 'Inspect',
+  });
+  const idle = [...devices].filter((d) => d.status !== 'active' && d.value > 0).sort((a, b) => b.value - a.value)[0];
+  if (idle && insights.length < 3) insights.push({
+    tone: 'neutral', icon: 'M12 7v5l3 2M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0z',
+    title: `${idle.label} ${idle.status === 'paused' ? 'dormant' : 'idle'} — last seen ${idle.lastSeen}`,
+    body: 'No recent activity. Revoke its token to shrink your exposure if it is no longer in use.',
+    dev: idle.id, cta: 'Review',
+  });
+  const displayInsights = insights.slice(0, 3);
+
+  if (loading && !data) {
     return (
       <div className="flex justify-center items-center h-64">
         <div className="text-center">
-          <div className="inline-block">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[color:var(--accent)]" />
-          </div>
-          <p className="mt-4 ink-3 text-[13px] mono">loading dashboard…</p>
+          <div className="inline-block"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[color:var(--accent)]" /></div>
+          <p className="mt-4 ink-3 text-[13px] mono">loading device activity…</p>
         </div>
       </div>
     );
   }
 
+  const grand = data?.grand || 0;
+  const deviceCount = data?.deviceCount || 0;
+  const rangeLabel = { '24h': '24h', '7d': '7d', '30d': '30d' }[range];
+  const dayLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }).toLowerCase();
+
   return (
-    <div className="space-y-10">
-
-      {/* 2FA warning */}
-      {twoFAEnabled === false && (
-        <div className="card p-4 relative overflow-hidden" style={{ borderColor: 'rgba(210,153,34,0.4)' }}>
-          <div style={{ position: 'absolute', top: 0, left: 0, height: '2px', width: '40px', background: 'var(--amber)' }} />
-          <div className="flex items-start gap-3">
-            <div className="flex-1">
-              <div className="micro mb-1" style={{ color: 'var(--amber)' }}>SECURITY</div>
-              <span className="ink text-[14px]">Two-factor authentication is not enabled.{' '}
-                <Link to="/settings?tab=security" className="accent" style={{ textDecoration: 'underline' }}>Enable 2FA →</Link>
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* AlertBanner for WebSocket alerts */}
-      <AlertBanner alerts={alerts} onDismiss={handleDismissAlert} onApprove={handleApproveDevice} />
-
-      {/* PendingInvitations */}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }} data-tour="dashboard">
+      <AlertBanner alerts={alerts} onDismiss={(id) => setAlerts((p) => p.filter((a) => a.id !== id))} onApprove={handleApproveDevice} />
       <PendingInvitations />
 
-      {/* Section header */}
-      <div className="flex flex-col sm:flex-row items-start gap-4 mb-8">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row items-start gap-4">
         <div className="flex-1 min-w-0">
           <div className="micro mb-2">CONTROL ROOM · {dayLabel}</div>
           <h1 className="font-serif text-[22px] sm:text-[34px] leading-[1.05] tracking-tight ink font-medium">
@@ -606,241 +598,91 @@ function Dashboard() {
           </h1>
           <p className="mt-2 text-[15px] ink-2 max-w-[60ch]">One gateway between your services and the agents that use them.</p>
         </div>
-        <div className="flex items-center gap-2 pt-1">
-          <Link to="/services" className="btn">Connect service</Link>
-          <Link to="/access-tokens" className="btn btn-primary">+ New token</Link>
-        </div>
       </div>
 
-      {/* Error display */}
-      {error && (
-        <div className="card p-4" style={{ borderColor: 'rgba(248,81,73,0.4)' }}>
-          <p className="text-[13px]" style={{ color: 'var(--red)' }}>{error}</p>
+      {/* Toolbar */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Badge tone="success" dot live>Live</Badge>
+          <span style={{ fontSize: 12.5, color: 'var(--ink-3)' }}>Your devices &amp; agents — what each is calling on your behalf</span>
         </div>
-      )}
-
-      {/* Primary 2-col: Persona + Usage ring */}
-      <div className="grid grid-cols-12 gap-6">
-
-        {/* Active Persona */}
-        <div className="col-span-12 lg:col-span-7 card p-6 relative overflow-hidden">
-          <div className="absolute inset-y-0 left-0 w-1" style={{ background: personaTint }} />
-          {activePersona ? (
-            <div className="flex items-start gap-4">
-              <div className="w-14 h-14 border hairline bg-sunk grid place-items-center shrink-0"
-                style={{ boxShadow: `inset 0 0 0 3px ${personaTint}22` }}>
-                <span className="font-serif text-[24px] leading-none ink" style={{ color: personaTint }}>
-                  {activePersona.name[0]}
-                </span>
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="micro">ACTIVE PERSONA</span>
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[11px] border"
-                    style={{ background: 'var(--green-bg)', color: 'var(--green)', borderColor: 'rgba(63,185,80,0.4)' }}>
-                    <span className="tick" style={{ background: 'var(--green)' }} /> live
-                  </span>
-                </div>
-                <div className="font-serif text-[28px] leading-tight mt-1 ink">{activePersona.name}</div>
-                {activePersona.description && (
-                  <p className="ink-2 text-[14px] mt-1">"{activePersona.description}"</p>
-                )}
-                <div className="mt-4 flex items-center gap-5 text-[12.5px] ink-3">
-                  <span><span className="ink mono">{metrics.knowledge || 0}</span> knowledge docs</span>
-                  <span className="tick" style={{ background: 'var(--line)' }} />
-                  <span><span className="ink mono">{metrics.skills || 0}</span> active skills</span>
-                  <span className="tick" style={{ background: 'var(--line)' }} />
-                  <span><span className="ink mono">{metrics.activeTokens || 0}</span> tokens</span>
-                </div>
-              </div>
-              <Link to="/personas" className="btn shrink-0">Switch…</Link>
-            </div>
-          ) : (
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 border hairline bg-sunk grid place-items-center shrink-0 stripes" />
-              <div className="min-w-0 flex-1">
-                <div className="micro mb-1">ACTIVE PERSONA</div>
-                <div className="font-serif text-[22px] ink">No persona configured</div>
-                <p className="ink-3 text-[13.5px] mt-1">Create a persona to shape how agents see your data.</p>
-              </div>
-              <Link to="/personas" className="btn btn-primary shrink-0">+ New persona</Link>
-            </div>
-          )}
-        </div>
-
-        {/* Usage ring */}
-        <div className="col-span-12 lg:col-span-5 card p-6">
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="micro">API USAGE · THIS MONTH</div>
-              <div className="mt-1 flex items-baseline gap-2">
-                <span className="font-serif text-[32px] ink">{billingUsed.toLocaleString()}</span>
-                <span className="ink-3 mono text-[13px]">/ {isUnlimited ? '∞' : billingLimit.toLocaleString()}</span>
-              </div>
-              <div className="text-[13px] ink-3 mt-0.5 capitalize">{billingPlan} plan</div>
-            </div>
-            <div className="ring-wrap">
-              <div className="ring" style={{ '--p': usagePct }}>
-                <span className="mono text-[13px] ink">{usagePct}%</span>
-              </div>
-            </div>
-          </div>
-          <div className="mt-5 grid grid-cols-2 gap-4">
-            <MetricCell label="Access tokens" value={metrics.activeTokens || 0} unit="active" />
-            <MetricCell label="Services" value={metrics.connectedServices || 0} unit="connected" />
-            <MetricCell label="Devices" value={connectorsSummary.afpDevices} unit={`${connectorsSummary.afpOnline} online`} />
-            <MetricCell label="Personas" value={metrics.personas || 0} unit="configured" />
-          </div>
-        </div>
-      </div>
-
-      {/* Sparkline + Connected services */}
-      <div className="grid grid-cols-12 gap-6">
-
-        {/* Sparkline */}
-        <div className="col-span-12 lg:col-span-7 card p-6">
-          <div className="flex items-center">
-            <div>
-              <div className="micro">REQUESTS · last 24h</div>
-              <div className="font-serif text-[22px] ink mt-0.5">{billingUsed.toLocaleString()} total</div>
-            </div>
-            <div className="ml-auto flex items-center gap-2 text-[12px] ink-3">
-              <span className="flex items-center gap-1">
-                <span className="tick" style={{ background: 'var(--accent)' }} />
-                this gateway
-              </span>
-            </div>
-          </div>
-          <div className="mt-4 overflow-hidden">
-            <SparkSVG />
-            <div className="grid mono text-[10px] ink-4 mt-1" style={{ gridTemplateColumns: 'repeat(24, 1fr)' }}>
-              {Array.from({ length: 24 }).map((_, h) => (
-                <span key={h} className="text-center">{h % 3 === 0 ? String(h).padStart(2, '0') : '·'}</span>
-              ))}
-            </div>
-          </div>
-          <div className="mt-5 grid grid-cols-4 gap-4 border-t hairline-2 pt-4">
-            <MiniStat label="2xx" value={Math.max(0, billingUsed - Math.floor(billingUsed * 0.08)).toLocaleString()} tone="green" />
-            <MiniStat label="4xx" value={Math.floor(billingUsed * 0.06).toLocaleString()} tone="amber" />
-            <MiniStat label="5xx" value={Math.floor(billingUsed * 0.02).toLocaleString()} tone="accent" />
-            <MiniStat label="skills" value={metrics.skills || 0} />
-          </div>
-        </div>
-
-        {/* Connected services */}
-        <div className="col-span-12 lg:col-span-5 card p-6">
-          <div className="flex items-center mb-4">
-            <div>
-              <div className="micro">CONNECTED SERVICES</div>
-              <div className="font-serif text-[22px] ink mt-0.5">{metrics.connectedServices || 0} live</div>
-            </div>
-            <Link to="/services" className="ml-auto text-[12.5px] ink-2 hover:ink" style={{ textDecoration: 'none' }}>Manage →</Link>
-          </div>
-          {connectedServicesList.length > 0 ? (
-            <ul className="divide-y divide-[color:var(--line-2)]">
-              {connectedServicesList.slice(0, 6).map((svc, i) => {
-                const name = svc.name || svc.service_name || svc.id || '';
-                const scopes = Array.isArray(svc.scopes) ? svc.scopes : [];
-                return (
-                <li key={svc.id || i} className="py-2.5 flex items-center gap-3">
-                  <ServiceGlyph id={name} />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[13.5px] ink truncate capitalize">{name}</div>
-                    <div className="text-[11.5px] ink-3 mono truncate">{scopes.slice(0,2).join(' · ') || 'connected'}</div>
-                  </div>
-                  <span className="tick" style={{ background: 'var(--green)' }} />
-                </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <div className="flex flex-col items-center justify-center py-8 text-center">
-              <div className="ink-3 text-[13.5px]">No services connected</div>
-              <p className="ink-4 text-[12px] mt-1 max-w-[24ch]">Connect OAuth services to get started.</p>
-              <Link to="/services" className="btn btn-primary mt-4 text-[12px]">+ Connect service</Link>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Onboarding checklist */}
-      {onboardingActive && !checklistHidden && !isChecklistComplete && (
-        <div className="card p-5 relative overflow-hidden">
-          <div style={{ position: 'absolute', top: 0, left: 0, height: '2px', width: '40px', background: 'var(--accent)' }} />
-          <div className="flex items-start gap-3 mb-4">
-            <div className="flex-1">
-              <div className="micro mb-1" style={{ color: 'var(--accent)' }}>GETTING STARTED</div>
-              <div className="font-serif text-[18px] ink">Set up your workspace</div>
-              <div className="ink-3 text-[12.5px] mt-0.5">{completedChecklistCount}/{checklistItems.length} complete</div>
-            </div>
-            <button
-              type="button"
-              onClick={dismissChecklistPermanently}
-              className="btn btn-ghost text-[12px]"
-              title="Hide this checklist permanently"
-            >
-              Dismiss
-            </button>
-          </div>
-          <div className="space-y-1">
-            {checklistItems.map((item) => (
-              <Link
-                key={item.label}
-                to={item.href}
-                className={`flex items-center gap-3 px-3 py-2 border transition-colors ${
-                  item.done
-                    ? 'opacity-50 pointer-events-none border-transparent'
-                    : 'hairline hover:bg-sunk cursor-pointer'
-                }`}
-                style={{ borderRadius: '4px' }}
-              >
-                <span className={`flex-shrink-0 w-4 h-4 border flex items-center justify-center text-[10px] mono ${
-                  item.done
-                    ? 'border-[color:var(--green)] bg-[color:var(--green-bg)]'
-                    : 'border-[color:var(--line)]'
-                }`}>
-                  {item.done ? '✓' : ''}
-                </span>
-                <span className={`text-[13.5px] flex-1 ${item.done ? 'line-through ink-3' : 'ink'}`}>
-                  {item.label}
-                </span>
-                {!item.done && (
-                  <svg className="w-3.5 h-3.5 ink-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                )}
-              </Link>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'inline-flex', gap: 2, padding: 3, background: 'var(--bg-sunk)', border: '1px solid var(--line)', borderRadius: 8 }}>
+            {['24h', '7d', '30d'].map((r) => (
+              <button key={r} onClick={() => { setSelId(null); setRange(r); }}
+                style={{ padding: '4px 12px', fontSize: 12.5, fontWeight: 500, borderRadius: 6, cursor: 'pointer', border: '1px solid transparent',
+                  background: range === r ? 'var(--bg-raised)' : 'transparent', color: range === r ? 'var(--ink)' : 'var(--ink-3)', boxShadow: range === r ? '0 1px 2px rgba(0,0,0,0.35)' : 'none' }}>{r}</button>
             ))}
           </div>
-        </div>
-      )}
-
-      {/* Attention cards */}
-      <div>
-        <div className="flex items-baseline mb-4">
-          <h2 className="font-serif text-[22px] ink">Attention</h2>
-          <span className="micro ink-3 ml-3">things worth a look</span>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {displayCards.map((c, i) => (
-            <div key={i} className="card p-5 relative overflow-hidden"
-              style={c.tone === 'danger' ? { borderColor: 'rgba(248,81,73,0.5)' } : {}}>
-              <div style={{ position: 'absolute', top: 0, left: 0, height: '2px', width: c.tone === 'danger' ? '100%' : '40px', background: accentMap[c.tone] || 'var(--ink-3)' }} />
-              <div className="micro mb-2" style={{ color: accentMap[c.tone] || 'var(--ink-3)' }}>{c.kicker}</div>
-              <div className="font-serif text-[17px] leading-snug ink">{c.title}</div>
-              <p className="text-[13.5px] ink-2 mt-2">{c.body}</p>
-              {c._notifId ? (
-                <button onClick={() => dismissAdminCard(c._notifId)} className="mt-4 text-[12.5px] ink hover:opacity-80 underline underline-offset-4">{c.action}</button>
-              ) : c.href ? (
-                <Link to={c.href} className="mt-4 text-[12.5px] ink hover:opacity-80 underline underline-offset-4 block">{c.action}</Link>
-              ) : (
-                <button className="mt-4 text-[12.5px] ink hover:opacity-80 underline underline-offset-4">{c.action}</button>
-              )}
-            </div>
-          ))}
+          <button className="btn text-[12px]" onClick={() => navigate('/activity')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Ico d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" size={14} />Activity log
+          </button>
         </div>
       </div>
 
+      {error && <div className="card p-4" style={{ borderColor: 'rgba(248,81,73,0.4)' }}><p className="text-[13px]" style={{ color: 'var(--red)' }}>{error}</p></div>}
+
+      {/* KPI row */}
+      <div data-tour="dash-kpis" className="dash-kpis">
+        <Kpi label={`API CALLS · ${rangeLabel}`} value={fmtN(grand)} sub={`across ${deviceCount} device${deviceCount === 1 ? '' : 's'}`} spark={data?.allDaily || []} />
+        <Kpi label="ACTIVE DEVICES" value={`${data?.activeCount || 0} / ${deviceCount}`} sub={`${Math.max(0, deviceCount - (data?.activeCount || 0))} idle or dormant`} spark={devices.map((d) => (d.status === 'active' ? 1 : 0))} color="var(--green)" />
+        <Kpi label="ERROR RATE" value={(data?.errorRate || 0) + '%'} sub={worstErr ? `${worstErr.label} is the outlier` : 'across all clients'} tone="inverse" spark={data?.allDaily || []} color="var(--amber)" />
+        <Kpi label={`RATE-LIMITED · ${rangeLabel}`} value={fmtFull(data?.rateLimited || 0)} sub={mostLimited ? `mostly ${mostLimited.label}` : 'no rate-limit hits'} tone="inverse" spark={data?.allDaily || []} color="var(--red)" />
+      </div>
+
+      {/* Hero: drill-down donut + linked detail */}
+      <div data-tour="dash-donut" className="dash-hero">
+        <Panel title="API calls by device" hint={selected ? `${selected.label} · calls by service — click center to go back` : 'Click a slice to drill into one device’s calls'}>
+          <DrillDonut groups={groups} selectedKey={selId} onSelect={setSelId} fmt={fmtN} />
+        </Panel>
+        <DetailPanel device={selected} aggregate={aggregate} onClear={() => setSelId(null)} navigate={navigate} />
+      </div>
+
+      {/* Insights & alerts */}
+      <div data-tour="dash-insights">
+        <div className="micro" style={{ marginBottom: 9 }}>Insights &amp; alerts</div>
+        {displayInsights.length > 0 ? (
+          <div className="dash-insights" style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(3, displayInsights.length)}, 1fr)`, gap: 12 }}>
+            {displayInsights.map((ins, i) => <InsightCard key={ins.notifId || i} ins={ins} onOpen={setSelId} onDismiss={dismissBroadcast} />)}
+          </div>
+        ) : (
+          <div className="card" style={{ padding: 16, fontSize: 12.5, color: 'var(--ink-4)' }}>No anomalies or announcements right now. All clients are within normal ranges.</div>
+        )}
+      </div>
+
+      {/* Trend — follows selection */}
+      <Panel title={selected ? `${selected.label} — calls over time` : 'Total calls over time'}
+        hint={`Per ${range === '24h' ? 'hour' : 'day'} · last ${rangeLabel}${selected ? '' : ' · all devices'}`}
+        right={selected
+          ? <button className="btn btn-ghost text-[12px]" onClick={() => setSelId(null)} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Ico d="M15 18l-6-6 6-6" size={13} />All devices</button>
+          : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--ink-3)' }}><span style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--accent)' }} />All devices</span>}>
+        <BarChart data={trend} labels={labels} color={trendColor} fmt={fmtFull} height={150} />
+      </Panel>
+
+      {/* Device table */}
+      <div data-tour="dash-table">
+      <Panel title="Devices &amp; agents" hint="Every client holding a scoped token — select one to focus the dashboard" pad={0}>
+        <div className="dash-thead" style={{ padding: '9px 18px', borderBottom: '1px solid var(--line-2)' }}>
+          <span className="micro">Device</span>
+          <span className="micro">Status</span>
+          <span className="micro">Calls · {rangeLabel}</span>
+          <span className="micro">Top service</span>
+          <span className="micro" style={{ textAlign: 'right' }}>Errors</span>
+          <span />
+        </div>
+        {devices.length > 0 ? devices.map((d) => (
+          <DeviceRow key={d.id} d={d} color={d.color} selected={selId === d.id} onSelect={setSelId} />
+        )) : (
+          <div style={{ padding: '28px 18px', textAlign: 'center', color: 'var(--ink-4)', fontSize: 13 }}>
+            No device or agent API calls in the last {rangeLabel}. Issue a scoped token to connect a client.
+          </div>
+        )}
+      </Panel>
+      </div>
+
+      <p style={{ fontSize: 11, color: 'var(--ink-4)', fontFamily: MONO, margin: '4px 0 0' }}>
+        Aggregated from your audit log · scoped tokens only · dashboard browsing is never counted
+      </p>
     </div>
   );
 }

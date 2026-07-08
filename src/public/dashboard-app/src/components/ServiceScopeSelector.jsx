@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '../stores/authStore';
 
-// Available services from DB seed
-const AVAILABLE_SERVICES = [
+// Base services from DB seed; merged with live services (incl. Composio) on open
+const BASE_SERVICES = [
   'google',
   'github',
   'slack',
@@ -11,6 +11,7 @@ const AVAILABLE_SERVICES = [
   'facebook',
   'instagram',
   'linkedin',
+  'linkedin_pages',
   'twitter',
   'reddit',
   'whatsapp',
@@ -35,8 +36,30 @@ function ServiceScopeSelector({ isOpen, currentToken, onClose, onSuccess, master
 
   // Service toggles: { [serviceName]: { enabled: bool, level: 'read'|'write'|'*' } }
   const [services, setServices] = useState({});
+  // [{ name, label, byComposio }] — base seed list merged with live services
+  const [serviceList, setServiceList] = useState(BASE_SERVICES.map((name) => ({ name, label: name, byComposio: false })));
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState(null);
+
+  // Fetch live services (incl. Composio virtual services) when the modal opens
+  useEffect(() => {
+    if (!isOpen || !token) return;
+    fetch('/api/v1/oauth/status', { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((j) => {
+        const merged = new Map(BASE_SERVICES.map((name) => [name, { name, label: name, byComposio: false }]));
+        (j.services || []).forEach((svc) => {
+          if (!svc?.name || svc.name === 'composio') return; // root connector is not scopeable
+          merged.set(svc.name, {
+            name: svc.name,
+            label: svc.label || svc.name,
+            byComposio: svc.source === 'composio' || svc.name.startsWith('composio__'),
+          });
+        });
+        setServiceList([...merged.values()]);
+      })
+      .catch(() => {}); // keep the base list on failure
+  }, [isOpen, token]);
 
   // Initialize services from currentToken's scopes on mount
   useEffect(() => {
@@ -44,8 +67,8 @@ function ServiceScopeSelector({ isOpen, currentToken, onClose, onSuccess, master
       const initialized = {};
 
       // Initialize all services as disabled
-      AVAILABLE_SERVICES.forEach((service) => {
-        initialized[service] = { enabled: false, level: 'read' };
+      serviceList.forEach((svc) => {
+        initialized[svc.name] = { enabled: false, level: 'read' };
       });
 
       // Parse existing scopes and populate
@@ -55,9 +78,9 @@ function ServiceScopeSelector({ isOpen, currentToken, onClose, onSuccess, master
           const match = scope.match(/^services:([^:]+):(.+)$/);
           if (match) {
             const [, serviceName, level] = match;
-            if (initialized[serviceName]) {
-              initialized[serviceName] = { enabled: true, level };
-            }
+            // Keep scopes for services not in the list (e.g. disconnected Composio
+            // toolkits) so saving doesn't silently drop them
+            initialized[serviceName] = { enabled: true, level };
           }
         });
       }
@@ -65,7 +88,7 @@ function ServiceScopeSelector({ isOpen, currentToken, onClose, onSuccess, master
       setServices(initialized);
       setError(null);
     }
-  }, [currentToken, isOpen]);
+  }, [currentToken, isOpen, serviceList]);
 
   // Build the final scope string from current service selections
   const buildScopeString = () => {
@@ -229,7 +252,14 @@ function ServiceScopeSelector({ isOpen, currentToken, onClose, onSuccess, master
             </label>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {AVAILABLE_SERVICES.map((serviceName) => {
+              {[
+                ...serviceList,
+                // Services referenced by existing scopes but missing from the live
+                // list (e.g. disconnected Composio toolkits) still need a card
+                ...Object.keys(services)
+                  .filter((name) => !serviceList.some((svc) => svc.name === name))
+                  .map((name) => ({ name, label: name })),
+              ].map(({ name: serviceName, label }) => {
                 const config = services[serviceName];
                 if (!config) return null;
 
@@ -251,7 +281,9 @@ function ServiceScopeSelector({ isOpen, currentToken, onClose, onSuccess, master
                         disabled={isPublished}
                         className="h-4 w-4 text-blue-600 bg-slate-800 border-slate-600 rounded disabled:opacity-50"
                       />
-                      <span className="font-medium text-white capitalize">{serviceName}</span>
+                      <span className="font-medium text-white capitalize">
+                        {label}
+                      </span>
                     </label>
 
                     {/* Scope level selector (shown when enabled) */}

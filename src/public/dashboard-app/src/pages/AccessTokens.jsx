@@ -162,6 +162,18 @@ function AccessTokens() {
   const [selectedServiceNames, setSelectedServiceNames] = useState(new Set());
   const [serviceSelectionMode, setServiceSelectionMode] = useState('all');
 
+  // Resource sub-scopes: narrow a service to specific boards/channels/repos.
+  // picks:   { serviceName: { kind: Set(ids) } }
+  // options: { serviceName: { loading, error, kinds: [{kind,label}], resources: {kind: {items|error}} } }
+  const [serviceResourcePicks, setServiceResourcePicks] = useState({});
+  const [serviceResourceOptions, setServiceResourceOptions] = useState({});
+  const [expandedResourceSvc, setExpandedResourceSvc] = useState(null);
+  const [resourceCapabilities, setResourceCapabilities] = useState({}); // { svc: [{kind,label,hasLister}] }
+  const [manualResourceInput, setManualResourceInput] = useState({});   // { `${svc}:${kind}`: string }
+
+  // Usage limits (per-agent quotas)
+  const [limitsForm, setLimitsForm] = useState({ enabled: false, period: 'month', maxCalls: '', maxTokens: '', perService: {} });
+
   // Memory: boolean
   const [memoryAccess, setMemoryAccess] = useState(false);
   const [ticketAccess, setTicketAccess] = useState('none'); // 'none' | 'read' | 'write'
@@ -239,10 +251,17 @@ function AccessTokens() {
       fetch('/api/v1/oauth/status', { headers: authHdr })
         .then((r) => r.json())
         .then((j) => {
-          const connected = (j.services || []).filter((s) => s.status === 'connected');
+          const connected = (j.services || []).filter((s) => s.status === 'connected' && s.name !== 'composio');
           setConnectedServices(connected);
         })
         .catch(() => {}).finally(() => setLoading('services', false));
+    }
+    // Which services support resource sub-scopes (boards/channels/repos pickers)
+    if (Object.keys(resourceCapabilities).length === 0) {
+      fetch('/api/v1/services/resource-capabilities', { headers: authHdr })
+        .then((r) => r.json())
+        .then((j) => setResourceCapabilities(j.data || {}))
+        .catch(() => {});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showCreateForm, masterToken]);
@@ -259,6 +278,15 @@ function AccessTokens() {
       document.body.appendChild(ta); ta.focus(); ta.select();
       const ok = document.execCommand('copy'); document.body.removeChild(ta); return ok;
     } catch { return false; }
+  };
+
+  // Display name for the connected-services picker: prefer the server-provided
+  // label; otherwise strip the composio__ prefix and title-case the raw name.
+  // The underlying scope value keeps the full name (services:composio__gmail:read).
+  const serviceDisplayName = (svc) => {
+    if (svc?.label) return svc.label;
+    const raw = String(svc?.name || '').replace(/^composio__/, '').replace(/[_-]+/g, ' ');
+    return raw.replace(/\b\w/g, (c) => c.toUpperCase());
   };
 
   const maskToken = (t) => {
@@ -320,6 +348,11 @@ function AccessTokens() {
       if (serviceAccess === 'write') scopes.push('services:write');
       if (serviceSelectionMode === 'selected' && selectedServiceNames.size > 0) {
         allowedResources.services = [...selectedServiceNames];
+        // Per-service scopes (services:{name}:{level}) are standalone grants the
+        // backend enforces on execute/proxy; emitted alongside the global scope
+        // + allowedResources for backwards compatibility.
+        const level = serviceAccess === 'write' ? 'write' : 'read';
+        selectedServiceNames.forEach((name) => scopes.push(`services:${name}:${level}`));
       }
     }
 
@@ -328,8 +361,76 @@ function AccessTokens() {
     if (ticketAccess === 'read') scopes.push('tickets:read');
     if (ticketAccess === 'write') { scopes.push('tickets:read'); scopes.push('tickets:write'); }
 
+    // Resource sub-scopes: narrow services to specific boards/channels/repos.
+    if (serviceAccess !== 'none') {
+      const serviceResources = {};
+      Object.entries(serviceResourcePicks).forEach(([svc, kinds]) => {
+        if (serviceSelectionMode === 'selected' && !selectedServiceNames.has(svc)) return;
+        const entry = {};
+        Object.entries(kinds).forEach(([kind, ids]) => { if (ids && ids.size > 0) entry[kind] = [...ids]; });
+        if (Object.keys(entry).length > 0) serviceResources[svc] = entry;
+      });
+      if (Object.keys(serviceResources).length > 0) allowedResources.service_resources = serviceResources;
+    }
+
     return { scopes: [...new Set(scopes)], allowedResources: Object.keys(allowedResources).length > 0 ? allowedResources : null };
   };
+
+  // ── Usage limits + resource sub-scope helpers ─────────────────────────────────
+  const buildLimits = () => {
+    if (!limitsForm.enabled) return undefined;
+    const limits = { period: limitsForm.period };
+    if (limitsForm.maxCalls) limits.maxCalls = parseInt(limitsForm.maxCalls, 10);
+    if (limitsForm.maxTokens) limits.maxTokens = parseInt(limitsForm.maxTokens, 10);
+    const perService = {};
+    Object.entries(limitsForm.perService).forEach(([svc, cfg]) => {
+      const entry = {};
+      if (cfg?.maxCalls) entry.maxCalls = parseInt(cfg.maxCalls, 10);
+      if (cfg?.maxTokens) entry.maxTokens = parseInt(cfg.maxTokens, 10);
+      if (Object.keys(entry).length > 0) perService[svc] = entry;
+    });
+    if (Object.keys(perService).length > 0) limits.perService = perService;
+    return (limits.maxCalls || limits.maxTokens || limits.perService) ? limits : undefined;
+  };
+
+  const setPerServiceLimit = (svc, field, value) => {
+    setLimitsForm((p) => ({
+      ...p,
+      perService: { ...p.perService, [svc]: { ...(p.perService[svc] || {}), [field]: value } },
+    }));
+  };
+
+  const fetchServiceResources = async (svcName) => {
+    if (serviceResourceOptions[svcName]?.kinds || serviceResourceOptions[svcName]?.loading) return;
+    setServiceResourceOptions((p) => ({ ...p, [svcName]: { loading: true } }));
+    try {
+      const res = await fetch(`/api/v1/services/${svcName}/resources`, {
+        credentials: 'include',
+        headers: masterToken ? { Authorization: `Bearer ${masterToken}` } : {},
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'Failed to load resources');
+      setServiceResourceOptions((p) => ({
+        ...p,
+        [svcName]: { loading: false, kinds: d.data?.kinds || [], resources: d.data?.resources || {} },
+      }));
+    } catch (e) {
+      setServiceResourceOptions((p) => ({ ...p, [svcName]: { loading: false, error: e.message, kinds: [], resources: {} } }));
+    }
+  };
+
+  const toggleResourcePick = (svc, kind, id) => {
+    setServiceResourcePicks((prev) => {
+      const next = { ...prev, [svc]: { ...(prev[svc] || {}) } };
+      const set = new Set(next[svc][kind] || []);
+      if (set.has(id)) set.delete(id); else set.add(id);
+      next[svc][kind] = set;
+      return next;
+    });
+  };
+
+  const countResourcePicks = (svc) =>
+    Object.values(serviceResourcePicks[svc] || {}).reduce((n, set) => n + (set?.size || 0), 0);
 
   const hasServiceScopeInState = () => serviceAccess !== 'none';
   const hasServiceScope = (scopes) => (scopes || []).some((s) => s === 'services:read' || s === 'services:write' || s.startsWith('services:'));
@@ -479,6 +580,8 @@ function AccessTokens() {
     setServiceAccess('none'); setSelectedServiceNames(new Set()); setServiceSelectionMode('all');
     setMemoryAccess(false);
     setTicketAccess('none');
+    setServiceResourcePicks({}); setExpandedResourceSvc(null);
+    setLimitsForm({ enabled: false, period: 'month', maxCalls: '', maxTokens: '', perService: {} });
   };
 
   const handleCreateSubmit = async (e) => {
@@ -508,6 +611,7 @@ function AccessTokens() {
       scopeBundle,
       allowedPersonas: allowedPersonas.length > 0 ? allowedPersonas : undefined,
       allowedResources,
+      limits: buildLimits(),
     };
 
     const created = await createToken(masterToken, payload);
@@ -547,8 +651,8 @@ function AccessTokens() {
       {/* Header */}
       <div>
         <div className="micro mb-2">TOKENS · ACCESS</div>
-        <h1 className="font-serif text-[20px] sm:text-[28px] font-medium tracking-tight ink">Access Tokens.</h1>
-        <p className="mt-1 text-sm ink-3">Manage your master token, guest tokens, and marketplace-installed tokens</p>
+        <h1 className="font-serif text-[20px] sm:text-[28px] font-medium tracking-tight ink">Scoped keys, revocable anytime.</h1>
+        <p className="mt-1 text-sm ink-3">Manage your master token, scoped tokens, and marketplace-installed tokens</p>
       </div>
 
       {/* Alerts */}
@@ -570,7 +674,7 @@ function AccessTokens() {
       )}
 
       {/* ── Master Token ── */}
-      <section className="space-y-3">
+      <section className="space-y-3" data-tour="tok-master">
         <div>
           <h2 className="text-base font-semibold ink">Master Token</h2>
           <p className="text-xs ink-3 mt-0.5">Full access · Never expires · Keep it secret</p>
@@ -647,10 +751,11 @@ function AccessTokens() {
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-base font-semibold ink">Guest Tokens</h2>
+            <h2 className="text-base font-semibold ink">Scoped Tokens</h2>
             <p className="text-xs ink-3 mt-0.5">Fine-grained scoped tokens for agents or external parties</p>
           </div>
           <button
+            data-tour="tok-new"
             onClick={() => { resetForm(); setNewlyCreated(null); setShowCreateForm(true); }}
             className="ui-button-primary inline-flex items-center gap-2 flex-shrink-0"
           >
@@ -683,7 +788,7 @@ function AccessTokens() {
           <div className="flex justify-center py-10"><div className="w-5 h-5 border-2 rounded-full animate-spin" style={{ borderColor: 'var(--line)', borderTopColor: 'var(--accent)' }}/></div>
         ) : guestTokens.length === 0 ? (
           <div className="rounded hairline border-dashed p-10 text-center">
-            <p className="text-sm ink-3">No guest tokens yet. Create one to grant scoped access.</p>
+            <p className="text-sm ink-3">No scoped tokens yet. Create one to grant scoped access.</p>
           </div>
         ) : (
           <div className="rounded hairline overflow-x-auto">
@@ -891,7 +996,7 @@ function AccessTokens() {
             {/* Modal header */}
             <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid var(--line)' }}>
               <div>
-                <h3 className="text-base font-semibold ink">Create Guest Token</h3>
+                <h3 className="text-base font-semibold ink">Create Scoped Token</h3>
                 <p className="text-xs ink-4 mt-0.5">
                   {totalScopesSelected() > 0 ? `${totalScopesSelected()} permission categor${totalScopesSelected() !== 1 ? 'ies' : 'y'} selected` : 'Choose permissions for this token'}
                 </p>
@@ -1257,13 +1362,111 @@ function AccessTokens() {
                               {resourcesLoading.services ? <LoadingSkeleton lines={3}/> : connectedServices.length === 0 ? (
                                 <p className="text-xs ink-3 px-2">No connected services found. Connect services in the Connectors page.</p>
                               ) : connectedServices.map((svc) => (
-                                <ResourceItem
-                                  key={svc.name}
-                                  label={svc.name.charAt(0).toUpperCase() + svc.name.slice(1)}
-                                  sublabel={svc.description}
-                                  checked={selectedServiceNames.has(svc.name)}
-                                  onChange={() => toggleSet(selectedServiceNames, setSelectedServiceNames, svc.name)}
-                                />
+                                <div key={svc.name}>
+                                  <ResourceItem
+                                    label={serviceDisplayName(svc)}
+                                    checked={selectedServiceNames.has(svc.name)}
+                                    onChange={() => toggleSet(selectedServiceNames, setSelectedServiceNames, svc.name)}
+                                  />
+                                  {selectedServiceNames.has(svc.name) && resourceCapabilities[svc.name] && (
+                                    <div className="ml-7 mt-1 mb-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const opening = expandedResourceSvc !== svc.name;
+                                          setExpandedResourceSvc(opening ? svc.name : null);
+                                          if (opening) fetchServiceResources(svc.name);
+                                        }}
+                                        className="text-[11px] underline ink-3 hover:ink min-h-[44px] sm:min-h-0"
+                                      >
+                                        {countResourcePicks(svc.name) > 0
+                                          ? `Restricted to ${countResourcePicks(svc.name)} resource${countResourcePicks(svc.name) !== 1 ? 's' : ''} — edit`
+                                          : 'Restrict to specific resources (boards, channels, repos…)'}
+                                      </button>
+                                      {expandedResourceSvc === svc.name && (
+                                        <div className="mt-2 p-3 rounded hairline space-y-3" style={{ background: 'var(--bg-hover)' }}>
+                                          {serviceResourceOptions[svc.name]?.loading && <LoadingSkeleton lines={3} />}
+                                          {serviceResourceOptions[svc.name]?.error && (
+                                            <p className="text-xs" style={{ color: 'var(--red)' }}>{serviceResourceOptions[svc.name].error}</p>
+                                          )}
+                                          {(serviceResourceOptions[svc.name]?.kinds?.length
+                                            ? serviceResourceOptions[svc.name].kinds
+                                            : (resourceCapabilities[svc.name] || [])
+                                          ).map(({ kind, label }) => {
+                                            const bucket = serviceResourceOptions[svc.name]?.resources?.[kind];
+                                            const picked = serviceResourcePicks[svc.name]?.[kind] || new Set();
+                                            const listedIds = new Set((bucket?.items || []).map((i) => i.id));
+                                            const manualKey = `${svc.name}:${kind}`;
+                                            const manualIds = [...picked].filter((id) => !listedIds.has(id));
+                                            return (
+                                              <div key={kind}>
+                                                <p className="micro mb-1">{label}</p>
+                                                {bucket?.error && <p className="text-xs ink-4">{bucket.error}</p>}
+                                                {bucket?.requiresParent && <p className="text-xs ink-4">Listing needs a parent {bucket.requiresParent} — add IDs manually below, or restrict at the parent level.</p>}
+                                                {(bucket?.items || []).length === 0 && !bucket?.error && !bucket?.requiresParent && (
+                                                  <p className="text-xs ink-4">Nothing listed for this account — add IDs manually below.</p>
+                                                )}
+                                                <div className="max-h-44 overflow-y-auto space-y-0.5">
+                                                  {(bucket?.items || []).map((item) => (
+                                                    <ResourceItem
+                                                      key={item.id}
+                                                      label={item.name}
+                                                      sublabel={item.id !== item.name ? item.id : undefined}
+                                                      checked={picked.has(item.id)}
+                                                      onChange={() => toggleResourcePick(svc.name, kind, item.id)}
+                                                    />
+                                                  ))}
+                                                </div>
+                                                {manualIds.length > 0 && (
+                                                  <div className="flex flex-wrap gap-1 mt-1">
+                                                    {manualIds.map((id) => (
+                                                      <button
+                                                        key={id} type="button"
+                                                        onClick={() => toggleResourcePick(svc.name, kind, id)}
+                                                        title="Remove"
+                                                        className="px-2 py-0.5 rounded text-[11px] hairline ink-3 hover:ink"
+                                                        style={{ background: 'var(--accent-bg)' }}
+                                                      >
+                                                        {id} ×
+                                                      </button>
+                                                    ))}
+                                                  </div>
+                                                )}
+                                                <div className="flex gap-1.5 mt-1.5">
+                                                  <input
+                                                    type="text"
+                                                    placeholder={`Add ${label.toLowerCase()} ID manually…`}
+                                                    value={manualResourceInput[manualKey] || ''}
+                                                    onChange={(e) => setManualResourceInput((p) => ({ ...p, [manualKey]: e.target.value }))}
+                                                    onKeyDown={(e) => {
+                                                      if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        const v = (manualResourceInput[manualKey] || '').trim();
+                                                        if (v) { toggleResourcePick(svc.name, kind, v); setManualResourceInput((p) => ({ ...p, [manualKey]: '' })); }
+                                                      }
+                                                    }}
+                                                    className="ui-input flex-1 text-xs"
+                                                  />
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      const v = (manualResourceInput[manualKey] || '').trim();
+                                                      if (v) { toggleResourcePick(svc.name, kind, v); setManualResourceInput((p) => ({ ...p, [manualKey]: '' })); }
+                                                    }}
+                                                    className="ui-button text-xs px-3"
+                                                  >
+                                                    Add
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            );
+                                          })}
+                                          <p className="text-[11px] ink-4">Leave everything unchecked to allow all {serviceDisplayName(svc)} resources. Checking any item restricts the token to only those.</p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
                               ))}
                             </div>
                           )}
@@ -1364,6 +1567,85 @@ function AccessTokens() {
                     <p className="text-xs ink-4">Users must be approved before this token grants access</p>
                   </div>
                 </label>
+
+                {/* Usage limits */}
+                <div className="rounded hairline" style={limitsForm.enabled ? { borderColor: 'var(--accent)' } : {}}>
+                  <label className="flex items-start gap-3 p-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={limitsForm.enabled}
+                      onChange={(e) => setLimitsForm((p) => ({ ...p, enabled: e.target.checked }))}
+                      className="mt-0.5 h-4 w-4 rounded"
+                      style={{ accentColor: 'var(--accent)' }}
+                    />
+                    <div>
+                      <p className="text-sm font-medium ink">Usage Limits</p>
+                      <p className="text-xs ink-4">Cap how many API calls and context tokens this agent can consume</p>
+                    </div>
+                  </label>
+                  {limitsForm.enabled && (
+                    <div className="px-3 pb-3 space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <div>
+                          <label className="block text-xs ink-3 mb-1">Window</label>
+                          <select
+                            value={limitsForm.period}
+                            onChange={(e) => setLimitsForm((p) => ({ ...p, period: e.target.value }))}
+                            className="ui-input w-full"
+                          >
+                            <option value="day">Per day</option>
+                            <option value="month">Per month</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs ink-3 mb-1">Max API calls</label>
+                          <input
+                            type="number" min="1" placeholder="Unlimited"
+                            value={limitsForm.maxCalls}
+                            onChange={(e) => setLimitsForm((p) => ({ ...p, maxCalls: e.target.value }))}
+                            className="ui-input w-full"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs ink-3 mb-1">Max tokens</label>
+                          <input
+                            type="number" min="1" placeholder="Unlimited"
+                            value={limitsForm.maxTokens}
+                            onChange={(e) => setLimitsForm((p) => ({ ...p, maxTokens: e.target.value }))}
+                            className="ui-input w-full"
+                          />
+                        </div>
+                      </div>
+                      <p className="text-[11px] ink-4">Tokens ≈ context the agent pulls through service calls (request + response size, ~4 characters per token).</p>
+                      {serviceAccess !== 'none' && connectedServices.length > 0 && (
+                        <div>
+                          <p className="micro mb-1.5">Per-service limits (optional)</p>
+                          <div className="space-y-1.5 max-h-56 overflow-y-auto">
+                            {connectedServices
+                              .filter((svc) => serviceSelectionMode !== 'selected' || selectedServiceNames.has(svc.name))
+                              .map((svc) => (
+                                <div key={svc.name} className="grid grid-cols-[1fr_auto_auto] gap-2 items-center">
+                                  <span className="text-xs ink-3 truncate">{serviceDisplayName(svc)}</span>
+                                  <input
+                                    type="number" min="1" placeholder="calls"
+                                    value={limitsForm.perService[svc.name]?.maxCalls || ''}
+                                    onChange={(e) => setPerServiceLimit(svc.name, 'maxCalls', e.target.value)}
+                                    className="ui-input w-24 text-xs"
+                                  />
+                                  <input
+                                    type="number" min="1" placeholder="tokens"
+                                    value={limitsForm.perService[svc.name]?.maxTokens || ''}
+                                    onChange={(e) => setPerServiceLimit(svc.name, 'maxTokens', e.target.value)}
+                                    className="ui-input w-24 text-xs"
+                                  />
+                                </div>
+                              ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
 
                 {/* Publish on create */}
                 {!hasServiceScopeInState() ? (

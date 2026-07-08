@@ -19,7 +19,7 @@ class DiscordAdapter {
       response_type: 'code',
       redirect_uri: this.redirectUri,
       integration_type: '0',
-      scope: 'identify email guilds guilds.join bot applications.commands.permissions.update',
+      scope: 'identify email guilds',
       state: state
     };
     return `${DISCORD_AUTH_URL}?${querystring.stringify(params)}`;
@@ -59,7 +59,7 @@ class DiscordAdapter {
                 refreshToken: result.refresh_token || null,
                 expiresIn: result.expires_in,
                 tokenType: result.token_type,
-                scope: result.scope || 'identify email guilds guilds.join bot applications.commands.permissions.update'
+                scope: result.scope || 'identify email guilds'
               });
             }
           } catch (e) {

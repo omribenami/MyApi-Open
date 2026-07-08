@@ -438,7 +438,7 @@ function Skills() {
           <h1 className="font-serif text-[22px] sm:text-[34px] leading-[1.05] tracking-tight ink font-medium">Capability modules agents can invoke.</h1>
           <p className="mt-2 text-[15px] ink-2 max-w-[60ch]">Composable, reusable actions. Each skill wraps one or more service calls behind a natural-language intent.</p>
         </div>
-        <div className="flex items-center gap-2 pt-1">
+        <div className="flex items-center gap-2 pt-1" data-tour="skills-new">
           <button className="btn btn-primary" onClick={openCreateModal}>+ Create skill</button>
         </div>
       </div>
@@ -485,7 +485,7 @@ function Skills() {
           <p className="ink-3 text-[14px]">No skills match your search.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" data-tour="skills-grid">
           {filteredSkills.map((skill) => {
             const serviceId = skill.service || skill.category || 'skill';
             const color = glyphColor(serviceId);

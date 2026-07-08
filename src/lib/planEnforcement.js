@@ -4,16 +4,32 @@
  */
 
 const { getUserById, getWorkspaces, getBillingSubscriptionByWorkspace } = require('../database');
-const { PLAN_LIMITS: BILLING_PLAN_LIMITS, resolveWorkspaceCurrentPlan } = require('./billing');
+
+// Billing is a closed-source module (absent in MyApi Open). Fall back to the
+// local PLAN_LIMITS map for plan-id validity checks and to 'free' when a
+// workspace subscription can't be resolved.
+let BILLING_PLAN_LIMITS = null;
+let resolveWorkspaceCurrentPlan = null;
+try {
+  ({ PLAN_LIMITS: BILLING_PLAN_LIMITS, resolveWorkspaceCurrentPlan } = require('./billing'));
+} catch (err) {
+  if (err.code !== 'MODULE_NOT_FOUND') throw err;
+}
 
 const PLAN_ENFORCEMENT_ENABLED = process.env.NODE_ENV === 'test'
   ? false
   : process.env.ENFORCE_PLAN_LIMITS !== 'false';
 
+// Personal (id 'free'): 5 services, 1k calls. Pro $9: 10k calls + $0.25/1k overage.
+// Heavy (id 'enterprise'): unlimited calls. Beta unchanged.
 const PLAN_LIMITS = {
-  free:       { personas: 2,  serviceConnections: 3,        knowledgeBytes: 10 * 1024 * 1024,  vaultTokens: 5,        skillsPerPersona: 4,        monthlyApiCalls: 1000,     teamMembers: 2        },
-  pro:        { personas: 5,  serviceConnections: Infinity, knowledgeBytes: 50 * 1024 * 1024,  vaultTokens: Infinity, skillsPerPersona: Infinity, monthlyApiCalls: 100000,   teamMembers: 10       },
-  enterprise: { personas: 20, serviceConnections: Infinity, knowledgeBytes: 200 * 1024 * 1024, vaultTokens: Infinity, skillsPerPersona: Infinity, monthlyApiCalls: Infinity, teamMembers: Infinity },
+  beta:       { personas: Infinity, serviceConnections: Infinity, knowledgeBytes: Infinity,              vaultTokens: Infinity, skillsPerPersona: Infinity, monthlyApiCalls: Infinity, teamMembers: Infinity },
+  free:       { personas: 2,        serviceConnections: 5,        knowledgeBytes: 10 * 1024 * 1024,      vaultTokens: 5,        skillsPerPersona: 4,        monthlyApiCalls: 1000,     teamMembers: 2        },
+  pro:        { personas: 10,       serviceConnections: Infinity, knowledgeBytes: 50 * 1024 * 1024,      vaultTokens: Infinity, skillsPerPersona: Infinity, monthlyApiCalls: 10000,    teamMembers: 10       },
+  enterprise: { personas: 20,       serviceConnections: Infinity, knowledgeBytes: 200 * 1024 * 1024,     vaultTokens: Infinity, skillsPerPersona: Infinity, monthlyApiCalls: Infinity, teamMembers: Infinity },
+  // B2B org plans (per member; API calls are pooled org-wide in the quota gate)
+  business:       { personas: 20, serviceConnections: Infinity, knowledgeBytes: 200 * 1024 * 1024, vaultTokens: Infinity, skillsPerPersona: Infinity, monthlyApiCalls: 50000,    teamMembers: Infinity },
+  enterprise_org: { personas: 50, serviceConnections: Infinity, knowledgeBytes: 1024 * 1024 * 1024, vaultTokens: Infinity, skillsPerPersona: Infinity, monthlyApiCalls: Infinity, teamMembers: Infinity },
 };
 
 function getRequestWorkspaceId(req) {
@@ -32,19 +48,40 @@ function getRequestWorkspaceId(req) {
   return null;
 }
 
+/**
+ * Single choke point for org-plan supersession: members of an active org get
+ * the org's plan, not their personal one. Returns null for non-org users.
+ */
+function resolveOrgPlan(userId) {
+  if (!userId || userId === 'owner') return null;
+  try {
+    const { getUserOrg } = require('../database');
+    const org = getUserOrg(String(userId));
+    if (org && org.status === 'active' && (BILLING_PLAN_LIMITS || PLAN_LIMITS)[String(org.plan).toLowerCase()]) {
+      return { plan: String(org.plan).toLowerCase(), org };
+    }
+  } catch { /* fall through to personal plan */ }
+  return null;
+}
+
 function resolveRequesterPlan(req) {
   try {
+    // Org plan supersedes personal plans for org members
+    const orgPlan = resolveOrgPlan(req?.user?.id || req?.tokenMeta?.ownerId);
+    if (orgPlan) return orgPlan.plan;
+
+    const knownPlans = BILLING_PLAN_LIMITS || PLAN_LIMITS;
     if (req?.user?.id) {
       const user = getUserById(req.user.id);
-      if (user?.plan && BILLING_PLAN_LIMITS[String(user.plan).toLowerCase()]) return String(user.plan).toLowerCase();
+      if (user?.plan && knownPlans[String(user.plan).toLowerCase()]) return String(user.plan).toLowerCase();
     }
     const ownerId = req?.tokenMeta?.ownerId;
     if (ownerId && ownerId !== 'owner') {
       const owner = getUserById(ownerId);
-      if (owner?.plan && BILLING_PLAN_LIMITS[String(owner.plan).toLowerCase()]) return String(owner.plan).toLowerCase();
+      if (owner?.plan && knownPlans[String(owner.plan).toLowerCase()]) return String(owner.plan).toLowerCase();
     }
     const workspaceId = getRequestWorkspaceId(req);
-    if (workspaceId) {
+    if (workspaceId && resolveWorkspaceCurrentPlan) {
       const sub = getBillingSubscriptionByWorkspace(workspaceId);
       return resolveWorkspaceCurrentPlan(sub).id;
     }
@@ -85,4 +122,4 @@ function enforcePlanLimit(req, key, currentValue, increment = 0) {
   return null;
 }
 
-module.exports = { PLAN_LIMITS, resolveRequesterPlan, planLimitError, enforcePlanLimit };
+module.exports = { PLAN_LIMITS, resolveRequesterPlan, resolveOrgPlan, planLimitError, enforcePlanLimit };

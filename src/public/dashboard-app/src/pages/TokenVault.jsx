@@ -1,22 +1,32 @@
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '../stores/authStore';
 
+const EMPTY_TOKEN = { name: '', token: '', websiteUrl: '', discoveredApiUrl: '', discoveredAuthScheme: '' };
+const EMPTY_CRED = { label: '', username: '', password: '', url: '', notes: '', totpSecret: '', service: '' };
+
 function TokenVault() {
   const masterToken = useAuthStore((state) => state.masterToken);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const currentWorkspace = useAuthStore((state) => state.currentWorkspace);
+
   const [tokens, setTokens] = useState([]);
+  const [credentials, setCredentials] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [formData, setFormData] = useState({ name: '', token: '', websiteUrl: '', discoveredApiUrl: '', discoveredAuthScheme: '' });
+
+  // Modal state
+  // modalMode: null | 'token' | 'credential'
+  const [modalMode, setModalMode] = useState(null);
+  const [tokenForm, setTokenForm] = useState(EMPTY_TOKEN);
+  const [credForm, setCredForm] = useState(EMPTY_CRED);
   const [discovering, setDiscovering] = useState(false);
-  // revealedTokens maps id -> decrypted token string (or null if not revealed)
-  const [revealedTokens, setRevealedTokens] = useState({});
-  const [revealingId, setRevealingId] = useState(null);
-  const [editingToken, setEditingToken] = useState(null);
-  const [deleteTarget, setDeleteTarget] = useState(null);
-  const [copiedId, setCopiedId] = useState(null);
+  const [editing, setEditing] = useState(null); // { kind: 'token'|'credential', id }
+
+  // Reveal/copy state — keyed by `${kind}:${id}`
+  const [revealed, setRevealed] = useState({}); // for tokens: string; for credentials: { password, notes, totpSecret }
+  const [revealingKey, setRevealingKey] = useState(null);
+  const [copiedKey, setCopiedKey] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null); // { kind, id, label }
 
   const services = [
     { id: 'openai', name: 'OpenAI' },
@@ -29,57 +39,61 @@ function TokenVault() {
     { id: 'other', name: 'Other' },
   ];
 
+  const authHeaders = () => {
+    const h = { 'Content-Type': 'application/json' };
+    if (masterToken) h['Authorization'] = `Bearer ${masterToken}`;
+    return h;
+  };
+
   useEffect(() => {
     if (isAuthenticated) {
-      fetchTokens();
+      fetchAll();
     }
   }, [isAuthenticated, masterToken, currentWorkspace?.id]);
 
-  const fetchTokens = async () => {
+  const fetchAll = async () => {
     setIsLoading(true);
     try {
-      const headers = { 'Content-Type': 'application/json' };
-      if (masterToken) headers['Authorization'] = `Bearer ${masterToken}`;
-      const response = await fetch('/api/v1/vault/tokens', {
-        headers,
-        credentials: 'include',
-      });
-      if (response.ok) {
-        const data = await response.json();
+      const [tokRes, credRes] = await Promise.all([
+        fetch('/api/v1/vault/tokens', { headers: authHeaders(), credentials: 'include' }),
+        fetch('/api/v1/vault/credentials', { headers: authHeaders(), credentials: 'include' }),
+      ]);
+      if (tokRes.ok) {
+        const data = await tokRes.json();
         setTokens(data.tokens || data.data || []);
-      } else {
-        console.error('Failed to fetch vault tokens:', response.status);
+      }
+      if (credRes.ok) {
+        const data = await credRes.json();
+        setCredentials(data.credentials || data.data || []);
       }
     } catch (err) {
-      console.error('Error fetching vault tokens:', err);
+      console.error('Error loading vault:', err);
     } finally {
       setIsLoading(false);
     }
   };
 
+  // ── Tokens ────────────────────────────────────────────────────────────────
+
   const handleDiscoverApi = async () => {
-    if (!formData.websiteUrl) {
+    if (!tokenForm.websiteUrl) {
       setError('Website URL is required before discovery');
       return;
     }
-
     setDiscovering(true);
     setError('');
     try {
       const response = await fetch('/api/v1/vault/discover-api', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${masterToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ websiteUrl: formData.websiteUrl }),
+        headers: authHeaders(),
+        body: JSON.stringify({ websiteUrl: tokenForm.websiteUrl }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         setError(payload.error || 'Failed to discover API URL');
         return;
       }
-      setFormData((prev) => ({
+      setTokenForm((prev) => ({
         ...prev,
         discoveredApiUrl: payload?.data?.apiBaseUrl || '',
         discoveredAuthScheme: payload?.data?.authScheme || 'unknown',
@@ -92,88 +106,204 @@ function TokenVault() {
   };
 
   const handleSaveToken = async () => {
-    if (!formData.name || !formData.token || !formData.websiteUrl) {
+    if (!tokenForm.name || !tokenForm.token || !tokenForm.websiteUrl) {
       setError('Name, URL, and token are required');
       return;
     }
     setError('');
-
+    const isEdit = editing?.kind === 'token';
     try {
-      const response = await fetch(editingToken ? `/api/v1/vault/tokens/${editingToken.id}` : '/api/v1/vault/tokens', {
-        method: editingToken ? 'PUT' : 'POST',
-        headers: {
-          'Authorization': `Bearer ${masterToken}`,
-          'Content-Type': 'application/json',
-        },
+      const response = await fetch(isEdit ? `/api/v1/vault/tokens/${editing.id}` : '/api/v1/vault/tokens', {
+        method: isEdit ? 'PUT' : 'POST',
+        headers: authHeaders(),
         body: JSON.stringify({
-          name: formData.name,
-          token: formData.token,
-          websiteUrl: formData.websiteUrl,
-          discoveredApiUrl: formData.discoveredApiUrl,
-          discoveredAuthScheme: formData.discoveredAuthScheme,
-          discoverApi: !formData.discoveredApiUrl, // only discover if not provided
+          name: tokenForm.name,
+          token: tokenForm.token,
+          websiteUrl: tokenForm.websiteUrl,
+          discoveredApiUrl: tokenForm.discoveredApiUrl,
+          discoveredAuthScheme: tokenForm.discoveredAuthScheme,
+          discoverApi: !tokenForm.discoveredApiUrl,
         }),
       });
-
       if (response.ok) {
-        setFormData({ name: '', token: '', websiteUrl: '', discoveredApiUrl: '', discoveredAuthScheme: '' });
-        setShowAddModal(false);
-        setEditingToken(null);
-        await fetchTokens();
+        closeModal();
+        await fetchAll();
       } else {
         const errData = await response.json().catch(() => ({}));
-        setError(errData.error || `Failed to ${editingToken ? 'update' : 'add'} token`);
+        setError(errData.error || `Failed to ${isEdit ? 'update' : 'add'} token`);
       }
     } catch {
-      setError(`Error ${editingToken ? 'updating' : 'adding'} token`);
+      setError(`Error ${isEdit ? 'updating' : 'adding'} token`);
     }
   };
 
-  const handleDeleteToken = async (tokenId) => {
+  // ── Credentials ───────────────────────────────────────────────────────────
 
+  const handleSaveCredential = async () => {
+    if (!credForm.label.trim() || !credForm.username.trim() || !credForm.password) {
+      setError('Label, username, and password are required');
+      return;
+    }
+    setError('');
+    const isEdit = editing?.kind === 'credential';
+    const payload = {
+      label: credForm.label.trim(),
+      username: credForm.username.trim(),
+      password: credForm.password,
+      url: credForm.url.trim() || null,
+      notes: credForm.notes || null,
+      totpSecret: credForm.totpSecret || null,
+      service: credForm.service.trim() || null,
+    };
     try {
-      const response = await fetch(`/api/v1/vault/tokens/${tokenId}`, {
+      const response = await fetch(isEdit ? `/api/v1/vault/credentials/${editing.id}` : '/api/v1/vault/credentials', {
+        method: isEdit ? 'PUT' : 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify(payload),
+      });
+      if (response.ok) {
+        if (isEdit) {
+          setRevealed((prev) => {
+            const next = { ...prev };
+            delete next[`credential:${editing.id}`];
+            return next;
+          });
+        }
+        closeModal();
+        await fetchAll();
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        setError(errData.error || `Failed to ${isEdit ? 'update' : 'add'} credential`);
+      }
+    } catch {
+      setError(`Error ${isEdit ? 'updating' : 'adding'} credential`);
+    }
+  };
+
+  // ── Common actions ────────────────────────────────────────────────────────
+
+  const openAddToken = () => {
+    setEditing(null);
+    setTokenForm(EMPTY_TOKEN);
+    setError('');
+    setModalMode('token');
+  };
+
+  const openAddCredential = () => {
+    setEditing(null);
+    setCredForm(EMPTY_CRED);
+    setError('');
+    setModalMode('credential');
+  };
+
+  const openEditToken = (token) => {
+    setEditing({ kind: 'token', id: token.id });
+    setTokenForm({
+      name: token.name || token.label || '',
+      token: '',
+      websiteUrl: token.websiteUrl || '',
+      discoveredApiUrl: token.discoveredApiUrl || '',
+      discoveredAuthScheme: token.discoveredAuthScheme || '',
+    });
+    setError('');
+    setModalMode('token');
+  };
+
+  const openEditCredential = async (cred) => {
+    setError('');
+    try {
+      const response = await fetch(`/api/v1/vault/credentials/${cred.id}/reveal`, {
+        headers: authHeaders(),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        setError(body.error || 'Failed to load credential');
+        return;
+      }
+      const { data } = await response.json();
+      setEditing({ kind: 'credential', id: cred.id });
+      setCredForm({
+        label: data.label || '',
+        username: data.username || '',
+        password: data.password || '',
+        url: data.url || '',
+        notes: data.notes || '',
+        totpSecret: data.totpSecret || '',
+        service: data.service || '',
+      });
+      setModalMode('credential');
+    } catch (e) {
+      setError(e.message || 'Failed to load credential');
+    }
+  };
+
+  const closeModal = () => {
+    setModalMode(null);
+    setEditing(null);
+    setTokenForm(EMPTY_TOKEN);
+    setCredForm(EMPTY_CRED);
+    setError('');
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    const url = deleteTarget.kind === 'token'
+      ? `/api/v1/vault/tokens/${deleteTarget.id}`
+      : `/api/v1/vault/credentials/${deleteTarget.id}`;
+    try {
+      const response = await fetch(url, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${masterToken}` },
       });
-
       if (response.ok) {
-        setRevealedTokens((prev) => {
+        setRevealed((prev) => {
           const next = { ...prev };
-          delete next[tokenId];
+          delete next[`${deleteTarget.kind}:${deleteTarget.id}`];
           return next;
         });
-        await fetchTokens();
+        setDeleteTarget(null);
+        await fetchAll();
       }
     } catch (err) {
-      console.error('Error deleting vault token:', err);
+      console.error('Error deleting:', err);
     }
   };
 
-  const handleReveal = async (tokenId) => {
-    // Toggle off if already revealed
-    if (revealedTokens[tokenId] !== undefined) {
-      setRevealedTokens((prev) => {
+  const handleReveal = async (kind, id) => {
+    const key = `${kind}:${id}`;
+    if (revealed[key] !== undefined) {
+      setRevealed((prev) => {
         const next = { ...prev };
-        delete next[tokenId];
+        delete next[key];
         return next;
       });
       return;
     }
-
-    setRevealingId(tokenId);
+    setRevealingKey(key);
     try {
-      const response = await fetch(`/api/v1/vault/tokens/${tokenId}/reveal`, {
-        headers: { 'Authorization': `Bearer ${masterToken}` },
-      });
+      const url = kind === 'token'
+        ? `/api/v1/vault/tokens/${id}/reveal`
+        : `/api/v1/vault/credentials/${id}/reveal`;
+      const response = await fetch(url, { headers: { 'Authorization': `Bearer ${masterToken}` } });
       if (response.ok) {
-        const data = await response.json();
-        setRevealedTokens((prev) => ({ ...prev, [tokenId]: data.data.token }));
+        const { data } = await response.json();
+        if (kind === 'token') {
+          setRevealed((prev) => ({ ...prev, [key]: data.token }));
+        } else {
+          setRevealed((prev) => ({
+            ...prev,
+            [key]: {
+              password: data.password || '',
+              notes: data.notes || '',
+              totpSecret: data.totpSecret || '',
+            },
+          }));
+        }
       }
     } catch (err) {
-      console.error('Error revealing vault token:', err);
+      console.error('Error revealing:', err);
     } finally {
-      setRevealingId(null);
+      setRevealingKey(null);
     }
   };
 
@@ -185,7 +315,6 @@ function TokenVault() {
         return true;
       }
     } catch { /* ignored */ }
-
     try {
       const ta = document.createElement('textarea');
       ta.value = text;
@@ -203,39 +332,61 @@ function TokenVault() {
     }
   };
 
-  const handleCopyToken = async (tokenId) => {
+  const handleCopySecret = async (kind, id) => {
+    const key = `${kind}:${id}`;
     try {
-      let tokenValue = revealedTokens[tokenId];
-      if (!tokenValue) {
-        const response = await fetch(`/api/v1/vault/tokens/${tokenId}/reveal`, {
-          headers: { 'Authorization': `Bearer ${masterToken}` },
-        });
-        if (!response.ok) {
-          alert('Failed to retrieve token');
-          return;
+      let value = null;
+      if (kind === 'token') {
+        value = revealed[key];
+        if (!value) {
+          const response = await fetch(`/api/v1/vault/tokens/${id}/reveal`, {
+            headers: { 'Authorization': `Bearer ${masterToken}` },
+          });
+          if (!response.ok) { alert('Failed to retrieve token'); return; }
+          const data = await response.json();
+          value = data.data.token;
+          setRevealed((prev) => ({ ...prev, [key]: value }));
         }
-        const data = await response.json();
-        tokenValue = data.data.token;
-        setRevealedTokens((prev) => ({ ...prev, [tokenId]: tokenValue }));
+      } else {
+        const r = revealed[key];
+        if (r) {
+          value = r.password;
+        } else {
+          const response = await fetch(`/api/v1/vault/credentials/${id}/reveal`, {
+            headers: { 'Authorization': `Bearer ${masterToken}` },
+          });
+          if (!response.ok) { alert('Failed to retrieve credential'); return; }
+          const { data } = await response.json();
+          value = data.password;
+          setRevealed((prev) => ({
+            ...prev,
+            [key]: { password: data.password || '', notes: data.notes || '', totpSecret: data.totpSecret || '' },
+          }));
+        }
       }
-      await copyText(tokenValue);
-      setCopiedId(tokenId);
-      setTimeout(() => setCopiedId(null), 2000);
+      await copyText(value);
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(null), 2000);
     } catch {
       // silently ignore
     }
   };
 
-
   const getServiceIcon = (serviceId) => {
     const service = services.find(s => s.id === serviceId);
-    return service?.name?.charAt(0)?.toUpperCase() || 'K';
+    return service?.name?.charAt(0)?.toUpperCase() || (serviceId ? serviceId.charAt(0).toUpperCase() : 'K');
   };
 
   const getServiceName = (serviceId) => {
     const service = services.find(s => s.id === serviceId);
-    return service?.name || serviceId || 'Unknown';
+    return service?.name || serviceId || '—';
   };
+
+  // Unified list: tokens first, then credentials, each with a `kind` marker
+  const rows = [
+    ...tokens.map((t) => ({ kind: 'token', raw: t })),
+    ...credentials.map((c) => ({ kind: 'credential', raw: c })),
+  ];
 
   return (
     <div className="space-y-8">
@@ -243,18 +394,20 @@ function TokenVault() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <div className="micro mb-2">VAULT · CREDENTIALS</div>
-          <h1 className="font-serif text-[20px] sm:text-[28px] font-medium tracking-tight ink">External Token Vault.</h1>
-          <p className="mt-2 ink-3 text-sm">Securely store API keys and credentials for external services</p>
+          <h1 className="font-serif text-[20px] sm:text-[28px] font-medium tracking-tight ink">Secrets your agents never touch.</h1>
+          <p className="mt-2 ink-3 text-sm">Securely store API keys, usernames, and passwords for external services</p>
         </div>
-        <button
-          onClick={() => { setShowAddModal(true); setError(''); }}
-          className="ui-button self-start sm:self-auto"
-        >
-          + Add Token
-        </button>
+        <div className="flex flex-wrap gap-2 self-start sm:self-auto" data-tour="vault-actions">
+          <button onClick={openAddCredential} className="ui-button">
+            + Add Credential
+          </button>
+          <button onClick={openAddToken} className="ui-button-primary">
+            + Add Token
+          </button>
+        </div>
       </div>
 
-      {error && (
+      {error && !modalMode && !deleteTarget && (
         <div className="rounded p-3 text-sm" style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red)' }}>
           {error}
         </div>
@@ -264,63 +417,117 @@ function TokenVault() {
         <div className="flex justify-center items-center py-16">
           <div className="text-center">
             <div className="inline-block animate-spin rounded-full h-10 w-10 border-b-2 mb-4" style={{ borderColor: 'var(--accent)' }}></div>
-            <p className="ink-3">Loading tokens...</p>
+            <p className="ink-3">Loading vault...</p>
           </div>
         </div>
-      ) : tokens.length === 0 ? (
+      ) : rows.length === 0 ? (
         <div className="ui-card border-2 border-dashed p-10 text-center">
-          <h3 className="text-lg font-semibold ink mb-2">No external tokens stored yet</h3>
-          <p className="ink-3 mb-6">Add API keys for OpenAI, AWS, GitHub, Stripe, and more</p>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="ui-button px-6"
-          >
-            Add Your First Token
-          </button>
+          <h3 className="text-lg font-semibold ink mb-2">Vault is empty</h3>
+          <p className="ink-3 mb-6">Add an API token, or store a username/password credential</p>
+          <div className="flex flex-wrap justify-center gap-2">
+            <button onClick={openAddCredential} className="ui-button px-6">Add Credential</button>
+            <button onClick={openAddToken} className="ui-button-primary px-6">Add Token</button>
+          </div>
         </div>
       ) : (
-        <div className="rounded hairline overflow-x-auto">
+        <div className="rounded hairline overflow-x-auto" data-tour="vault-list">
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="bg-sunk" style={{ borderBottom: '1px solid var(--line)' }}>
                 <th className="px-4 py-2.5 text-left micro whitespace-nowrap">Name</th>
+                <th className="px-4 py-2.5 text-left micro whitespace-nowrap">Type</th>
                 <th className="px-4 py-2.5 text-left micro whitespace-nowrap hidden sm:table-cell">Service</th>
-                <th className="px-4 py-2.5 text-left micro whitespace-nowrap">Secret Key</th>
-                <th className="px-4 py-2.5 text-left micro whitespace-nowrap hidden lg:table-cell">API Endpoint</th>
+                <th className="px-4 py-2.5 text-left micro whitespace-nowrap">Secret</th>
+                <th className="px-4 py-2.5 text-left micro whitespace-nowrap hidden lg:table-cell">Endpoint / URL</th>
                 <th className="px-4 py-2.5 text-left micro whitespace-nowrap hidden md:table-cell">Added</th>
                 <th className="px-4 py-2.5 text-right micro whitespace-nowrap"></th>
               </tr>
             </thead>
             <tbody style={{ borderTop: 'none' }}>
-              {tokens.map((token) => {
-                const isRevealed = revealedTokens[token.id] !== undefined;
-                const displayValue = isRevealed
-                  ? revealedTokens[token.id]
-                  : (token.tokenPreview ? `${token.tokenPreview.slice(0, 8)}…` : '••••••••••••');
+              {rows.map(({ kind, raw }) => {
+                const key = `${kind}:${raw.id}`;
+                const isRevealed = revealed[key] !== undefined;
+
+                const label = raw.name || raw.label;
+                const service = raw.service;
+                const createdAt = raw.createdAt;
+
+                let secretDisplay;
+                let endpointDisplay;
+                if (kind === 'token') {
+                  secretDisplay = isRevealed
+                    ? revealed[key]
+                    : (raw.tokenPreview ? `${raw.tokenPreview.slice(0, 8)}…` : '••••••••••••');
+                  endpointDisplay = raw.discoveredApiUrl
+                    ? (
+                      <span className="text-xs truncate max-w-[200px] block" style={{ color: 'var(--green)' }} title={raw.discoveredApiUrl}>
+                        {raw.discoveredApiUrl.replace(/^https?:\/\//, '')}
+                        {raw.discoveredAuthScheme && raw.discoveredAuthScheme !== 'unknown' && (
+                          <span className="ml-1 ink-4">({raw.discoveredAuthScheme})</span>
+                        )}
+                      </span>
+                    )
+                    : <span className="text-xs ink-4">—</span>;
+                } else {
+                  const r = revealed[key];
+                  secretDisplay = (
+                    <span>
+                      <span className="ink-2">{raw.username}</span>
+                      <span className="ink-4"> · </span>
+                      <span>{r ? r.password : '••••••••'}</span>
+                    </span>
+                  );
+                  endpointDisplay = raw.url
+                    ? (
+                      <a
+                        href={raw.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs truncate max-w-[200px] block hover:underline"
+                        style={{ color: 'var(--accent)' }}
+                        title={raw.url}
+                      >
+                        {raw.url.replace(/^https?:\/\//, '')}
+                      </a>
+                    )
+                    : <span className="text-xs ink-4">—</span>;
+                }
+
                 return (
-                  <tr key={token.id} className="row row-cell group" style={{ borderTop: '1px solid var(--line)' }}>
+                  <tr key={key} className="row row-cell group" style={{ borderTop: '1px solid var(--line)' }}>
                     {/* Name */}
                     <td className="px-4 py-2.5 whitespace-nowrap">
-                      <span className="font-medium ink text-sm">{token.name || token.label}</span>
+                      <span className="font-medium ink text-sm">{label}</span>
+                    </td>
+                    {/* Type */}
+                    <td className="px-4 py-2.5 whitespace-nowrap">
+                      <span
+                        className="inline-block text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded hairline"
+                        style={kind === 'token'
+                          ? { background: 'var(--bg-raised)', color: 'var(--accent)' }
+                          : { background: 'var(--bg-raised)', color: 'var(--green)' }}
+                      >
+                        {kind === 'token' ? 'Token' : 'Login'}
+                      </span>
                     </td>
                     {/* Service */}
                     <td className="px-4 py-2.5 whitespace-nowrap hidden sm:table-cell">
                       <span className="inline-flex items-center gap-1.5 text-xs ink-2">
                         <span className="inline-flex h-5 w-5 items-center justify-center rounded bg-raised text-[10px] font-bold ink-2 flex-shrink-0">
-                          {getServiceIcon(token.service)}
+                          {getServiceIcon(service)}
                         </span>
-                        {getServiceName(token.service)}
+                        {getServiceName(service)}
                       </span>
                     </td>
-                    {/* Secret Key */}
+                    {/* Secret */}
                     <td className="px-4 py-2.5 whitespace-nowrap">
                       <div className="flex items-center gap-2">
-                        <code className="mono text-[11px] ink-3 bg-sunk px-2 py-0.5 rounded hairline max-w-[160px] truncate">
-                          {displayValue}
+                        <code className="mono text-[11px] ink-3 bg-sunk px-2 py-0.5 rounded hairline max-w-[200px] truncate">
+                          {secretDisplay}
                         </code>
                         <button
-                          onClick={() => handleReveal(token.id)}
-                          disabled={revealingId === token.id}
+                          onClick={() => handleReveal(kind, raw.id)}
+                          disabled={revealingKey === key}
                           title={isRevealed ? 'Hide' : 'Reveal'}
                           className="ink-4 hover:ink-2 transition-colors disabled:opacity-30"
                         >
@@ -333,54 +540,35 @@ function TokenVault() {
                         </button>
                       </div>
                     </td>
-                    {/* API Endpoint */}
+                    {/* Endpoint / URL */}
                     <td className="px-4 py-2.5 whitespace-nowrap hidden lg:table-cell">
-                      {token.discoveredApiUrl ? (
-                        <span className="text-xs truncate max-w-[200px] block" style={{ color: 'var(--green)' }} title={token.discoveredApiUrl}>
-                          {token.discoveredApiUrl.replace(/^https?:\/\//, '')}
-                          {token.discoveredAuthScheme && token.discoveredAuthScheme !== 'unknown' && (
-                            <span className="ml-1 ink-4">({token.discoveredAuthScheme})</span>
-                          )}
-                        </span>
-                      ) : (
-                        <span className="text-xs ink-4">—</span>
-                      )}
+                      {endpointDisplay}
                     </td>
                     {/* Added */}
                     <td className="px-4 py-2.5 whitespace-nowrap hidden md:table-cell">
                       <span className="text-xs ink-3">
-                        {token.createdAt ? new Date(token.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                        {createdAt ? new Date(createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
                       </span>
                     </td>
                     {/* Actions */}
                     <td className="px-4 py-2.5 whitespace-nowrap text-right">
                       <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
-                          onClick={() => handleCopyToken(token.id)}
-                          title={copiedId === token.id ? 'Copied!' : 'Copy key'}
-                          className={`p-1.5 rounded transition-colors ${copiedId === token.id ? 'accent' : 'ink-4 hover:ink'}`}
+                          onClick={() => handleCopySecret(kind, raw.id)}
+                          title={copiedKey === key ? 'Copied!' : (kind === 'token' ? 'Copy key' : 'Copy password')}
+                          className={`p-1.5 rounded transition-colors ${copiedKey === key ? 'accent' : 'ink-4 hover:ink'}`}
                         >
                           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
                         </button>
                         <button
-                          onClick={() => {
-                            setEditingToken(token);
-                            setFormData({
-                              name: token.name || token.label || '',
-                              token: '',
-                              websiteUrl: token.websiteUrl || '',
-                              discoveredApiUrl: token.discoveredApiUrl || '',
-                              discoveredAuthScheme: token.discoveredAuthScheme || '',
-                            });
-                            setShowAddModal(true);
-                          }}
+                          onClick={() => (kind === 'token' ? openEditToken(raw) : openEditCredential(raw))}
                           title="Edit"
                           className="p-1.5 rounded ink-4 hover:ink transition-colors"
                         >
                           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                         </button>
                         <button
-                          onClick={() => setDeleteTarget(token)}
+                          onClick={() => setDeleteTarget({ kind, id: raw.id, label })}
                           title="Delete"
                           className="p-1.5 rounded ink-4 transition-colors hover:text-[color:var(--red)]"
                         >
@@ -396,11 +584,13 @@ function TokenVault() {
         </div>
       )}
 
-      {/* Add Token Modal */}
-      {showAddModal && (
+      {/* Add/Edit Token Modal */}
+      {modalMode === 'token' && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-raised hairline rounded p-6 max-w-md w-full" style={{ background: 'var(--bg-raised)' }}>
-            <h2 className="text-xl font-bold ink mb-4">{editingToken ? 'Edit External Token' : 'Add External Token'}</h2>
+            <h2 className="text-xl font-bold ink mb-4">
+              {editing?.kind === 'token' ? 'Edit External Token' : 'Add External Token'}
+            </h2>
 
             {error && (
               <div className="mb-4 p-3 rounded text-sm" style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red)' }}>
@@ -413,20 +603,19 @@ function TokenVault() {
                 <label className="block text-sm ink-2 mb-2">Token Name</label>
                 <input
                   type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  value={tokenForm.name}
+                  onChange={(e) => setTokenForm({ ...tokenForm, name: e.target.value })}
                   placeholder="e.g., My OpenAI API Key"
                   className="ui-input w-full"
                 />
               </div>
 
-
               <div>
                 <label className="block text-sm ink-2 mb-2">Website URL</label>
                 <input
                   type="url"
-                  value={formData.websiteUrl}
-                  onChange={(e) => setFormData({ ...formData, websiteUrl: e.target.value })}
+                  value={tokenForm.websiteUrl}
+                  onChange={(e) => setTokenForm({ ...tokenForm, websiteUrl: e.target.value })}
                   placeholder="https://example.com"
                   className="ui-input w-full"
                 />
@@ -437,8 +626,8 @@ function TokenVault() {
                 <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                   <input
                     type="url"
-                    value={formData.discoveredApiUrl}
-                    onChange={(e) => setFormData({ ...formData, discoveredApiUrl: e.target.value })}
+                    value={tokenForm.discoveredApiUrl}
+                    onChange={(e) => setTokenForm({ ...tokenForm, discoveredApiUrl: e.target.value })}
                     placeholder="https://api.example.com"
                     className="ui-input flex-1 w-full"
                   />
@@ -447,7 +636,7 @@ function TokenVault() {
                     <button
                       type="button"
                       onClick={handleDiscoverApi}
-                      disabled={discovering || !formData.websiteUrl}
+                      disabled={discovering || !tokenForm.websiteUrl}
                       className="ui-button w-full sm:w-auto whitespace-nowrap disabled:opacity-60"
                       title="Scan Website URL for API endpoint"
                     >
@@ -455,16 +644,16 @@ function TokenVault() {
                     </button>
                   </div>
                 </div>
-                {formData.discoveredAuthScheme && formData.discoveredAuthScheme !== 'unknown' && (
-                  <p className="mt-2 text-xs" style={{ color: 'var(--green)' }}>Detected auth: {formData.discoveredAuthScheme}</p>
+                {tokenForm.discoveredAuthScheme && tokenForm.discoveredAuthScheme !== 'unknown' && (
+                  <p className="mt-2 text-xs" style={{ color: 'var(--green)' }}>Detected auth: {tokenForm.discoveredAuthScheme}</p>
                 )}
               </div>
 
               <div>
                 <label className="block text-sm ink-2 mb-2">Token / API Key</label>
                 <textarea
-                  value={formData.token}
-                  onChange={(e) => setFormData({ ...formData, token: e.target.value })}
+                  value={tokenForm.token}
+                  onChange={(e) => setTokenForm({ ...tokenForm, token: e.target.value })}
                   placeholder="Paste your API key here"
                   className="ui-input mono w-full"
                   rows={4}
@@ -473,22 +662,114 @@ function TokenVault() {
             </div>
 
             <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => {
-                  setShowAddModal(false);
-                  setEditingToken(null);
-                  setFormData({ name: '', token: '', websiteUrl: '', discoveredApiUrl: '', discoveredAuthScheme: '' });
-                  setError('');
-                }}
-                className="flex-1 ui-button"
-              >
-                Cancel
+              <button onClick={closeModal} className="flex-1 ui-button">Cancel</button>
+              <button onClick={handleSaveToken} className="flex-1 ui-button-primary">
+                {editing?.kind === 'token' ? 'Save Changes' : 'Add Token'}
               </button>
-              <button
-                onClick={handleSaveToken}
-                className="flex-1 ui-button-primary"
-              >
-                {editingToken ? 'Save Changes' : 'Add Token'}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add/Edit Credential Modal */}
+      {modalMode === 'credential' && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-raised hairline rounded p-6 max-w-md w-full max-h-[90vh] overflow-y-auto" style={{ background: 'var(--bg-raised)' }}>
+            <h2 className="text-xl font-bold ink mb-4">
+              {editing?.kind === 'credential' ? 'Edit Credential' : 'Add Credential'}
+            </h2>
+
+            {error && (
+              <div className="mb-4 p-3 rounded text-sm" style={{ background: 'var(--red-bg)', color: 'var(--red)', border: '1px solid var(--red)' }}>
+                {error}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm ink-2 mb-2">Label</label>
+                <input
+                  type="text"
+                  value={credForm.label}
+                  onChange={(e) => setCredForm({ ...credForm, label: e.target.value })}
+                  placeholder="e.g., AWS Root Account"
+                  className="ui-input w-full"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm ink-2 mb-2">Username / Email</label>
+                <input
+                  type="text"
+                  value={credForm.username}
+                  onChange={(e) => setCredForm({ ...credForm, username: e.target.value })}
+                  placeholder="user@example.com"
+                  autoComplete="off"
+                  className="ui-input w-full"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm ink-2 mb-2">Password</label>
+                <input
+                  type="password"
+                  value={credForm.password}
+                  onChange={(e) => setCredForm({ ...credForm, password: e.target.value })}
+                  placeholder="••••••••"
+                  autoComplete="new-password"
+                  className="ui-input mono w-full"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm ink-2 mb-2">URL (Optional)</label>
+                <input
+                  type="url"
+                  value={credForm.url}
+                  onChange={(e) => setCredForm({ ...credForm, url: e.target.value })}
+                  placeholder="https://example.com/login"
+                  className="ui-input w-full"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm ink-2 mb-2">Service Tag (Optional)</label>
+                <input
+                  type="text"
+                  value={credForm.service}
+                  onChange={(e) => setCredForm({ ...credForm, service: e.target.value })}
+                  placeholder="e.g., aws, github"
+                  className="ui-input w-full"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm ink-2 mb-2">TOTP Secret (Optional)</label>
+                <input
+                  type="text"
+                  value={credForm.totpSecret}
+                  onChange={(e) => setCredForm({ ...credForm, totpSecret: e.target.value })}
+                  placeholder="Base32 2FA seed"
+                  className="ui-input mono w-full"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm ink-2 mb-2">Notes (Optional)</label>
+                <textarea
+                  value={credForm.notes}
+                  onChange={(e) => setCredForm({ ...credForm, notes: e.target.value })}
+                  placeholder="Recovery codes, security questions, etc."
+                  className="ui-input w-full"
+                  rows={3}
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button onClick={closeModal} className="flex-1 ui-button">Cancel</button>
+              <button onClick={handleSaveCredential} className="flex-1 ui-button-primary">
+                {editing?.kind === 'credential' ? 'Save Changes' : 'Add Credential'}
               </button>
             </div>
           </div>
@@ -498,27 +779,16 @@ function TokenVault() {
       {deleteTarget && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
           <div className="bg-raised rounded max-w-md w-full p-6" style={{ background: 'var(--bg-raised)', border: '1px solid var(--red)' }}>
-            <h3 className="text-lg font-semibold mb-2" style={{ color: 'var(--red)' }}>Delete token?</h3>
+            <h3 className="text-lg font-semibold mb-2" style={{ color: 'var(--red)' }}>
+              Delete {deleteTarget.kind === 'token' ? 'token' : 'credential'}?
+            </h3>
             <p className="text-sm ink-2 mb-5">
-              Are you sure you want to delete <span className="font-semibold ink">{deleteTarget.name || deleteTarget.label}</span>?
+              Are you sure you want to delete <span className="font-semibold ink">{deleteTarget.label}</span>?
               This action cannot be undone.
             </p>
             <div className="flex gap-3">
-              <button
-                onClick={() => setDeleteTarget(null)}
-                className="flex-1 ui-button"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={async () => {
-                  await handleDeleteToken(deleteTarget.id);
-                  setDeleteTarget(null);
-                }}
-                className="flex-1 ui-button-danger"
-              >
-                Delete
-              </button>
+              <button onClick={() => setDeleteTarget(null)} className="flex-1 ui-button">Cancel</button>
+              <button onClick={handleDelete} className="flex-1 ui-button-danger">Delete</button>
             </div>
           </div>
         </div>

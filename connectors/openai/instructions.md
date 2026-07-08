@@ -93,35 +93,24 @@ https://www.myapiai.com/api/v1/oauth-server/openapi.yaml
 **Option B — Paste directly:**
 Copy the full content of `openapi.yaml` (in this folder) and paste it into the Schema field.
 
-After importing, you should see the available operations listed:
-- `getIdentity`
-- `listPersonas` / `getPersona`
-- `listKnowledgeDocs` / `getKnowledgeDoc`
-- `listServices`
-- `getBrainContext`
-- `listNotifications`
+After importing, you should see operations including:
+- `getIdentity`, `listPersonas` / `getPersona`
+- `listServices`, `getServiceMethods`, `callServiceProxy`  *(discover-then-call any service, incl. Composio toolkits and afp)*
+- `listKnowledgeDocs` / `getKnowledgeDoc` / `upsertKnowledgeDoc`
+- `listAfpDevices`, `afpExec`, `afpListDir`, `afpReadFile`, `afpWriteFile`  *(the user's own PCs/servers)*
+- `getBrainContext`, `listNotifications`, `listMemories` / `addMemory`
 
 ---
 
-### Step 5 — Copy the Callback URL → update your server
+### Step 5 — (No callback step needed)
 
-After saving the Action, ChatGPT displays a **Callback URL** like:
-```
-https://chatgpt.com/aip/g-XXXXXXXXXXXX/oauth/callback
-```
+MyApi's ChatGPT client already pre-allows every ChatGPT callback — both custom GPT
+Actions (`/aip/g-*/oauth/callback`) and the newer Connectors/Apps platform
+(`connector_platform_oauth_redirect`) — via wildcard. You do **not** need to copy
+ChatGPT's callback URL into `.env` or restart the server.
 
-You MUST add this to your server or OAuth will fail when users try to authorize.
-
-1. Copy the full callback URL from ChatGPT
-2. Open your `.env` file on the server
-3. Add or update:
-   ```env
-   CHATGPT_OAUTH_REDIRECT_URIS=https://chatgpt.com/aip/g-XXXXXXXXXXXX/oauth/callback
-   ```
-   *(Replace `g-XXXXXXXXXXXX` with your actual GPT ID)*
-4. Restart the server: `node src/index.js` (or however you run it in production)
-
-> **Note:** Until you do this, the OAuth flow will be blocked with `invalid_redirect_uri`. The server logs exact-match validation errors if this isn't set correctly.
+> Only set `CHATGPT_OAUTH_REDIRECT_URIS` if you deliberately want to restrict the
+> client to one specific GPT id (the connector callbacks are still added automatically).
 
 ---
 
@@ -140,7 +129,9 @@ Before publishing, test that everything works:
 You need to be logged into your MyApi dashboard in the same browser. Open `https://www.myapiai.com/dashboard/` in a tab, log in, then try the OAuth flow again.
 
 **If you see `invalid_redirect_uri`:**
-The callback URL in your `.env` doesn't match exactly. Double-check Step 5.
+Rare — the ChatGPT wildcards are pre-registered. Only happens if you set
+`CHATGPT_OAUTH_REDIRECT_URIS` to an explicit list that omits your GPT's callback.
+Either unset it (wildcards cover everything) or include the exact callback.
 
 **If you see `invalid_client`:**
 The client secret doesn't match. Re-check Step 1.

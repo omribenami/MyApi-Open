@@ -16,7 +16,7 @@ class SlackAdapter {
     const params = {
       client_id: this.clientId,
       // Request user token only (no bot install), to avoid "doesn't have a bot user" failures
-      user_scope: 'chat:write,users:read,users.profile:read',
+      user_scope: 'chat:write,channels:read,channels:history,users:read,users.profile:read',
       redirect_uri: this.redirectUri,
       state: state
     };
@@ -59,7 +59,7 @@ class SlackAdapter {
                 accessToken: resolvedAccessToken,
                 refreshToken: null,
                 tokenType: 'bearer',
-                scope: result.scope || result.authed_user?.scope || 'chat:write users:read users.profile:read',
+                scope: result.scope || result.authed_user?.scope || 'chat:write channels:read channels:history users:read users.profile:read',
                 teamId: result.team?.id,
                 userId: result.authed_user?.id
               });

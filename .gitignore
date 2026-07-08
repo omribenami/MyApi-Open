@@ -19,6 +19,7 @@ src/data/*.db
 src/data/*.db-shm
 src/data/*.db-wal
 src/.db_integrity
+src/data/cookie_preferences.json
 :memory:
 :memory:-shm
 :memory:-wal
@@ -50,9 +51,15 @@ backups/
 test-db-query.js
 test-*.js
 
-# SSL certificates (sensitive)
+# SSL certificates / private keys (sensitive — NEVER commit)
 certs/
 certbot/
+*.pem
+*.key
+ed25519.pem
+id_ed25519*
+*.p12
+*.pfx
 
 # Docker-managed data volumes (when using bind mounts)
 data/

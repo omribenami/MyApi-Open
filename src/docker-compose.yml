@@ -39,6 +39,26 @@ services:
       # AFP desktop app installers - deployed by CI
       - /opt/MyApi/connectors/afp-app/dist:/app/connectors/afp-app/dist:ro
 
+    # Resource limits — prevent OOM or runaway CPU from taking down the host
+    deploy:
+      resources:
+        limits:
+          memory: 4g
+          cpus: '2.0'
+        reservations:
+          memory: 256m
+
+    # Security hardening
+    security_opt:
+      - no-new-privileges:true
+    read_only: false
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+
     # Restart policy
     restart: unless-stopped
 

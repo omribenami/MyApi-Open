@@ -172,7 +172,7 @@ function ProfileTab() {
       {/* Split view: Form + Preview */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Left: Edit Form */}
-        <div className="card p-6">
+        <div className="card p-6" data-tour="id-form">
           <h2 className="text-[15px] font-semibold ink mb-1">Edit Profile</h2>
           <p className="ink-3 text-[13px] mb-6">
             Updates your USER.md identity file
@@ -239,7 +239,7 @@ function ProfileTab() {
         </div>
 
         {/* Right: Preview */}
-        <div className="card p-6">
+        <div className="card p-6" data-tour="id-preview">
           <h2 className="text-[15px] font-semibold ink mb-1">Profile Preview</h2>
           <p className="ink-3 text-[13px] mb-6">How your identity will appear</p>
 

@@ -43,7 +43,7 @@ export const useAuthStore = create((set, get) => ({
 
     initializePromise = (async () => {
       try {
-        if (isLogoutInProgress()) {
+        if (isLogoutInProgress() || wasLoggedOut()) {
           set({ user: null, masterToken: null, sessionToken: null, isAuthenticated: false, isInitialized: true, error: null });
           return;
         }
@@ -60,18 +60,6 @@ export const useAuthStore = create((set, get) => ({
           _sessionToken = sessionStorage.getItem('sessionToken');
         } catch { /* ignored */ }
 
-        // If a masterToken exists in localStorage but the browser session flag is missing
-        // (sessionStorage is cleared on browser close), the user must re-authenticate fully
-        // (including 2FA). This prevents the persistent token from bypassing 2FA after
-        // the browser is closed and reopened.
-        if (masterToken) {
-          const sessionVerified = (() => { try { return sessionStorage.getItem('sessionAuthVerified'); } catch { return null; } })();
-          if (!sessionVerified) {
-            set({ isAuthenticated: false, isInitialized: true });
-            return;
-          }
-        }
-
         // Single combined probe: send session cookie + Bearer token (if available) together.
         // The server checks session first, then Bearer, so this handles both auth paths in
         // one request — eliminating the session-probe 401 that showed in console for
@@ -82,6 +70,7 @@ export const useAuthStore = create((set, get) => ({
           const probeRes = await fetch('/api/v1/auth/me', { headers, credentials: 'include' });
           if (probeRes.ok) {
             resetAuthMeFailureCountOnSuccess();
+            clearLoggedOut();
             const payload = await probeRes.json();
             const user = normalizeUserPayload(payload);
             const bootstrapToken = payload?.bootstrap?.masterToken || null;
@@ -109,6 +98,17 @@ export const useAuthStore = create((set, get) => ({
             if (masterToken) {
               clearAuthArtifacts();
               masterToken = null;
+            }
+          } else if (probeRes.status === 403) {
+            // Device approval gate fired (session expired + unrecognised device fingerprint).
+            // Clear the stale token so the user is sent back to login to re-authenticate,
+            // which will create a fresh session and auto-approve the current device.
+            const body = await probeRes.json().catch(() => ({}));
+            if (body?.code === 'DEVICE_APPROVAL_REQUIRED' || body?.code === 'DEVICE_APPROVAL_FAILED') {
+              clearAuthArtifacts();
+              masterToken = null;
+            } else {
+              incrementAuthMeFailureCount();
             }
           } else {
             incrementAuthMeFailureCount();
@@ -182,6 +182,7 @@ export const useAuthStore = create((set, get) => ({
   setUser: (user) => {
     setLogoutInProgress(false);
     const normalized = normalizeUserPayload(user);
+    if (normalized) clearLoggedOut();
     set({ user: normalized, isAuthenticated: !!normalized });
   },
 

@@ -194,7 +194,8 @@ function RatingWidget({ listingId, onRated, masterToken }) {
     try {
       const res = await fetch(`/api/v1/marketplace/${listingId}/rate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${masterToken}` },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ rating: selected, review: review || undefined }),
       });
       const data = await res.json().catch(() => ({}));
@@ -268,10 +269,9 @@ function ListingModal({ listing, onClose, onInstall, onRated, masterToken, initi
     let cancelled = false;
 
     async function checkInstalled() {
-      if (!masterToken || !listingId || listingType !== 'skill') return;
+      if (!listingId || listingType !== 'skill') return;
       try {
         const res = await fetch('/api/v1/skills', {
-          headers: { 'Authorization': `Bearer ${masterToken}` },
           credentials: 'include',
         });
         if (!res.ok) return;
@@ -295,13 +295,12 @@ function ListingModal({ listing, onClose, onInstall, onRated, masterToken, initi
   }, [listingId, listingType, masterToken]);
 
   async function handleInstall() {
-    if (isInstalled || !listingId || !masterToken) return;
+    if (isInstalled || !listingId) return;
     setInstalling(true);
     setInstallError('');
     try {
       const installRes = await fetch(`/api/v1/marketplace/${listingId}/install`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${masterToken}` },
         credentials: 'include',
       });
       const installData = await installRes.json().catch(() => ({}));
@@ -680,13 +679,12 @@ function ListingCard({
 
   async function handleQuickInstall(e) {
     e.stopPropagation();
-    if (!masterToken || isInstalled || quickInstalling || !listingId) return;
+    if (isInstalled || quickInstalling || !listingId) return;
 
     setQuickError('');
     try {
       const res = await fetch(`/api/v1/marketplace/${listingId}/install`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${masterToken}` },
         credentials: 'include',
       });
       const data = await res.json().catch(() => ({}));
@@ -947,14 +945,8 @@ export default function Marketplace() {
   }, [fetchListings]);
 
   const fetchInstalledSkills = useCallback(async () => {
-    if (!masterToken) {
-      setInstalledSkillListingIds(new Set());
-      return;
-    }
-
     try {
       const res = await fetch('/api/v1/skills', {
-        headers: { 'Authorization': `Bearer ${masterToken}` },
         credentials: 'include',
       });
       if (!res.ok) return;
@@ -1024,7 +1016,7 @@ export default function Marketplace() {
         </div>
 
         {/* Top Summary Counters */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" data-tour="mkt-counters">
           <div className="card p-3">
             <p style={{ color: 'var(--ink-3)' }} className="text-xs font-medium">Total Products</p>
             <p style={{ color: 'var(--accent)' }} className="text-2xl font-bold mt-1">{currentCounts.total}</p>
@@ -1044,7 +1036,7 @@ export default function Marketplace() {
         </div>
 
         {/* Search + Sort */}
-        <div className="flex flex-col sm:flex-row gap-3 items-end">
+        <div className="flex flex-col sm:flex-row gap-3 items-end" data-tour="mkt-search">
           <div className="relative flex-1">
             <span className="absolute inset-y-0 left-3 flex items-center" style={{ color: 'var(--ink-3)' }}>
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -1318,7 +1310,7 @@ export default function Marketplace() {
             <p className="text-sm mt-1">Be the first to publish something!</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5" data-tour="mkt-grid">
             {(listings || []).filter(l => {
               if (typeFilter === 'all') return true;
               // 'token' tab shows both 'token' and legacy 'api' type listings

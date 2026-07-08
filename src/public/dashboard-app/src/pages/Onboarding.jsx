@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { completeOnboarding, dismissModal } from '../utils/onboardingUtils';
+import { markTourSeen } from '../stores/tourStore';
+import { AscKeypairPanel, OAuthInstallerPanel, MasterTokenPanel } from '../components/AgentConnectorPanels';
+import { CONNECTION_METHOD_CARDS } from '../components/agentConnectorData';
 
 // ─── Icons ───────────────────────────────────────────────────────────────────
 
@@ -204,6 +207,79 @@ function MobileProgress({ current, total }) {
 }
 
 // ─── Steps ────────────────────────────────────────────────────────────────────
+
+// The roadmap shown on the welcome screen — one line on WHAT each stop does and
+// WHY it matters, so users know what they're walking into before they start.
+const ROADMAP = [
+  { icon: 'user',        title: 'Your profile',     why: 'Tell agents who you are so their answers fit your context.', tag: '1 min' },
+  { icon: 'brain',       title: 'Your assistant',   why: 'Set a default persona — tone and style your agents follow.', tag: '1 min' },
+  { icon: 'shieldCheck', title: 'Account security', why: 'Turn on two-factor auth to protect your data and tokens.',   tag: 'Optional' },
+  { icon: 'bolt',        title: 'Connect services', why: 'Link Google, GitHub, Slack and more — once, securely.',      tag: 'Optional' },
+  { icon: 'terminal',    title: 'Add an agent',     why: 'Give an AI tool (ChatGPT, Claude…) safe access to it all.',  tag: '2 min' },
+];
+
+function StepWelcome({ data }) {
+  const firstName = (data.name || '').trim().split(/\s+/)[0];
+  return (
+    <div className="ob-step-enter" style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 14 }}>
+        <div style={{
+          width: 52, height: 52, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'var(--accent-bg)', border: '1px solid var(--accent-2)',
+        }}>
+          <Logo size={30} />
+        </div>
+        <div>
+          <h2 style={{ fontSize: 25, fontWeight: 700, marginBottom: 8, lineHeight: 1.2 }}>
+            {firstName ? `Welcome, ${firstName}.` : 'Welcome to MyApi.'}
+          </h2>
+          <p style={{ fontSize: 14.5, color: 'var(--ink-2)', margin: 0, lineHeight: 1.6, maxWidth: 540 }}>
+            MyApi is the secure bridge between your AI agents and your real data — your identity,
+            knowledge, and connected apps. This quick setup gets it ready. Here's what's ahead and
+            why each step matters:
+          </p>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {ROADMAP.map((r, i) => (
+          <div key={r.title} style={{
+            display: 'flex', alignItems: 'center', gap: 14, padding: '13px 15px',
+            borderRadius: 9, background: 'var(--bg-sunk)', border: '1px solid var(--line)',
+          }}>
+            <span style={{
+              width: 34, height: 34, borderRadius: 8, flexShrink: 0, display: 'inline-flex',
+              alignItems: 'center', justifyContent: 'center',
+              background: 'var(--bg-raised)', border: '1px solid var(--line)', color: 'var(--accent)',
+            }}>
+              <Icon name={r.icon} size={17} />
+            </span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 11, fontFamily: "'JetBrains Mono', monospace", color: 'var(--ink-4)' }}>{i + 1}</span>
+                <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>{r.title}</span>
+              </div>
+              <p style={{ fontSize: 12.5, color: 'var(--ink-3)', margin: '2px 0 0', lineHeight: 1.5 }}>{r.why}</p>
+            </div>
+            <span style={{
+              fontSize: 10.5, fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.04em',
+              color: r.tag === 'Optional' ? 'var(--ink-4)' : 'var(--accent)',
+              background: r.tag === 'Optional' ? 'var(--bg-raised)' : 'var(--accent-bg)',
+              border: `1px solid ${r.tag === 'Optional' ? 'var(--line)' : 'var(--accent-2)'}`,
+              padding: '3px 8px', borderRadius: 999, flexShrink: 0, whiteSpace: 'nowrap',
+            }}>{r.tag}</span>
+          </div>
+        ))}
+      </div>
+
+      <TipCard
+        variant="security"
+        title="You're in control the whole way"
+        body="Nothing is shared without your say-so. Every step is optional except your name, you can skip anything and finish it later, and your progress saves automatically. Takes about five minutes."
+      />
+    </div>
+  );
+}
 
 function StepProfile({ data, update }) {
   return (
@@ -512,38 +588,24 @@ function StepSecurity({ data, update, masterToken }) {
   );
 }
 
+// Featured connectors shown during onboarding. Keep this list to services whose
+// OAuth is actually enabled on the server (ENABLE_OAUTH_* in .env) — never list a
+// service the user can't connect. Full catalog lives on the Services page.
 const SERVICES = [
-  { id: 'github',    name: 'GitHub',      desc: 'Repos, issues, PRs',     icon: SvcIcon.github    },
   { id: 'google',    name: 'Google',      desc: 'Gmail, Drive, Calendar',  icon: SvcIcon.google    },
+  { id: 'github',    name: 'GitHub',      desc: 'Repos, issues, PRs',      icon: SvcIcon.github    },
   { id: 'slack',     name: 'Slack',       desc: 'Messages, channels',      icon: SvcIcon.slack     },
+  { id: 'notion',    name: 'Notion',      desc: 'Docs, databases',         icon: SvcIcon.notion    },
   { id: 'discord',   name: 'Discord',     desc: 'Servers, messages',       icon: SvcIcon.discord   },
-  { id: 'twitter',   name: 'Twitter / X', desc: 'Posts, DMs',              icon: SvcIcon.twitter   },
   { id: 'linkedin',  name: 'LinkedIn',    desc: 'Profile, posts',          icon: SvcIcon.linkedin  },
-  { id: 'instagram', name: 'Instagram',   desc: 'Feed, stories',           icon: SvcIcon.instagram },
+  { id: 'twitter',   name: 'Twitter / X', desc: 'Posts, DMs',              icon: SvcIcon.twitter   },
   { id: 'facebook',  name: 'Facebook',    desc: 'Pages, groups',           icon: SvcIcon.facebook  },
-  { id: 'reddit',    name: 'Reddit',      desc: 'Posts, comments',         icon: SvcIcon.reddit    },
-  { id: 'whatsapp',  name: 'WhatsApp',    desc: 'Messages, contacts',      icon: SvcIcon.whatsapp  },
+  { id: 'instagram', name: 'Instagram',   desc: 'Feed, stories',           icon: SvcIcon.instagram },
   { id: 'tiktok',    name: 'TikTok',      desc: 'Videos, analytics',       icon: SvcIcon.tiktok    },
 ];
 
-function StepConnect({ data, update }) {
+function StepConnect({ data }) {
   const connected = data.connected || [];
-
-  // On mount, sync already-connected services from the backend (e.g. signup via Google)
-  useEffect(() => {
-    fetch('/api/v1/oauth/status', { credentials: 'include' })
-      .then(r => r.ok ? r.json() : null)
-      .then(result => {
-        if (!result?.services) return;
-        const alreadyConnected = result.services
-          .filter(s => s.status === 'connected')
-          .map(s => s.name);
-        if (alreadyConnected.length === 0) return;
-        update({ connected: [...new Set([...(data.connected || []), ...alreadyConnected])] });
-      })
-      .catch(() => { /* ignore */ });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const connectNow = (id) => {
     const params = new URLSearchParams({ mode: 'connect', returnTo: '/dashboard/onboarding', redirect: '1' });
@@ -593,7 +655,7 @@ function StepConnect({ data, update }) {
         }}>
           <span style={{ fontSize: 20, fontWeight: 700, lineHeight: 1 }}>+</span>
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-2)' }}>More</span>
-          <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>34+ services</span>
+          <span style={{ fontSize: 11, color: 'var(--ink-4)' }}>90+ services</span>
         </a>
       </div>
 
@@ -603,7 +665,7 @@ function StepConnect({ data, update }) {
             ? 'Skip to add services later from the Services page.'
             : `${connected.length} service${connected.length === 1 ? '' : 's'} connected — add more anytime.`}
         </span>
-        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-3)' }}>45+ total</span>
+        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-3)' }}>90+ total</span>
       </div>
 
       <TipCard
@@ -695,26 +757,22 @@ function StepToken({ data, update, newToken }) {
   );
 }
 
-const CONNECTION_METHODS = [
-  {
-    id: 'device', title: 'OAuth Device Flow',
-    badge: { text: 'Recommended', color: 'var(--accent)', bg: 'var(--accent-bg)', border: 'var(--accent-2)' },
-    desc: 'Agent shows a short code, you approve in the browser. Each agent gets its own scoped token.',
-    icon: <Icon name="shieldCheck" size={18} />,
-  },
-  {
-    id: 'master', title: 'Master Token',
-    badge: { text: 'Simplest', color: 'var(--amber)', bg: 'var(--amber-bg)', border: 'var(--amber)' },
-    desc: 'Paste your master token into any HTTP client. Zero setup — works immediately.',
-    icon: <Icon name="key" size={18} />,
-  },
-  {
-    id: 'asc', title: 'ASC — Ed25519 Keypair',
-    badge: { text: 'Advanced', color: 'var(--violet)', bg: 'var(--violet-bg)', border: 'var(--violet)' },
-    desc: 'Agent signs every request; private key never transmitted. For production pipelines.',
-    icon: <Icon name="lock" size={18} />,
-  },
-];
+// Derived from the canonical CONNECTION_METHOD_CARDS (agentConnectorData.js) so the
+// onboarding page can't drift from the Connectors page / OnboardingModal. We only
+// re-map the badge shape to RadioCard's and attach an icon per method id.
+const METHOD_ICONS = {
+  asc: <Icon name="lock" size={18} />,
+  oauth: <Icon name="shieldCheck" size={18} />,
+  master: <Icon name="key" size={18} />,
+};
+
+const CONNECTION_METHODS = CONNECTION_METHOD_CARDS.map((m) => ({
+  id: m.id,
+  title: m.title,
+  desc: m.desc,
+  icon: METHOD_ICONS[m.id],
+  badge: { text: m.badge, color: m.badgeText, bg: m.badgeColor, border: m.badgeBorder },
+}));
 
 const AGENT_PROMPT = `I'd like you to connect to my MyApi context API.
 
@@ -769,47 +827,9 @@ function StepAgent({ data, update }) {
   );
 }
 
-function ObCopyBlock({ label, text, accent = 'blue' }) {
-  const [copied, setCopied] = useState(false);
-  const copy = () => {
-    navigator.clipboard?.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-  const accentColor = accent === 'violet' ? '#a78bfa' : 'var(--accent)';
-  return (
-    <div style={{ background: 'var(--bg-sunk)', border: '1px solid var(--line)', borderRadius: 6, overflow: 'hidden' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 12px', borderBottom: '1px solid var(--line)' }}>
-        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-4)' }}>{label}</span>
-        <button onClick={copy} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 500, padding: '3px 8px', borderRadius: 4, background: 'transparent', border: 'none', cursor: 'pointer', color: accentColor }}>
-          {copied
-            ? <><svg style={{ width: 11, height: 11 }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>Copied</>
-            : <><svg style={{ width: 11, height: 11 }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>Copy</>}
-        </button>
-      </div>
-      <pre style={{ margin: 0, padding: 12, fontSize: 11, color: 'var(--ink-2)', lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: "'JetBrains Mono', monospace" }}><code>{text}</code></pre>
-    </div>
-  );
-}
-
-function ObStep({ n, title, children }) {
-  return (
-    <div style={{ display: 'flex', gap: 14, paddingBottom: 20 }}>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
-        <span style={{ width: 20, height: 20, borderRadius: '50%', background: 'var(--bg-hover)', border: '1px solid var(--line)', color: 'var(--ink-3)', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{n}</span>
-        <div style={{ width: 1, flex: 1, background: 'var(--line)', minHeight: 16, marginTop: 4 }} />
-      </div>
-      <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
-        <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)', marginBottom: 8 }}>{title}</p>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function StepAgentSetup({ data, masterToken }) {
-  const method = data.agentMethod;
-  const token = masterToken || '<your-master-token>';
+function StepAgentSetup({ data }) {
+  // 'device' is the legacy id for OAuth PKCE — normalize so resumed sessions still render.
+  const method = data.agentMethod === 'device' ? 'oauth' : data.agentMethod;
 
   if (!method) {
     return (
@@ -820,94 +840,14 @@ function StepAgentSetup({ data, masterToken }) {
     );
   }
 
-  const titles = { device: 'OAuth Device Flow setup', master: 'Master token setup', asc: 'ASC keypair setup' };
-  const subtitles = {
-    device: 'Run the installer on your machine. Your browser opens, you authorize, and the terminal prints a per-agent token.',
-    master: 'Paste your master token directly into your agent or HTTP client. Zero setup — works immediately.',
-    asc: 'Your agent generates an Ed25519 keypair and signs every request. The private key never leaves its machine.',
-  };
+  const title = CONNECTION_METHOD_CARDS.find((m) => m.id === method)?.title || 'Agent setup';
 
   return (
     <div className="ob-step-enter" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div>
-        <h2 style={{ fontSize: 22, fontWeight: 600, marginBottom: 6 }}>{titles[method]}</h2>
-        <p style={{ fontSize: 13.5, color: 'var(--ink-2)', margin: 0, lineHeight: 1.55 }}>{subtitles[method]}</p>
-      </div>
-
-      {method === 'device' && (
-        <>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, borderRadius: 6, border: '1px solid var(--accent-bg)', background: 'var(--accent-bg)', padding: '10px 14px' }}>
-            <Icon name="tip" size={14} style={{ color: 'var(--accent)', marginTop: 2, flexShrink: 0 }} />
-            <p style={{ fontSize: 12, color: 'var(--accent)', lineHeight: 1.5, margin: 0 }}>
-              <strong style={{ fontWeight: 600 }}>You run this on your machine</strong> — not the agent. Agents in sandboxes can't receive localhost callbacks.
-            </p>
-          </div>
-
-          <ObStep n="1" title="Run the installer on your machine">
-            <ObCopyBlock label="terminal" accent="blue" text="curl -sL https://www.myapiai.com/api/v1/agent-auth/install.js | node" />
-            <p style={{ fontSize: 12, color: 'var(--ink-3)', marginTop: 8, lineHeight: 1.5 }}>Your browser opens. Once you authorize, the terminal prints a token starting with <code style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--ink)' }}>myapi_</code></p>
-          </ObStep>
-
-          <ObStep n="2" title="Give the token to your agent">
-            <ObCopyBlock label="agent prompt" accent="blue" text={`I ran the MyApi agent auth installer on my machine and got this access token:\n\nmyapi_PASTE_TOKEN_HERE\n\nPlease save this as your MyApi Bearer token and use it for all API requests:\n  Authorization: Bearer myapi_PASTE_TOKEN_HERE\n  Base URL: https://www.myapiai.com/api/v1/\n\nDo not ask me to run the installer — I already ran it. Just use this token.`} />
-          </ObStep>
-
-          <div style={{ borderRadius: 6, background: 'var(--bg-sunk)', border: '1px solid var(--line)', padding: '12px 14px' }}>
-            <p style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-4)', marginBottom: 8 }}>Optional flags</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12, color: 'var(--ink-3)', fontFamily: "'JetBrains Mono', monospace" }}>
-              <p><span style={{ color: 'var(--ink)' }}>--save</span>  → saves token to <span style={{ color: 'var(--ink-2)' }}>~/.myapi/agent-token.json</span></p>
-              <p><span style={{ color: 'var(--ink)' }}>--json</span>  → outputs <span style={{ color: 'var(--ink-2)' }}>{`{"token":"myapi_..."}`}</span> for scripting</p>
-            </div>
-          </div>
-        </>
-      )}
-
-      {method === 'master' && (
-        <>
-          <div>
-            <p style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-4)', marginBottom: 6 }}>Your master token</p>
-            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 12, padding: '10px 14px', background: 'var(--bg-sunk)', border: '1px solid var(--line)', borderRadius: 6, color: 'var(--ink)', wordBreak: 'break-all', lineHeight: 1.6, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
-              <span style={{ flex: 1 }}>{token}</span>
-            </div>
-          </div>
-          <ObStep n="1" title="Tell your agent">
-            <ObCopyBlock label="agent prompt" accent="blue" text={`Use this as your MyApi Bearer token for all API requests:\n  Authorization: Bearer ${token}\n  Base URL: https://www.myapiai.com/api/v1/`} />
-          </ObStep>
-          <ObStep n="2" title="Test it">
-            <ObCopyBlock label="terminal" accent="blue" text={`curl -s https://www.myapiai.com/api/v1/me \\\n  -H "Authorization: Bearer ${token}"`} />
-          </ObStep>
-          <TipCard
-            title="Keep this token secret"
-            body="Never commit it to git or paste it in public chats. It grants full access to your account. Revoke and reissue any time from Settings › Security."
-          />
-        </>
-      )}
-
-      {method === 'asc' && (
-        <>
-          <ObStep n="1" title="Send this prompt to your agent">
-            <ObCopyBlock label="agent prompt" accent="violet" text={`Please set up an ASC (Agentic Secure Connection) to my MyApi account so you have a stable cryptographic identity across sessions and IPs.\n\n── SETUP (one time) ──────────────────────────────────────────\n\n1. Generate an Ed25519 keypair and extract the raw 32-byte public key:\n   const { generateKeyPairSync } = require('crypto');\n   const { privateKey, publicKey } = generateKeyPairSync('ed25519');\n   const pubKeyB64 = publicKey.export({ type: 'spki', format: 'der' }).slice(-32).toString('base64');\n   Save privateKey and pubKeyB64 to disk before continuing — never keep them only in memory.\n\n2. Fetch your token ID — you'll need it for signing:\n   GET https://www.myapiai.com/api/v1/auth/me\n   Authorization: Bearer <your-token>\n   → Save the value at bootstrap.tokenId (format: tok_xxxxxxxx...)\n   This ID is fixed for your token. Fetch it once on startup, not on every request.\n\n3. Register your public key:\n   POST https://www.myapiai.com/api/v1/agentic/asc/register\n   Authorization: Bearer <your-token>\n   Content-Type: application/json\n   Body: {"public_key":"<pubKeyB64>","label":"<your-agent-name>"}\n   Show me the key_fingerprint from the response — I need to approve it.\n\n── SIGNING (every request after approval) ────────────────────\n\nAdd these 3 headers to every API request:\n  X-Agent-PublicKey:  <pubKeyB64>\n  X-Agent-Timestamp:  <current Unix seconds as string>\n  X-Agent-Signature:  base64( Ed25519_sign(privateKey, Buffer.from(timestamp + ":" + tokenId)) )\n\nKeep Authorization: Bearer <your-token> as well.\n\n── COMMON MISTAKES ───────────────────────────────────────────\n\n✗ tokenId is NOT the token secret (myapi_...), NOT the hash, NOT the fingerprint\n✓ tokenId looks like: tok_a44fbb8effb427b4bd51f32606e5d4f2\n\n✗ Do NOT regenerate the keypair on each session — load it from disk\n✓ Persist privateKey and pubKeyB64 to ~/.myapi-asc.key (or equivalent)\n\n✗ Do NOT hardcode tokenId — fetch it via /auth/me on startup\n✓ tokenId stays the same as long as the token is not revoked`} />
-          </ObStep>
-
-          <ObStep n="2" title="Approve the key">
-            <p style={{ fontSize: 13, color: 'var(--ink-2)', lineHeight: 1.6 }}>
-              Your agent shows you a short key fingerprint. Go to{' '}
-              <a href="/dashboard/devices" style={{ color: '#a78bfa', textDecoration: 'underline', textUnderlineOffset: 2 }}>Dashboard → Devices</a>,
-              find the pending ASC request, and click Approve.
-            </p>
-          </ObStep>
-
-          <div style={{ borderRadius: 6, background: 'var(--bg-sunk)', border: '1px solid var(--line)', padding: '12px 14px' }}>
-            <p style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-4)', marginBottom: 8 }}>Signing — Node.js quick reference</p>
-            <pre style={{ margin: 0, fontSize: 11.5, color: 'var(--ink-3)', lineHeight: 1.6, whiteSpace: 'pre-wrap', fontFamily: "'JetBrains Mono', monospace" }}>{`const ts  = String(Math.floor(Date.now() / 1000));
-const msg = Buffer.from(\`\${ts}:\${tokenId}\`);
-const sig = crypto.sign(null, msg, privateKey).toString('base64');
-// X-Agent-Timestamp: ts
-// X-Agent-Signature: sig
-// X-Agent-PublicKey: pubKeyB64`}</pre>
-          </div>
-        </>
-      )}
+      <h2 style={{ fontSize: 22, fontWeight: 600, marginBottom: 0 }}>{title}</h2>
+      {method === 'asc'    && <AscKeypairPanel />}
+      {method === 'oauth'  && <OAuthInstallerPanel />}
+      {method === 'master' && <MasterTokenPanel />}
     </div>
   );
 }
@@ -972,6 +912,7 @@ function StepFinish({ data, onNavigate }) {
 // ─── Step definitions ─────────────────────────────────────────────────────────
 
 const STEPS = [
+  { id: 'welcome',  label: 'Welcome'  },
   { id: 'profile',  label: 'Profile'  },
   { id: 'persona',  label: 'Persona'  },
   { id: 'security', label: 'Security' },
@@ -1107,7 +1048,7 @@ export default function Onboarding() {
     }
   };
 
-  const handleFinish = async () => {
+  const handleFinish = async ({ tour = false } = {}) => {
     setSaving(true);
     try {
       await fetch('/api/v1/onboarding/complete', {
@@ -1119,10 +1060,16 @@ export default function Onboarding() {
       dismissModal();
       if (setUser && user) setUser({ ...user, needsOnboarding: false });
       try { localStorage.removeItem(STORAGE_KEY); } catch (_) { /* ignore */ }
-      navigate('/');
-    } catch {
-      navigate('/');
+    } catch { /* complete anyway — never trap the user in the wizard */ }
+    // Honor the user's explicit choice on the finish step: start the guided
+    // tour, or mark it seen so it never auto-pops. App.jsx polls for this flag
+    // once the dashboard shell mounts (avoids the old start-too-early race).
+    // Either way the auto-start tour effect should stay quiet — explicit choice wins.
+    markTourSeen();
+    if (tour) {
+      try { sessionStorage.setItem('myapi_pending_tour', '1'); } catch (_) { /* ignore */ }
     }
+    navigate('/');
   };
 
   const goTo = (i) => {
@@ -1146,10 +1093,11 @@ export default function Onboarding() {
 
   const renderStep = () => {
     const sid = STEPS[step].id;
+    if (sid === 'welcome')  return <StepWelcome  data={data} />;
     if (sid === 'profile')  return <StepProfile  data={data} update={update} />;
     if (sid === 'persona')  return <StepPersona  data={data} update={update} />;
     if (sid === 'security') return <StepSecurity data={data} update={update} masterToken={masterToken} />;
-    if (sid === 'connect')  return <StepConnect  data={data} update={update} key="connect" />;
+    if (sid === 'connect')  return <StepConnect  data={data} key="connect" />;
     if (sid === 'agent')       return <StepAgent      data={data} update={update} />;
     if (sid === 'agent-setup') return <StepAgentSetup data={data} masterToken={masterToken} />;
     if (sid === 'finish')      return <StepFinish     data={data} onNavigate={onNavigate} />;
@@ -1200,7 +1148,7 @@ export default function Onboarding() {
             <div>
               <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-3)', marginBottom: 4 }}>Getting started</div>
               <div style={{ fontSize: 12.5, color: 'var(--ink-3)' }}>
-                {step + 1} of {STEPS.length} · ~{Math.max(1, STEPS.length - step)} min left
+                {step + 1} of {STEPS.length} · ~{Math.max(1, Math.round((STEPS.length - 1 - step) * 0.7))} min left
               </div>
             </div>
 
@@ -1257,7 +1205,7 @@ export default function Onboarding() {
                     <Icon name="arrowLeft" size={14} /> Back
                   </button>
                 )}
-                {!isFinish && STEPS[step].id !== 'security' && STEPS[step].id !== 'token' && (
+                {!isFinish && STEPS[step].id !== 'welcome' && STEPS[step].id !== 'security' && STEPS[step].id !== 'token' && (
                   <button onClick={skip} disabled={saving} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', fontSize: 12.5, fontWeight: 500, border: 'none', background: 'transparent', color: 'var(--ink-3)', borderRadius: 6, cursor: 'pointer' }}>
                     Skip for now
                   </button>
@@ -1279,19 +1227,29 @@ export default function Onboarding() {
                     opacity: (!canAdvance || saving) ? 0.5 : 1, minHeight: 36, transition: 'opacity 0.15s',
                   }}>
                     {saving ? <span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: 999, animation: 'ob-spin 0.8s linear infinite' }} /> : null}
-                    {step === STEPS.length - 2 ? 'Finish setup' : 'Continue'}
+                    {STEPS[step].id === 'welcome' ? 'Get started' : step === STEPS.length - 2 ? 'Finish setup' : 'Continue'}
                     {!saving && <Icon name="arrowRight" size={14} />}
                   </button>
                 ) : (
-                  <button onClick={handleFinish} disabled={saving} style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px',
-                    fontSize: 13, fontWeight: 500, borderRadius: 6, cursor: saving ? 'not-allowed' : 'pointer',
-                    background: 'var(--accent-2)', color: '#fff', border: '1px solid rgba(240,246,252,0.1)',
-                    opacity: saving ? 0.5 : 1, minHeight: 36,
-                  }}>
-                    {saving ? <span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: 999, animation: 'ob-spin 0.8s linear infinite' }} /> : null}
-                    Go to dashboard <Icon name="arrowRight" size={14} />
-                  </button>
+                  <>
+                    <button onClick={() => handleFinish({ tour: false })} disabled={saving} style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px',
+                      fontSize: 13, fontWeight: 500, borderRadius: 6, cursor: saving ? 'not-allowed' : 'pointer',
+                      background: 'var(--bg-raised)', color: 'var(--ink)', border: '1px solid var(--line)',
+                      opacity: saving ? 0.5 : 1, minHeight: 36,
+                    }}>
+                      Finish
+                    </button>
+                    <button onClick={() => handleFinish({ tour: true })} disabled={saving} style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px',
+                      fontSize: 13, fontWeight: 500, borderRadius: 6, cursor: saving ? 'not-allowed' : 'pointer',
+                      background: 'var(--accent-2)', color: '#fff', border: '1px solid rgba(240,246,252,0.1)',
+                      opacity: saving ? 0.5 : 1, minHeight: 36,
+                    }}>
+                      {saving ? <span style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: 999, animation: 'ob-spin 0.8s linear infinite' }} /> : null}
+                      <Icon name="sparkles" size={14} /> Take a tour
+                    </button>
+                  </>
                 )}
               </div>
             </footer>

@@ -1,7 +1,6 @@
 require('dotenv').config();
 const { initDatabase } = require('../config/database');
 const TokenManager = require('../gateway/tokens');
-const Vault = require('../vault/vault');
 
 async function initialize() {
   console.log('🔧 Initializing MyApi Platform...\n');
@@ -14,7 +13,6 @@ async function initialize() {
 
   // Initialize components
   const tokenManager = new TokenManager();
-  const vault = new Vault(process.env.ENCRYPTION_KEY);
 
   // Create initial personal token
   console.log('🔑 Creating initial personal token...');
@@ -34,27 +32,6 @@ async function initialize() {
   console.log('╚═══════════════════════════════════════════════════════════════╝\n');
   console.log(`Token: ${personalToken.token}\n`);
   console.log('Copy this token and use it to access the dashboard and API.\n');
-
-  // Try to ingest USER.md if it exists
-  const userMdPath = process.env.USER_MD_PATH || '/home/jarvis/.openclaw/workspace/USER.md';
-  console.log(`📄 Attempting to ingest USER.md from: ${userMdPath}`);
-  
-  const ingestResult = vault.ingestUserMd(userMdPath);
-  
-  if (ingestResult.success) {
-    console.log(`✓ USER.md ingested successfully!`);
-    console.log(`  Sections parsed: ${ingestResult.sections.join(', ')}\n`);
-  } else {
-    console.log(`⚠ Could not ingest USER.md: ${ingestResult.error}`);
-    console.log('  You can ingest it later from the dashboard.\n');
-  }
-
-  // Store some example preferences
-  console.log('📋 Creating example preferences...');
-  vault.storePreference('theme', 'dark', 'ui');
-  vault.storePreference('language', 'en', 'general');
-  vault.storePreference('timezone', 'America/Chicago', 'general');
-  console.log('✓ Example preferences created\n');
 
   console.log('╔═══════════════════════════════════════════════════════════════╗');
   console.log('║                                                               ║');

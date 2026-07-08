@@ -172,6 +172,24 @@ router.post('/login', requireCsrfForSession, async (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
+    // B2B SSO enforcement: org members must sign in through their IdP when the
+    // org enforces SSO. The org owner keeps password login as break-glass.
+    try {
+      const orgRow = db.prepare('SELECT org_id, org_role FROM users WHERE id = ?').get(user.id);
+      if (orgRow?.org_id && orgRow.org_role !== 'owner') {
+        const { isSsoEnforcedForOrg } = require('../lib/sso');
+        if (isSsoEnforcedForOrg(orgRow.org_id)) {
+          return res.status(403).json({
+            error: 'SSO required',
+            code: 'SSO_REQUIRED',
+            message: 'Your organization requires single sign-on. Use "Continue with SSO".',
+          });
+        }
+      }
+    } catch (e) {
+      logger.warn('[Login] SSO enforcement check failed:', e.message);
+    }
+
     const passwordMatch = await bcrypt.compare(password, user.password_hash || '').catch(() => false);
     if (!passwordMatch) {
       return res.status(401).json({ error: 'Invalid email or password' });
@@ -255,6 +273,22 @@ router.post('/register', requireCsrfForSession, requireBetaSlot, async (req, res
     );
     invalidateBetaFullCache();
 
+    // B2B domain capture: signups on a verified org domain join that org
+    // automatically when the org opted in (settings.domain_capture === 'auto').
+    let joinedOrgId = null;
+    if (email) {
+      try {
+        const { findOrgByEmailDomain, addUserToOrg } = require('../database');
+        const org = findOrgByEmailDomain(email);
+        if (org && (org.settings.domain_capture || 'auto') === 'auto') {
+          addUserToOrg(id, org.id, 'member');
+          joinedOrgId = org.id;
+        }
+      } catch (e) {
+        logger.warn('[Register] Org domain capture failed:', e.message);
+      }
+    }
+
     // Fire-and-forget welcome email (does not block the 201 response)
     if (email) {
       emailService.sendWelcomeEmail(email, display_name || username).catch(() => {});
@@ -272,7 +306,7 @@ router.post('/register', requireCsrfForSession, requireBetaSlot, async (req, res
     global.sessions[sessionToken] = { userId: id, username, createdAt: Date.now(), expiresAt: Date.now() + SESSION_TTL_MS };
 
     // FIX BUG-3: Return 201 for successful creation
-    return res.status(201).json({ data: { token: sessionToken, user: { id, username, displayName: display_name || username, email: email || '', timezone: timezone || 'UTC' }, needsOnboarding: true } });
+    return res.status(201).json({ data: { token: sessionToken, user: { id, username, displayName: display_name || username, email: email || '', timezone: timezone || 'UTC', orgId: joinedOrgId }, needsOnboarding: true } });
   } catch (err) {
     logger.error('Registration error:', err);
     return res.status(500).json({ error: 'Registration failed' });
@@ -453,11 +487,27 @@ router.get('/me', async (req, res) => {
             ).get(matchedToken.tokenId);
             const isMasterToken = tokenRow?.token_type === 'master' || tokenRow?.scope === 'full';
             const isOAuthToken = tokenRow?.label && tokenRow.label.endsWith('(OAuth)');
-            // Gate if: master token, OAuth-labeled token, OR guest token with requires_approval=1.
-            // Guest token without approval requirement still passes (existing policy).
-            const gateEnabled = isMasterToken || isOAuthToken || !!tokenRow?.requires_approval;
-
-            if (gateEnabled) {
+            // Master tokens skip the device gate on /auth/me — this endpoint is the dashboard's
+            // session bootstrap probe. When a master token is used here it means the user's
+            // session cookie expired; gating them out forces a re-login rather than an
+            // "access denied" wall.
+            //
+            // OAuth tokens follow the shared policy in middleware/deviceApproval.js: the user
+            // already authenticated and consented in the browser during the OAuth flow, so no
+            // device approval prompt — visibility-only tracking, fail closed on revocation.
+            // Gating them here is what produced spurious "New Device … via <client> (OAuth)"
+            // approval requests whenever an agent probed /auth/me.
+            if (isOAuthToken && !isMasterToken) {
+              const { applyOAuthDevicePolicy } = require('../middleware/deviceApproval');
+              const verdict = applyOAuthDevicePolicy(req, {
+                userId,
+                tokenId: matchedToken.tokenId,
+                tokenLabel: tokenRow.label,
+              });
+              if (!verdict.allow) {
+                return res.status(verdict.status).json(verdict.body);
+              }
+            } else if (!isMasterToken && !!tokenRow?.requires_approval) {
               const fingerprint = DeviceFingerprint.fromRequest(req);
               // Per-token lookup: master approval must NOT auto-authorize guest tokens.
               const approvedForToken = dbInstance.prepare(
@@ -468,7 +518,7 @@ router.get('/me', async (req, res) => {
                 const pendingApprovals = getPendingApprovals(userId, matchedToken.tokenId);
                 const existingPending = pendingApprovals.find(p => p.device_fingerprint_hash === fingerprint.fingerprintHash);
                 if (!existingPending) {
-                  createPendingApproval(matchedToken.tokenId, userId, fingerprint.fingerprintHash, fingerprint.summary, fingerprint.fingerprint.ipAddress);
+                  createPendingApproval(matchedToken.tokenId, userId, fingerprint.fingerprintHash, fingerprint.summary, fingerprint.summary.ipAddress);
                 }
                 return res.status(403).json({
                   error: 'device_not_approved',
@@ -599,6 +649,112 @@ router.get('/me', async (req, res) => {
   } catch (error) {
     logger.error('Get user error:', error);
     res.status(500).json({ error: 'Failed to get user' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// B2B SSO (OIDC + SAML) — public entry points
+// ═══════════════════════════════════════════════════════════════════════════
+
+const APP_BASE = () => (process.env.APP_BASE_URL || 'https://www.myapiai.com').replace(/\/$/, '');
+
+async function establishSsoSession(req, res, { userId, redirect = '/dashboard/' }) {
+  const { getUserById } = require('../database');
+  const user = getUserById(userId);
+  if (!user) return res.status(500).json({ error: 'SSO login failed' });
+  await regenerateSession(req);
+  req.session.user = { id: user.id, email: user.email, username: user.username, displayName: user.displayName };
+  req.session.save(() => res.redirect(redirect));
+}
+
+/**
+ * GET /api/v1/auth/sso/start?email=user@acme.com
+ * Domain discovery → redirect to the org's IdP.
+ * Also accepts ?org=<slug> for direct entry.
+ */
+router.get('/sso/start', async (req, res) => {
+  try {
+    const { findOrgByEmailDomain, getOrganizationBySlug } = require('../database');
+    const sso = require('../lib/sso');
+    const org = req.query.org
+      ? getOrganizationBySlug(String(req.query.org))
+      : findOrgByEmailDomain(String(req.query.email || ''));
+    if (!org) {
+      return res.status(404).json({ error: 'Not Found', code: 'NO_SSO_ORG', message: 'No SSO-enabled organization found for this email domain' });
+    }
+    const config = sso.getOrgSsoConfig(org.id);
+    if (!config || !config.enabled) {
+      return res.status(404).json({ error: 'Not Found', code: 'NO_SSO_ORG', message: 'SSO is not configured for this organization' });
+    }
+    if (config.type === 'oidc') {
+      const url = await sso.buildOidcAuthUrl(org.id, `${APP_BASE()}/api/v1/auth/sso/oidc/callback`);
+      return res.redirect(url);
+    }
+    // SAML: SP-initiated AuthnRequest redirect
+    const saml = sso.getSamlInstance(org.id, APP_BASE());
+    const host = req.get('host');
+    const authUrl = await saml.getAuthorizeUrlAsync('', host, {});
+    return res.redirect(authUrl);
+  } catch (error) {
+    logger.error('[SSO] start failed:', error);
+    res.status(500).json({ error: 'SSO start failed', message: error.message });
+  }
+});
+
+/** GET /api/v1/auth/sso/oidc/callback — code exchange, JIT, session */
+router.get('/sso/oidc/callback', async (req, res) => {
+  try {
+    const sso = require('../lib/sso');
+    const { code, state, error: idpError } = req.query;
+    if (idpError) return res.status(400).json({ error: 'SSO failed', message: String(idpError) });
+    if (!code || !state) return res.status(400).json({ error: 'SSO failed', message: 'Missing code or state' });
+
+    const assertion = await sso.handleOidcCallback({
+      code: String(code),
+      state: String(state),
+      redirectUri: `${APP_BASE()}/api/v1/auth/sso/oidc/callback`,
+    });
+    const { userId, created } = sso.jitProvisionUser({ ...assertion, type: 'oidc' });
+    logger.info(`[SSO] OIDC login org=${assertion.orgId} user=${userId} created=${created}`);
+    return establishSsoSession(req, res, { userId });
+  } catch (error) {
+    logger.error('[SSO] OIDC callback failed:', error.message);
+    res.status(401).json({ error: 'SSO failed', message: error.message });
+  }
+});
+
+/** POST /api/v1/auth/sso/saml/callback/:orgId — validate assertion, JIT, session */
+router.post('/sso/saml/callback/:orgId', express.urlencoded({ extended: false }), async (req, res) => {
+  try {
+    const sso = require('../lib/sso');
+    const saml = sso.getSamlInstance(req.params.orgId, APP_BASE());
+    const { profile, loggedOut } = await saml.validatePostResponseAsync(req.body);
+    if (loggedOut || !profile) throw new Error('SAML response did not contain a login assertion');
+    const email = String(profile.nameID || profile.email || profile['urn:oid:0.9.2342.19200300.100.1.3'] || '').toLowerCase();
+    if (!email.includes('@')) throw new Error('SAML assertion did not contain an email nameID');
+    const { userId, created } = sso.jitProvisionUser({
+      orgId: req.params.orgId,
+      email,
+      name: profile.displayName || profile.cn || email,
+      subject: `saml:${profile.issuer || req.params.orgId}:${profile.nameID}`,
+      type: 'saml',
+    });
+    logger.info(`[SSO] SAML login org=${req.params.orgId} user=${userId} created=${created}`);
+    return establishSsoSession(req, res, { userId });
+  } catch (error) {
+    logger.error('[SSO] SAML callback failed:', error.message);
+    res.status(401).json({ error: 'SSO failed', message: error.message });
+  }
+});
+
+/** GET /api/v1/auth/sso/saml/metadata/:orgId — SP metadata for IdP setup */
+router.get('/sso/saml/metadata/:orgId', (req, res) => {
+  try {
+    const sso = require('../lib/sso');
+    const saml = sso.getSamlInstance(req.params.orgId, APP_BASE());
+    res.type('application/xml').send(saml.generateServiceProviderMetadata(null, null));
+  } catch (error) {
+    res.status(404).json({ error: 'Not Found', message: error.message });
   }
 });
 

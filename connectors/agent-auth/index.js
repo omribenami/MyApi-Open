@@ -185,19 +185,20 @@ async function runOAuthFlow() {
     '─────────────────────────────────────────────────────────────',
   ].join('\n'));
 
-  const opened = openBrowser(authUrl);
-  if (opened) {
-    log('✓ Browser opened — sign in to MyApi and click Authorize.');
-    log('  If the browser did not open, copy this URL manually:\n');
-    log('  ' + authUrl);
-  } else {
-    log('  Open this URL in your browser to authorize:\n');
-    log('  ' + authUrl + '\n');
-  }
-
-  // Local HTTP server to receive the OAuth callback
+  // Local HTTP server to receive the OAuth callback.
+  // Started BEFORE opening the browser so /start is ready immediately,
+  // and so the browser never races against a not-yet-listening server.
   const code = await new Promise((resolve, reject) => {
     const server = http.createServer((req, res) => {
+      // /start — redirect to the full OAuth URL via HTTP 302.
+      // Opening this simple local URL avoids xdg-open mangling the & chars
+      // in the query string on Linux (xdg-open is a shell script internally).
+      if (req.url === '/start') {
+        res.writeHead(302, { 'Location': authUrl });
+        res.end();
+        return;
+      }
+
       // Only handle /callback — ignore favicon, etc.
       if (!req.url || !req.url.startsWith('/callback')) {
         res.writeHead(404);
@@ -232,6 +233,15 @@ async function runOAuthFlow() {
 
     server.listen(port, '127.0.0.1', () => {
       log('  Waiting for browser authorization (timeout: 5 min)...');
+      const opened = openBrowser(`http://localhost:${port}/start`);
+      if (opened) {
+        log('✓ Browser opened — sign in to MyApi and click Authorize.');
+        log('  If the browser did not open, copy this URL manually:\n');
+        log('  ' + authUrl);
+      } else {
+        log('  Open this URL in your browser to authorize:\n');
+        log('  ' + authUrl + '\n');
+      }
     });
 
     server.on('error', (e) => {

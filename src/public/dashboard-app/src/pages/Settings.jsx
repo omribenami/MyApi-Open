@@ -1978,7 +1978,7 @@ function BillingSection() {
 
       <div className="mb-4 p-4 rounded" style={{ border: '1px solid var(--line)', background: 'var(--bg-raised)' }}>
         <p className="micro">Current Plan</p>
-        <p className="text-2xl font-bold ink mt-1">{String(current.plan || 'free').toUpperCase()}</p>
+        <p className="text-2xl font-bold ink mt-1">{current.planName || ({ free: 'Personal', pro: 'Pro', enterprise: 'Heavy', beta: 'Beta' }[String(current.plan || 'free').toLowerCase()] || String(current.plan).toUpperCase())}</p>
         {current.status && current.status !== 'active' && (
           <span
             className="mt-1 inline-block text-xs px-2 py-0.5 rounded"
@@ -2013,6 +2013,20 @@ function BillingSection() {
         {usageItems.map((item) => renderMetric(usage?.limits?.[item.key], item))}
       </div>
 
+      {usage?.overage?.enabled && (
+        <div className="mb-5 p-3 rounded text-sm" style={{ border: '1px solid var(--line)', background: 'var(--bg-raised)' }}>
+          <div className="flex items-center justify-between">
+            <span className="ink-2">Overage this month{usage.monthToDate?.month ? ` (${usage.monthToDate.month})` : ''}</span>
+            <span className="mono" style={{ color: usage.overage.calls > 0 ? 'var(--amber)' : 'var(--ink-3)' }}>
+              {usage.overage.calls.toLocaleString()} calls · ${(usage.overage.costCents / 100).toFixed(2)}
+            </span>
+          </div>
+          <p className="ink-4 text-xs mt-1">
+            {usage.overage.includedCalls?.toLocaleString()} calls included, then ${(usage.overage.ratePerThousandCents / 100).toFixed(2)} per 1,000 — calls are never blocked on this plan.
+          </p>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {plans.map((plan) => {
           const isCurrent = String(current.plan).toLowerCase() === String(plan.id).toLowerCase();
@@ -2040,13 +2054,14 @@ function BillingSection() {
                 )}
               </div>
               {isFree ? (
-                <p className="ink-2 text-xl mt-1 flex items-baseline gap-2">
-                  {betaActive && <span className="line-through ink-4 text-base">$10</span>}
-                  <span>Free</span>
-                  {betaActive && <span className="text-xs font-semibold" style={{ color: 'var(--violet)' }}>Beta</span>}
-                </p>
+                <p className="ink-2 text-xl mt-1">Free</p>
               ) : (
-                <p className="ink-2 text-xl mt-1">${plan.priceMonthly ?? Math.floor((plan.price_cents || 0) / 100)}<span className="text-sm ink-4">/mo</span></p>
+                <p className="ink-2 text-xl mt-1">
+                  ${plan.priceMonthly ?? Math.floor((plan.price_cents || 0) / 100)}<span className="text-sm ink-4">/mo</span>
+                  {plan.overage && (
+                    <span className="block text-[11px] ink-4 mt-0.5">+ ${(plan.overage.priceCents / 100).toFixed(2)} per {plan.overage.perCalls.toLocaleString()} extra calls</span>
+                  )}
+                </p>
               )}
               {plan.description && <p className="ink-4 text-xs mt-1">{plan.description}</p>}
               {Array.isArray(plan.features) && plan.features.length > 0 && (
@@ -2333,7 +2348,7 @@ function Settings() {
       {/* Page header */}
       <div>
         <div className="micro mb-2">ACCOUNT · SETTINGS</div>
-        <h1 className="font-serif text-[20px] sm:text-[28px] font-medium tracking-tight ink">Settings.</h1>
+        <h1 className="font-serif text-[20px] sm:text-[28px] font-medium tracking-tight ink">Your account, your rules.</h1>
         <p className="ink-3 text-sm mt-1">Manage your account, security, and privacy preferences</p>
       </div>
 

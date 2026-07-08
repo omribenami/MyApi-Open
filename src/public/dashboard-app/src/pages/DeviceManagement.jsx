@@ -173,7 +173,7 @@ const DeviceManagement = () => {
       {/* Header */}
       <div>
         <div className="micro mb-2">DEVICES · MANAGEMENT</div>
-        <h1 className="font-serif text-[20px] sm:text-[28px] font-medium tracking-tight ink">Device Management.</h1>
+        <h1 className="font-serif text-[20px] sm:text-[28px] font-medium tracking-tight ink">Every device, accountable.</h1>
         <p className="ink-3 text-sm mt-1">Control which devices and agents can access your MyApi tokens</p>
       </div>
 
@@ -209,7 +209,7 @@ const DeviceManagement = () => {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-0" style={{ borderBottom: '1px solid var(--line)' }}>
+      <div className="flex gap-0" data-tour="dev-tabs" style={{ borderBottom: '1px solid var(--line)' }}>
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -248,17 +248,17 @@ const DeviceManagement = () => {
           {approvedDevices.length === 0 ? (
             <div className="text-center py-16 ink-4 text-sm">No approved devices yet</div>
           ) : (
-            <div className="rounded overflow-hidden" style={{ border: '1px solid var(--line)' }}>
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto rounded" style={{ border: '1px solid var(--line)' }}>
+              <table className="text-sm" style={{ width: '100%', minWidth: '960px' }}>
                 <thead>
                   <tr className="bg-sunk" style={{ borderBottom: '1px solid var(--line)' }}>
                     <th className="px-4 py-3 text-left micro">Device</th>
-                    <th className="px-4 py-3 text-left micro hidden md:table-cell">Fingerprint / ID</th>
-                    <th className="px-4 py-3 text-left micro hidden lg:table-cell">IP Address</th>
+                    <th className="px-4 py-3 text-left micro">Fingerprint / ID</th>
+                    <th className="px-4 py-3 text-left micro">IP Address</th>
                     <th className="px-4 py-3 text-left micro hidden lg:table-cell">Approved</th>
-                    <th className="px-4 py-3 text-left micro hidden sm:table-cell">Last Used</th>
+                    <th className="px-4 py-3 text-left micro hidden lg:table-cell">Last Used</th>
                     <th className="px-4 py-3 text-left micro">Scope</th>
-                    <th className="px-4 py-3 text-right micro">Actions</th>
+                    <th className="px-4 py-3 text-right micro" style={{ width: '160px' }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -316,7 +316,7 @@ const DeviceManagement = () => {
                         </td>
 
                         {/* Fingerprint */}
-                        <td className="px-4 py-3.5 hidden md:table-cell">
+                        <td className="px-4 py-3.5">
                           <code
                             className="text-xs mono px-2 py-1 rounded ink-3"
                             style={{ background: 'var(--bg-sunk)' }}
@@ -326,7 +326,7 @@ const DeviceManagement = () => {
                         </td>
 
                         {/* IP */}
-                        <td className="px-4 py-3.5 hidden lg:table-cell">
+                        <td className="px-4 py-3.5">
                           <code className="text-xs mono ink-2">{device.ip || '—'}</code>
                         </td>
 
@@ -336,7 +336,7 @@ const DeviceManagement = () => {
                         </td>
 
                         {/* Last used */}
-                        <td className="px-4 py-3.5 hidden sm:table-cell">
+                        <td className="px-4 py-3.5 hidden lg:table-cell">
                           <span className="text-xs ink-3">{fmtRelative(device.lastUsedAt)}</span>
                         </td>
 
@@ -370,19 +370,25 @@ const DeviceManagement = () => {
                         </td>
 
                         {/* Actions */}
-                        <td className="px-4 py-3.5 text-right">
-                          <div className="flex items-center justify-end gap-1">
+                        <td className="px-3 py-3.5 text-right" style={{ width: '1px', whiteSpace: 'nowrap' }}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                             <button
                               onClick={() => { setRenameMode(device.id); setNewDeviceName(device.name); }}
-                              className="ui-button px-2.5 py-1.5 text-xs"
+                              title="Rename"
+                              className="ui-button"
+                              style={{ padding: '5px 7px', display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}
                             >
-                              Rename
+                              <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                              <span className="hidden sm:inline">Rename</span>
                             </button>
                             <button
                               onClick={() => handleRevokeDevice(device.id)}
-                              className="ui-button-danger px-2.5 py-1.5 text-xs"
+                              title="Revoke"
+                              className="ui-button-danger"
+                              style={{ padding: '5px 7px', display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}
                             >
-                              Revoke
+                              <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+                              <span className="hidden sm:inline">Revoke</span>
                             </button>
                           </div>
                         </td>
@@ -399,8 +405,8 @@ const DeviceManagement = () => {
           {pendingApprovals.length === 0 ? (
             <div className="text-center py-16 ink-4 text-sm">No pending approvals</div>
           ) : (
-            <div className="rounded overflow-hidden" style={{ border: '1px solid var(--line)' }}>
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto rounded" style={{ border: '1px solid var(--line)' }}>
+              <table className="w-full text-sm" style={{ minWidth: '500px' }}>
                 <thead>
                   <tr className="bg-sunk" style={{ borderBottom: '1px solid var(--line)' }}>
                     <th className="px-4 py-3 text-left micro">Request</th>
@@ -408,7 +414,7 @@ const DeviceManagement = () => {
                     <th className="px-4 py-3 text-left micro hidden sm:table-cell">IP</th>
                     <th className="px-4 py-3 text-left micro hidden lg:table-cell">Expires</th>
                     <th className="px-4 py-3 text-left micro">Name</th>
-                    <th className="px-4 py-3 text-right micro">Actions</th>
+                    <th className="px-4 py-3 text-right micro whitespace-nowrap">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -500,13 +506,13 @@ const DeviceManagement = () => {
           {activityLog.length === 0 ? (
             <div className="text-center py-16 ink-4 text-sm">No device activity yet</div>
           ) : (
-            <div className="rounded overflow-hidden" style={{ border: '1px solid var(--line)' }}>
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto rounded" style={{ border: '1px solid var(--line)' }}>
+              <table className="text-sm" style={{ width: '100%', minWidth: '480px' }}>
                 <thead>
                   <tr className="bg-sunk" style={{ borderBottom: '1px solid var(--line)' }}>
                     <th className="px-4 py-3 text-left micro">Event</th>
-                    <th className="px-4 py-3 text-left micro hidden sm:table-cell">Device</th>
-                    <th className="px-4 py-3 text-left micro hidden md:table-cell">IP</th>
+                    <th className="px-4 py-3 text-left micro">Device</th>
+                    <th className="px-4 py-3 text-left micro">IP</th>
                     <th className="px-4 py-3 text-left micro">Time</th>
                   </tr>
                 </thead>
@@ -529,10 +535,10 @@ const DeviceManagement = () => {
                             <span className="ink-2 font-medium capitalize">{event.action}</span>
                           </div>
                         </td>
-                        <td className="px-4 py-3.5 hidden sm:table-cell">
+                        <td className="px-4 py-3.5">
                           <span className="ink-2">{event.deviceName || '—'}</span>
                         </td>
-                        <td className="px-4 py-3.5 hidden md:table-cell">
+                        <td className="px-4 py-3.5">
                           <code className="text-xs mono ink-3">{event.ip || '—'}</code>
                         </td>
                         <td className="px-4 py-3.5">
