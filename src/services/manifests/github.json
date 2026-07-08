@@ -1,0 +1,62 @@
+{
+  "service": {
+    "name": "github",
+    "label": "GitHub",
+    "category": "dev",
+    "icon": "https://cdn.simpleicons.org/github",
+    "description": "Version control and collaboration",
+    "auth_type": "oauth2",
+    "api_endpoint": "https://api.github.com",
+    "documentation_url": "https://docs.github.com/en/rest"
+  },
+  "methods": [
+    {
+      "method_name": "repos.list",
+      "http_method": "GET",
+      "endpoint": "/user/repos",
+      "description": "List accessible GitHub repositories",
+      "parameters": [
+        { "name": "per_page", "type": "number", "required": false, "description": "Results per page" },
+        { "name": "page", "type": "number", "required": false, "description": "Page number" },
+        { "name": "sort", "type": "string", "required": false, "description": "Sort by updated, created, pushed, full_name" }
+      ],
+      "response_example": {
+        "ok": true,
+        "data": [
+          { "full_name": "octocat/Hello-World", "private": false }
+        ]
+      }
+    },
+    {
+      "method_name": "repos.get",
+      "http_method": "GET",
+      "endpoint": "/repos/:owner/:repo",
+      "description": "Get repository metadata",
+      "parameters": [
+        { "name": "owner", "type": "string", "required": true, "description": "Repository owner" },
+        { "name": "repo", "type": "string", "required": true, "description": "Repository name" }
+      ],
+      "response_example": {
+        "ok": true,
+        "data": { "full_name": "octocat/Hello-World", "default_branch": "main" }
+      }
+    },
+    {
+      "method_name": "pull_requests.list",
+      "http_method": "GET",
+      "endpoint": "/repos/:owner/:repo/pulls",
+      "description": "List pull requests from a repository",
+      "parameters": [
+        { "name": "owner", "type": "string", "required": true, "description": "Repository owner" },
+        { "name": "repo", "type": "string", "required": true, "description": "Repository name" },
+        { "name": "state", "type": "string", "required": false, "description": "open, closed, or all" }
+      ],
+      "response_example": {
+        "ok": true,
+        "data": [
+          { "number": 7, "title": "Add feature", "state": "open" }
+        ]
+      }
+    }
+  ]
+}

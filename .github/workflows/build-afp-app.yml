@@ -144,6 +144,9 @@ jobs:
     name: Deploy installers to server
     runs-on: ubuntu-latest
     needs: [build-win, build-mac]
+    # Hosted-infra step: only the private repo has the SSH deploy secrets.
+    # Forks and MyApi Open still build the installers above.
+    if: github.repository == 'omribenami/MyApi'
 
     steps:
       - name: Download win artifact
