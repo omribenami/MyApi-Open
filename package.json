@@ -24,6 +24,7 @@
     "db:migrate:status": "node src/scripts/migrate.js status",
     "db:migrate:rollback": "node src/scripts/migrate.js rollback",
     "db:migrate:create": "node src/scripts/migrate.js create",
+    "services:import-manifests": "node src/scripts/import-service-manifests.js",
     "backup:create": "node src/scripts/backup.js create",
     "backup:restore": "node src/scripts/backup.js restore",
     "backup:list": "node src/scripts/backup.js list",
