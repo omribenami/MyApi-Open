@@ -1,7 +1,55 @@
+const crypto = require('crypto');
 const logger = require('../utils/logger');
 const NotificationService = require('../services/notificationService');
 const { getDatabase } = require('../config/database');
 const { checkRequest: securityCheck } = require('../lib/tokenSecurityMonitor');
+
+function tryAscOnlyAuth(req) {
+  try {
+    const pubKeyB64 = req.headers['x-agent-publickey'];
+    const sigB64    = req.headers['x-agent-signature'];
+    const tsHeader  = req.headers['x-agent-timestamp'];
+    if (!pubKeyB64 || !sigB64 || !tsHeader) return null;
+
+    const ts = parseInt(tsHeader, 10);
+    if (isNaN(ts) || Math.abs(Math.floor(Date.now() / 1000) - ts) > 60) return null;
+
+    // Normalize to the raw 32-byte Ed25519 key so the fingerprint matches the one
+    // computed at registration / in the live auth path (index.js). A 44-byte SPKI
+    // key must have its 12-byte header stripped first; anything else is invalid.
+    let rawPub = Buffer.from(pubKeyB64, 'base64');
+    if (rawPub.length === 44) rawPub = rawPub.slice(12);
+    if (rawPub.length !== 32) return null;
+    const fingerprint = crypto.createHash('sha256').update(rawPub).digest('hex').substring(0, 32);
+
+    const db = getDatabase();
+    const { getApprovedDeviceByKeyFingerprintGlobal } = require('../database');
+    const device = getApprovedDeviceByKeyFingerprintGlobal(fingerprint);
+    if (!device) return null;
+
+    const spki   = Buffer.concat([Buffer.from('302a300506032b6570032100', 'hex'), rawPub]);
+    const keyObj = crypto.createPublicKey({ key: spki, format: 'der', type: 'spki' });
+    const msg    = Buffer.from(`${tsHeader}:${fingerprint}`);
+    const valid  = crypto.verify(null, msg, keyObj, Buffer.from(sigB64, 'base64'));
+    if (!valid) return null;
+
+    // Scoped ASC keys carry the registering token's scope (JSON array only);
+    // legacy 'read'/'full' device values keep their original semantics.
+    const boundScope = typeof device.scope === 'string' && device.scope.startsWith('[') ? device.scope : null;
+    return {
+      id:      `asc_${fingerprint}`,
+      tokenId: fingerprint,
+      ownerId: String(device.user_id),
+      userId:  String(device.user_id),
+      type:    'asc',
+      tokenType: boundScope ? 'guest' : 'master',
+      scope:   boundScope || 'full',
+      name:    device.device_name || 'ASC Agent',
+    };
+  } catch {
+    return null;
+  }
+}
 
 // Authentication middleware
 function authenticate(tokenManager, auditLog) {
@@ -9,7 +57,18 @@ function authenticate(tokenManager, auditLog) {
     try {
       // Extract token from Authorization header
       const authHeader = req.headers.authorization;
-      
+
+      // ASC-only path: no bearer token but valid signed ASC headers from an approved key
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        const ascMeta = tryAscOnlyAuth(req);
+        if (ascMeta) {
+          req.tokenData = ascMeta;
+          req.tokenMeta = ascMeta;
+          req.userId    = ascMeta.userId;
+          return next();
+        }
+      }
+
       if (!authHeader || !authHeader.startsWith('Bearer ')) {
         auditLog.log({
           action: 'auth_failed',

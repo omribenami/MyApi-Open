@@ -30,35 +30,36 @@ class NotificationDispatcher {
     'billing_quota_exceeded': { channels: ['in-app', 'email'], category: 'billing', severity: 'critical' },
     'billing_subscription_upgraded': { channels: ['in-app'], category: 'billing', severity: 'info' },
     'billing_failure': { channels: ['in-app', 'email'], category: 'billing', severity: 'critical' },
-    'agent_approval_request': { channels: ['in-app', 'email'], category: 'agents', severity: 'info' }
+    'agent_approval_request': { channels: ['in-app', 'email'], category: 'agents', severity: 'info' },
+    'oauth_reconnect_required': { channels: ['in-app', 'email'], category: 'services', severity: 'warning' },
+    'token_created': { channels: ['in-app', 'email'], category: 'security', severity: 'info' }
   };
 
   /**
-   * Get user's notification preferences for specific channels
+   * Get user's notification preferences for specific channels. Uses the same
+   * settings model as NotificationService (getOrCreateNotificationSettings +
+   * per-type type_settings) so both emit paths obey the Settings UI. Previously
+   * this read channel rows directly, defaulted email to ON (the service defaults
+   * it to OFF), and ignored per-type toggles entirely.
    */
-  static getUserChannelPreferences(workspaceId, userId, channels) {
+  static getUserChannelPreferences(workspaceId, userId, channels, notificationType) {
+    const NotificationService = require('../services/notificationService');
+    const result = {};
     try {
-      if (!channels || channels.length === 0) return {};
-
-      const placeholders = channels.map(() => '?').join(',');
-      const preferences = db.prepare(`
-        SELECT channel, enabled FROM notification_preferences
-        WHERE workspace_id = ? AND user_id = ? AND channel IN (${placeholders})
-      `).all(workspaceId, userId, ...channels);
-
-      // Build result: map each channel to enabled status
-      const result = {};
-      channels.forEach(channel => {
-        const pref = preferences.find(p => p.channel === channel);
-        result[channel] = pref ? pref.enabled === 1 : true; // Default to enabled
+      const { getOrCreateNotificationSettings } = require('../database');
+      const settings = getOrCreateNotificationSettings(workspaceId, userId);
+      const prefsByChannel = { 'in-app': settings.inApp, 'email': settings.email };
+      const alwaysOn = NotificationService.ALWAYS_IN_APP.has(notificationType);
+      (channels || []).forEach(channel => {
+        result[channel] = NotificationService.isTypeEnabled(prefsByChannel[channel], notificationType, {
+          alwaysOn: channel === 'in-app' && alwaysOn,
+        });
       });
-
       return result;
     } catch (err) {
       console.error('[NotificationDispatcher] Error fetching preferences:', err);
-      // Fallback: enable all requested channels
-      const result = {};
-      channels.forEach(ch => result[ch] = true);
+      // Fail safe: deliver in-app only (never email someone who may have opted out)
+      (channels || []).forEach(ch => result[ch] = ch === 'in-app');
       return result;
     }
   }
@@ -75,7 +76,7 @@ class NotificationDispatcher {
       }
 
       // Get user preferences for default channels
-      const enabledChannels = this.getUserChannelPreferences(workspaceId, userId, notifConfig.channels);
+      const enabledChannels = this.getUserChannelPreferences(workspaceId, userId, notifConfig.channels, notificationType);
       const channelsToUse = Object.keys(enabledChannels).filter(ch => enabledChannels[ch]);
 
       if (channelsToUse.length === 0) {
@@ -97,9 +98,9 @@ class NotificationDispatcher {
       queueNotificationForDelivery(notificationId, channelsToUse);
 
       // Queue actual email when email channel is enabled.
-      // oauth_connected / oauth_disconnected are skipped here — they have dedicated
-      // transactional email sends (new design) fired directly in the route handlers.
-      const DEDICATED_EMAIL_TYPES = new Set(['oauth_connected', 'oauth_disconnected']);
+      // These types are skipped here — they have dedicated transactional email sends
+      // (new design) fired directly in the route handlers.
+      const DEDICATED_EMAIL_TYPES = new Set(['oauth_connected', 'oauth_disconnected', 'team_invitation', 'security_device_revoked', 'security_alert', 'device_approval_requested']);
       if (channelsToUse.includes('email') && !DEDICATED_EMAIL_TYPES.has(notificationType)) {
         try {
           const user = db.prepare('SELECT email, display_name FROM users WHERE id = ?').get(userId);
@@ -204,7 +205,18 @@ class NotificationDispatcher {
   static async onDeviceRevoked(workspaceId, userId, deviceName) {
     const title = `Device Revoked`;
     const message = `Your device "${deviceName}" has been removed and can no longer access your account`;
-    return this.dispatch(workspaceId, userId, 'security_device_revoked', title, message, { deviceName });
+    const result = await this.dispatch(workspaceId, userId, 'security_device_revoked', title, message, { deviceName });
+    try {
+      const user = db.prepare('SELECT email, display_name FROM users WHERE id = ?').get(userId);
+      if (user?.email) {
+        const EmailService = require('../services/emailService');
+        EmailService.sendDeviceRevokedEmail(user.email, user.display_name, deviceName)
+          .catch(err => console.error('[NotificationDispatcher] Device revoked email failed:', err.message));
+      }
+    } catch (err) {
+      console.error('[NotificationDispatcher] Device revoked email error:', err.message);
+    }
+    return result;
   }
 
   // ========== BILLING EVENTS ==========

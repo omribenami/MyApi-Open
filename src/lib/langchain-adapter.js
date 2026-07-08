@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { maybeCompressMessagesForLLM } = require('./headroom');
 
 /**
  * LangChain-inspired Adapter for LLM Integration
@@ -51,16 +52,22 @@ class LLMAdapter {
       { role: 'user', content: safeUserMessage }
     ];
 
+    const headroomResult = await maybeCompressMessagesForLLM(messages, {
+      label: 'brain chat prompt messages',
+      model: this.model,
+    });
+    const outboundMessages = headroomResult.messages;
+
     // Route to appropriate provider
     try {
       if (this.model.startsWith('gemini')) {
-        return await this._callGemini(messages);
+        return await this._callGemini(outboundMessages);
       } else if (this.model.startsWith('gpt')) {
-        return await this._callOpenAI(messages);
+        return await this._callOpenAI(outboundMessages);
       } else if (this.model.startsWith('claude')) {
-        return await this._callClaude(messages);
+        return await this._callClaude(outboundMessages);
       } else {
-        return await this._callOllama(messages);
+        return await this._callOllama(outboundMessages);
       }
     } catch (error) {
       // Fallback to mock response if API unavailable

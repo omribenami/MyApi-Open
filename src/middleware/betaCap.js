@@ -21,7 +21,7 @@ function requireBetaSlot(req, res, next) {
   if (wantsHtml(req)) {
     const email = req.query?.email || req.body?.email || '';
     const qs = email ? `?beta=full&email=${encodeURIComponent(email)}` : '?beta=full';
-    return res.redirect(302, `/${qs}`);
+    return res.redirect(302, `/dashboard/signup${qs}`);
   }
 
   return res.status(403).json(payload);

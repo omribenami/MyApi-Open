@@ -1,0 +1,787 @@
+{
+  "airtable": {
+    "label": "Airtable",
+    "authConfigId": "",
+    "category": "Productivity"
+  },
+  "anthropic_administrator": {
+    "label": "Anthropic",
+    "authConfigId": "",
+    "category": "AI",
+    "authMode": "api_key",
+    "authFields": [
+      {
+        "name": "generic_api_key",
+        "displayName": "Admin API Key",
+        "type": "string",
+        "required": true,
+        "secret": true,
+        "description": "The Admin API key used for authentication, starting with 'sk-ant-admin...'."
+      }
+    ]
+  },
+  "asana": {
+    "label": "Asana",
+    "authConfigId": "",
+    "category": "Project Management"
+  },
+  "attio": {
+    "label": "Attio",
+    "authConfigId": "",
+    "category": "Business & CRM"
+  },
+  "basecamp": {
+    "label": "Basecamp",
+    "authConfigId": "",
+    "category": "Project Management"
+  },
+  "bitbucket": {
+    "label": "Bitbucket",
+    "authConfigId": "",
+    "category": "Developer Tools"
+  },
+  "boldsign": {
+    "label": "Boldsign",
+    "authConfigId": "",
+    "category": "Productivity"
+  },
+  "box": {
+    "label": "Box",
+    "authConfigId": "",
+    "category": "Productivity"
+  },
+  "cal": {
+    "label": "Cal.com",
+    "authConfigId": "",
+    "category": "Productivity"
+  },
+  "calendly": {
+    "label": "Calendly",
+    "authConfigId": "",
+    "category": "Productivity"
+  },
+  "canva": {
+    "label": "Canva",
+    "authConfigId": "",
+    "category": "Productivity"
+  },
+  "capsule_crm": {
+    "label": "Capsule CRM",
+    "authConfigId": "",
+    "category": "Business & CRM"
+  },
+  "clickup": {
+    "label": "ClickUp",
+    "authConfigId": "",
+    "category": "Project Management"
+  },
+  "cloudflare": {
+    "label": "Cloudflare",
+    "authConfigId": "",
+    "category": "Developer Tools",
+    "authMode": "api_key",
+    "authFields": [
+      {
+        "name": "generic_api_key",
+        "displayName": "Global API Key",
+        "type": "string",
+        "required": true,
+        "secret": true,
+        "description": "Cloudflare Global API Key \u2014 dash.cloudflare.com \u2192 My Profile \u2192 API Tokens \u2192 Global API Key \u2192 View."
+      },
+      {
+        "name": "generic_id",
+        "displayName": "Account Email",
+        "type": "string",
+        "required": true,
+        "secret": false,
+        "description": "The email address of your Cloudflare account (used together with the Global API Key)."
+      }
+    ]
+  },
+  "confluence": {
+    "label": "Confluence",
+    "authConfigId": "",
+    "category": "Project Management"
+  },
+  "contentful": {
+    "label": "Contentful",
+    "authConfigId": "",
+    "category": "Developer Tools"
+  },
+  "digital_ocean": {
+    "label": "DigitalOcean",
+    "authConfigId": "",
+    "category": "Developer Tools"
+  },
+  "discord": {
+    "label": "Discord",
+    "authConfigId": "",
+    "category": "Communication"
+  },
+  "discordbot": {
+    "label": "Discord Bot",
+    "authConfigId": "",
+    "category": "Communication"
+  },
+  "dropbox": {
+    "label": "Dropbox",
+    "authConfigId": "",
+    "category": "Productivity"
+  },
+  "dub": {
+    "label": "Dub",
+    "authConfigId": "",
+    "category": "Productivity"
+  },
+  "dynamics365": {
+    "label": "Dynamics 365",
+    "authConfigId": "",
+    "category": "Business & CRM"
+  },
+  "elevenlabs": {
+    "label": "ElevenLabs",
+    "authConfigId": "",
+    "category": "AI",
+    "authMode": "api_key",
+    "authFields": [
+      {
+        "name": "generic_api_key",
+        "displayName": "API Key",
+        "type": "string",
+        "required": true,
+        "secret": true,
+        "description": "Your ElevenLabs API key (starts with 'sk_'). Create one at elevenlabs.io/app/settings/api-keys and copy it right away \u2014 it's shown only once."
+      }
+    ]
+  },
+  "eventbrite": {
+    "label": "Eventbrite",
+    "authConfigId": "",
+    "category": "Business & CRM"
+  },
+  "exa": {
+    "label": "Exa",
+    "authConfigId": "",
+    "category": "AI",
+    "authMode": "api_key",
+    "authFields": [
+      {
+        "name": "generic_api_key",
+        "displayName": "API Key",
+        "type": "string",
+        "required": true,
+        "secret": true,
+        "description": "Your Exa API key, a long secret string that authorizes every search. Create or copy one at https://dashboard.exa.ai/api-keys (sign in first)."
+      }
+    ]
+  },
+  "excel": {
+    "label": "Excel",
+    "authConfigId": "",
+    "category": "Productivity"
+  },
+  "facebook": {
+    "label": "Facebook",
+    "authConfigId": "",
+    "category": "Social Media"
+  },
+  "fathom": {
+    "label": "Fathom",
+    "authConfigId": "",
+    "category": "Productivity"
+  },
+  "figma": {
+    "label": "Figma",
+    "authConfigId": "",
+    "category": "Developer Tools"
+  },
+  "freshbooks": {
+    "label": "FreshBooks",
+    "authConfigId": "",
+    "category": "Business & CRM"
+  },
+  "github": {
+    "label": "GitHub",
+    "authConfigId": "",
+    "category": "Developer Tools"
+  },
+  "gitlab": {
+    "label": "GitLab",
+    "authConfigId": "",
+    "category": "Developer Tools"
+  },
+  "gmail": {
+    "label": "Gmail",
+    "authConfigId": "",
+    "category": "Communication"
+  },
+  "gong": {
+    "label": "Gong",
+    "authConfigId": "",
+    "category": "Business & CRM"
+  },
+  "google_analytics": {
+    "label": "Google Analytics",
+    "authConfigId": "",
+    "category": "Business & CRM"
+  },
+  "google_classroom": {
+    "label": "Google Classroom",
+    "authConfigId": "",
+    "category": "Productivity"
+  },
+  "google_maps": {
+    "label": "Google Maps",
+    "authConfigId": "",
+    "category": "Developer Tools"
+  },
+  "google_search_console": {
+    "label": "Google Search Console",
+    "authConfigId": "",
+    "category": "Business & CRM"
+  },
+  "googleads": {
+    "label": "Google Ads",
+    "authConfigId": "",
+    "category": "Business & CRM"
+  },
+  "googlebigquery": {
+    "label": "Google BigQuery",
+    "authConfigId": "",
+    "category": "Developer Tools"
+  },
+  "googlecalendar": {
+    "label": "Google Calendar",
+    "authConfigId": "",
+    "category": "Productivity"
+  },
+  "googledocs": {
+    "label": "Google Docs",
+    "authConfigId": "",
+    "category": "Productivity"
+  },
+  "googledrive": {
+    "label": "Google Drive",
+    "authConfigId": "",
+    "category": "Productivity"
+  },
+  "googlemeet": {
+    "label": "Google Meet",
+    "authConfigId": "",
+    "category": "Communication"
+  },
+  "googlephotos": {
+    "label": "Google Photos",
+    "authConfigId": "",
+    "category": "Productivity"
+  },
+  "googlesheets": {
+    "label": "Google Sheets",
+    "authConfigId": "",
+    "category": "Productivity"
+  },
+  "googleslides": {
+    "label": "Google Slides",
+    "authConfigId": "",
+    "category": "Productivity"
+  },
+  "googlesuper": {
+    "label": "Google Super",
+    "authConfigId": "",
+    "category": "Productivity"
+  },
+  "googletasks": {
+    "label": "Google Tasks",
+    "authConfigId": "",
+    "category": "Productivity"
+  },
+  "gorgias": {
+    "label": "Gorgias",
+    "authConfigId": "",
+    "category": "Business & CRM"
+  },
+  "groqcloud": {
+    "label": "Groq",
+    "authConfigId": "",
+    "category": "AI",
+    "authMode": "api_key",
+    "authFields": [
+      {
+        "name": "generic_api_key",
+        "displayName": "GroqCloud API Key",
+        "type": "string",
+        "required": true,
+        "secret": true,
+        "description": "The API key used to authenticate requests to the Groq API."
+      }
+    ]
+  },
+  "gumroad": {
+    "label": "Gumroad",
+    "authConfigId": "",
+    "category": "Business & CRM"
+  },
+  "harvest": {
+    "label": "Harvest",
+    "authConfigId": "",
+    "category": "Project Management"
+  },
+  "heygen": {
+    "label": "HeyGen",
+    "authConfigId": "",
+    "category": "AI",
+    "authMode": "api_key",
+    "authFields": [
+      {
+        "name": "generic_api_key",
+        "displayName": "API Key",
+        "type": "string",
+        "required": true,
+        "secret": true,
+        "description": "Your secret HeyGen API key, which proves requests come from your account. Copy it in the HeyGen app under Settings \u2192 API. Note: API calls use separate API credits."
+      }
+    ]
+  },
+  "hubspot": {
+    "label": "HubSpot",
+    "authConfigId": "",
+    "category": "Business & CRM"
+  },
+  "hugging_face": {
+    "label": "Hugging Face",
+    "authConfigId": "",
+    "category": "Developer Tools"
+  },
+  "instagram": {
+    "label": "Instagram",
+    "authConfigId": "",
+    "category": "Social Media"
+  },
+  "intercom": {
+    "label": "Intercom",
+    "authConfigId": "",
+    "category": "Business & CRM"
+  },
+  "jira": {
+    "label": "Jira",
+    "authConfigId": "",
+    "category": "Project Management"
+  },
+  "kit": {
+    "label": "Kit",
+    "authConfigId": "",
+    "category": "Communication"
+  },
+  "linear": {
+    "label": "Linear",
+    "authConfigId": "",
+    "category": "Project Management"
+  },
+  "linkedin": {
+    "label": "LinkedIn (Profile)",
+    "authConfigId": "",
+    "category": "Social Media",
+    "scopes": [
+      "openid",
+      "profile",
+      "email",
+      "w_member_social",
+      "r_organization_social",
+      "w_organization_social",
+      "rw_organization_admin"
+    ]
+  },
+  "mailchimp": {
+    "label": "Mailchimp",
+    "authConfigId": "",
+    "category": "Business & CRM"
+  },
+  "microsoft_teams": {
+    "label": "Microsoft Teams",
+    "authConfigId": "",
+    "category": "Communication"
+  },
+  "miro": {
+    "label": "Miro",
+    "authConfigId": "",
+    "category": "Productivity"
+  },
+  "mistral_ai": {
+    "label": "Mistral AI",
+    "authConfigId": "",
+    "category": "AI",
+    "authMode": "api_key",
+    "authFields": [
+      {
+        "name": "generic_api_key",
+        "displayName": "Mistral AI API Key",
+        "type": "string",
+        "required": true,
+        "secret": true,
+        "description": "Your API key for authenticating requests to Mistral AI's API."
+      }
+    ]
+  },
+  "monday": {
+    "label": "Monday.com",
+    "authConfigId": "",
+    "category": "Project Management"
+  },
+  "mural": {
+    "label": "Mural",
+    "authConfigId": "",
+    "category": "Productivity"
+  },
+  "notion": {
+    "label": "Notion",
+    "authConfigId": "",
+    "category": "Productivity"
+  },
+  "omnisend": {
+    "label": "Omnisend",
+    "authConfigId": "",
+    "category": "Communication"
+  },
+  "one_drive": {
+    "label": "OneDrive",
+    "authConfigId": "",
+    "category": "Productivity"
+  },
+  "openai": {
+    "label": "OpenAI",
+    "authConfigId": "",
+    "category": "AI",
+    "authMode": "api_key",
+    "authFields": [
+      {
+        "name": "generic_api_key",
+        "displayName": "OpenAI API Key",
+        "type": "string",
+        "required": true,
+        "secret": true,
+        "description": "Your secret OpenAI API key, starting with 'sk-' or 'sk-proj-'. Create or copy one at platform.openai.com/api-keys and keep it private."
+      },
+      {
+        "name": "organization_id",
+        "displayName": "OpenAI Organization ID (optional)",
+        "type": "string",
+        "required": false,
+        "secret": false,
+        "description": "Only needed if you're in multiple OpenAI organizations. Looks like 'org-AbC123xyz' \u2014 find it under Settings \u2192 Organization \u2192 General. Most users can leave this blank."
+      }
+    ]
+  },
+  "outlook": {
+    "label": "Outlook",
+    "authConfigId": "",
+    "category": "Communication"
+  },
+  "pagerduty": {
+    "label": "PagerDuty",
+    "authConfigId": "",
+    "category": "Developer Tools"
+  },
+  "perplexityai": {
+    "label": "Perplexity",
+    "authConfigId": "",
+    "category": "AI",
+    "authMode": "api_key",
+    "authFields": [
+      {
+        "name": "generic_api_key",
+        "displayName": "API Key",
+        "type": "string",
+        "required": true,
+        "secret": true,
+        "description": "Your secret Perplexity API key, starting with 'pplx-'. Create one at console.perplexity.ai under API Keys \u2014 it's shown only once, so copy it immediately."
+      }
+    ]
+  },
+  "prisma": {
+    "label": "Prisma",
+    "authConfigId": "",
+    "category": "Developer Tools"
+  },
+  "productboard": {
+    "label": "Productboard",
+    "authConfigId": "",
+    "category": "Project Management"
+  },
+  "pushbullet": {
+    "label": "Pushbullet",
+    "authConfigId": "",
+    "category": "Communication"
+  },
+  "quickbooks": {
+    "label": "QuickBooks",
+    "authConfigId": "",
+    "category": "Business & CRM"
+  },
+  "reddit": {
+    "label": "Reddit",
+    "authConfigId": "",
+    "category": "Social Media",
+    "scopes": [
+      "identity",
+      "edit",
+      "flair",
+      "history",
+      "modconfig",
+      "modflair",
+      "modlog",
+      "modposts",
+      "modwiki",
+      "mysubreddits",
+      "privatemessages",
+      "read",
+      "report",
+      "save",
+      "submit",
+      "subscribe",
+      "vote",
+      "wikiedit",
+      "wikiread",
+      "account",
+      "creddits",
+      "livemanage",
+      "modcontributors",
+      "modmail",
+      "modothers",
+      "modself",
+      "structuredstyles"
+    ]
+  },
+  "reddit_ads": {
+    "label": "Reddit Ads",
+    "authConfigId": "",
+    "category": "Social Media"
+  },
+  "replicate": {
+    "label": "Replicate",
+    "authConfigId": "",
+    "category": "AI",
+    "authMode": "api_key",
+    "authFields": [
+      {
+        "name": "bearer_token",
+        "displayName": "Replicate API Token",
+        "type": "string",
+        "required": true,
+        "secret": true,
+        "description": "Your Replicate API token, used for authenticating API requests."
+      }
+    ]
+  },
+  "salesforce": {
+    "label": "Salesforce",
+    "authConfigId": "",
+    "category": "Business & CRM"
+  },
+  "sentry": {
+    "label": "Sentry",
+    "authConfigId": "",
+    "category": "Developer Tools"
+  },
+  "serpapi": {
+    "label": "SerpApi",
+    "authConfigId": "",
+    "category": "AI",
+    "authMode": "api_key",
+    "authFields": [
+      {
+        "name": "generic_api_key",
+        "displayName": "API Key",
+        "type": "string",
+        "required": true,
+        "secret": true,
+        "description": "Your SerpApi private API key, a 64-character string. Sign in and copy it from your Dashboard under 'Your Private API Key' at serpapi.com/manage-api-key."
+      }
+    ]
+  },
+  "share_point": {
+    "label": "SharePoint",
+    "authConfigId": "",
+    "category": "Productivity"
+  },
+  "slack": {
+    "label": "Slack",
+    "authConfigId": "",
+    "category": "Communication"
+  },
+  "slackbot": {
+    "label": "Slack Bot",
+    "authConfigId": "",
+    "category": "Communication"
+  },
+  "splitwise": {
+    "label": "Splitwise",
+    "authConfigId": "",
+    "category": "Productivity"
+  },
+  "square": {
+    "label": "Square",
+    "authConfigId": "",
+    "category": "Business & CRM"
+  },
+  "stack_exchange": {
+    "label": "Stack Exchange",
+    "authConfigId": "",
+    "category": "Developer Tools"
+  },
+  "strava": {
+    "label": "Strava",
+    "authConfigId": "",
+    "category": "Social Media"
+  },
+  "stripe": {
+    "label": "Stripe",
+    "authConfigId": "",
+    "category": "Business & CRM"
+  },
+  "supabase": {
+    "label": "Supabase",
+    "authConfigId": "",
+    "category": "Developer Tools"
+  },
+  "tavily": {
+    "label": "Tavily",
+    "authConfigId": "",
+    "category": "AI",
+    "authMode": "api_key",
+    "authFields": [
+      {
+        "name": "generic_api_key",
+        "displayName": "API Key",
+        "type": "string",
+        "required": true,
+        "secret": true,
+        "description": "Your Tavily API key (starts with 'tvly-', e.g. tvly-dev-abc123). Sign in at app.tavily.com and copy it from the API Keys section; either key type works."
+      }
+    ]
+  },
+  "telegram": {
+    "label": "Telegram",
+    "authConfigId": "",
+    "category": "Communication"
+  },
+  "ticketmaster": {
+    "label": "Ticketmaster",
+    "authConfigId": "",
+    "category": "Productivity"
+  },
+  "ticktick": {
+    "label": "TickTick",
+    "authConfigId": "",
+    "category": "Productivity"
+  },
+  "todoist": {
+    "label": "Todoist",
+    "authConfigId": "",
+    "category": "Productivity"
+  },
+  "trello": {
+    "label": "Trello",
+    "authConfigId": "",
+    "category": "Project Management"
+  },
+  "twitch": {
+    "label": "Twitch",
+    "authConfigId": "",
+    "category": "Social Media",
+    "authMode": "oauth2",
+    "scopes": [
+      "user:read:email",
+      "user:read:follows",
+      "user:read:subscriptions",
+      "user:read:blocked_users",
+      "user:edit",
+      "channel:read:subscriptions",
+      "channel:read:stream_key",
+      "channel:read:redemptions",
+      "channel:manage:redemptions",
+      "channel:manage:broadcast",
+      "channel:manage:videos",
+      "channel:read:editors",
+      "channel:read:vips",
+      "channel:manage:vips",
+      "clips:edit",
+      "bits:read",
+      "moderator:read:followers",
+      "analytics:read:games",
+      "analytics:read:extensions",
+      "chat:read",
+      "chat:edit"
+    ]
+  },
+  "typeform": {
+    "label": "Typeform",
+    "authConfigId": "",
+    "category": "Productivity"
+  },
+  "vercel": {
+    "label": "Vercel",
+    "authConfigId": "",
+    "category": "Developer Tools"
+  },
+  "wakatime": {
+    "label": "WakaTime",
+    "authConfigId": "",
+    "category": "Developer Tools"
+  },
+  "webex": {
+    "label": "Webex",
+    "authConfigId": "",
+    "category": "Communication"
+  },
+  "whatsapp": {
+    "label": "WhatsApp Business",
+    "authConfigId": "",
+    "category": "Communication"
+  },
+  "wrike": {
+    "label": "Wrike",
+    "authConfigId": "",
+    "category": "Project Management"
+  },
+  "ynab": {
+    "label": "YNAB",
+    "authConfigId": "",
+    "category": "Productivity"
+  },
+  "youtube": {
+    "label": "YouTube",
+    "authConfigId": "",
+    "category": "Social Media"
+  },
+  "zendesk": {
+    "label": "Zendesk",
+    "authConfigId": "",
+    "category": "Business & CRM"
+  },
+  "zeplin": {
+    "label": "Zeplin",
+    "authConfigId": "",
+    "category": "Developer Tools"
+  },
+  "zoho_books": {
+    "label": "Zoho Books",
+    "authConfigId": "",
+    "category": "Business & CRM"
+  },
+  "zoho_desk": {
+    "label": "Zoho Desk",
+    "authConfigId": "",
+    "category": "Business & CRM"
+  },
+  "zoho_invoice": {
+    "label": "Zoho Invoice",
+    "authConfigId": "",
+    "category": "Business & CRM"
+  },
+  "zoom": {
+    "label": "Zoom",
+    "authConfigId": "",
+    "category": "Communication"
+  }
+}

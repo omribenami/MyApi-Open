@@ -24,16 +24,36 @@ class RootErrorBoundary extends Component {
 }
 
 // Emergency client-side guard for rare storage/db corruption errors surfaced by browser/runtime.
-// v2: inline onerror recovery added to index.html handles pre-load failures.
+// v3: also clears IndexedDB databases (source of SQLite WAL corruption in Safari/WebKit).
 // If detected, clear local auth/session artifacts once and reload cleanly.
 if (typeof window !== 'undefined') {
   const CORRUPTION_MARKERS = [
     'Corruption: block checksum mismatch',
     'block checksum mismatch',
-    'IndexedDB',
   ];
   const RECOVERY_TS_KEY = '__myapi_corruption_recovery_ts__';
   const RECOVERY_COUNT_KEY = '__myapi_corruption_recovery_count__';
+
+  const doReload = () => {
+    try { window.location.replace(window.location.href); } catch { /* continue degraded */ }
+  };
+
+  const clearIndexedDB = (onDone) => {
+    try {
+      if (typeof indexedDB !== 'undefined' && typeof indexedDB.databases === 'function') {
+        indexedDB.databases().then((dbs) => {
+          if (!dbs.length) { onDone(); return; }
+          let remaining = dbs.length;
+          dbs.forEach((info) => {
+            const req = indexedDB.deleteDatabase(info.name);
+            req.onsuccess = req.onerror = req.onblocked = () => { if (--remaining === 0) onDone(); };
+          });
+        }).catch(onDone);
+      } else {
+        onDone();
+      }
+    } catch { onDone(); }
+  };
 
   const recoverFromCorruption = () => {
     // Hard runtime guard: if browser storage itself is corrupted/unavailable,
@@ -49,9 +69,10 @@ if (typeof window !== 'undefined') {
       const lastTs = Number(sessionStorage.getItem(RECOVERY_TS_KEY) || 0);
       const recoveries = Number(sessionStorage.getItem(RECOVERY_COUNT_KEY) || 0);
 
-      // Prevent runaway reload storms that can trigger Cloudflare 1015 bans.
-      // Allow only one auto-recovery every 30 minutes per tab.
-      if (Number.isFinite(lastTs) && now - lastTs < 30 * 60 * 1000 && recoveries >= 1) {
+      // Allow up to 3 recoveries per 30 minutes — corruption can fire from multiple
+      // IDB stores (Google Identity, accounts.google.com iframe) on a single boot,
+      // and __myapiCorruptionRecovered already blocks same-page-load loops.
+      if (Number.isFinite(lastTs) && now - lastTs < 30 * 60 * 1000 && recoveries >= 3) {
         console.warn('[MyApi] Corruption detected again; skipping auto-reload to avoid loop.');
         return;
       }
@@ -59,22 +80,24 @@ if (typeof window !== 'undefined') {
       sessionStorage.setItem(RECOVERY_TS_KEY, String(now));
       sessionStorage.setItem(RECOVERY_COUNT_KEY, String(recoveries + 1));
 
-      localStorage.removeItem('masterToken');
+      // Clear ALL auth artifacts so OAuth login works cleanly after reload.
+      // masterToken lives in sessionStorage; __myapi_logged_out__ flag in localStorage
+      // would otherwise block initialize() from restoring the session.
+      sessionStorage.removeItem('masterToken');
       sessionStorage.removeItem('sessionToken');
+      sessionStorage.removeItem('sessionAuthVerified');
       sessionStorage.removeItem('tokenData');
+      localStorage.removeItem('masterToken');
+      localStorage.removeItem('tokenData');
+      localStorage.removeItem('__myapi_logged_out__');
     } catch {
       // Ignore cleanup errors and still try a one-time clean navigation.
     }
 
-    // Perform a single clean reload so the browser can start with a fresh
-    // storage/IndexedDB state. The sessionStorage guards above ensure this
-    // reload only happens once every 30 minutes, preventing reload storms.
-    console.warn('[MyApi] Corruption recovery executed. Reloading for clean state.');
-    try {
-      window.location.replace(window.location.href);
-    } catch {
-      // If navigation fails, the app will continue in a degraded but functional state.
-    }
+    // Clear any IndexedDB databases (SQLite WAL corruption in WebKit browsers lives here),
+    // then reload once so the browser starts with a clean storage state.
+    console.warn('[MyApi] Corruption recovery executed. Clearing IndexedDB and reloading.');
+    clearIndexedDB(doReload);
   };
 
   const messageFromError = (value) => {

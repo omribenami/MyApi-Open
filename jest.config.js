@@ -20,4 +20,8 @@ module.exports = {
   detectOpenHandles: true,
   setupFiles: ['<rootDir>/src/tests/setup-env.js'],
   setupFilesAfterEnv: ['<rootDir>/src/tests/setup.js'],
+  moduleNameMapper: {
+    '^pdf-parse$': '<rootDir>/src/tests/__mocks__/pdf-parse.js',
+    '^uuid$': '<rootDir>/src/tests/__mocks__/uuid.js',
+  },
 };

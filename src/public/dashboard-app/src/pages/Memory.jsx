@@ -273,7 +273,7 @@ export default function Memory() {
           <h1 className="font-serif text-[22px] sm:text-[34px] leading-[1.05] tracking-tight ink font-medium">What every persona has learned.</h1>
           <p className="mt-2 text-[15px] ink-2 max-w-[60ch]">Long-lived facts agents have stored about you. Each memory is scoped to a persona and can be forgotten one at a time.</p>
         </div>
-        <div className="flex items-center gap-2 pt-1">
+        <div className="flex items-center gap-2 pt-1" data-tour="mem-actions">
           <input
             ref={fileRef}
             type="file"
@@ -339,7 +339,7 @@ export default function Memory() {
       )}
 
       {/* Memory list */}
-      <div className="card divide-y" style={{ padding: 0, overflow: 'hidden' }}>
+      <div className="card divide-y" style={{ padding: 0, overflow: 'hidden' }} data-tour="mem-list">
         {/* Table header */}
         <div className="p-3 px-5 grid grid-cols-12 gap-4" style={{ background: 'var(--bg-sunk)', borderBottom: '1px solid var(--line)' }}>
           <div className="col-span-2 micro">Added</div>

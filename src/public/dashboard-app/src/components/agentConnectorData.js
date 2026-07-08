@@ -1,0 +1,45 @@
+export const AGENT_TABS = [
+  { id: 'quick',   label: 'Quick Connect', sub: 'One prompt · no credentials', activeColor: 'var(--green)' },
+  { id: 'asc',     label: 'ASC Keypair', sub: 'Manual · most control',      activeColor: '#a78bfa'        },
+  { id: 'oauth',   label: 'OAuth PKCE',  sub: 'Browser flow',               activeColor: 'var(--accent)'  },
+  { id: 'compare', label: 'Compare',     sub: 'Method comparison',           activeColor: 'var(--ink)'     },
+];
+
+export const CONNECTION_METHOD_CARDS = [
+  {
+    id: 'asc',
+    badge: 'Recommended',
+    badgeColor: 'rgba(188,140,255,0.15)',
+    badgeBorder: 'rgba(188,140,255,0.5)',
+    badgeText: '#bc8cff',
+    title: 'ASC — Ed25519 Keypair',
+    desc: 'Install a local daemon that signs every request cryptographically. The private key never leaves your machine.',
+    pros: ['Cryptographic proof on every request', 'Replay protection built-in', 'Per-agent identity & revocation'],
+    cons: ['Linux only (daemon install required)', 'Medium setup complexity'],
+    bestFor: 'Production agents & automated pipelines',
+  },
+  {
+    id: 'oauth',
+    badge: 'Easier Setup',
+    badgeColor: 'var(--accent-bg)',
+    badgeBorder: 'var(--accent-2)',
+    badgeText: 'var(--accent)',
+    title: 'OAuth PKCE',
+    desc: 'Run a one-line installer on your machine. Your browser opens once to authorize, then a token is printed.',
+    pros: ['Per-agent token & revocation', 'No pre-existing token needed', 'Works across IPs'],
+    cons: ['Bearer token — no cryptographic signing', 'Requires browser once to authorize'],
+    bestFor: 'Interactive setups where a human is present',
+  },
+  {
+    id: 'master',
+    badge: 'Simplest',
+    badgeColor: 'rgba(210,153,34,0.12)',
+    badgeBorder: 'var(--amber)',
+    badgeText: 'var(--amber)',
+    title: 'Master Token',
+    desc: 'Copy your master token from the Access Tokens page and paste it directly into the agent.',
+    pros: ['Zero setup — token already exists', 'Works with any HTTP client immediately'],
+    cons: ['One token shared by all agents', 'Cannot be scoped or revoked per-agent'],
+    bestFor: 'Quick local experiments only',
+  },
+];

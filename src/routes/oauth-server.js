@@ -18,9 +18,65 @@ const {
   consumeOAuthServerAuthCode,
   peekOAuthServerAuthCode,
   createAccessToken,
-  createApprovedDevice,
+  revokeAccessTokensForClient,
+  createOAuthServerRefreshToken,
+  getOAuthServerRefreshTokenById,
+  touchOAuthServerRefreshToken,
+  revokeOAuthServerRefreshToken,
+  recordOAuthServerGrant,
+  hasOAuthServerGrant,
 } = require('../database');
-const DeviceFingerprint = require('../utils/deviceFingerprint');
+
+// Advertised access-token lifetime. The token does not actually expire
+// server-side, but advertising expires_in + issuing a refresh_token lets ChatGPT
+// renew via grant_type=refresh_token instead of re-running the consent flow.
+const ACCESS_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days
+
+// Throwaway bcrypt hash computed at startup (never a real credential). Used only
+// to equalize timing on the refresh-token miss path so an attacker can't tell an
+// unknown token id from a known id with a wrong secret. Generated at runtime so
+// no secret-shaped literal lives in source.
+const DUMMY_REFRESH_HASH = bcrypt.hashSync(crypto.randomBytes(32).toString('hex'), 10);
+
+// Mint a MyApi access token for an OAuth-server delegation and a refresh token to
+// renew it. Returns the standard OAuth token response body.
+async function issueTokenSet({ userId, scope, client }) {
+  const rawToken = 'myapi_' + crypto.randomBytes(32).toString('hex');
+  const hash = await bcrypt.hash(rawToken, 10);
+  const label = `${client.client_name} (OAuth)`;
+  const newTokenId = createAccessToken(
+    hash, userId, scope || 'full', label,
+    null, null, null, rawToken, 'guest',
+    client.client_id
+  );
+
+  // Keep exactly ONE active token per (user, client): revoke any earlier tokens for
+  // this client. ChatGPT re-issues on every authorization AND every refresh, so
+  // without this a single client piles up dozens of live tokens (and device rows).
+  try {
+    const revoked = revokeAccessTokensForClient(String(userId), client.client_id, newTokenId);
+    if (revoked) console.log(`[OAuth] Superseded ${revoked} prior token(s) for client ${client.client_id}`);
+  } catch (e) {
+    console.error('[OAuth] Failed to revoke prior client tokens:', e.message);
+  }
+
+  // Refresh token format: rt_<id>.<secret>. We store only bcrypt(secret) keyed by
+  // id, so a stolen DB cannot reconstruct usable refresh tokens.
+  const rtId = 'rt_' + crypto.randomBytes(16).toString('hex');
+  const rtSecret = crypto.randomBytes(32).toString('hex');
+  const rtHash = await bcrypt.hash(rtSecret, 10);
+  createOAuthServerRefreshToken({
+    id: rtId, tokenHash: rtHash, clientId: client.client_id, userId: String(userId), scope: scope || 'full',
+  });
+
+  return {
+    access_token: rawToken,
+    token_type: 'bearer',
+    expires_in: ACCESS_TOKEN_TTL_SECONDS,
+    refresh_token: `${rtId}.${rtSecret}`,
+    scope: scope || 'full',
+  };
+}
 
 // ─── Redirect URI validation ──────────────────────────────────────────────────
 // Supports exact URIs and simple glob patterns (* matches any non-slash segment)
@@ -189,6 +245,26 @@ router.get('/authorize', (req, res) => {
     return res.status(400).send('invalid_redirect_uri');
   }
 
+  // Remembered consent: if this user already authorized this client AND has an
+  // active session here, auto-issue the code and skip the consent screen. This is
+  // what makes re-authorization invisible instead of "approve again every time".
+  const sessionUserId = req.session?.user?.id;
+  if (sessionUserId && hasOAuthServerGrant(client_id, sessionUserId)) {
+    const code = crypto.randomBytes(32).toString('hex');
+    createOAuthServerAuthCode({
+      code,
+      clientId: client_id,
+      userId: String(sessionUserId),
+      redirectUri: redirect_uri,
+      scope: scope || 'full',
+      codeChallenge: code_challenge || null,
+    });
+    const redirectUrl = new URL(redirect_uri);
+    redirectUrl.searchParams.set('code', code);
+    if (state) redirectUrl.searchParams.set('state', state);
+    return res.redirect(redirectUrl.toString());
+  }
+
   // Always redirect to the React consent page — it uses Bearer token auth (not session
   // cookies) so it works in cross-site popup contexts (e.g. ChatGPT opening from
   // chat.openai.com). The React page also avoids the CSP form-action issue that the
@@ -226,6 +302,9 @@ router.post('/authorize', express.urlencoded({ extended: false }), (req, res) =>
     return res.status(400).send('invalid_client');
   }
 
+  // Remember the grant so subsequent re-authorizations are auto-approved.
+  try { recordOAuthServerGrant({ clientId: client_id, userId: req.session.user.id, scope }); } catch (_) {}
+
   const code = crypto.randomBytes(32).toString('hex');
   createOAuthServerAuthCode({
     code,
@@ -259,15 +338,48 @@ router.get('/deny', (req, res) => {
 
 // Token exchange handler — shared by POST and GET
 async function handleTokenExchange(params, res, req) {
-  const { grant_type, code, redirect_uri, client_id, client_secret, code_verifier } = params;
-
-  if (grant_type !== 'authorization_code') {
-    return res.status(400).json({ error: 'unsupported_grant_type' });
-  }
+  const { grant_type, code, redirect_uri, client_id, client_secret, code_verifier, refresh_token } = params;
 
   const client = getOAuthServerClient(client_id);
   if (!client) {
     return res.status(401).json({ error: 'invalid_client' });
+  }
+
+  // ── Refresh grant: renew silently, no consent ───────────────────────────────
+  // This is what stops ChatGPT from re-prompting the user on every sign-in.
+  if (grant_type === 'refresh_token') {
+    const rt = String(refresh_token || '');
+    const dot = rt.indexOf('.');
+    if (dot < 0) return res.status(400).json({ error: 'invalid_grant' });
+    const rtId = rt.slice(0, dot);
+    const rtSecret = rt.slice(dot + 1);
+
+    const record = getOAuthServerRefreshTokenById(rtId);
+    // Constant-ish work even on miss to avoid distinguishing invalid id vs secret.
+    const ok = record
+      ? (record.client_id === client.client_id && await bcrypt.compare(rtSecret, record.token_hash))
+      : await bcrypt.compare(rtSecret || 'x', DUMMY_REFRESH_HASH);
+    if (!record || !ok) {
+      return res.status(400).json({ error: 'invalid_grant', error_description: 'invalid or expired refresh token' });
+    }
+
+    // Confidential clients must still present their secret on refresh. PKCE-only
+    // public clients (no secret provided at exchange) are credentialed by the
+    // refresh token itself.
+    if (client_secret) {
+      const secretMatch = await bcrypt.compare(String(client_secret), client.client_secret_hash);
+      if (!secretMatch) return res.status(401).json({ error: 'invalid_client' });
+    }
+
+    touchOAuthServerRefreshToken(rtId);
+    const tokenSet = await issueTokenSet({ userId: record.user_id, scope: record.scope, client });
+    // Rotate the refresh token: revoke the one just used.
+    revokeOAuthServerRefreshToken(rtId);
+    return res.json(tokenSet);
+  }
+
+  if (grant_type !== 'authorization_code') {
+    return res.status(400).json({ error: 'unsupported_grant_type' });
   }
 
   // PKCE: verify code_verifier instead of client_secret
@@ -296,27 +408,17 @@ async function handleTokenExchange(params, res, req) {
     return res.status(400).json({ error: 'invalid_grant' });
   }
 
-  // Generate a new MyApi access token scoped to this user
-  const rawToken = 'myapi_' + crypto.randomBytes(32).toString('hex');
-  const hash = await bcrypt.hash(rawToken, 10);
-  const label = `${client.client_name} (OAuth)`;
+  // Remember this grant so future re-authorizations skip the consent screen.
+  try { recordOAuthServerGrant({ clientId: client.client_id, userId: authCode.user_id, scope: authCode.scope }); } catch (_) {}
 
-  const tokenId = createAccessToken(hash, authCode.user_id, authCode.scope || 'full', label, null, null, null, rawToken, 'guest');
-
-  // Bind token to the device that performed the exchange — any other device must be
-  // explicitly approved by the user. This makes each OAuth token single-device by default.
-  if (req && tokenId) {
-    try {
-      const fp = DeviceFingerprint.fromRequest(req);
-      createApprovedDevice(tokenId, authCode.user_id, fp.fingerprintHash, label, fp.summary, fp.summary.ipAddress);
-    } catch (_) {}
-  }
-
-  res.json({
-    access_token: rawToken,
-    token_type: 'bearer',
-    scope: authCode.scope || 'full',
-  });
+  // Generate a new MyApi access token + refresh token scoped to this user.
+  // Token identity = bearer secret + oauth_client_id. We do NOT bind the token to the
+  // exchanging device's fingerprint: OAuth is a server-to-server delegation, AI agents
+  // legitimately rotate IPs/UAs, and binding produced false-positive "suspicious device"
+  // alerts. lib/tokenSecurityMonitor.js handles real anomaly detection (ASN drift, VPN/Tor,
+  // velocity) per request.
+  const tokenSet = await issueTokenSet({ userId: authCode.user_id, scope: authCode.scope, client });
+  res.json(tokenSet);
 }
 
 // POST /api/v1/oauth-server/token — standard OAuth token exchange
@@ -391,6 +493,9 @@ router.post('/authorize-token', express.json(), (req, res) => {
     return res.status(400).json({ error: 'invalid_redirect_uri' });
   }
 
+  // Remember the grant so subsequent re-authorizations are auto-approved.
+  try { recordOAuthServerGrant({ clientId: client_id, userId, scope }); } catch (_) {}
+
   const code = crypto.randomBytes(32).toString('hex');
   createOAuthServerAuthCode({
     code,
@@ -408,15 +513,21 @@ router.post('/authorize-token', express.json(), (req, res) => {
   res.json({ redirectUrl: redirectUrl.toString() });
 });
 
-// GET /api/v1/oauth-server/openapi.yaml — serves the ChatGPT OpenAPI schema
+// GET /api/v1/oauth-server/openapi.yaml — serves the ChatGPT OpenAPI schema.
+// The `servers:` URL is rewritten to the deployment's public base so the spec
+// is correct on dev (dev.myapiai.com) and prod (www.myapiai.com) alike, and so
+// a self-hosted MyApi never ships a spec pointing at the wrong host.
 router.get('/openapi.yaml', (req, res) => {
   const specPath = path.join(__dirname, '../../connectors/openai/openapi.yaml');
   if (!fs.existsSync(specPath)) {
     return res.status(404).send('not found');
   }
+  const base = (process.env.PUBLIC_URL || `https://${req.headers.host || 'www.myapiai.com'}`).replace(/\/$/, '');
+  let spec = fs.readFileSync(specPath, 'utf8');
+  spec = spec.replace(/^(servers:\s*\n\s*- url:\s*).*$/m, `$1${base}`);
   res.setHeader('Content-Type', 'text/yaml');
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.send(fs.readFileSync(specPath, 'utf8'));
+  res.send(spec);
 });
 
 module.exports = router;

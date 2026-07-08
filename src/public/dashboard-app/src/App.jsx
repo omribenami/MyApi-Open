@@ -4,6 +4,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from './stores/authStore';
 import OnboardingModal from './components/OnboardingModal';
 import SessionExpiredOverlay from './components/SessionExpiredOverlay';
+import ProductTour from './components/ProductTour';
+import { useTourStore, tourSeen, markTourSeen } from './stores/tourStore';
+import { ESSENTIALS } from './stores/tourSteps';
 import { isOnboardingActive, wasModalDismissed, restartOnboarding } from './utils/onboardingUtils';
 import Dashboard from './pages/Dashboard';
 import DashboardHome from './pages/DashboardHome';
@@ -15,10 +18,12 @@ import KnowledgeBase from './pages/KnowledgeBase';
 import Identity from './pages/Identity';
 import Settings from './pages/Settings';
 import EnterpriseSettings from './pages/EnterpriseSettings';
+import Organization from './pages/Organization';
 import UserManagement from './pages/UserManagement';
 import BetaAdmin from './pages/BetaAdmin';
 import Broadcast from './pages/Broadcast';
 import Tickets from './pages/Tickets';
+import Analytics from './pages/Analytics';
 import PlatformDocs from './pages/PlatformDocs';
 import ApiDocs from './pages/ApiDocs';
 import Marketplace from './pages/Marketplace';
@@ -30,10 +35,11 @@ import NotificationCenter from './pages/NotificationCenter';
 import TeamSettings from './pages/TeamSettings';
 import Connectors from './pages/Connectors';
 import Memory from './pages/Memory';
+import Automations from './pages/Automations';
 import OAuthAuthorize from './pages/OAuthAuthorize';
-import LogIn from './pages/LogIn';
-import Login from './pages/Login';
 import SignUp from './pages/SignUp';
+import SigningIn from './pages/SigningIn';
+import RestoringSession from './pages/RestoringSession';
 import Onboarding from './pages/Onboarding';
 import Activate from './pages/Activate';
 import Layout from './components/Layout';
@@ -93,6 +99,50 @@ function App() {
     }
   }, [isAuthenticated, user?.needsOnboarding]);
 
+  // Kick off the guided product tour once — only AFTER onboarding is fully done
+  // and the user is settled inside the real dashboard shell. We never start it
+  // during the standalone onboarding wizard (which has no sidebar/targets) so the
+  // tour and onboarding don't collide.
+  useEffect(() => {
+    if (!isAuthenticated || user?.needsOnboarding || tourSeen()) return;
+    if (isOnboardingActive()) return; // onboarding checklist still in progress
+    const path = window.location.pathname;
+    if (path.includes('/onboarding') || path.includes('/authorize') || path.includes('/activate')) return;
+    const t = setTimeout(() => {
+      if (tourSeen() || isOnboardingActive() || useAuthStore.getState().user?.needsOnboarding) return;
+      // Only start once the dashboard shell (and its nav targets) is actually mounted.
+      if (!document.querySelector('[data-tour="dashboard"]')) return;
+      markTourSeen();
+      useTourStore.getState().start(ESSENTIALS);
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [isAuthenticated, user?.needsOnboarding]);
+
+  // Explicit "Take a tour" request from the onboarding finish step. Unlike the
+  // auto-start above (which fires once and bails if targets aren't mounted yet),
+  // this polls until the dashboard shell mounts so the tour reliably starts even
+  // when navigation out of the wizard is slow.
+  useEffect(() => {
+    if (!isAuthenticated || user?.needsOnboarding) return;
+    let pending = false;
+    try { pending = sessionStorage.getItem('myapi_pending_tour') === '1'; } catch { /* ignore */ }
+    if (!pending) return;
+    let tries = 0;
+    const iv = setInterval(() => {
+      tries += 1;
+      if (document.querySelector('[data-tour="dashboard"]')) {
+        clearInterval(iv);
+        try { sessionStorage.removeItem('myapi_pending_tour'); } catch { /* ignore */ }
+        markTourSeen();
+        useTourStore.getState().start(ESSENTIALS);
+      } else if (tries > 40) { // give up after ~10s
+        clearInterval(iv);
+        try { sessionStorage.removeItem('myapi_pending_tour'); } catch { /* ignore */ }
+      }
+    }, 250);
+    return () => clearInterval(iv);
+  }, [isAuthenticated, user?.needsOnboarding]);
+
   // Legacy: if onboarding mode flag is set and modal not yet dismissed, redirect to wizard.
   useEffect(() => {
     if (isAuthenticated && isOnboardingActive() && !wasModalDismissed()) {
@@ -115,6 +165,9 @@ function App() {
 
   // Handle OAuth callbacks at app level (runs before router decides which component to show)
   useEffect(() => {
+    // When the callback lands on /signup, that page handles it — skip to avoid double-processing.
+    if (window.location.pathname.endsWith('/signup')) return;
+
     const urlParams = new URLSearchParams(window.location.search);
     const oauthStatus = urlParams.get('oauth_status');
     const confirmToken = urlParams.get('token');
@@ -196,14 +249,13 @@ function App() {
           window.location.replace('/');
         });
     } else if (oauthStatus === 'pending_2fa') {
-      // User has 2FA enabled — redirect to the login page which has the 2FA input form.
-      // Guard: if already on /login, don't redirect again (prevents infinite loop).
-      if (!window.location.pathname.endsWith('/login')) {
-        window.location.replace(`/dashboard/login${window.location.search}`);
-      }
+      // User has 2FA enabled — landing page handles the 2FA form.
+      window.location.replace(`/${window.location.search}`);
     } else if (oauthStatus === 'signup_required') {
-      // New-user signup flow — Login.jsx handles it via its own useEffect.
-      // Do NOT redirect; just let the router render the login page with the params intact.
+      // No account for this OAuth identity — route to /signup so SignUp.jsx can complete the flow.
+      if (!window.location.pathname.endsWith('/signup')) {
+        window.location.replace(`/dashboard/signup${window.location.search}`);
+      }
     } else if (oauthStatus && oauthStatus !== 'connected') {
       // Unhandled oauth_status (e.g. unknown 'error') with no confirm token —
       // strip the params and redirect to landing so the user isn't stuck forever.
@@ -228,25 +280,23 @@ function App() {
   }, [forceUnauthenticated]);
 
   if (!isInitialized) {
-    return (
-      <div className="min-h-screen grid place-items-center bg-slate-950 text-slate-300">
-        <div className="text-center">
-          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-b-2 border-blue-500" />
-          <p>Restoring your session…</p>
-        </div>
-      </div>
-    );
+    return <RestoringSession onSignOut={() => { window.location.href = '/'; }} />;
   }
 
-  // Unauthenticated users: redirect to landing page unless they're in an OAuth flow,
-  // on the /authorize consent page, or on the dedicated /login page.
+  // Unauthenticated users: redirect to landing page unless they're in an in-progress
+  // OAuth flow that another page is actively processing (signup_required / confirm_login
+  // / pending_2fa), or on the /authorize consent / /signup / docs pages.
   if (!isAuthenticated) {
     const urlParams = new URLSearchParams(window.location.search);
+    const oauthStatus = urlParams.get('oauth_status');
     const isAuthorizePath = window.location.pathname.includes('/authorize');
-    const isLoginPath = window.location.pathname.endsWith('/login');
     const isSignupPath = window.location.pathname.endsWith('/signup');
     const isDocsPath = window.location.pathname.includes('/platform-docs') || window.location.pathname.includes('/api-docs');
-    if (!urlParams.has('oauth_status') && !isAuthorizePath && !isLoginPath && !isSignupPath && !isDocsPath) {
+    // Only these oauth_status values represent an in-progress callback that a page
+    // is actively processing. Other statuses (connected/error/etc) with no session
+    // mean the flow already finished — send the user back to landing to retry.
+    const isInProgressCallback = ['signup_required', 'confirm_login', 'pending_2fa'].includes(oauthStatus);
+    if (!isAuthorizePath && !isSignupPath && !isDocsPath && !isInProgressCallback) {
       window.location.replace('/');
       return null;
     }
@@ -265,18 +315,14 @@ function App() {
           {!isAuthenticated && (
             <>
               <Route path="/authorize" element={<OAuthAuthorize />} />
-              <Route path="/login" element={<LogIn />} />
               <Route path="/signup" element={<SignUp />} />
               <Route path="/platform-docs" element={<PlatformDocs />} />
               <Route path="/api-docs" element={<ApiDocs />} />
-              <Route path="/" element={<Login />} />
               <Route path="*" element={
-                <div className="min-h-screen grid place-items-center bg-slate-950 text-slate-300">
-                  <div className="text-center">
-                    <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-b-2 border-blue-500" />
-                    <p>Signing you in…</p>
-                  </div>
-                </div>
+                <SigningIn
+                  serviceKey={new URLSearchParams(window.location.search).get('oauth_service') || undefined}
+                  onCancel={() => { window.location.href = '/'; }}
+                />
               } />
             </>
           )}
@@ -304,6 +350,7 @@ function App() {
                 </ProtectedRoute>
               }
             />
+            <Route path="/connect-agent" element={<Navigate to="/connectors" replace />} />
             <Route
               path="/services"
               element={
@@ -392,6 +439,14 @@ function App() {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/analytics"
+              element={
+                <ProtectedRoute>
+                  <Analytics />
+                </ProtectedRoute>
+              }
+            />
             <Route path="/platform-docs" element={<PlatformDocs />} />
             <Route path="/api-docs" element={<ApiDocs />} />
             <Route
@@ -452,6 +507,14 @@ function App() {
               }
             />
             <Route
+              path="/automations"
+              element={
+                <ProtectedRoute>
+                  <Automations />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/settings/team"
               element={
                 <ProtectedRoute>
@@ -467,6 +530,14 @@ function App() {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/organization"
+              element={
+                <ProtectedRoute>
+                  <Organization />
+                </ProtectedRoute>
+              }
+            />
             <Route path="*" element={<Navigate to="/" replace />} />
                     </Routes>
                   </Layout>
@@ -475,6 +546,7 @@ function App() {
             </>
           )}
         </Routes>
+        {isAuthenticated && <ProductTour />}
       </Router>
     </QueryClientProvider>
   );

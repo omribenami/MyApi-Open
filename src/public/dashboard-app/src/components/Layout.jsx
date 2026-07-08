@@ -2,6 +2,8 @@ import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { useNotificationStore } from '../stores/notificationStore';
+import { useTourStore } from '../stores/tourStore';
+import { ESSENTIALS, getPageTour } from '../stores/tourSteps';
 import apiClient from '../utils/apiClient';
 import BrandLogo from './BrandLogo';
 import CookieNotice from './CookieNotice';
@@ -49,6 +51,8 @@ const Icons = {
   x:        <Ico d="M6 6l12 12M18 6L6 18" />,
   sun:      <Ico d="M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />,
   moon:     <Ico d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />,
+  // Discord brand mark — filled (not the stroke Ico) so it reads as the real logo.
+  discord:  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M20.317 4.369a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.249a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.036A19.74 19.74 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.2 14.2 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.1 13.1 0 0 1-1.872-.892.077.077 0 0 1-.008-.128c.126-.094.252-.192.372-.291a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.009c.12.099.246.198.373.292a.077.077 0 0 1-.006.127c-.598.349-1.22.645-1.873.893a.076.076 0 0 0-.04.105c.36.698.772 1.363 1.225 1.994a.076.076 0 0 0 .084.029 19.84 19.84 0 0 0 6.002-3.03.077.077 0 0 0 .032-.056c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028zM8.02 15.331c-1.182 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>,
   down:     <Ico d="M6 9l6 6 6-6" />,
   logout:   <Ico d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />,
   connectors:<Ico d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />,
@@ -59,36 +63,37 @@ const NAV_GROUPS = [
   {
     section: 'Overview',
     items: [
-      { path: '/', label: 'Dashboard',    icon: Icons.grid,     exact: true },
-      { path: '/activity',      label: 'Activity Log',  icon: Icons.activity },
+      { path: '/', label: 'Dashboard',    icon: Icons.grid,     exact: true, tour: 'dashboard' },
+      { path: '/automations',   label: 'Automations',   icon: Icons.bolt, badge: 'New', tour: 'automations' },
+      { path: '/activity',      label: 'Activity Log',  icon: Icons.activity, tour: 'activity' },
       { path: '/notifications', label: 'Notifications', icon: Icons.bell },
     ]
   },
   {
     section: 'AI Brain',
     items: [
-      { path: '/identity',  label: 'Identity',       icon: Icons.user },
-      { path: '/memory',    label: 'Memory',          icon: Icons.brain },
-      { path: '/personas',  label: 'Personas',        icon: Icons.personas },
-      { path: '/knowledge', label: 'Knowledge',       icon: Icons.book },
+      { path: '/identity',  label: 'Identity',       icon: Icons.user, tour: 'identity' },
+      { path: '/memory',    label: 'Memory',          icon: Icons.brain, tour: 'memory' },
+      { path: '/personas',  label: 'Personas',        icon: Icons.personas, tour: 'personas' },
+      { path: '/knowledge', label: 'Knowledge',       icon: Icons.book, tour: 'knowledge' },
       { path: '/skills',    label: 'Skills',          icon: Icons.bolt },
     ]
   },
   {
     section: 'Gateway',
     items: [
-      { path: '/access-tokens', label: 'Access Tokens',     icon: Icons.key },
-      { path: '/tokens',        label: 'Token Vault',       icon: Icons.shield },
-      { path: '/services',      label: 'Services',          icon: Icons.plug },
-      { path: '/connectors',    label: 'Connectors',        icon: Icons.connectors },
-      { path: '/devices',       label: 'Devices',           icon: Icons.terminal },
+      { path: '/access-tokens', label: 'Access Tokens',     icon: Icons.key, tour: 'access-tokens' },
+      { path: '/tokens',        label: 'Token Vault',       icon: Icons.shield, tour: 'vault' },
+      { path: '/services',      label: 'Services',          icon: Icons.plug, tour: 'services' },
+      { path: '/connectors',    label: 'Connectors',        icon: Icons.connectors, tour: 'connectors' },
+      { path: '/devices',       label: 'Devices',           icon: Icons.terminal, tour: 'devices' },
     ]
   },
   {
     section: 'Marketplace',
     items: [
-      { path: '/marketplace',  label: 'Marketplace',   icon: Icons.store },
-      { path: '/my-listings',  label: 'My Listings',   icon: Icons.list },
+      { path: '/marketplace',  label: 'Marketplace',   icon: Icons.store, tour: 'marketplace' },
+      { path: '/my-listings',  label: 'My Listings',   icon: Icons.list, tour: 'my-listings' },
     ]
   },
   {
@@ -99,6 +104,14 @@ const NAV_GROUPS = [
     ]
   },
 ];
+
+// Shown only to actual org members (any role) or power users (who may create one)
+const ORG_GROUP = {
+  section: 'Organization',
+  items: [
+    { path: '/organization', label: 'Organization', icon: Icons.enterprise },
+  ]
+};
 
 const ENTERPRISE_GROUP = {
   section: 'Workspace',
@@ -111,6 +124,7 @@ const ENTERPRISE_GROUP = {
 const ADMIN_GROUP = {
   section: 'Admin',
   items: [
+    { path: '/analytics', label: 'Analytics', icon: Icons.activity },
     { path: '/users',     label: 'Users',     icon: Icons.users },
     { path: '/beta',      label: 'Beta',      icon: Icons.beta },
     { path: '/broadcast', label: 'Broadcast', icon: Icons.megaphone },
@@ -140,6 +154,8 @@ const PAGE_TITLES = {
   '/settings':       { title: 'Settings',       kicker: null },
   '/settings/team':  { title: 'Team Settings',  kicker: 'Workspace' },
   '/enterprise':     { title: 'Enterprise',     kicker: 'Workspace' },
+  '/organization':   { title: 'Organization',   kicker: 'B2B' },
+  '/analytics':      { title: 'Analytics',      kicker: 'Admin' },
   '/users':          { title: 'Users',          kicker: 'Admin' },
   '/beta':           { title: 'Beta',           kicker: 'Admin' },
   '/broadcast':      { title: 'Broadcast',      kicker: 'Admin' },
@@ -243,6 +259,20 @@ function SignalTile({ label, value, unit, trend, muted }) {
   );
 }
 
+// Stable per-actor/device color: hash a key into a hue so each device/agent
+// keeps the same color everywhere in the dashboard.
+const _actorColorCache = {};
+function actorColor(key) {
+  const k = String(key || 'unknown');
+  if (_actorColorCache[k]) return _actorColorCache[k];
+  let h = 0;
+  for (let i = 0; i < k.length; i++) h = (h * 31 + k.charCodeAt(i)) >>> 0;
+  // mid saturation/lightness so it stays readable on both dark and light themes
+  const c = `hsl(${h % 360} 60% 58%)`;
+  _actorColorCache[k] = c;
+  return c;
+}
+
 // ── Live Signal Rail ──────────────────────────────────────────────────
 function LiveSignalRail({ masterToken }) {
   const [paused, setPaused] = useState(false);
@@ -258,8 +288,8 @@ function LiveSignalRail({ masterToken }) {
     try {
       // fetch 40 for display and 500 for accurate stats
       const [listRes, statsRes, usageRes] = await Promise.all([
-        fetch('/api/v1/audit?limit=40', { headers }),
-        fetch('/api/v1/audit?limit=500', { headers }),
+        fetch('/api/v1/audit?limit=40&actor=me', { headers }),
+        fetch('/api/v1/audit?limit=500&actor=me', { headers }),
         fetch('/api/v1/billing/usage?range=1d', { headers }),
       ]);
       if (listRes.ok) {
@@ -273,7 +303,7 @@ function LiveSignalRail({ masterToken }) {
       if (usageRes.ok) {
         const d = await usageRes.json();
         const total = d?.data?.totals?.monthlyApiCalls ?? d?.totals?.monthlyApiCalls ?? null;
-        if (total !== null) setCallsToday(Number(total));
+        if (total !== null && total > 0) setCallsToday(Number(total));
       }
     } catch {
       // silently ignore
@@ -289,7 +319,8 @@ function LiveSignalRail({ masterToken }) {
   const stats = useMemo(() => {
     const nowSec = Date.now() / 1000;
     const rpm = allEntries.filter(e => {
-      const ts = e.timestamp || (e.created_at ? new Date(e.created_at).getTime() / 1000 : 0);
+      const tsRaw = e.timestamp || e.created_at;
+      const ts = tsRaw ? new Date(tsRaw).getTime() / 1000 : 0;
       return ts > 0 && (nowSec - ts) < 60;
     }).length;
     const errors = allEntries.filter(e => {
@@ -339,9 +370,22 @@ function LiveSignalRail({ masterToken }) {
         {entries.map((entry, i) => {
           const rawMethod = (entry.method || entry.http_method || '').toUpperCase();
           const method = ['GET','POST','PUT','PATCH','DELETE','HEAD','OPTIONS'].includes(rawMethod) ? rawMethod : '—';
-          const path   = entry.endpoint || entry.path || entry.resource_type || entry.url || entry.action || '';
+          // The actual API call: prefer the concrete request path over the
+          // coarse action name (so we show "/api/v1/proxy/youtube", not "asc_request").
+          const path   = entry.endpoint || entry.resource || entry.path || entry.url || entry.action || '';
           const scope  = entry.scope || entry.token_scope || '';
-          const agent  = entry.ip || entry.ip_address || entry.user_id || 'api';
+          // Who/what made the call — device or token identity, not just the IP.
+          const actorName = entry.deviceName || entry.device_name
+            || entry.tokenLabel || entry.token_label
+            || (entry.actorType && entry.actorType !== 'user' ? entry.actorType : '')
+            || entry.authType || entry.auth_type
+            || entry.ip || entry.ip_address || 'api';
+          // Stable identity key for the color (same device/agent ⇒ same color).
+          const actorKey = entry.deviceId || entry.device_id
+            || entry.actorId || entry.actor_id
+            || entry.tokenLabel || entry.token_label
+            || entry.authType || entry.ip || actorName;
+          const aColor = actorColor(actorKey);
           const status = entry.statusCode || entry.status_code || entry.http_status || '';
           const ms     = entry.duration_ms || entry.ms || '';
           const ts     = entry.created_at || entry.timestamp || '';
@@ -362,10 +406,11 @@ function LiveSignalRail({ masterToken }) {
                 <span className="mono ink-4 ml-auto text-[10.5px]">{fmtTime(ts)}</span>
               </div>
               <div className="mono ink-2 mt-0.5 truncate" title={path}>{path || '—'}</div>
-              <div className="flex items-center gap-2 mt-1 text-[11px] ink-3">
-                <span className="ink-2 truncate" style={{ maxWidth:'90px' }}>{agent}</span>
-                {scope && <><span>·</span><span className="mono truncate" style={{ maxWidth:'100px' }}>{scope}</span></>}
-                {ms && <span className="mono ml-auto">{ms}ms</span>}
+              <div className="flex items-center gap-1.5 mt-1 text-[11px] ink-3">
+                <span style={{ width:7, height:7, borderRadius:'50%', background:aColor, flexShrink:0 }} />
+                <span className="truncate font-medium" style={{ maxWidth:'130px', color:aColor }} title={actorName}>{actorName}</span>
+                {scope && <><span className="ink-4">·</span><span className="mono truncate ink-3" style={{ maxWidth:'90px' }}>{scope}</span></>}
+                {ms && <span className="mono ml-auto ink-4">{ms}ms</span>}
               </div>
             </div>
           );
@@ -423,8 +468,8 @@ function Layout({ children, onLogout }) {
         setAvatarMenuOpen(false);
       }
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
   }, [avatarMenuOpen]);
 
   // Keyboard shortcut ⌘K / Ctrl+K for command palette
@@ -473,6 +518,16 @@ function Layout({ children, onLogout }) {
   const effectivePlan = String(user?.plan || tokenData?.plan || 'free').toLowerCase();
   const hasEnterpriseAccess = effectivePlan === 'enterprise';
 
+  // B2B: org nav only for members of an organization (any role) or power users
+  const [hasOrg, setHasOrg] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    apiClient.get('/orgs/current')
+      .then((res) => { if (!cancelled) setHasOrg(!!res.data?.organization); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
   const isActive = useCallback((path, exact = false) => {
     if (exact || path === '/') return location.pathname === path;
     return location.pathname.startsWith(path);
@@ -481,10 +536,11 @@ function Layout({ children, onLogout }) {
   // Build nav groups
   const navGroups = useMemo(() => {
     const groups = [...NAV_GROUPS];
+    if (hasOrg || isPowerUser) groups.push(ORG_GROUP);
     if (hasEnterpriseAccess) groups.push(ENTERPRISE_GROUP);
     if (isPowerUser) groups.push(ADMIN_GROUP);
     return groups;
-  }, [hasEnterpriseAccess, isPowerUser]);
+  }, [hasEnterpriseAccess, isPowerUser, hasOrg]);
 
   // Flatten for command palette
   const allNavItems = useMemo(() => {
@@ -516,11 +572,13 @@ function Layout({ children, onLogout }) {
   const userInitial = displayName.slice(0, 1).toUpperCase();
 
   const handleLogout = () => {
-    if (window.confirm('Are you sure you want to log out?')) onLogout();
+    onLogout();
   };
 
   // ── Sidebar ──────────────────────────────────────────────────────
-  const Sidebar = ({ mobile = false }) => (
+  // Called as a function, not JSX, so React never treats it as a new component
+  // type on re-render — prevents full unmount/remount that closes the avatar dropdown.
+  const renderSidebar = (mobile = false) => (
     <aside
       style={{
         width: mobile ? '100%' : '232px',
@@ -574,6 +632,7 @@ function Layout({ children, onLogout }) {
                   <li key={item.path}>
                     <Link
                       to={item.path}
+                      data-tour={item.tour}
                       style={{
                         display: 'flex', alignItems: 'center', gap: '8px',
                         padding: '6px 8px', fontSize: '13.5px', textDecoration: 'none',
@@ -604,7 +663,16 @@ function Layout({ children, onLogout }) {
                           {pendingDeviceCount}
                         </span>
                       )}
-                      {active && !hasPending && (
+                      {item.badge && !hasPending && (
+                        <span style={{
+                          fontSize: '9.5px', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase',
+                          padding: '1px 5px', borderRadius: '3px',
+                          background: 'var(--accent)', color: '#fff', flexShrink: 0,
+                        }}>
+                          {item.badge}
+                        </span>
+                      )}
+                      {active && !hasPending && !item.badge && (
                         <span style={{
                           width: '3px', height: '14px', borderRadius: '999px',
                           background: 'var(--accent)', flexShrink: 0,
@@ -618,6 +686,27 @@ function Layout({ children, onLogout }) {
           </div>
         ))}
       </nav>
+
+      {/* Take a tour */}
+      <div style={{ padding: '0 12px 8px', flexShrink: 0 }}>
+        <button
+          type="button"
+          data-tour="take-a-tour"
+          onClick={() => useTourStore.getState().start(ESSENTIALS)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '8px', width: '100%',
+            padding: '6px 8px', borderRadius: '4px', cursor: 'pointer',
+            background: 'transparent', border: 'none', color: 'var(--ink-2)', fontSize: '13px',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--ink)'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--ink-2)'; }}
+        >
+          <span style={{ color: 'var(--ink-3)', flexShrink: 0 }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" strokeLinecap="round" /><path d="M12 17h.01" strokeLinecap="round" /></svg>
+          </span>
+          Take a tour
+        </button>
+      </div>
 
       {/* User row */}
       <div style={{ borderTop: '1px solid var(--line)', padding: '10px 12px', paddingBottom: 'max(10px, calc(10px + env(safe-area-inset-bottom)))', flexShrink: 0 }}>
@@ -724,7 +813,7 @@ function Layout({ children, onLogout }) {
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)' }}>
       {/* Desktop sidebar (left rail) */}
       <div className="hidden lg:block" style={{ position: 'sticky', top: 0, height: '100vh', flexShrink: 0 }}>
-        <Sidebar />
+        {renderSidebar()}
       </div>
 
       {/* Mobile sidebar overlay */}
@@ -745,7 +834,7 @@ function Layout({ children, onLogout }) {
             }}
             className="thin-scroll"
           >
-            <Sidebar mobile />
+            {renderSidebar(true)}
           </div>
         </div>
       )}
@@ -803,6 +892,45 @@ function Layout({ children, onLogout }) {
               ))}
             </span>
           </button>
+
+          {/* Discord support — opens our community server in a new tab */}
+          <a
+            href="https://discord.gg/WPp4sCN4xB"
+            target="_blank"
+            rel="noopener noreferrer"
+            data-tour="discord"
+            title="Join our Discord for support"
+            aria-label="Join our Discord community for support"
+            style={{
+              display: 'flex', alignItems: 'center', gap: '6px',
+              height: '30px', padding: '0 11px', borderRadius: '999px',
+              background: 'rgba(88,101,242,0.12)', border: '1px solid rgba(88,101,242,0.4)',
+              color: '#7c87f0', cursor: 'pointer', flexShrink: 0,
+              fontSize: '12.5px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(88,101,242,0.22)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(88,101,242,0.12)'; }}
+          >
+            {Icons.discord}
+            <span className="hidden md:inline">Support</span>
+          </a>
+
+          {/* Page help — runs a short tour of the current page */}
+          <button
+            type="button"
+            data-tour="page-help"
+            onClick={() => useTourStore.getState().start(getPageTour(location.pathname))}
+            title="Show me around this page"
+            aria-label="Page help"
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: '30px', height: '30px', borderRadius: '999px',
+              background: 'var(--bg-raised)', border: '1px solid var(--line)',
+              color: 'var(--ink-2)', cursor: 'pointer', flexShrink: 0, fontSize: '13px', fontWeight: 600,
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--ink)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-raised)'; e.currentTarget.style.color = 'var(--ink-2)'; }}
+          >?</button>
 
           {/* Theme toggle */}
           <button
@@ -875,8 +1003,8 @@ function Layout({ children, onLogout }) {
 
         {/* Page content */}
         <main
-          style={{ flex: 1, overflowY: 'auto', padding: '32px', boxSizing: 'border-box' }}
-          className="thin-scroll"
+          style={{ flex: 1, overflowY: 'auto', overflowX: 'auto', boxSizing: 'border-box' }}
+          className="thin-scroll main-pad"
         >
           <div style={{ maxWidth: '1180px', margin: '0 auto' }}>
             {children}

@@ -22,6 +22,10 @@ function EditTokenModal({ isOpen, token, onClose, onSuccess }) {
   const [selectedScopes, setSelectedScopes] = useState([]);
   const [requiresApproval, setRequiresApproval] = useState(false);
   const [initialRequiresApproval, setInitialRequiresApproval] = useState(false);
+  const [limitsForm, setLimitsForm] = useState({ enabled: false, period: 'month', maxCalls: '', maxTokens: '' });
+  const [initialLimitsJson, setInitialLimitsJson] = useState('null');
+  const [perServiceLimits, setPerServiceLimits] = useState(null); // preserved as-is; edited in create flow
+  const [usage, setUsage] = useState(null);
 
   // Initialize form state when the token changes
   useEffect(() => {
@@ -32,8 +36,46 @@ function EditTokenModal({ isOpen, token, onClose, onSuccess }) {
       const initApproval = !!(token.requiresApproval ?? token.requires_approval);
       setRequiresApproval(initApproval);
       setInitialRequiresApproval(initApproval);
+
+      // Load current limits + usage (not present on the list payload)
+      setUsage(null);
+      setLimitsForm({ enabled: false, period: 'month', maxCalls: '', maxTokens: '' });
+      setPerServiceLimits(null);
+      setInitialLimitsJson('null');
+      if (isOpen && token.id) {
+        fetch(`/api/v1/tokens/${token.id}/usage`, {
+          credentials: 'include',
+          headers: masterToken ? { Authorization: `Bearer ${masterToken}` } : {},
+        })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d) => {
+            if (!d?.data) return;
+            const lim = d.data.limits;
+            setUsage(d.data.usage || null);
+            setInitialLimitsJson(JSON.stringify(lim || null));
+            if (lim) {
+              setLimitsForm({
+                enabled: true,
+                period: lim.period || 'month',
+                maxCalls: lim.maxCalls ? String(lim.maxCalls) : '',
+                maxTokens: lim.maxTokens ? String(lim.maxTokens) : '',
+              });
+              setPerServiceLimits(lim.perService || null);
+            }
+          })
+          .catch(() => {});
+      }
     }
-  }, [token]);
+  }, [token, isOpen, masterToken]);
+
+  const buildLimits = () => {
+    if (!limitsForm.enabled) return null;
+    const limits = { period: limitsForm.period };
+    if (limitsForm.maxCalls) limits.maxCalls = parseInt(limitsForm.maxCalls, 10);
+    if (limitsForm.maxTokens) limits.maxTokens = parseInt(limitsForm.maxTokens, 10);
+    if (perServiceLimits && Object.keys(perServiceLimits).length > 0) limits.perService = perServiceLimits;
+    return (limits.maxCalls || limits.maxTokens || limits.perService) ? limits : null;
+  };
 
   const handleScopeToggle = (scope) => {
     setSelectedScopes((prev) =>
@@ -59,8 +101,10 @@ function EditTokenModal({ isOpen, token, onClose, onSuccess }) {
       originalScopes.some((s) => !selectedScopes.includes(s)) ||
       selectedScopes.some((s) => !originalScopes.includes(s));
     const approvalChanged = requiresApproval !== initialRequiresApproval;
+    const newLimits = buildLimits();
+    const limitsChanged = JSON.stringify(newLimits) !== initialLimitsJson;
 
-    if (!scopesChanged && !approvalChanged) {
+    if (!scopesChanged && !approvalChanged && !limitsChanged) {
       handleClose();
       return;
     }
@@ -68,6 +112,7 @@ function EditTokenModal({ isOpen, token, onClose, onSuccess }) {
     const updates = {};
     if (scopesChanged) updates.scopes = selectedScopes;
     if (approvalChanged) updates.requiresApproval = requiresApproval;
+    if (limitsChanged) updates.limits = newLimits;
 
     const success = await updateToken(masterToken, token.id, updates);
 
@@ -151,6 +196,72 @@ function EditTokenModal({ isOpen, token, onClose, onSuccess }) {
                 </label>
               ))}
             </div>
+          </div>
+
+          {/* Usage Limits */}
+          <div>
+            <label className="flex items-start gap-3 p-3 rounded-lg cursor-pointer border bg-slate-900 border-slate-700 hover:border-slate-600 transition-colors">
+              <input
+                type="checkbox"
+                checked={limitsForm.enabled}
+                onChange={(e) => setLimitsForm((p) => ({ ...p, enabled: e.target.checked }))}
+                className="mt-0.5 h-4 w-4 rounded text-blue-500 bg-slate-700 border-slate-600"
+              />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-white">Usage Limits</p>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Cap this agent's API calls and context tokens per day or month. Unchecking removes all limits.
+                </p>
+              </div>
+            </label>
+            {limitsForm.enabled && (
+              <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Window</label>
+                  <select
+                    value={limitsForm.period}
+                    onChange={(e) => setLimitsForm((p) => ({ ...p, period: e.target.value }))}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm"
+                  >
+                    <option value="day">Per day</option>
+                    <option value="month">Per month</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Max API calls</label>
+                  <input
+                    type="number" min="1" placeholder="Unlimited"
+                    value={limitsForm.maxCalls}
+                    onChange={(e) => setLimitsForm((p) => ({ ...p, maxCalls: e.target.value }))}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Max tokens</label>
+                  <input
+                    type="number" min="1" placeholder="Unlimited"
+                    value={limitsForm.maxTokens}
+                    onChange={(e) => setLimitsForm((p) => ({ ...p, maxTokens: e.target.value }))}
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white text-sm"
+                  />
+                </div>
+              </div>
+            )}
+            {perServiceLimits && limitsForm.enabled && (
+              <p className="text-xs text-slate-500 mt-2">
+                Per-service limits: {Object.entries(perServiceLimits).map(([s, c]) =>
+                  `${s} (${[c.maxCalls && `${c.maxCalls} calls`, c.maxTokens && `${c.maxTokens} tokens`].filter(Boolean).join(', ')})`
+                ).join(' · ')} — kept as configured.
+              </p>
+            )}
+            {usage && (
+              <p className="text-xs text-slate-500 mt-2">
+                Usage this window: {usage.calls} calls · {usage.tokens} tokens
+                {Object.keys(usage.perService || {}).length > 0 && (
+                  <> ({Object.entries(usage.perService).map(([s, u]) => `${s}: ${u.calls}`).join(', ')})</>
+                )}
+              </p>
+            )}
           </div>
 
           {/* Requires Approval */}

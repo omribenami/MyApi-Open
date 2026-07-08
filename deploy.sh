@@ -182,6 +182,13 @@ fi
 
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d
 
+# Fix volume ownership so the non-root container user (nodeapp, uid=1001)
+# can write to volumes that may have been created under root.
+echo "[deploy] Fixing volume ownership..."
+docker exec -u root myapi-platform chown -R nodeapp:nodeapp /app/logs /app/data 2>/dev/null && \
+  echo "[deploy] Volume ownership OK." || \
+  echo "[deploy] WARNING: Could not fix volume ownership — container may not be ready yet."
+
 echo "[deploy] Waiting for health check..."
 sleep 5
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" ps

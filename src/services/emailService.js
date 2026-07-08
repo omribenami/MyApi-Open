@@ -21,6 +21,12 @@ class EmailService {
       resendKeySet: !!process.env.RESEND_API_KEY
     });
     this.initTransporter();
+    // Resend allows ~2 requests/sec. All Resend sends are serialized through
+    // this queue with a minimum gap, so burst callers (lifecycle sweep,
+    // waitlist backfill) don't get silently 429'd.
+    this._resendQueue = Promise.resolve();
+    this._resendLastSentAt = 0;
+    this._resendMinGapMs = parseInt(process.env.RESEND_MIN_GAP_MS, 10) || 600;
   }
 
   initTransporter() {
@@ -94,9 +100,35 @@ class EmailService {
   }
 
   /**
-   * Send email via Resend API
+   * Send email via Resend API.
+   * Sends are serialized and throttled (see constructor); a 429 from Resend
+   * is retried up to twice with backoff before failing.
    */
-  async sendEmailViaResend(emailData) {
+  sendEmailViaResend(emailData) {
+    const send = async () => {
+      for (let attempt = 0; ; attempt++) {
+        const wait = this._resendLastSentAt + this._resendMinGapMs - Date.now();
+        if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+        this._resendLastSentAt = Date.now();
+        try {
+          return await this._resendRequest(emailData);
+        } catch (err) {
+          if (err.statusCode === 429 && attempt < 2) {
+            console.warn(`[Email] Resend rate limited (429), retry ${attempt + 1}/2 for ${emailData.email_address}`);
+            await new Promise((r) => setTimeout(r, 1200 * (attempt + 1)));
+            continue;
+          }
+          throw err;
+        }
+      }
+    };
+    const result = this._resendQueue.then(send, send);
+    // Keep the chain alive even when a send ultimately fails.
+    this._resendQueue = result.catch(() => {});
+    return result;
+  }
+
+  _resendRequest(emailData) {
     return new Promise((resolve, reject) => {
       const payload = JSON.stringify({
         from: `${this.fromName} <${this.fromAddress}>`,
@@ -125,7 +157,9 @@ class EmailService {
             if (res.statusCode >= 200 && res.statusCode < 300) {
               resolve({ success: true, messageId: response.id });
             } else {
-              reject(new Error(`Resend API error: ${response.message || res.statusCode}`));
+              const err = new Error(`Resend API error: ${response.message || res.statusCode}`);
+              err.statusCode = res.statusCode;
+              reject(err);
             }
           } catch (e) {
             reject(new Error(`Failed to parse Resend response: ${e.message}`));
@@ -626,6 +660,245 @@ class EmailService {
       console.log(`[Email] Waitlist confirmation sent to ${toEmail}`);
     } catch (err) {
       console.error(`[Email] Failed to send waitlist confirmation to ${toEmail}:`, err.message);
+    }
+  }
+
+  /**
+   * Inactivity warning: sent once when a beta user has never connected a
+   * service or made an API call. They get `graceDays` to become active
+   * before the account is removed to free a beta seat.
+   */
+  async sendInactivityWarningEmail(toEmail, displayName, { graceDays = 4, deleteAfter } = {}) {
+    if (!toEmail || !this.fromAddress) return;
+    const base = (process.env.PUBLIC_URL || process.env.BASE_URL || 'https://www.myapiai.com').replace(/\/$/, '');
+    const name = displayName || 'there';
+    const deadline = deleteAfter
+      ? new Date(deleteAfter).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+      : `${graceDays} days from now`;
+    const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="color-scheme" content="dark light"/>
+<title>Your MyApi beta seat is at risk</title>
+<!--[if mso]><style>body,table,td,p,a{font-family:Arial,sans-serif !important;}</style><![endif]-->
+<style>
+  body{margin:0;padding:0;background:#010409;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;-webkit-font-smoothing:antialiased;}
+  a{color:#4493f8;text-decoration:none;}
+  .wrap{background:#010409;padding:24px 16px;}
+  .card{max-width:560px;margin:0 auto;background:#0d1117;border:1px solid #2a313c;border-radius:12px;overflow:hidden;}
+  .pad{padding:28px 32px;}
+  .micro{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:#d29922;}
+  h1{font-size:22px;font-weight:600;margin:0 0 10px;letter-spacing:-0.01em;color:#f0f6fc;line-height:1.3;}
+  p{color:#9198a1;font-size:14.5px;line-height:1.6;margin:0 0 12px;}
+  li{color:#9198a1;font-size:14.5px;line-height:1.8;}
+  .mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px;color:#9198a1;}
+  .deadline{background:rgba(210,153,34,0.1);border:1px solid rgba(210,153,34,0.35);border-radius:8px;padding:12px 16px;color:#d29922;font-size:13.5px;}
+  .foot{text-align:center;padding:24px 16px;color:#484f58;font-size:11.5px;line-height:1.5;}
+  .foot a{color:#6e7681;}
+  @media (prefers-color-scheme:light){
+    body,.wrap{background:#f6f8fa;}
+    .card{background:#fff;border-color:#d1d9e0;}
+    h1{color:#1f2328;} p,li{color:#59636e;} .mono{color:#59636e;}
+    .foot{color:#afb8c1;} .foot a{color:#818b98;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div class="pad" style="padding-bottom:8px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td style="vertical-align:middle;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+              <td style="vertical-align:middle;padding-right:10px;">
+                <svg width="30" height="30" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+                  <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#4A8CFF"/><stop offset="100%" stop-color="#6058FF"/>
+                  </linearGradient></defs>
+                  <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#lg)"/>
+                  <path d="M36 14 L25 31 H34 L30 50 L44 29 H35 L36 14 Z" fill="none" stroke="#fff" stroke-width="3.6" stroke-linejoin="round" stroke-linecap="round"/>
+                </svg>
+              </td>
+              <td style="vertical-align:middle;"><span style="font-size:16px;font-weight:600;color:#f0f6fc;">MyApi</span></td>
+            </tr></table>
+          </td>
+          <td style="text-align:right;vertical-align:middle;">
+            <span style="display:inline-block;background:rgba(210,153,34,0.15);color:#d29922;font-family:'JetBrains Mono',monospace;font-size:10.5px;padding:3px 8px;border-radius:999px;border:1px solid rgba(210,153,34,0.35);letter-spacing:0.8px;">ACTION NEEDED</span>
+          </td>
+        </tr>
+      </table>
+    </div>
+    <div class="pad" style="padding-top:16px;">
+      <div class="micro" style="margin-bottom:14px;">BETA SEAT AT RISK</div>
+      <h1>Still with us, ${name}?</h1>
+      <p>You signed up for the MyApi beta, but haven't connected a service or made an API call yet. Beta seats are limited, we cherish feedback from active testers — and there's a waitlist of people hoping for a spot.</p>
+      <div class="deadline" style="margin:18px 0;">
+        Become active by <strong>${deadline}</strong> or your account will be removed to make room for someone on the waitlist.
+      </div>
+      <p style="margin-bottom:6px;">Any of these keeps your seat:</p>
+      <ul style="margin:0 0 16px;padding-left:20px;">
+        <li>Connect a service (Gmail, GitHub, Slack, 100+ more)</li>
+        <li>Make an API call with one of your tokens</li>
+        <li>Create an automation</li>
+      </ul>
+      <div style="margin:22px 0;">
+        <a href="${base}/dashboard/services" style="display:inline-block;background:linear-gradient(90deg,#2f6feb,#6058FF);background-color:#2f6feb;color:#fff !important;padding:11px 20px;border-radius:6px;font-size:14px;font-weight:500;text-decoration:none;">Connect a service →</a>
+      </div>
+      <p style="font-size:13px;">Changed your mind about MyApi? No action needed — we'll tidy up your data automatically, or you can delete your account right away in Settings.</p>
+    </div>
+    <div style="background:#010409;border-top:1px solid #2a313c;padding:14px 32px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td class="mono" style="font-size:10.5px;color:#484f58;">auth · vault · audit</td>
+          <td style="text-align:right;" class="mono"><a href="${base}" style="color:#6e7681;">myapiai.com</a></td>
+        </tr>
+      </table>
+    </div>
+  </div>
+  <div class="foot">
+    Sent because your beta account has had no activity since registration.<br/>
+    MyApi · The privacy-first personal API platform
+  </div>
+</div>
+</body>
+</html>`;
+    const data = {
+      email_address: toEmail.trim(),
+      subject: `Action needed: your MyApi beta seat expires ${deadline}`,
+      body: `Hi ${name}, you haven't connected a service or made an API call since joining the MyApi beta. Beta seats are limited: become active by ${deadline} (connect a service, make an API call, or create an automation at ${base}/dashboard/services) or your account will be removed to make room for waitlisted users.`,
+      html_body: html,
+    };
+    try {
+      if (this.provider === 'resend') {
+        await this.sendEmailViaResend(data);
+      } else {
+        if (!this.transporter) throw new Error('Email service not configured');
+        await this.transporter.sendMail({
+          from: `${this.fromName} <${this.fromAddress}>`,
+          to: data.email_address,
+          subject: data.subject,
+          text: data.body,
+          html: data.html_body,
+        });
+      }
+      console.log(`[Email] Inactivity warning sent to ${toEmail}`);
+    } catch (err) {
+      console.error(`[Email] Failed to send inactivity warning to ${toEmail}:`, err.message);
+      throw err;
+    }
+  }
+
+  /**
+   * Waitlist "a spot opened up" email — sent when an inactive beta account is
+   * removed and a seat frees up. One recipient per freed seat, oldest first.
+   */
+  async sendWaitlistSpotOpenedEmail(toEmail) {
+    if (!toEmail || !this.fromAddress) return;
+    const base = (process.env.PUBLIC_URL || process.env.BASE_URL || 'https://www.myapiai.com').replace(/\/$/, '');
+    const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="color-scheme" content="dark light"/>
+<title>A MyApi beta spot opened up</title>
+<!--[if mso]><style>body,table,td,p,a{font-family:Arial,sans-serif !important;}</style><![endif]-->
+<style>
+  body{margin:0;padding:0;background:#010409;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;-webkit-font-smoothing:antialiased;}
+  a{color:#4493f8;text-decoration:none;}
+  .wrap{background:#010409;padding:24px 16px;}
+  .card{max-width:560px;margin:0 auto;background:#0d1117;border:1px solid #2a313c;border-radius:12px;overflow:hidden;}
+  .pad{padding:28px 32px;}
+  .micro{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:#3fb950;}
+  h1{font-size:22px;font-weight:600;margin:0 0 10px;letter-spacing:-0.01em;color:#f0f6fc;line-height:1.3;}
+  p{color:#9198a1;font-size:14.5px;line-height:1.6;margin:0 0 12px;}
+  .mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px;color:#9198a1;}
+  .foot{text-align:center;padding:24px 16px;color:#484f58;font-size:11.5px;line-height:1.5;}
+  .foot a{color:#6e7681;}
+  @media (prefers-color-scheme:light){
+    body,.wrap{background:#f6f8fa;}
+    .card{background:#fff;border-color:#d1d9e0;}
+    h1{color:#1f2328;} p{color:#59636e;} .mono{color:#59636e;}
+    .foot{color:#afb8c1;} .foot a{color:#818b98;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <div class="pad" style="padding-bottom:8px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td style="vertical-align:middle;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+              <td style="vertical-align:middle;padding-right:10px;">
+                <svg width="30" height="30" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+                  <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#4A8CFF"/><stop offset="100%" stop-color="#6058FF"/>
+                  </linearGradient></defs>
+                  <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#lg)"/>
+                  <path d="M36 14 L25 31 H34 L30 50 L44 29 H35 L36 14 Z" fill="none" stroke="#fff" stroke-width="3.6" stroke-linejoin="round" stroke-linecap="round"/>
+                </svg>
+              </td>
+              <td style="vertical-align:middle;"><span style="font-size:16px;font-weight:600;color:#f0f6fc;">MyApi</span></td>
+            </tr></table>
+          </td>
+          <td style="text-align:right;vertical-align:middle;">
+            <span style="display:inline-block;background:rgba(63,185,80,0.15);color:#3fb950;font-family:'JetBrains Mono',monospace;font-size:10.5px;padding:3px 8px;border-radius:999px;border:1px solid rgba(63,185,80,0.35);letter-spacing:0.8px;">SPOT OPEN</span>
+          </td>
+        </tr>
+      </table>
+    </div>
+    <div class="pad" style="padding-top:16px;">
+      <div class="micro" style="margin-bottom:14px;">YOU'RE OFF THE WAITLIST</div>
+      <h1>A beta spot just opened up.</h1>
+      <p>Good news — a seat in the MyApi beta is now free, and you're next in line. Spots go to whoever signs up first, so grab yours while it lasts.</p>
+      <div style="margin:22px 0;">
+        <a href="${base}/dashboard/signup" style="display:inline-block;background:linear-gradient(90deg,#2f6feb,#6058FF);background-color:#2f6feb;color:#fff !important;padding:11px 20px;border-radius:6px;font-size:14px;font-weight:500;text-decoration:none;">Claim your spot →</a>
+      </div>
+      <p style="font-size:13px;">Tip: seats stay yours by simply being used — connect a service or make an API call after signing up.</p>
+    </div>
+    <div style="background:#010409;border-top:1px solid #2a313c;padding:14px 32px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td class="mono" style="font-size:10.5px;color:#484f58;">auth · vault · audit</td>
+          <td style="text-align:right;" class="mono"><a href="${base}" style="color:#6e7681;">myapiai.com</a></td>
+        </tr>
+      </table>
+    </div>
+  </div>
+  <div class="foot">
+    You received this because you joined the MyApi beta waitlist.<br/>
+    MyApi · The privacy-first personal API platform
+  </div>
+</div>
+</body>
+</html>`;
+    const data = {
+      email_address: toEmail.trim(),
+      subject: 'A MyApi beta spot opened up — claim it',
+      body: `A seat in the MyApi beta just freed up and you're next in line. Sign up now: ${base}/dashboard/signup — spots go to whoever claims them first.`,
+      html_body: html,
+    };
+    try {
+      if (this.provider === 'resend') {
+        await this.sendEmailViaResend(data);
+      } else {
+        if (!this.transporter) throw new Error('Email service not configured');
+        await this.transporter.sendMail({
+          from: `${this.fromName} <${this.fromAddress}>`,
+          to: data.email_address,
+          subject: data.subject,
+          text: data.body,
+          html: data.html_body,
+        });
+      }
+      console.log(`[Email] Waitlist spot-opened email sent to ${toEmail}`);
+    } catch (err) {
+      console.error(`[Email] Failed to send spot-opened email to ${toEmail}:`, err.message);
     }
   }
 
@@ -1402,6 +1675,121 @@ class EmailService {
     await this._dispatchEmail(toEmail.trim(), `${label} disconnected from your MyApi vault`, html);
   }
 
+  async sendDeviceRevokedEmail(toEmail, displayName, deviceName) {
+    if (!toEmail || !this.fromAddress) return;
+    const name = displayName || 'there';
+    const base = (process.env.PUBLIC_URL || process.env.BASE_URL || 'https://www.myapiai.com').replace(/\/$/, '');
+    const devicesUrl = `${base}/dashboard/devices`;
+    const revokedAt = new Date().toUTCString();
+
+    const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="color-scheme" content="dark light"/>
+<meta name="supported-color-schemes" content="dark light"/>
+<title>Device Revoked — MyApi</title>
+<!--[if mso]><style>body,table,td,p,a{font-family:Arial,sans-serif !important;}</style><![endif]-->
+<style>
+  body{margin:0;padding:0;background:#010409;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;-webkit-font-smoothing:antialiased;}
+  a{color:#4493f8;text-decoration:none;}
+  .wrap{background:#010409;padding:24px 16px;}
+  .card{max-width:560px;margin:0 auto;background:#0d1117;border:1px solid #2a313c;border-radius:12px;overflow:hidden;}
+  .pad{padding:28px 32px;}
+  .micro{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:#6e7681;}
+  h1{font-size:22px;font-weight:600;margin:0 0 10px;letter-spacing:-0.01em;color:#f0f6fc;line-height:1.3;}
+  p{color:#9198a1;font-size:14.5px;line-height:1.6;margin:0 0 12px;}
+  .btn{display:inline-block;background:#1f6feb;color:#fff !important;padding:11px 20px;border-radius:6px;font-size:14px;font-weight:500;border:1px solid rgba(240,246,252,0.1);}
+  .hairline{border-top:1px solid #2a313c;}
+  .mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px;color:#9198a1;}
+  .foot{text-align:center;padding:24px 16px;color:#484f58;font-size:11.5px;line-height:1.5;}
+  .foot a{color:#6e7681;}
+  @media (prefers-color-scheme:light){
+    body,.wrap{background:#f6f8fa;}
+    .card{background:#fff;border-color:#d1d9e0;}
+    h1{color:#1f2328;} p{color:#59636e;}
+    .micro{color:#818b98;} .mono{color:#59636e;}
+    .hairline{border-top-color:#d1d9e0;} .foot{color:#afb8c1;} .foot a{color:#818b98;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <!-- Header -->
+    <div class="pad" style="padding-bottom:8px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td style="vertical-align:middle;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+              <td style="vertical-align:middle;padding-right:10px;">
+                <svg width="30" height="30" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+                  <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stop-color="#4A8CFF"/><stop offset="100%" stop-color="#6058FF"/>
+                  </linearGradient></defs>
+                  <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#lg)"/>
+                  <path d="M36 14 L25 31 H34 L30 50 L44 29 H35 L36 14 Z" fill="none" stroke="#fff" stroke-width="3.6" stroke-linejoin="round" stroke-linecap="round"/>
+                </svg>
+              </td>
+              <td style="vertical-align:middle;"><span style="font-size:16px;font-weight:600;color:#f0f6fc;">MyApi</span></td>
+            </tr></table>
+          </td>
+          <td style="text-align:right;vertical-align:middle;">
+            <span style="display:inline-block;background:rgba(248,81,73,0.15);color:#f85149;font-family:'JetBrains Mono',monospace;font-size:10.5px;padding:3px 8px;border-radius:999px;border:1px solid rgba(248,81,73,0.3);letter-spacing:0.8px;">ACCESS REVOKED</span>
+          </td>
+        </tr>
+      </table>
+    </div>
+    <!-- Body -->
+    <div class="pad" style="padding-top:16px;">
+      <div class="micro" style="margin-bottom:14px;">DEVICE REMOVED</div>
+      <h1>Device access revoked, ${name}.</h1>
+      <p>A device has been removed from your account and can no longer use any of your tokens. If you didn't do this, review your active devices immediately.</p>
+
+      <!-- Device info block -->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:rgba(248,81,73,0.06);border:1px solid rgba(248,81,73,0.25);border-radius:6px;margin:4px 0 20px;">
+        <tr><td style="padding:14px 16px;">
+          <div class="micro" style="color:#f85149;margin-bottom:8px;">REVOKED DEVICE</div>
+          <div style="font-size:14px;font-weight:600;color:#f0f6fc;margin-bottom:10px;">${deviceName || 'Unknown Device'}</div>
+          <div class="micro" style="margin-bottom:3px;">REVOKED AT</div>
+          <div style="font-size:13px;color:#9198a1;">${revokedAt}</div>
+        </td></tr>
+      </table>
+
+      <p style="font-size:13px;">The device can no longer make requests using any token on your account. Revocation is immediate and permanent.</p>
+
+      <div style="margin:18px 0;">
+        <a href="${devicesUrl}" class="btn">Manage Devices →</a>
+      </div>
+
+      <div class="hairline" style="margin:20px 0 16px;"></div>
+      <p style="font-size:12px;color:#6e7681;margin:0;">Didn't do this? Someone else may have access to your account. <a href="${base}/dashboard/access-tokens" style="color:#4493f8;">Review your tokens</a> and change your credentials. Questions? <a href="https://discord.gg/WPp4sCN4xB" style="color:#4493f8;">Join our Discord</a>.</p>
+    </div>
+    <!-- Footer bar -->
+    <div style="background:#010409;border-top:1px solid #2a313c;padding:14px 32px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td class="mono" style="font-size:10.5px;color:#484f58;">auth · vault · audit</td>
+          <td style="text-align:right;" class="mono">
+            <a href="${devicesUrl}" style="color:#6e7681;">Devices</a>
+            <a href="${base}/dashboard/access-tokens" style="color:#6e7681;margin-left:12px;">Tokens</a>
+          </td>
+        </tr>
+      </table>
+    </div>
+  </div>
+  <div class="foot">
+    Sent because a device was revoked from your MyApi account.<br/>
+    MyApi · The privacy-first personal API platform
+  </div>
+</div>
+</body>
+</html>`;
+
+    await this._dispatchEmail(toEmail.trim(), `Device access revoked — ${deviceName || 'Device'}`, html);
+  }
+
   async _dispatchEmail(toEmail, subject, html) {
     const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
     if (this.provider === 'resend') {
@@ -1450,6 +1838,60 @@ class EmailService {
       return { success: false, error: error.message, config: this.getConfigStatus() };
     }
   }
+
+  /**
+   * Send a MyApi-branded email produced by an automation. `body` is plain text
+   * (or simple HTML); it is wrapped in the standard MyApi template so every
+   * automation email is consistently branded.
+   */
+  async sendAutomationEmail({ to, subject, body, automationName } = {}) {
+    const recipient = String(to || '').trim();
+    if (!recipient) throw new Error('recipient email is required');
+    const cfg = this.getConfigStatus();
+    if (!cfg.configured) throw new Error(`Email is not configured on the server (missing: ${cfg.missing.join(', ')})`);
+    const subj = String(subject || 'Your MyApi automation').trim();
+    const html = automationEmailHtml(subj, body || '', automationName);
+    const data = { email_address: recipient, subject: subj, body: String(body || ''), html_body: html };
+    if (this.provider === 'resend') {
+      await this.sendEmailViaResend(data);
+    } else {
+      if (!this.transporter) throw new Error('Email service not configured');
+      await this.transporter.sendMail({ from: `${this.fromName} <${this.fromAddress}>`, to: recipient, subject: subj, text: data.body, html });
+    }
+    console.log(`[Email] Automation email sent to ${recipient}`);
+    return { success: true };
+  }
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// The shared MyApi template for automation emails (dark + light aware).
+function automationEmailHtml(subject, body, automationName) {
+  const paragraphs = String(body || '').trim().split(/\n{2,}/)
+    .map((p) => `<p>${escapeHtml(p).replace(/\n/g, '<br/>')}</p>`).join('') || '<p></p>';
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><meta name="color-scheme" content="dark light"/><title>${escapeHtml(subject)}</title>
+<style>
+  body{margin:0;padding:0;background:#010409;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;-webkit-font-smoothing:antialiased;}
+  .wrap{background:#010409;padding:24px 16px;}
+  .card{max-width:560px;margin:0 auto;background:#0d1117;border:1px solid #2a313c;border-radius:12px;overflow:hidden;}
+  .head{background:linear-gradient(90deg,#1f6feb,#6e40c9);padding:18px 28px;}
+  .brand{color:#fff;font-weight:700;font-size:16px;letter-spacing:-.01em;}
+  .badge{color:rgba(255,255,255,.85);font-size:11px;margin-top:2px;}
+  .pad{padding:24px 28px;}
+  h1{font-size:19px;font-weight:600;margin:0 0 14px;color:#f0f6fc;line-height:1.3;}
+  p{color:#9198a1;font-size:14.5px;line-height:1.6;margin:0 0 12px;}
+  .foot{text-align:center;padding:20px 16px;color:#484f58;font-size:11.5px;line-height:1.5;}
+  @media (prefers-color-scheme:light){body,.wrap{background:#f6f8fa;}.card{background:#fff;border-color:#d1d9e0;}h1{color:#1f2328;}p{color:#59636e;}.foot{color:#afb8c1;}}
+</style></head>
+<body><div class="wrap"><div class="card">
+  <div class="head"><div class="brand">MyApi</div><div class="badge">Automation${automationName ? ' · ' + escapeHtml(automationName) : ''}</div></div>
+  <div class="pad"><h1>${escapeHtml(subject)}</h1>${paragraphs}</div>
+</div><div class="foot">Sent automatically by your MyApi automation.</div></div></body></html>`;
 }
 
 module.exports = new EmailService();
+// Exposed so automations can apply the same MyApi template when sending through
+// a user's own connected mailbox (e.g. Gmail) instead of the platform mailer.
+module.exports.buildAutomationEmailHtml = automationEmailHtml;

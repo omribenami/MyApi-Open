@@ -33,15 +33,18 @@ class GenericOAuthAdapter {
     if (!this.isConfigured()) {
       throw new Error(`${this.serviceName} OAuth is not configured`);
     }
+    // runtimeAuthParams must win over the configured scope: the login flow
+    // (mode='login' in index.js) narrows facebook to identity-only scopes,
+    // while explicit Connect uses the full configured scope set.
     const params = {
       [this.clientIdParam]: this.clientId,
       redirect_uri: this.redirectUri,
       response_type: 'code',
       state,
+      ...(this.scope ? { scope: this.scope } : {}),
       ...this.extraAuthParams,
       ...(runtimeAuthParams || {}),
     };
-    if (this.scope) params.scope = this.scope;
     return `${this.authUrl}?${querystring.stringify(params)}`;
   }
 

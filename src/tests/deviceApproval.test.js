@@ -292,56 +292,22 @@ describe('Device Approval System', () => {
     });
   });
 
-  describe('Suspicious Activity Detection', () => {
-    it('should detect OS changes', () => {
-      const current = {
-        summary: { os: 'Windows' },
-        fingerprint: { ipAddress: '192.168.1.100' },
-      };
-
-      const previous = [{
-        summary: { os: 'macOS' },
-        fingerprint: { ipAddress: '192.168.1.100' },
-      }];
-
-      const analysis = DeviceFingerprint.analyzeSuspiciousActivity(current, previous);
-
-      // When all prior devices differ, the change is classified as suspicious (reasons),
-      // not a warning — both indicate detection of the change.
-      assert(analysis.reasons.length > 0 || analysis.warnings.length > 0, 'Should detect OS change');
-    });
-
-    it('should detect browser changes', () => {
-      const current = {
-        summary: { browser: 'Firefox' },
-        fingerprint: { ipAddress: '192.168.1.100' },
-      };
-
-      const previous = [{
-        summary: { browser: 'Chrome' },
-        fingerprint: { ipAddress: '192.168.1.100' },
-      }];
-
-      const analysis = DeviceFingerprint.analyzeSuspiciousActivity(current, previous);
-
-      assert(analysis.reasons.length > 0 || analysis.warnings.length > 0, 'Should detect browser change');
-    });
-
-    it('should detect multiple IPs', () => {
+  describe('Suspicious Activity Detection (deprecated stub)', () => {
+    // The fingerprint-based heuristic (UA/IP equality) was retired because it produced
+    // false positives whenever an AI agent's UA flapped. lib/tokenSecurityMonitor.js
+    // is now the anomaly authority (ASN drift, VPN/Tor, velocity). The stub remains
+    // for backward compatibility but always reports non-suspicious.
+    it('should return non-suspicious for any history (stub)', () => {
       const current = {
         summary: { os: 'Windows', browser: 'Chrome' },
         fingerprint: { ipAddress: '192.168.1.103' },
       };
-
       const previous = [
-        { summary: { os: 'Windows', browser: 'Chrome' }, fingerprint: { ipAddress: '192.168.1.100' } },
-        { summary: { os: 'Windows', browser: 'Chrome' }, fingerprint: { ipAddress: '192.168.1.101' } },
-        { summary: { os: 'Windows', browser: 'Chrome' }, fingerprint: { ipAddress: '192.168.1.102' } },
+        { summary: { os: 'macOS', browser: 'Firefox' }, fingerprint: { ipAddress: '192.168.1.100' } },
       ];
-
       const analysis = DeviceFingerprint.analyzeSuspiciousActivity(current, previous);
-
-      assert(analysis.warnings.length > 0, 'Should detect multiple IP addresses');
+      assert.strictEqual(analysis.suspicious, false);
+      assert.strictEqual(analysis.reasons.length, 0);
     });
 
     it('should return new device risk level for no history', () => {
@@ -349,9 +315,7 @@ describe('Device Approval System', () => {
         summary: {},
         fingerprint: { ipAddress: '192.168.1.100' },
       };
-
       const analysis = DeviceFingerprint.analyzeSuspiciousActivity(current, []);
-
       assert.strictEqual(analysis.riskLevel, 'new', 'Should identify as new device');
     });
   });

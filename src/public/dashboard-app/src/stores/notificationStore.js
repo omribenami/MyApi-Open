@@ -110,12 +110,38 @@ export const useNotificationStore = create((set) => ({
       );
       
       if (response.ok) {
-        set(state => ({
-          notifications: state.notifications.filter(n => n.id !== notificationId),
-        }));
+        set(state => {
+          const removed = state.notifications.find(n => n.id === notificationId);
+          const wasUnread = removed && !removed.isRead && !removed.read_at;
+          return {
+            notifications: state.notifications.filter(n => n.id !== notificationId),
+            unreadCount: wasUnread ? Math.max(0, state.unreadCount - 1) : state.unreadCount,
+          };
+        });
       }
     } catch (error) {
       console.error('Error deleting notification:', error);
+    }
+  },
+
+  // Mark all notifications as read
+  markAllAsRead: async (masterToken) => {
+    try {
+      const headers = masterToken ? { Authorization: `Bearer ${masterToken}` } : {};
+      const response = await fetch('/api/v1/notifications/read-all', {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+      });
+      if (response.ok) {
+        const now = new Date().toISOString();
+        set(state => ({
+          notifications: state.notifications.map(n => ({ ...n, isRead: true, read_at: n.read_at || now })),
+          unreadCount: 0,
+        }));
+      }
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error);
     }
   },
   

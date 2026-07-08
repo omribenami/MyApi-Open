@@ -30,6 +30,11 @@ function ServiceConnectors() {
   const [categories, setCategories] = useState([]);
   const [oauthSuccessService, setOauthSuccessService] = useState(null);
   const [configService, setConfigService] = useState(null);
+  // API-key connect modal (Composio toolkits that authenticate with a pasted key)
+  const [apiKeyService, setApiKeyService] = useState(null);
+  const [apiKeyValues, setApiKeyValues] = useState({});
+  const [apiKeyError, setApiKeyError] = useState(null);
+  const [apiKeySubmitting, setApiKeySubmitting] = useState(false);
 
   useEffect(() => {
     fetchCategories();
@@ -76,7 +81,11 @@ function ServiceConnectors() {
       const oauthMap = Object.fromEntries((oauthData.services || []).map((s) => [s.name, s]));
       setServices(allServices.map((svc) => {
         const oauthProviderName = getOAuthProvider(svc.name);
-        const oauthStatus = oauthMap[oauthProviderName] || {
+        // Exact name first: Composio virtual services (composio__*) have their own
+        // status entry and must not inherit the root composio connector's status —
+        // an available-but-not-yet-connected toolkit would otherwise show as
+        // "connected" just because some other toolkit is connected.
+        const oauthStatus = oauthMap[svc.name] || (svc.byComposio ? null : oauthMap[oauthProviderName]) || {
           status: svc.status, enabled: !svc.notConfigured, auth_type: svc.auth_type,
         };
         return normalizeService(svc, oauthStatus);
@@ -96,9 +105,24 @@ function ServiceConnectors() {
       setConnectError(`${service.label} is not configured on the server. Add the required environment keys to enable this integration.`);
       return;
     }
+    // API-key Composio toolkits (OpenAI, Anthropic, Perplexity, ...) and native
+    // instance services (Home Assistant: URL + long-lived token) collect the
+    // user's credentials in a modal instead of redirecting through OAuth.
+    const isNativeInstance = !service.byComposio && service.auth_type === 'api_key' && (service.authFields || []).length > 0;
+    if (isNativeInstance || (service.byComposio && (service.authMode === 'api_key' || service.auth_type === 'api_key'))) {
+      setApiKeyService(service);
+      setApiKeyValues({});
+      setApiKeyError(null);
+      return;
+    }
     try {
-      const oauthProvider = getOAuthProvider(service.name);
-      await startOAuthFlow(oauthProvider, { mode: 'connect', returnTo: '/dashboard/services' });
+      const oauthProvider = service.byComposio
+        ? "composio"
+        : getOAuthProvider(service.name);
+      const toolkitOption = service.byComposio && service.connectToolkit
+        ? { toolkit: service.connectToolkit }
+        : {};
+      await startOAuthFlow(oauthProvider, { mode: 'connect', returnTo: '/dashboard/services', ...toolkitOption });
     } catch {
       const message = `Failed to connect ${service.label}. Please try again.`;
       setError(message);
@@ -110,8 +134,28 @@ function ServiceConnectors() {
     setIsRevoking(true);
     setError(null);
     try {
-      const oauthProvider = getOAuthProvider(service.name);
-      await oauth.disconnect(oauthProvider);
+      // Native instance services (Home Assistant) disconnect via their own endpoint.
+      if (!service.byComposio && service.auth_type === 'api_key' && (service.authFields || []).length > 0) {
+        const res = await fetch(`/api/v1/services/${service.name}/connect`, {
+          method: 'DELETE',
+          credentials: 'include',
+          headers: masterToken ? { Authorization: `Bearer ${masterToken}` } : {},
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || 'Failed to disconnect');
+        }
+        closeRevokeModal();
+        await fetchServices();
+        return;
+      }
+      // For Composio services, disconnect the SPECIFIC toolkit — never route
+      // through getOAuthProvider, which collapses every composio service to the
+      // root "composio" id and would disconnect ALL of them.
+      const target = service.byComposio
+        ? (service.toolkitSlug || service.name)
+        : getOAuthProvider(service.name);
+      await oauth.disconnect(target);
       closeRevokeModal();
       await fetchServices();
     } catch (err) {
@@ -123,11 +167,51 @@ function ServiceConnectors() {
     }
   };
 
+  const submitApiKey = async () => {
+    if (!apiKeyService) return;
+    const toolkit = apiKeyService.toolkitSlug || apiKeyService.connectToolkit || apiKeyService.name;
+    const fields = apiKeyService.authFields || [];
+    // Client-side required check mirrors the backend.
+    const missing = fields.find((f) => f.required && !String(apiKeyValues[f.name] || '').trim());
+    if (missing) {
+      setApiKeyError(`${missing.displayName || missing.name} is required.`);
+      return;
+    }
+    setApiKeySubmitting(true);
+    setApiKeyError(null);
+    try {
+      // Native instance services post to their own connect endpoint; Composio
+      // toolkits go through the Composio key exchange.
+      const isNative = !apiKeyService.byComposio;
+      const res = await fetch(isNative ? `/api/v1/services/${apiKeyService.name}/connect` : '/api/v1/oauth/composio/connect-key', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...(masterToken ? { Authorization: `Bearer ${masterToken}` } : {}) },
+        body: JSON.stringify(isNative ? { fields: apiKeyValues } : { toolkit, fields: apiKeyValues }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) throw new Error(data.error || 'Failed to connect');
+      setApiKeyService(null);
+      setApiKeyValues({});
+      showSuccessToast(`${apiKeyService.label} connected successfully!`, 6000);
+      await fetchServices();
+    } catch (err) {
+      setApiKeyError(err.message || 'Failed to connect. Check your key and try again.');
+    } finally {
+      setApiKeySubmitting(false);
+    }
+  };
+
+  // Category tabs use slugified keys ('developer-tools', 'business-crm') while
+  // some services carry label-form categories ('Developer Tools') — normalize
+  // both sides so every service matches its tab.
+  const categoryKey = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+
   const filteredServices = useMemo(() => {
     const base = services.filter((s) => {
       const text = `${s.label} ${s.description || ''} ${s.category_label || s.category || ''}`.toLowerCase();
       const matchesSearch = !searchQuery || text.includes(searchQuery.toLowerCase());
-      const matchesCategory = selectedCategory === 'all' || s.category === selectedCategory;
+      const matchesCategory = selectedCategory === 'all' || categoryKey(s.category) === categoryKey(selectedCategory);
       const matchesStatus = selectedStatus === 'all'
         || (selectedStatus === 'connected' && s.status === 'connected')
         || (selectedStatus === 'pending' && s.status === 'pending')
@@ -182,109 +266,144 @@ function ServiceConnectors() {
     );
   };
 
-  // Exact reference ServiceGlyph: bg-raised square, border, colored mono letter
-  const Glyph = ({ name, label }) => {
-    const palette = ['#3F6FD8','#D84A4A','#2E8A5F','#C96A1F','#6E4AB0','#1F8DA8','#5A5A5A','#B0326E'];
-    const hash = [...(name || '')].reduce((a, c) => a + c.charCodeAt(0), 0);
-    const color = palette[hash % palette.length];
-    const letter = ((label || name || '?').charAt(0)).toUpperCase();
-    return (
-      <div className="shrink-0 grid place-items-center border hairline bg-raised"
-        style={{ width: 36, height: 36, color }}>
-        <span className="mono text-[11px] font-semibold" style={{ color }}>{letter}</span>
-      </div>
-    );
+  const CONFIGURABLE_SERVICES = new Set(['slack','facebook','instagram','twitter','tiktok','linkedin','reddit','discord','fal']);
+
+  // Inline SVGs for brands where simpleicons only provides monochrome but the real logo is multicolor
+  const _GOOGLE_SVG = (
+    <svg width="20" height="20" viewBox="0 0 24 24">
+      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+    </svg>
+  );
+  const _INSTAGRAM_SVG = (
+    <svg width="20" height="20" viewBox="0 0 24 24">
+      <defs><radialGradient id="ig-sc-grad" cx="30%" cy="107%" r="150%"><stop offset="0%" stopColor="#fdf497"/><stop offset="5%" stopColor="#fdf497"/><stop offset="45%" stopColor="#fd5949"/><stop offset="60%" stopColor="#d6249f"/><stop offset="90%" stopColor="#285AEB"/></radialGradient></defs>
+      <path fill="url(#ig-sc-grad)" d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838a6.162 6.162 0 1 0 0 12.324 6.162 6.162 0 0 0 0-12.324zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.406-11.845a1.44 1.44 0 1 0 0 2.881 1.44 1.44 0 0 0 0-2.881z"/>
+    </svg>
+  );
+  const INLINE_OVERRIDES = {
+    google: _GOOGLE_SVG, gmail: _GOOGLE_SVG, googledrive: _GOOGLE_SVG,
+    googlesheets: _GOOGLE_SVG, googlecalendar: _GOOGLE_SVG, googlephotos: _GOOGLE_SVG,
+    googlecontacts: _GOOGLE_SVG, googleanalytics: _GOOGLE_SVG, youtubedatapi: _GOOGLE_SVG,
+    instagram: _INSTAGRAM_SVG,
   };
 
-  // Exact reference Chip: square corners, inline-flex, border
-  const Chip = ({ tone = 'default', mono: isMono = false, children }) => {
-    const toneMap = {
-      default: { bg: 'var(--bg-sunk)',           color: 'var(--ink-2)',  border: 'var(--line)' },
-      green:   { bg: 'var(--green-bg)',           color: 'var(--green)', border: 'rgba(63,185,80,0.4)' },
-      amber:   { bg: 'rgba(210,153,34,0.16)',     color: 'var(--amber)', border: 'rgba(210,153,34,0.4)' },
-      accent:  { bg: 'var(--accent-bg)',          color: 'var(--accent)',border: 'rgba(68,147,248,0.4)' },
-      outline: { bg: 'transparent',              color: 'var(--ink-2)', border: 'var(--line)' },
+  const ServiceIcon = ({ service, isConnected }) => {
+    const inlineSvg = INLINE_OVERRIDES[service.name?.toLowerCase()];
+    const fallbacks = service.logoFallbacks || [];
+    // service.icon carries the service's own brand logo when the backend provides
+    // one (Composio services use logos.composio.dev) — prefer it over the generic
+    // brand map so e.g. composio__gmail shows the Gmail logo, not the Google G.
+    const [src, setSrc] = useState(service.icon || fallbacks[0] || null);
+    const [imgFailed, setImgFailed] = useState(false);
+
+    const handleError = () => {
+      const allSrcs = [service.icon, ...fallbacks].filter(Boolean);
+      const next = allSrcs.find(f => f !== src);
+      if (next) { setSrc(next); } else { setImgFailed(true); }
     };
-    const m = toneMap[tone] || toneMap.default;
+
+    const palette = ['#3F6FD8','#D84A4A','#2E8A5F','#C96A1F','#6E4AB0','#1F8DA8','#5A5A5A','#B0326E'];
+    const hash = [...(service.name || '')].reduce((a, c) => a + c.charCodeAt(0), 0);
+    const letterColor = palette[hash % palette.length];
+    const letter = ((service.label || service.name || '?').charAt(0)).toUpperCase();
+
     return (
-      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[11px] border${isMono ? ' mono' : ''}`}
-        style={{ background: m.bg, color: m.color, borderColor: m.border }}>
-        {children}
+      <span style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        width: 20, height: 20,
+        color: isConnected ? '#22c55e' : 'var(--ink-2)',
+        transition: 'color 0.2s',
+      }}>
+        {inlineSvg ? inlineSvg
+          : src && !imgFailed ? (
+            <img src={src} alt="" width={20} height={20}
+              style={{ objectFit: 'contain', display: 'block' }}
+              onError={handleError}
+            />
+          ) : (
+            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 14, fontWeight: 700, color: isConnected ? '#22c55e' : letterColor }}>
+              {letter}
+            </span>
+          )}
       </span>
     );
   };
 
-  // Exact reference StatusDot
-  const StatusDot = ({ s }) => {
-    const c = {
-      connected: 'var(--green)', active: 'var(--green)',
-      pending: 'var(--amber)', error: 'var(--red)', revoked: 'var(--red)',
-      disconnected: 'var(--ink-4)',
-    }[s] || 'var(--ink-4)';
-    return <span className="tick" style={{ background: c }} />;
-  };
-
-  // Service card — exact match to reference ServiceCard
   const InlineServiceCard = ({ service }) => {
-    const scopes = service.scopes || [];
-    const isConnected = service.status === 'connected';
+    const isConnected = service.status === 'connected' && !service.loginOnly;
+    const isLoginOnly = service.status === 'connected' && !!service.loginOnly;
     const isError = service.status === 'error';
     const isPending = service.status === 'pending';
     const isNotConfigured = service.notConfigured;
 
-    const statusMap = {
-      connected:    { chip: 'green',   label: 'connected' },
-      pending:      { chip: 'amber',   label: 'pending auth' },
-      error:        { chip: 'accent',  label: 'needs attention' },
-      disconnected: { chip: 'outline', label: 'not connected' },
-    };
-    const st = statusMap[service.status] || statusMap.disconnected;
+    // Third row: same vertical space as the onboarding desc text line
+    const btnBase = { fontSize: 11, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', lineHeight: 1.4 };
+    const dot = <span style={{ color: 'var(--ink-4)', fontSize: 10, lineHeight: 1.4 }}>·</span>;
+
+    let thirdRow;
+    if (isConnected) {
+      const hasConfig = CONFIGURABLE_SERVICES.has(service.name?.toLowerCase());
+      thirdRow = (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {hasConfig && <>
+            <button type="button" onClick={() => setConfigService(service)} style={{ ...btnBase, color: 'rgba(34,197,94,0.75)' }}>Manage</button>
+            {dot}
+          </>}
+          <button type="button" onClick={() => openRevokeModal(service.name)} style={{ ...btnBase, color: 'rgba(248,81,73,0.6)' }}>Disconnect</button>
+        </div>
+      );
+    } else if (isLoginOnly) {
+      thirdRow = (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button type="button" onClick={() => handleConnect(service)} style={{ ...btnBase, color: 'var(--accent)' }}>Connect</button>
+          {dot}
+          <button type="button" onClick={() => openRevokeModal(service.name)} style={{ ...btnBase, color: 'rgba(248,81,73,0.6)' }}>Sign out</button>
+        </div>
+      );
+    } else if (isError) {
+      thirdRow = <button type="button" onClick={() => handleConnect(service)} style={{ ...btnBase, color: 'var(--accent)' }}>Reconnect</button>;
+    } else if (isPending) {
+      thirdRow = <span style={{ fontSize: 11, color: 'var(--amber)', lineHeight: 1.4 }}>Pending…</span>;
+    } else {
+      thirdRow = (
+        <button type="button" onClick={() => !isNotConfigured && handleConnect(service)} disabled={isNotConfigured}
+          style={{ ...btnBase, color: isNotConfigured ? 'var(--ink-4)' : 'var(--ink-3)', opacity: isNotConfigured ? 0.45 : 1, cursor: isNotConfigured ? 'not-allowed' : 'pointer' }}
+          title={isNotConfigured ? 'Requires server-side configuration' : undefined}>
+          Connect
+        </button>
+      );
+    }
 
     return (
-      <div className="card p-5 flex flex-col">
-        <div className="flex items-start gap-3">
-          <Glyph name={service.name} label={service.label} />
-          <div className="flex-1 min-w-0">
-            <span className="ink text-[15px] font-medium">{service.label}</span>
-            <div className="text-[11.5px] ink-3 mt-0.5">{service.category_label || service.category || 'Integration'}</div>
-          </div>
-          <Chip tone={st.chip}><StatusDot s={service.status} />{st.label}</Chip>
-        </div>
+      <div style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
+        padding: '16px 8px', borderRadius: 8, position: 'relative',
+        background: isConnected ? 'rgba(34,197,94,0.08)' : isError ? 'rgba(248,81,73,0.05)' : 'var(--bg-sunk)',
+        border: `1.5px solid ${isConnected ? '#22c55e' : isError ? 'rgba(248,81,73,0.35)' : 'var(--line)'}`,
+        transition: 'all 0.2s',
+      }}>
+        {isConnected && (
+          <span style={{ position: 'absolute', top: 6, right: 6, width: 16, height: 16, borderRadius: 999, background: '#22c55e', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={4} strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+          </span>
+        )}
+        {isError && (
+          <span style={{ position: 'absolute', top: 6, right: 6, width: 16, height: 16, borderRadius: 999, background: 'var(--red)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, lineHeight: 1 }}>!</span>
+        )}
+        {isPending && (
+          <span style={{ position: 'absolute', top: 6, right: 6, width: 16, height: 16, borderRadius: 999, background: 'var(--amber)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, lineHeight: 1 }}>·</span>
+        )}
 
-        <div className="flex-1 mt-4">
-          {scopes.length > 0 ? (
-            <div className="flex flex-wrap gap-1">
-              {scopes.slice(0, 4).map(sc => <Chip key={sc} tone="default" mono>{sc}</Chip>)}
-              {scopes.length > 4 && <span className="ink-4 text-[10.5px] px-1">{scopes.length - 4}+</span>}
-            </div>
-          ) : null}
-        </div>
+        <ServiceIcon service={service} isConnected={isConnected} />
 
-        <div className="mt-4 pt-4 border-t hairline-2 flex items-center gap-3 text-[12px] ink-3">
-          {isConnected ? (
-            <>
-              <span className="mono ink-2">{(service.callCount ?? service.calls ?? 0).toLocaleString()}</span>
-              <span>calls · {service.connectedAt ? new Date(service.connectedAt).toLocaleDateString() : service.last_used || 'never'}</span>
-              <button type="button" onClick={() => setConfigService(service)} className="ml-auto ink-2 hover:ink" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px' }}>Manage →</button>
-              <button type="button" onClick={() => openRevokeModal(service.name)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px', color: 'var(--red)' }}>Disconnect</button>
-            </>
-          ) : isError ? (
-            <>
-              <span className="accent">auth failed</span>
-              <button type="button" onClick={() => handleConnect(service)} className="ml-auto btn btn-accent text-[12px] px-2 py-1">Reconnect</button>
-            </>
-          ) : isPending ? (
-            <>
-              <span className="ink-3">waiting for callback</span>
-              <button type="button" className="ml-auto ink-2 hover:ink" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px' }}>Copy OAuth URL</button>
-            </>
-          ) : (
-            <>
-              <span className="ink-3">{isNotConfigured ? 'Not configured' : 'OAuth 2.0 · scoped'}</span>
-              <button type="button" onClick={() => handleConnect(service)} disabled={isNotConfigured} className="ml-auto btn text-[12px] px-2 py-1" style={{ opacity: isNotConfigured ? 0.45 : 1, cursor: isNotConfigured ? 'not-allowed' : 'pointer' }} title={isNotConfigured ? `${service.label} requires server-side configuration` : undefined}>Connect</button>
-            </>
-          )}
-        </div>
+        <span style={{ fontSize: 13, fontWeight: 600, textAlign: 'center', lineHeight: 1.3, color: isConnected ? '#22c55e' : 'var(--ink)' }}>
+          {service.label}
+        </span>
+
+        {thirdRow}
       </div>
     );
   };
@@ -379,7 +498,7 @@ function ServiceConnectors() {
 
       {/* Tab bar + search */}
       <div>
-        <div className="hairline" style={{ display: 'flex', alignItems: 'center', gap: 0, borderBottom: '1px solid var(--line)' }}>
+        <div className="hairline" data-tour="svc-tabs" style={{ display: 'flex', alignItems: 'center', gap: 0, borderBottom: '1px solid var(--line)' }}>
           {statusTabs.map(tab => (
             <button
               key={tab.key}
@@ -422,7 +541,7 @@ function ServiceConnectors() {
 
         {/* Category chips */}
         {categories.length > 0 && (
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', paddingTop: '12px' }}>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', paddingTop: '12px' }} data-tour="svc-categories">
             <button type="button" onClick={() => setSelectedCategory('all')}
               style={{
                 padding: '3px 10px', borderRadius: '3px', fontSize: '11px', fontWeight: 500,
@@ -479,7 +598,7 @@ function ServiceConnectors() {
         </div>
 
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 155px))', gap: 8 }} data-tour="svc-grid">
           {filteredServices.map((service) => (
             <InlineServiceCard key={service.name} service={service} />
           ))}
@@ -531,6 +650,68 @@ function ServiceConnectors() {
                 className="ui-button-danger"
                 style={{ flex: 1, justifyContent: 'center', opacity: isRevoking ? 0.5 : 1 }}>
                 {isRevoking ? 'Disconnecting…' : 'Disconnect'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* API-key connect modal (OpenAI, Anthropic, Perplexity, ... via Composio) */}
+      {apiKeyService && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: '16px',
+        }} onClick={() => !apiKeySubmitting && setApiKeyService(null)}>
+          <div onClick={(e) => e.stopPropagation()} style={{
+            background: 'var(--bg-raised)', border: '1px solid var(--line)',
+            borderRadius: '8px', maxWidth: '440px', width: '100%', padding: '24px',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+          }}>
+            <h2 className="ink" style={{ fontSize: '15px', fontWeight: 600, margin: '0 0 6px' }}>
+              Connect {apiKeyService.label}
+            </h2>
+            <p className="ink-2" style={{ fontSize: '13px', margin: '0 0 18px', lineHeight: 1.55 }}>
+              {apiKeyService.byComposio
+                ? `Paste your ${apiKeyService.label} credentials. They are stored securely by Composio and never exposed to agents.`
+                : `Enter your ${apiKeyService.label} details. Credentials are stored on your MyApi server and never exposed to agents — the gateway makes the calls on their behalf.`}
+            </p>
+            {(apiKeyService.authFields || []).map((field) => (
+              <div key={field.name} style={{ marginBottom: '14px' }}>
+                <label className="ink" style={{ display: 'block', fontSize: '12px', fontWeight: 500, marginBottom: '5px' }}>
+                  {field.displayName || field.name}{field.required ? ' *' : ''}
+                </label>
+                <input
+                  type={field.secret ? 'password' : 'text'}
+                  autoComplete="off"
+                  value={apiKeyValues[field.name] || ''}
+                  onChange={(e) => setApiKeyValues((v) => ({ ...v, [field.name]: e.target.value }))}
+                  placeholder={field.secret ? '••••••••••••••••' : ''}
+                  className="ui-input"
+                  style={{ width: '100%', minHeight: '40px', boxSizing: 'border-box' }}
+                />
+                {field.description && (
+                  <p className="ink-3" style={{ fontSize: '11px', margin: '5px 0 0', lineHeight: 1.45 }}>{field.description}</p>
+                )}
+              </div>
+            ))}
+            {apiKeyError && (
+              <div style={{
+                marginBottom: '16px', padding: '10px 12px',
+                background: 'var(--red-bg)', border: '1px solid color-mix(in srgb, var(--red) 30%, transparent)', borderRadius: '4px',
+              }}>
+                <p style={{ fontSize: '12px', color: 'var(--red)', margin: 0 }}>{apiKeyError}</p>
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+              <button onClick={() => setApiKeyService(null)} disabled={apiKeySubmitting}
+                className="ui-button"
+                style={{ flex: 1, justifyContent: 'center', opacity: apiKeySubmitting ? 0.5 : 1 }}>
+                Cancel
+              </button>
+              <button onClick={submitApiKey} disabled={apiKeySubmitting}
+                className="ui-button-primary"
+                style={{ flex: 1, justifyContent: 'center', opacity: apiKeySubmitting ? 0.5 : 1 }}>
+                {apiKeySubmitting ? 'Connecting…' : 'Connect'}
               </button>
             </div>
           </div>

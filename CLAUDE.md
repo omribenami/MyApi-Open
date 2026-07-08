@@ -50,9 +50,8 @@ Request → auth middleware (src/middleware/auth.js)
         → scope-validator (src/middleware/scope-validator.js)
         → RBAC (src/middleware/rbac.js)
         → device approval gate (src/middleware/deviceApproval.js)
-        → route handler (src/routes/*.js)
-        → brain/vault for data (src/brain/brain.js, src/vault/vault.js)
-        → database (src/config/database.js)
+        → route handler (src/routes/*.js, identity/preferences inline in src/index.js)
+        → database (src/config/database.js, src/database.js)
 ```
 
 **Auth headers**: `Authorization: Bearer {token}` + `X-Workspace-ID: {id}` for multi-tenancy.
@@ -68,9 +67,7 @@ Request → auth middleware (src/middleware/auth.js)
 | File | Purpose |
 |------|---------|
 | `src/config/database.js` | SQLite (better-sqlite3), WAL mode, 50+ tables, all CRUD operations and schema migrations |
-| `src/routes/api.js` | Core identity/preference/connector endpoints; factory pattern: `createApiRoutes(brain, vault, tokenManager, auditLog)` |
-| `src/routes/` | Additional routes: `admin`, `auth`, `services`, `skills`, `vault-instructions`, `workspaces`, `notifications`, `devices`, `email`, `invitations`, `import`, `export` |
-| `src/brain/brain.js` | `PersonalBrain` class — enforces token scope and applies privacy filters on all data responses |
+| `src/routes/` | Routes: `admin`, `auth`, `services`, `skills`, `vault-instructions`, `workspaces`, `notifications`, `devices`, `email`, `invitations`, `import`, `export` (identity/preferences endpoints are inline in `src/index.js`; per-user identity = `users.profile_metadata`, preferences = `user_preferences` table) |
 | `src/gateway/tokens.js` | `TokenManager` — creates, validates, revokes API tokens |
 | `src/gateway/audit.js` | `AuditLog` — writes every API action with IP, scope, and metadata |
 | `src/lib/encryption.js` | AES-256-GCM with PBKDF2 (600k iterations), authenticated encryption, key rotation |

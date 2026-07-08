@@ -116,7 +116,7 @@ export default function NotificationCenter() {
       <div className="flex flex-col sm:flex-row items-start gap-4 mb-2">
         <div className="flex-1 min-w-0">
           <div className="micro mb-2">OVERVIEW</div>
-          <h1 className="font-serif text-[22px] sm:text-[34px] leading-[1.05] tracking-tight ink font-medium">Notifications</h1>
+          <h1 className="font-serif text-[22px] sm:text-[34px] leading-[1.05] tracking-tight ink font-medium">Everything that needs your attention.</h1>
           <p className="mt-2 text-[15px] ink-2 max-w-[60ch]">
             Activity from your workspace — device approvals, token events, and security alerts.
             {unreadCount > 0 && (
@@ -127,7 +127,7 @@ export default function NotificationCenter() {
       </div>
 
       {/* Filters */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }} data-tour="notif-filters">
         {/* Status filter row */}
         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
           {['all', 'unread', 'read'].map(f => (
@@ -231,7 +231,7 @@ export default function NotificationCenter() {
           </p>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }} data-tour="notif-list">
           {filteredNotifications.map(notif => (
             <div
               key={notif.id}

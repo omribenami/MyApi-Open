@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const DeviceFingerprint = require('../utils/deviceFingerprint');
 const db = require('../database');
 const NotificationService = require('../services/notificationService');
+const { setRequestActor } = require('../lib/request-context');
 
 // ─── ASC: Ed25519 signature verification ─────────────────────────────────────
 
@@ -12,10 +13,11 @@ function verifyASCSignature(req, userId, tokenId) {
 
   if (!pubKeyB64 || !sigB64 || !tsHeader) return null; // not an ASC request
 
-  // Replay protection: timestamp must be within 60 seconds
+  // Replay protection: timestamp must be within the replay window (5 min).
+  // Matches src/index.js ASC_REPLAY_WINDOW_SECONDS — keep in sync.
   const ts = parseInt(tsHeader, 10);
   const now = Math.floor(Date.now() / 1000);
-  if (isNaN(ts) || Math.abs(now - ts) > 60) {
+  if (isNaN(ts) || Math.abs(now - ts) > 300) {
     return { valid: false, reason: 'timestamp_invalid' };
   }
 
@@ -58,6 +60,73 @@ function verifyASCSignature(req, userId, tokenId) {
   return { valid: true, keyFingerprint, pubKeyB64 };
 }
 
+// 24h cool-down on the "new device" / "suspicious device" email per (token, fingerprint).
+// Without this, a flapping User-Agent triggers an email on every request. The dedupe
+// boundary lives at the device_approvals_pending row: last_alert_sent_at is checked
+// before send and written after send.
+const ALERT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+
+function shouldSendDeviceAlert(tokenId, fingerprintHash) {
+  try {
+    const last = db.getLastAlertSentAt(tokenId, fingerprintHash);
+    if (!last) return true;
+    return (Date.now() - new Date(last).getTime()) > ALERT_COOLDOWN_MS;
+  } catch (_) {
+    return true; // fail open — better to over-notify than miss real theft on a DB hiccup
+  }
+}
+
+// Strict-mode (FEATURE_OAUTH_STRICT_DEVICE_BIND=true) email. Behind the cool-down.
+function sendOAuthSuspiciousAlertOnce({ db, userId, tokenId, tokenLabel, fingerprint, approvalId, req }) {
+  if (!shouldSendDeviceAlert(tokenId, fingerprint.fingerprintHash)) return;
+  try {
+    const userRow = db.db.prepare('SELECT email, display_name, username FROM users WHERE id = ?').get(userId);
+    const oauthTokenName = tokenLabel || 'OAuth Token';
+
+    NotificationService.emitNotification(userId, 'security_alert',
+      `Security Alert: OAuth token used from a different device`,
+      `Token "${oauthTokenName}" was used from an unrecognised device (${fingerprint.summary.ipAddress}). This token is bound to a specific device — cross-device use may indicate token theft.`,
+      {
+        relatedEntityType: 'device',
+        relatedEntityId: approvalId,
+        data: { ip: fingerprint.summary.ipAddress, os: fingerprint.summary.os, browser: fingerprint.summary.browser, tokenName: oauthTokenName },
+        actionUrl: approvalId ? `/dashboard/devices?approval=${approvalId}` : '/dashboard/devices',
+        skipEmail: true,
+      }
+    ).catch(err => console.error('[DeviceApproval] OAuth notification failed:', err.message));
+
+    if (userRow?.email) {
+      const EmailService = require('../services/emailService');
+      const originalDevice = (() => {
+        try {
+          const approved = db.db.prepare('SELECT device_name, ip_address, approved_at FROM approved_devices WHERE token_id = ? AND user_id = ? AND revoked_at IS NULL ORDER BY approved_at ASC LIMIT 1').get(tokenId, userId);
+          return approved ? { name: approved.device_name, ip: approved.ip_address, approvedAt: approved.approved_at } : null;
+        } catch (_) { return null; }
+      })();
+      EmailService.sendNewDeviceApprovalEmail(
+        userRow.email,
+        userRow.display_name || userRow.username || 'there',
+        {
+          tokenName: oauthTokenName,
+          tokenKind: 'oauth',
+          ip: fingerprint.summary.ipAddress,
+          os: fingerprint.summary.os,
+          browser: fingerprint.summary.browser,
+          endpoint: `${req.method} ${req.path}`,
+          detectedAt: new Date().toISOString(),
+          originalDevice,
+          approvalId,
+          suspiciousActivity: { suspicious: true, warnings: ['OAuth token used from a device it was not issued to — possible token theft or unauthorized sharing'], riskLevel: 'high' },
+        }
+      ).catch(err => console.error('[DeviceApproval] OAuth email failed:', err.message));
+    }
+
+    db.markAlertSent(approvalId);
+  } catch (err) {
+    console.error('[DeviceApproval] OAuth alert error:', err.message);
+  }
+}
+
 /**
  * Device Approval Middleware
  * Checks if the requesting device is approved before allowing API access
@@ -94,6 +163,180 @@ function checkApprovalRateLimit(tokenId) {
   
   limit.count++;
   return true;
+}
+
+// ─── OAuth token device policy (shared) ──────────────────────────────────────
+//
+// OAuth-issued tokens (label ends with "(OAuth)") identify the agent by the bearer
+// secret + OAuth client_id, NOT by device fingerprint. The user already authenticated
+// in the browser and explicitly granted consent during the OAuth flow, so requiring a
+// second "approve this device" step is redundant. AI agents also legitimately rotate
+// across LB workers, omit User-Agent headers, and call from different IPs — binding
+// them to a single SHA256(UA+platform) hash produced false-positive "suspicious device"
+// alerts on every request. Real theft signals (ASN drift, VPN/Tor, velocity) are
+// detected by lib/tokenSecurityMonitor.js, which runs after this middleware.
+//
+// FEATURE_OAUTH_STRICT_DEVICE_BIND=true restores the legacy strict path for one
+// release as a rollback guardrail.
+//
+// Used by deviceApprovalMiddleware below AND by the manual Bearer-token path in
+// routes/auth.js GET /auth/me (which is not wrapped in the middleware chain). Keep
+// this the single source of truth so the two paths cannot disagree.
+//
+// Returns { allow: true } or { allow: false, status, body }.
+function applyOAuthDevicePolicy(req, { userId, tokenId, tokenLabel }) {
+  // ── Device identity ──────────────────────────────────────────────────────────
+  // OAuth delegation tokens (ChatGPT, etc.) rotate token_id on every authorization
+  // and refresh, and arrive from many egress IPs/UAs. Keying the "device" by
+  // token_id + request fingerprint therefore spawns a brand-new device (and approval)
+  // per token/IP — dozens for one logical client. Instead, key OAuth devices by the
+  // stable OAuth client: ONE device per (user, client). Non-OAuth tokens keep the
+  // per-token + per-request-fingerprint identity. ASC has its own stable key path.
+  let oauthClientId = null;
+  try {
+    const row = db.db.prepare('SELECT oauth_client_id FROM access_tokens WHERE id = ?').get(tokenId);
+    oauthClientId = row?.oauth_client_id || null;
+  } catch (_) {}
+
+  const clientIp = req.headers?.['x-forwarded-for']?.split(',')[0]?.trim()
+    || req.headers?.['x-real-ip'] || req.socket?.remoteAddress || req.ip || 'unknown';
+
+  const deviceKey = oauthClientId ? `oauth:${oauthClientId}` : tokenId;
+  const fingerprint = oauthClientId
+    ? { fingerprintHash: `oauth:${oauthClientId}`, summary: { os: 'OAuth', browser: oauthClientId, ipAddress: clientIp } }
+    : DeviceFingerprint.fromRequest(req);
+
+  // Step 1: Revocation check — fail closed while a revocation is the user's
+  // LATEST decision for this entity. Revoking the device locks it down; approving
+  // a pending device afterwards restores the relaxed OAuth mode. Comparing MAX
+  // timestamps instead of "any revoked row exists" — a stale revoked row must not
+  // poison the entity forever. ISO-8601 strings compare lexicographically; a
+  // same-millisecond tie resolves in favor of the explicit approval.
+  let revocationActive;
+  try {
+    const lastRevoked = db.db.prepare(
+      'SELECT MAX(revoked_at) AS ts FROM approved_devices WHERE token_id = ? AND user_id = ? AND revoked_at IS NOT NULL'
+    ).get(deviceKey, userId);
+    const lastApproved = db.db.prepare(
+      'SELECT MAX(approved_at) AS ts FROM approved_devices WHERE token_id = ? AND user_id = ? AND revoked_at IS NULL'
+    ).get(deviceKey, userId);
+    revocationActive = Boolean(lastRevoked?.ts && (!lastApproved?.ts || lastApproved.ts < lastRevoked.ts));
+  } catch (err) {
+    console.error('[Device Approval] Revocation check failed', { err: err.message, deviceKey, userId });
+    return {
+      allow: false,
+      status: 503,
+      body: {
+        error: 'device_approval_error',
+        code: 'DEVICE_APPROVAL_FAILED',
+        message: 'Access denied — device check temporarily unavailable.',
+      },
+    };
+  }
+  if (revocationActive) {
+    // Revoked — create a pending approval so the user can re-approve from the dashboard.
+    // No email here: the revocation was user-initiated, the dashboard is the signal.
+    const pendingApprovals = db.getPendingApprovals(userId, deviceKey);
+    const existingPending = pendingApprovals.find(p => p.device_fingerprint_hash === fingerprint.fingerprintHash);
+    if (!existingPending) {
+      try {
+        db.createPendingApproval(deviceKey, userId, fingerprint.fingerprintHash, fingerprint.summary, fingerprint.summary.ipAddress);
+      } catch (_) {}
+    }
+    return {
+      allow: false,
+      status: 403,
+      body: {
+        error: 'device_not_approved',
+        code: 'DEVICE_APPROVAL_REQUIRED',
+        message: 'Access denied — waiting for the user to approve you in the dashboard.',
+      },
+    };
+  }
+
+  const existing = (() => {
+    try { return db.getApprovedDeviceByHashAndToken(userId, fingerprint.fingerprintHash, deviceKey); } catch (_) { return null; }
+  })();
+
+  // Step 2 (strict, opt-in): legacy device-binding gate.
+  if (process.env.FEATURE_OAUTH_STRICT_DEVICE_BIND === 'true') {
+    if (existing && !existing.revoked_at) {
+      try { db.updateDeviceLastUsed(existing.id); } catch (_) {}
+      setRequestActor({ deviceId: existing.id, deviceName: existing.device_name || null });
+      return { allow: true };
+    }
+    // Different fingerprint — require explicit approval, with 24h email cool-down.
+    const pendingApprovals = db.getPendingApprovals(userId, deviceKey);
+    const existingPending = pendingApprovals.find(p => p.device_fingerprint_hash === fingerprint.fingerprintHash);
+    let oauthApprovalId = existingPending?.id || null;
+    if (!existingPending) {
+      try {
+        oauthApprovalId = db.createPendingApproval(deviceKey, userId, fingerprint.fingerprintHash, fingerprint.summary, fingerprint.summary.ipAddress);
+      } catch (_) {}
+    }
+    sendOAuthSuspiciousAlertOnce({
+      db, userId, tokenId, tokenLabel,
+      fingerprint, approvalId: oauthApprovalId, req,
+    });
+    return {
+      allow: false,
+      status: 403,
+      body: {
+        error: 'device_not_approved',
+        code: 'DEVICE_APPROVAL_REQUIRED',
+        message: 'Access denied — this token was issued to a different device. Ask the user to approve you in the dashboard.',
+      },
+    };
+  }
+
+  // Step 2 (default): visibility-only tracking.
+  // Existing fingerprint → bump last_used. New fingerprint → silently auto-register
+  // the (token, fingerprint) pair so the dashboard can list and revoke it. No 403,
+  // no email. tokenSecurityMonitor.checkRequest (wired in src/index.js) is the
+  // anomaly authority and will suspend the token if it sees real theft signals.
+  if (existing && !existing.revoked_at) {
+    try { db.updateDeviceLastUsed(existing.id); } catch (_) {}
+    setRequestActor({ deviceId: existing.id, deviceName: existing.device_name || null });
+    return { allow: true };
+  }
+
+  // An explicitly revoked fingerprint stays blocked even after the token has
+  // returned to relaxed mode — the user can re-approve it from the dashboard.
+  // (getApprovedDeviceByHashAndToken filters revoked rows, so look it up here.)
+  const revokedRow = (() => {
+    try {
+      return db.db.prepare(
+        'SELECT id FROM approved_devices WHERE user_id = ? AND device_fingerprint_hash = ? AND token_id = ? AND revoked_at IS NOT NULL'
+      ).get(userId, fingerprint.fingerprintHash, deviceKey);
+    } catch (_) { return null; }
+  })();
+  if (revokedRow) {
+    const pendingApprovals = db.getPendingApprovals(userId, deviceKey);
+    const existingPending = pendingApprovals.find(p => p.device_fingerprint_hash === fingerprint.fingerprintHash);
+    if (!existingPending) {
+      try {
+        db.createPendingApproval(deviceKey, userId, fingerprint.fingerprintHash, fingerprint.summary, fingerprint.summary.ipAddress);
+      } catch (_) {}
+    }
+    return {
+      allow: false,
+      status: 403,
+      body: {
+        error: 'device_not_approved',
+        code: 'DEVICE_APPROVAL_REQUIRED',
+        message: 'Access denied — this device was revoked. Ask the user to re-approve it in the dashboard.',
+      },
+    };
+  }
+
+  try {
+    const newDeviceId = db.createApprovedDevice(
+      deviceKey, userId, fingerprint.fingerprintHash,
+      tokenLabel, fingerprint.summary, fingerprint.summary.ipAddress
+    );
+    if (newDeviceId) setRequestActor({ deviceId: newDeviceId, deviceName: tokenLabel || null });
+  } catch (_) { /* duplicate-key race is fine */ }
+  return { allow: true };
 }
 
 /**
@@ -137,6 +380,7 @@ function deviceApprovalMiddleware(req, res, next) {
     const ascDevice = db.getApprovedDeviceByKeyFingerprint(userId, ascResult.keyFingerprint);
     if (ascDevice && !ascDevice.revoked_at) {
       db.updateDeviceLastUsed(ascDevice.id);
+      setRequestActor({ deviceId: ascDevice.id, deviceName: ascDevice.device_name || 'ASC Agent' });
       return next();
     }
     if (ascDevice && ascDevice.revoked_at) {
@@ -152,7 +396,7 @@ function deviceApprovalMiddleware(req, res, next) {
     const existingPending = pending.find(p => p.device_fingerprint_hash === ascResult.keyFingerprint);
     if (!existingPending) {
       db.createPendingApproval(tokenId, userId, ascResult.keyFingerprint,
-        { type: 'asc', key_fingerprint: ascResult.keyFingerprint }, req.ip);
+        { type: 'asc', key_fingerprint: ascResult.keyFingerprint, public_key: ascResult.pubKeyB64 }, req.ip);
     }
     return res.status(403).json({
       error: 'device_not_approved',
@@ -162,117 +406,12 @@ function deviceApprovalMiddleware(req, res, next) {
     });
   }
 
-  // OAuth-issued tokens (label ends with "(OAuth)") are pre-authorized by the user during
-  // the OAuth consent flow — no additional device approval needed.
-  // Daemon tokens (AFP daemon, raw API tokens) must go through device approval.
-  // Guest/scoped tokens respect the per-token requires_approval flag.
   try {
     const tokenRow = db.db.prepare('SELECT label, requires_approval FROM access_tokens WHERE id = ?').get(tokenId);
     if (tokenRow?.label && tokenRow.label.endsWith('(OAuth)')) {
-      // Register/track in approved_devices so the user can see and revoke from the dashboard.
-      // Revocation is token-level: if the user has revoked any device for this token,
-      // block ALL requests from this token (regardless of fingerprint) until re-approved.
-      // Step 1: Revocation check — fail closed
-      let anyRevoked;
-      try {
-        anyRevoked = db.db.prepare(
-          'SELECT id FROM approved_devices WHERE token_id = ? AND user_id = ? AND revoked_at IS NOT NULL LIMIT 1'
-        ).get(tokenId, userId);
-      } catch (err) {
-        console.error('[Device Approval] Revocation check failed', { err: err.message, tokenId, userId });
-        return res.status(503).json({
-          error: 'device_approval_error',
-          code: 'DEVICE_APPROVAL_FAILED',
-          message: 'Access denied — device check temporarily unavailable.',
-        });
-      }
-      const fingerprint = DeviceFingerprint.fromRequest(req);
-      if (anyRevoked) {
-        // Revoked — create a new pending approval so the user can re-approve from the dashboard
-        const pendingApprovals = db.getPendingApprovals(userId, tokenId);
-        const existingPending = pendingApprovals.find(p => p.device_fingerprint_hash === fingerprint.fingerprintHash);
-        if (!existingPending) {
-          db.createPendingApproval(tokenId, userId, fingerprint.fingerprintHash, fingerprint.summary, fingerprint.summary.ipAddress);
-        }
-        return res.status(403).json({
-          error: 'device_not_approved',
-          code: 'DEVICE_APPROVAL_REQUIRED',
-          message: 'Access denied — waiting for the user to approve you in the dashboard.',
-        });
-      }
-      // Step 2: Device fingerprint check — token is bound to the device that did the exchange.
-      // Any different device must be explicitly approved by the user.
-      const existing = (() => {
-        try { return db.getApprovedDeviceByHashAndToken(userId, fingerprint.fingerprintHash, tokenId); } catch (_) { return null; }
-      })();
-      if (existing && !existing.revoked_at) {
-        try { db.updateDeviceLastUsed(existing.id); } catch (_) {}
-        return next();
-      }
-      // Different device — require explicit user approval.
-      // This is always treated as suspicious: OAuth tokens are bound to the authorizing device,
-      // so any cross-device use indicates possible token theft or unauthorized sharing.
-      const pendingApprovals = db.getPendingApprovals(userId, tokenId);
-      const existingPending = pendingApprovals.find(p => p.device_fingerprint_hash === fingerprint.fingerprintHash);
-      let oauthApprovalId = existingPending?.id || null;
-      if (!existingPending) {
-        try {
-          oauthApprovalId = db.createPendingApproval(tokenId, userId, fingerprint.fingerprintHash, fingerprint.summary, fingerprint.summary.ipAddress);
-        } catch (_) {}
-      }
-
-      // Notify + email — OAuth cross-device is always suspicious
-      try {
-        const userRow = db.db.prepare('SELECT email, display_name, username FROM users WHERE id = ?').get(userId);
-        const oauthTokenName = tokenRow?.label || 'OAuth Token';
-
-        // In-app notification
-        NotificationService.emitNotification(userId, 'security_alert',
-          `Security Alert: OAuth token used from a different device`,
-          `Token "${oauthTokenName}" was used from an unrecognised device (${fingerprint.summary.ipAddress}). This token is bound to a specific device — cross-device use may indicate token theft.`,
-          {
-            relatedEntityType: 'device',
-            relatedEntityId: oauthApprovalId,
-            data: { ip: fingerprint.summary.ipAddress, os: fingerprint.summary.os, browser: fingerprint.summary.browser, tokenName: oauthTokenName },
-            actionUrl: oauthApprovalId ? `/dashboard/devices?approval=${oauthApprovalId}` : '/dashboard/devices',
-          }
-        ).catch(err => console.error('[DeviceApproval] OAuth notification failed:', err.message));
-
-        // Email — always use the security alert style for OAuth cross-device
-        if (userRow?.email) {
-          const EmailService = require('../services/emailService');
-          const originalDevice = (() => {
-            try {
-              const approved = db.db.prepare('SELECT device_name, ip_address, approved_at FROM approved_devices WHERE token_id = ? AND user_id = ? AND revoked_at IS NULL ORDER BY approved_at ASC LIMIT 1').get(tokenId, userId);
-              return approved ? { name: approved.device_name, ip: approved.ip_address, approvedAt: approved.approved_at } : null;
-            } catch (_) { return null; }
-          })();
-          EmailService.sendNewDeviceApprovalEmail(
-            userRow.email,
-            userRow.display_name || userRow.username || 'there',
-            {
-              tokenName: oauthTokenName,
-              tokenKind: 'oauth',
-              ip: fingerprint.summary.ipAddress,
-              os: fingerprint.summary.os,
-              browser: fingerprint.summary.browser,
-              endpoint: `${req.method} ${req.path}`,
-              detectedAt: new Date().toISOString(),
-              originalDevice,
-              approvalId: oauthApprovalId,
-              suspiciousActivity: { suspicious: true, warnings: ['OAuth token used from a device it was not issued to — possible token theft or unauthorized sharing'], riskLevel: 'high' },
-            }
-          ).catch(err => console.error('[DeviceApproval] OAuth email failed:', err.message));
-        }
-      } catch (err) {
-        console.error('[DeviceApproval] OAuth alert error:', err.message);
-      }
-
-      return res.status(403).json({
-        error: 'device_not_approved',
-        code: 'DEVICE_APPROVAL_REQUIRED',
-        message: 'Access denied — this token was issued to a different device. Ask the user to approve you in the dashboard.',
-      });
+      const verdict = applyOAuthDevicePolicy(req, { userId, tokenId, tokenLabel: tokenRow.label });
+      if (verdict.allow) return next();
+      return res.status(verdict.status).json(verdict.body);
     }
     if (!isMasterToken && !tokenRow?.requires_approval) {
       return next(); // scoped token without approval requirement — pass through
@@ -302,7 +441,9 @@ function deviceApprovalMiddleware(req, res, next) {
         name: approvedDevice.device_name,
         fingerprint: fingerprintHash,
         approvedAt: approvedDevice.approved_at,
+        scope: approvedDevice.scope || 'full',
       };
+      setRequestActor({ deviceId: approvedDevice.id, deviceName: approvedDevice.device_name || null });
 
       // Set cache-control headers to prevent stale device status
       res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -374,6 +515,7 @@ function deviceApprovalMiddleware(req, res, next) {
             tokenName,
           },
           actionUrl: '/dashboard/devices',
+          skipEmail: true, // sendNewDeviceApprovalEmail handles the transactional email
         }
       ).catch(err => console.error('Failed to emit device approval notification:', err));
       
@@ -417,8 +559,9 @@ function deviceApprovalMiddleware(req, res, next) {
       }))
     );
 
-    // Email notification for new device — fire-and-forget, after suspiciousAnalysis is ready
-    if (isNewApproval) {
+    // Email notification for new device — fire-and-forget, gated by the 24h cool-down
+    // so a flapping fingerprint can't trigger one email per request.
+    if (isNewApproval && shouldSendDeviceAlert(tokenId, fingerprintHash)) {
       try {
         const userRow = db.db.prepare('SELECT email, display_name, username FROM users WHERE id = ?').get(userId);
         if (userRow?.email) {
@@ -442,6 +585,7 @@ function deviceApprovalMiddleware(req, res, next) {
               suspiciousActivity: suspiciousAnalysis,
             }
           ).catch(err => console.error('[DeviceApproval] Email failed:', err.message));
+          db.markAlertSent(approvalId);
         }
       } catch (err) {
         console.error('[DeviceApproval] Email dispatch error:', err.message);
@@ -568,6 +712,7 @@ function skipDeviceApproval(req, res, next) {
 
 module.exports = {
   deviceApprovalMiddleware,
+  applyOAuthDevicePolicy,
   deviceTrackingMiddleware,
   skipDeviceApproval,
   setAlertEmitter,

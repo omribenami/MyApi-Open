@@ -225,6 +225,9 @@ const router = express.Router();
     }
   });
 
+  // Per-type configurable notifications surfaced in the Settings UI. Note:
+  // 'security_alert' (token suspended) is intentionally NOT listed — security
+  // compromise alerts are always delivered and cannot be toggled off.
   const LEGACY_NOTIFICATION_TYPES = [
     'device_approval_requested',
     'device_approved',
@@ -233,8 +236,10 @@ const router = express.Router();
     'skill_used',
     'persona_invoked',
     'guest_token_used',
+    'token_created',
     'token_revoked',
-    'service_connected'
+    'service_connected',
+    'oauth_reconnect_required'
   ];
 
   function toLegacySettings(settings) {

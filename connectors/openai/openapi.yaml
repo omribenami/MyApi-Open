@@ -2,9 +2,19 @@ openapi: 3.1.0
 info:
   title: MyApi Personal AI Assistant
   description: |
-    Access your MyApi account — identity, personas, knowledge base, and connected services.
-    All requests are authenticated with your personal OAuth access token.
-  version: 1.0.0
+    Access the user's MyApi account — identity, personas, knowledge base, connected
+    services, and their own machines (PCs/servers).
+
+    HOW TO USE SERVICES (do this, don't guess): when the user asks about any connected
+    app, their files, their server, docker, or their data —
+      1. call listServices to see what's connected and the exact service ids,
+      2. call getServiceMethods(serviceId) to learn the exact paths/bodies,
+      3. then act: callServiceProxy for normal services, or the /api/v1/afp/* operations
+         for the user's own machines (service id "afp").
+    Composio-backed services use their plain toolkit name (e.g. gmail, notion) and are
+    called exactly like native ones via callServiceProxy. All requests use the user's
+    personal OAuth token automatically — never ask the user for credentials.
+  version: 1.1.0
 servers:
   - url: https://www.myapiai.com
 
@@ -29,6 +39,7 @@ paths:
                   data:
                     type: object
                     description: Key-value identity fields
+                    additionalProperties: true
 
   # ── Personas ─────────────────────────────────────────────────
   /api/v1/personas:
@@ -201,7 +212,11 @@ paths:
     get:
       operationId: listServices
       summary: List connected services
-      description: Returns all available integrations and which ones are currently connected (Google, GitHub, Slack, etc.).
+      description: >
+        Call this first when the user asks about a connected app, machine, or data.
+        Returns every service id and status. Ids: native (github, google, ...),
+        Composio-backed ones under their plain toolkit name (e.g. gmail, notion), and afp (the
+        user's own machines). Use the exact id with the other operations.
       responses:
         "200":
           description: Services list
@@ -220,6 +235,50 @@ paths:
                     type: integer
                     description: Number of connected services
 
+  # ── Service capability discovery ──────────────────────────────
+  /api/v1/services/{serviceName}/methods:
+    get:
+      operationId: getServiceMethods
+      summary: Discover how to call a service
+      description: >
+        Call before using an unfamiliar service to learn its exact operations, paths,
+        and bodies. Works for every id from listServices. For afp it lists the user's
+        machines and exec/ls/read/write ops (use /api/v1/afp/* paths, not the proxy);
+        for all others it returns the callServiceProxy shape.
+      parameters:
+        - name: serviceName
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The exact service id from listServices (e.g. gmail, github, afp)
+      responses:
+        "200":
+          description: Documented operations for the service
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  serviceId:
+                    type: string
+                  data:
+                    type: array
+                    description: Documented operations (path, method, params, body shape)
+                    items:
+                      type: object
+                      additionalProperties: true
+                  count:
+                    type: integer
+                  note:
+                    type: string
+                    description: How to invoke this service's operations
+                additionalProperties: true
+        "404":
+          description: Service not found or not connected
+
   # ── Service Proxy ─────────────────────────────────────────────
   # Use this to call ANY connected service's API directly.
   # First check listServices to confirm the service is connected before calling.
@@ -227,15 +286,18 @@ paths:
     post:
       operationId: callServiceProxy
       summary: Call a connected service's API
-      description: "Proxy a raw API call to any connected OAuth service (GitHub, Slack, Notion, etc.). Call listServices first to confirm the service is connected. Examples: GitHub repos → GET /user/repos, Slack channels → GET /conversations.list, Notion → POST /search."
+      description: >
+        Proxy a raw API call to any connected service, using the exact id from
+        listServices (native or Composio toolkit name). Call getServiceMethods first
+        if unsure of the path. MyApi attaches the stored credentials. For afp use
+        the /api/v1/afp/* operations, not this proxy.
       parameters:
         - name: serviceName
           in: path
           required: true
           schema:
             type: string
-            enum: [github, google, slack, discord, linkedin, notion, dropbox, facebook, instagram, twitter, microsoft365, trello, zoom, hubspot, salesforce, jira]
-          description: The connected service to call
+          description: The exact connected service id from listServices (native or Composio toolkit name)
       requestBody:
         required: true
         content:
@@ -271,6 +333,7 @@ paths:
                   data:
                     type: object
                     description: The raw response from the service API
+                    additionalProperties: true
                   success:
                     type: boolean
         "404":
@@ -713,6 +776,7 @@ paths:
                   user:
                     type: object
                     description: Your identity profile
+                    additionalProperties: true
                   persona:
                     $ref: "#/components/schemas/Persona"
                   systemPrompt:
@@ -833,6 +897,108 @@ paths:
       responses:
         "200":
           description: Memory deleted
+
+  /api/v1/triggers:
+    get:
+      operationId: listAutomations
+      summary: List the user's automations
+      description: Returns scheduled/proactive automations (triggers) the user has created. Requires a Pro or Heavy plan.
+      responses:
+        "200":
+          description: List of automations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      type: object
+    post:
+      operationId: createAutomation
+      summary: Create an automation (scheduled, proactive task)
+      description: >
+        Schedule a recurring or one-time task that MyApi runs on its own — even when no agent is connected.
+        Prefer actionType "ai_prompt": describe the task in plain English and list the connected services it may use;
+        an AI agent performs it (and emails via the user's own connected mailbox). Requires a Pro or Heavy plan.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - schedule
+                - actionType
+                - action
+              properties:
+                name:
+                  type: string
+                  description: Human-friendly name for the automation.
+                kind:
+                  type: string
+                  enum: [schedule]
+                  default: schedule
+                schedule:
+                  type: object
+                  description: >
+                    When to run. type ∈ once|interval|daily|weekly|monthly.
+                    once:{at:ISO}; interval:{everyMinutes>=60 for MyApi AI};
+                    daily:{atHour,atMinute}; weekly:{weekday(0=Sun),atHour,atMinute}; monthly:{day,atHour,atMinute}.
+                  example: { type: daily, atHour: 7, atMinute: 0 }
+                timezone:
+                  type: string
+                  description: IANA timezone (e.g. America/New_York). Defaults to UTC.
+                actionType:
+                  type: string
+                  enum: [ai_prompt, service_proxy, afp_exec]
+                  description: ai_prompt = AI agent task (recommended).
+                action:
+                  type: object
+                  description: >
+                    For ai_prompt: {prompt, services:[connected service slugs], provider?, model?, keyMode?}.
+                    For service_proxy: {service, path, method, body, query}. For afp_exec: {deviceId, cmd}.
+                  example: { prompt: "Summarize my unread email and send it to me", services: ["gmail"] }
+      responses:
+        "201":
+          description: Automation created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  data:
+                    type: object
+
+  /api/v1/triggers/{id}/run:
+    post:
+      operationId: runAutomation
+      summary: Run an automation now
+      description: Execute an automation immediately (useful to test it). Returns the run result.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Run result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  run:
+                    type: object
 
 components:
   securitySchemes:

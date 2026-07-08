@@ -46,17 +46,10 @@ apiClient.interceptors.request.use((config) => {
     return Promise.reject(err);
   }
 
-  let masterToken = null;
-  let sessionToken = null;
-  try {
-    masterToken = localStorage.getItem('masterToken');
-    sessionToken = sessionStorage.getItem('sessionToken');
-  } catch {
-    // Ignore storage corruption and continue with cookie/session auth only.
-  }
-  if (!sessionToken && masterToken) {
-    config.headers.Authorization = `Bearer ${masterToken}`;
-  }
+  // Dashboard auth is session-cookie only (withCredentials: true above).
+  // Never attach a Bearer master token: doing so makes backend treat the request
+  // as an agent call and runs device-approval, which is reserved for AI agents.
+  // On 401 the response interceptor below redirects to login.
 
   // Multi-tenancy: Add X-Workspace-ID header for workspace-scoped API calls.
   // Read from Zustand state (confirmed from server after login) to avoid sending a
@@ -83,7 +76,7 @@ apiClient.interceptors.response.use(
     const status = error.response?.status;
     const fullUrl = `${error.config?.baseURL || ''}${error.config?.url || ''}`;
 
-    if (status === 429) {
+    if (status === 429 || status === 503) {
       const retryAfterHeader = Number(error.response?.headers?.['retry-after'] || 0);
       const retryAfterMs = retryAfterHeader > 0 ? retryAfterHeader * 1000 : getBackoffMs(fullUrl);
       error.retryAfterMs = retryAfterMs;
@@ -126,6 +119,21 @@ export const services = {
   disconnect: (service) => apiClient.post(`/oauth/disconnect/${service}`),
   getServiceDetails: (service) => apiClient.get(`/services/${service}`),
   updateServiceConfig: (service, config) => apiClient.put(`/services/${service}`, config),
+};
+
+export const automations = {
+  list: () => apiClient.get('/triggers'),
+  get: (id) => apiClient.get(`/triggers/${id}`),
+  create: (body) => apiClient.post('/triggers', body),
+  update: (id, body) => apiClient.patch(`/triggers/${id}`, body),
+  remove: (id) => apiClient.delete(`/triggers/${id}`),
+  run: (id) => apiClient.post(`/triggers/${id}/run`),
+  runs: (id) => apiClient.get(`/triggers/${id}/runs`),
+  aiSettings: () => apiClient.get('/triggers/ai/settings'),
+  setKey: (provider, key) => apiClient.put('/triggers/ai/key', { provider, key }),
+  clearKey: (provider) => apiClient.delete('/triggers/ai/key', { data: { provider } }),
+  setWallet: (settings) => apiClient.put('/triggers/ai/wallet', settings),
+  topUp: (amountCents) => apiClient.post('/triggers/ai/topup', { amountCents }),
 };
 
 export default apiClient;

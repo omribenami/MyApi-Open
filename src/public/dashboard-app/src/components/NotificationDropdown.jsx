@@ -8,11 +8,14 @@ function NotificationDropdown({ open, onClose }) {
   const dropdownRef = useRef(null);
   const {
     notifications,
+    unreadCount,
     isLoading,
     error,
     fetchNotifications,
     markAsRead,
+    markAllAsRead,
     deleteNotification,
+    clearAll,
   } = useNotificationStore();
 
   const [offset, setOffset] = useState(0);
@@ -91,9 +94,17 @@ function NotificationDropdown({ open, onClose }) {
     return icons[type] || <svg className={svgClass} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>;
   };
 
-  const formatTime = (isoString) => {
-    if (!isoString) return '';
-    const date = new Date(isoString);
+  const formatTime = (value) => {
+    if (!value) return '';
+    // created_at is unix seconds from the API; also tolerate ISO strings and ms.
+    let date;
+    const num = Number(value);
+    if (Number.isFinite(num)) {
+      date = new Date(num < 1e12 ? num * 1000 : num);
+    } else {
+      date = new Date(value);
+    }
+    if (Number.isNaN(date.getTime())) return '';
     const now = new Date();
     const diffMs = now - date;
     const diffMins = Math.floor(diffMs / 60000);
@@ -131,13 +142,37 @@ function NotificationDropdown({ open, onClose }) {
       {/* Header */}
       <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--line-2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
         <span className="micro">Notifications</span>
-        <button
-          onClick={onClose}
-          className="ink-3"
-          style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: '2px' }}
-        >
-          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {unreadCount > 0 && (
+            <button
+              onClick={() => markAllAsRead(masterToken)}
+              className="text-[11px]"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', padding: '2px' }}
+              title="Mark all as read"
+            >
+              Mark all read
+            </button>
+          )}
+          {notifications.length > 0 && (
+            <button
+              onClick={() => clearAll(masterToken)}
+              className="text-[11px] ink-3"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px' }}
+              onMouseEnter={e => e.currentTarget.style.color = 'var(--red)'}
+              onMouseLeave={e => e.currentTarget.style.color = ''}
+              title="Clear all notifications"
+            >
+              Clear all
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="ink-3"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: '2px' }}
+          >
+            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
       </div>
 
       {/* Notifications list */}

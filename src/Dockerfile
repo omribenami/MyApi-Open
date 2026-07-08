@@ -17,6 +17,10 @@ COPY connectors/afp-oauth/dist/ afp-oauth-dist/
 # Agent Auth installer script (served at /api/v1/agent-auth/install.js)
 COPY connectors/agent-auth/ connectors/agent-auth/
 
+# ChatGPT connector assets — runtime code resolves these as <app>/../connectors/openai/
+# (openapi.yaml served at /api/v1/oauth-server/openapi.yaml, privacy policy at /chatgpt-privacy)
+COPY connectors/openai/ /connectors/openai/
+
 # ── Dependency install (cached until package.json/lock changes) ────────────────
 # Copy manifests BEFORE the full source so npm install is cached on code-only changes.
 
@@ -43,6 +47,11 @@ RUN cd public/dashboard-app && npm run build
 
 # Ensure data/log directories exist
 RUN mkdir -p data logs && chmod -R 755 data logs
+
+# Run as non-root user (UID 1001 matches host data dir ownership)
+RUN groupadd -g 1001 nodeapp && useradd -u 1001 -g nodeapp -s /bin/false nodeapp \
+    && chown -R nodeapp:nodeapp /app
+USER nodeapp
 
 # Expose API port
 EXPOSE 4500

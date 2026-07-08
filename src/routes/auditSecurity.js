@@ -23,11 +23,33 @@ function buildWorkspaceRateLimiter({ windowMs = 60_000, max = 120 } = {}) {
   };
 }
 
-function createAuditSecurityRouter({ sessionDb, sessionStore }) {
+function createAuditSecurityRouter({ sessionDb, sessionStore, isOwner }) {
   const router = express.Router();
+
+  // Resolve the authenticated user id (set by the auth middleware, in any of the
+  // several shapes session vs Bearer vs ASC auth produce).
+  const resolveUserId = (req) =>
+    req.userId || req.user?.id || req.tokenMeta?.ownerId || req.tokenMeta?.userId || null;
+
+  // The platform owner sees every row; everyone else is hard-scoped to their own
+  // audit rows. `isOwner` is injected from index.js (POWER_USER_EMAIL / USER.md).
+  // Falling back to `false` means: if owner detection is unavailable, fail CLOSED
+  // (scope to self) rather than leaking the whole platform's audit trail.
+  const isOwnerReq = (req) => {
+    try { return typeof isOwner === 'function' && isOwner(resolveUserId(req)); }
+    catch { return false; }
+  };
+
+  // SQL clause + params restricting audit_log rows to a single user. A row is the
+  // user's when actor_id is the user id, requester_id is the user id (token/agent
+  // calls), or requester_id is the user's dashboard session (sess_<userId>).
+  const ownRowsClause = (userId) => ({
+    clause: '(actor_id = ? OR requester_id = ? OR requester_id = ?)',
+    params: [userId, userId, `sess_${userId}`],
+  });
   const securityLimiter = buildWorkspaceRateLimiter({
     windowMs: Number(process.env.WORKSPACE_SECURITY_WINDOW_MS || 60000),
-    max: Number(process.env.WORKSPACE_SECURITY_MAX || (process.env.NODE_ENV === 'test' ? 20 : 60)),
+    max: Number(process.env.WORKSPACE_SECURITY_MAX || (process.env.NODE_ENV === 'test' ? 20 : 120)),
   });
 
   router.use((req, res, next) => {
@@ -39,10 +61,9 @@ function createAuditSecurityRouter({ sessionDb, sessionStore }) {
 
   router.get('/audit/logs', (req, res) => {
     try {
-      const scope = String(req.tokenMeta?.scope || '');
-      if (!(scope === 'full' || scope.includes('admin'))) {
-        return res.status(403).json({ error: 'Only master/session/admin users can view audit logs' });
-      }
+      const userId = resolveUserId(req);
+      if (!userId) return res.status(401).json({ error: 'Authentication required' });
+      const owner = isOwnerReq(req);
 
       const limit = Math.min(Number(req.query.limit) || 50, 200);
       const offset = Math.max(Number(req.query.offset) || 0, 0);
@@ -55,12 +76,19 @@ function createAuditSecurityRouter({ sessionDb, sessionStore }) {
 
       const clauses = [];
       const params = [];
+      // SECURITY: non-owners are hard-scoped to their own rows. This clause cannot
+      // be widened by query params — every other filter ANDs on top of it.
+      if (!owner) {
+        const own = ownRowsClause(userId);
+        clauses.push(own.clause);
+        params.push(...own.params);
+      }
       if (workspaceId) {
         clauses.push('(workspace_id = ? OR workspace_id IS NULL)');
         params.push(workspaceId);
       }
       if (actor) {
-        clauses.push('(actor_id = ? OR requester_id = ? OR json_extract(details, "$.actor") = ?)');
+        clauses.push("(actor_id = ? OR requester_id = ? OR json_extract(details, '$.actor') = ?)");
         params.push(actor, actor, actor);
       }
       if (action) {
@@ -85,9 +113,7 @@ function createAuditSecurityRouter({ sessionDb, sessionStore }) {
       const total = countStmt.get(...params).count;
 
       const rowsStmt = db.prepare(`
-        SELECT id, timestamp, workspace_id, requester_id, actor_id, actor_type, action, resource,
-               endpoint, http_method, status_code, scope, ip, details
-        FROM audit_log
+        SELECT * FROM audit_log
         ${where}
         ORDER BY timestamp DESC
         LIMIT ? OFFSET ?
@@ -106,6 +132,10 @@ function createAuditSecurityRouter({ sessionDb, sessionStore }) {
         statusCode: row.status_code,
         scope: row.scope,
         ip: row.ip,
+        authType: row.auth_type || null,
+        tokenLabel: row.token_label || null,
+        deviceId: row.device_id || null,
+        deviceName: row.device_name || null,
         details: row.details ? JSON.parse(row.details) : null,
       }));
 
@@ -120,10 +150,9 @@ function createAuditSecurityRouter({ sessionDb, sessionStore }) {
   // GET /audit/logs/export?format=csv&start=<ISO>&end=<ISO>&action=<str>&limit=<n>
   router.get('/audit/logs/export', (req, res) => {
     try {
-      const scope = String(req.tokenMeta?.scope || '');
-      if (!(scope === 'full' || scope.includes('admin'))) {
-        return res.status(403).json({ error: 'Only master/admin tokens can export audit logs' });
-      }
+      const userId = resolveUserId(req);
+      if (!userId) return res.status(401).json({ error: 'Authentication required' });
+      const owner = isOwnerReq(req);
 
       const format = String(req.query.format || 'csv').toLowerCase();
       if (!['csv', 'json'].includes(format)) {
@@ -138,6 +167,12 @@ function createAuditSecurityRouter({ sessionDb, sessionStore }) {
 
       const clauses = [];
       const params = [];
+      // SECURITY: non-owners can only export their own audit rows.
+      if (!owner) {
+        const own = ownRowsClause(userId);
+        clauses.push(own.clause);
+        params.push(...own.params);
+      }
       if (workspaceId) {
         clauses.push('(workspace_id = ? OR workspace_id IS NULL)');
         params.push(workspaceId);
@@ -207,13 +242,24 @@ function createAuditSecurityRouter({ sessionDb, sessionStore }) {
 
   router.get('/audit/summary', (req, res) => {
     try {
-      const scope = String(req.tokenMeta?.scope || '');
-      if (!(scope === 'full' || scope.includes('admin'))) {
-        return res.status(403).json({ error: 'Only master/session/admin users can view audit summary' });
-      }
+      const userId = resolveUserId(req);
+      if (!userId) return res.status(401).json({ error: 'Authentication required' });
+      const owner = isOwnerReq(req);
+
       const workspaceId = req.workspaceId || req.query.workspace || null;
-      const where = workspaceId ? 'WHERE (workspace_id = ? OR workspace_id IS NULL)' : '';
-      const arg = workspaceId ? [workspaceId] : [];
+      const clauses = [];
+      const arg = [];
+      // SECURITY: non-owners get stats over their own rows only.
+      if (!owner) {
+        const own = ownRowsClause(userId);
+        clauses.push(own.clause);
+        arg.push(...own.params);
+      }
+      if (workspaceId) {
+        clauses.push('(workspace_id = ? OR workspace_id IS NULL)');
+        arg.push(workspaceId);
+      }
+      const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
 
       const total = db.prepare(`SELECT COUNT(*) as count FROM audit_log ${where}`).get(...arg).count;
       const last24h = db.prepare(`SELECT COUNT(*) as count FROM audit_log ${where ? where + ' AND' : 'WHERE'} timestamp >= ?`).get(...arg, new Date(Date.now() - 86400000).toISOString()).count;

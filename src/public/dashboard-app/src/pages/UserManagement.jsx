@@ -143,7 +143,7 @@ function UserManagement() {
         <div className="flex items-start justify-between gap-3">
           <div>
             <h1 className="ui-title">User Management</h1>
-            <p className="ui-subtitle mt-1">Assign plans (Free / Pro / Enterprise) to users.</p>
+            <p className="ui-subtitle mt-1">Assign plans (Personal / Pro / Heavy / Beta) to users.</p>
           </div>
         </div>
       </div>

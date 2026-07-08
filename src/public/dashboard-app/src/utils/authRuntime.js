@@ -27,11 +27,15 @@ export const setLogoutInProgress = (value) => {
 
 export const clearAuthArtifacts = () => {
   try {
+    // masterToken lives in sessionStorage (authStore) — legacy localStorage entry cleared too.
+    sessionStorage.removeItem('masterToken');
+    sessionStorage.removeItem('sessionAuthVerified');
+    sessionStorage.removeItem('sessionToken');
+    sessionStorage.removeItem('tokenData');
     localStorage.removeItem('masterToken');
     localStorage.removeItem('tokenData');
     localStorage.removeItem('profileAvatarUrl');
-    sessionStorage.removeItem('sessionToken');
-    sessionStorage.removeItem('tokenData');
+    localStorage.removeItem('__myapi_logged_out__');
   } catch {
     // ignore storage failures
   }
@@ -56,14 +60,11 @@ export const redirectToLoginOnce = () => {
     // ignore; still attempt soft redirect
   }
 
-  notifyAuthExpired();
-
   // Don't redirect away from the OAuth authorize page — it renders its own
   // sign-in UI and must preserve the ChatGPT/OAuth params in the URL.
   if (window.location.pathname === '/dashboard/authorize') return;
 
-  const onDashboard = window.location.pathname.startsWith('/dashboard');
-  if (onDashboard) {
-    window.history.replaceState({}, document.title, '/');
-  }
+  notifyAuthExpired();
+  // Send the user back to the landing page to re-authenticate.
+  window.location.href = '/';
 }

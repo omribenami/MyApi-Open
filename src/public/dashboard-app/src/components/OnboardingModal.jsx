@@ -3,6 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import apiClient from '../utils/apiClient';
 import { useAuthStore } from '../stores/authStore';
 import { dismissModal } from '../utils/onboardingUtils';
+import {
+  AscKeypairPanel,
+  OAuthInstallerPanel,
+  MasterTokenPanel,
+} from './AgentConnectorPanels';
+import { CONNECTION_METHOD_CARDS } from './agentConnectorData';
 
 const ServiceIcons = {
   github: (
@@ -167,9 +173,9 @@ export default function OnboardingModal({ onClose }) {
     if (path) setTimeout(() => navigate(path), 320);
   };
 
-  const [copied, setCopied] = useState(false);
+  const [selectedMethod, setSelectedMethod] = useState('asc');
   const tip = TIPS[step - 1];
-  const TOTAL = 6;
+  const TOTAL = 7;
 
   return (
     <div
@@ -208,6 +214,7 @@ export default function OnboardingModal({ onClose }) {
                 {step === 4 && 'Connect a service'}
                 {step === 5 && "You're all set"}
                 {step === 6 && 'Connect your AI agent'}
+                {step === 7 && (CONNECTION_METHOD_CARDS.find(m => m.id === selectedMethod)?.title || 'Agent setup')}
               </h2>
             </div>
             <button
@@ -392,41 +399,37 @@ export default function OnboardingModal({ onClose }) {
               </div>
             )}
 
-            {/* Step 6 — Connect AI Agent */}
-            {step === 6 && (() => {
-              const AGENT_PROMPT = `I'd like you to connect to my personal AI context API — MyApi.
-
-Start by reading the connection guide (no auth needed):
-  curl -s https://www.myapiai.com/api/v1/agent-guide
-
-Once you've read it:
-1. Summarize what MyApi can do and how it will improve our conversations
-2. Walk me through each of the three connection methods with their pros and cons
-3. Ask me a few questions to understand my situation, then recommend the best method
-4. Guide me through the setup step by step — I'll follow your lead`;
-
-              const CONNECTION_METHODS = [
-                { id: 'device_flow', badge: 'Recommended', badgeColor: 'var(--accent-bg)', badgeBorder: 'var(--accent-2)', badgeText: 'var(--accent)', title: 'OAuth Device Flow', desc: 'Your agent requests a short code, you approve it in the browser — it gets its own named, scoped token.', pros: ['Each agent gets its own token & audit trail', 'You explicitly approve every agent', 'Revoke a single agent without affecting others'], cons: ['Requires opening a browser tab once to approve'], bestFor: 'Most users' },
-                { id: 'master_token', badge: 'Simplest', badgeColor: 'rgba(210,153,34,0.12)', badgeBorder: 'var(--amber)', badgeText: 'var(--amber)', title: 'Master Token', desc: 'Copy your master token from Access Tokens and paste it directly into the agent.', pros: ['Zero setup — token already exists', 'Works immediately with any HTTP client'], cons: ['One token shared by all agents', 'Cannot be scoped to read-only'], bestFor: 'Quick local experiments' },
-                { id: 'asc_keypair', badge: 'Advanced', badgeColor: 'rgba(188,140,255,0.1)', badgeBorder: 'rgba(188,140,255,0.5)', badgeText: '#bc8cff', title: 'ASC — Ed25519 Keypair', desc: 'The agent generates a cryptographic keypair and signs every request. The private key never leaves the agent.', pros: ['Strongest security — private key never transmitted', 'Cryptographic proof of origin per request', 'Replay protection built-in'], cons: ['Agent must implement Ed25519 signing', 'Requires accurate system clock'], bestFor: 'Production agents & automated pipelines' },
-              ];
-
-              return (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <p style={{ fontSize: '13px', color: 'var(--ink-2)', margin: 0, lineHeight: 1.6 }}>
-                    There are three ways to connect an AI agent to your API. Pick the one that fits your situation.
-                  </p>
-                  {CONNECTION_METHODS.map((m) => (
-                    <div key={m.id} style={{ background: 'var(--bg-sunk)', border: '1px solid var(--line)', borderRadius: '6px', padding: '12px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+            {/* Step 6 — Choose connection method */}
+            {step === 6 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <p style={{ fontSize: '13px', color: 'var(--ink-2)', margin: 0, lineHeight: 1.6 }}>
+                  Choose how your AI agent will authenticate. Pick one — the next step walks you through the full setup.
+                </p>
+                {CONNECTION_METHOD_CARDS.map((m) => {
+                  const selected = selectedMethod === m.id;
+                  return (
+                    <button key={m.id} onClick={() => setSelectedMethod(m.id)}
+                      style={{
+                        textAlign: 'left', background: selected ? 'var(--bg-hover)' : 'var(--bg-sunk)',
+                        border: `1px solid ${selected ? m.badgeBorder : 'var(--line)'}`,
+                        borderRadius: '6px', padding: '12px', cursor: 'pointer',
+                        outline: 'none', transition: 'border-color 0.15s, background 0.15s',
+                      }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px' }}>
+                        {selected && (
+                          <span style={{ width: '14px', height: '14px', borderRadius: '50%', background: m.badgeColor, border: `2px solid ${m.badgeText}`, flexShrink: 0, display: 'inline-block' }} />
+                        )}
+                        {!selected && (
+                          <span style={{ width: '14px', height: '14px', borderRadius: '50%', border: '1px solid var(--line)', flexShrink: 0, display: 'inline-block' }} />
+                        )}
                         <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--ink)' }}>{m.title}</span>
                         <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 7px', borderRadius: '20px', background: m.badgeColor, border: `1px solid ${m.badgeBorder}`, color: m.badgeText }}>{m.badge}</span>
                       </div>
-                      <p style={{ fontSize: '12px', color: 'var(--ink-3)', margin: '0 0 8px', lineHeight: 1.5 }}>{m.desc}</p>
-                      <div style={{ display: 'flex', gap: '16px' }}>
+                      <p style={{ fontSize: '12px', color: 'var(--ink-3)', margin: '0 0 7px 22px', lineHeight: 1.5 }}>{m.desc}</p>
+                      <div style={{ display: 'flex', gap: '14px', marginLeft: '22px' }}>
                         <div style={{ flex: 1 }}>
                           {m.pros.map((p, i) => (
-                            <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', marginBottom: '2px' }}>
+                            <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '5px', marginBottom: '2px' }}>
                               <span style={{ color: 'var(--green)', fontSize: '10px', marginTop: '2px', flexShrink: 0 }}>✓</span>
                               <span style={{ fontSize: '11px', color: 'var(--green)', lineHeight: 1.4, opacity: 0.85 }}>{p}</span>
                             </div>
@@ -434,30 +437,28 @@ Once you've read it:
                         </div>
                         <div style={{ flex: 1 }}>
                           {m.cons.map((c, i) => (
-                            <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', marginBottom: '2px' }}>
+                            <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '5px', marginBottom: '2px' }}>
                               <span style={{ color: 'var(--red)', fontSize: '10px', marginTop: '2px', flexShrink: 0 }}>✕</span>
                               <span style={{ fontSize: '11px', color: 'var(--red)', lineHeight: 1.4, opacity: 0.8 }}>{c}</span>
                             </div>
                           ))}
                         </div>
                       </div>
-                      <p style={{ fontSize: '11px', color: 'var(--ink-4)', marginTop: '6px', marginBottom: 0 }}>Best for: <span style={{ color: 'var(--ink-3)' }}>{m.bestFor}</span></p>
-                    </div>
-                  ))}
+                      <p style={{ fontSize: '11px', color: 'var(--ink-4)', marginTop: '6px', marginBottom: 0, marginLeft: '22px' }}>Best for: <span style={{ color: 'var(--ink-3)' }}>{m.bestFor}</span></p>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
-                  <div>
-                    <p style={{ fontSize: '12px', color: 'var(--ink-3)', marginBottom: '6px' }}>Or let your AI agent walk you through it — paste this prompt:</p>
-                    <div style={{ position: 'relative', background: 'var(--bg-sunk)', border: '1px solid var(--line)', borderRadius: '6px', padding: '12px 12px 40px 12px' }}>
-                      <pre style={{ margin: 0, fontSize: '11px', lineHeight: 1.6, color: 'var(--ink-2)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'JetBrains Mono, monospace' }}>{AGENT_PROMPT}</pre>
-                      <button onClick={() => { navigator.clipboard.writeText(AGENT_PROMPT).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }); }}
-                        style={{ position: 'absolute', bottom: '8px', right: '8px', padding: '4px 10px', borderRadius: '4px', border: `1px solid ${copied ? 'var(--green)' : 'var(--line)'}`, background: copied ? 'var(--green-bg)' : 'var(--bg-hover)', color: copied ? 'var(--green)' : 'var(--ink-3)', fontSize: '11px', fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s' }}>
-                        {copied ? '✓ Copied' : 'Copy Prompt'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
+            {/* Step 7 — Setup instructions for chosen method */}
+            {step === 7 && (
+              <div>
+                {selectedMethod === 'asc'    && <AscKeypairPanel />}
+                {selectedMethod === 'oauth'  && <OAuthInstallerPanel />}
+                {selectedMethod === 'master' && <MasterTokenPanel />}
+              </div>
+            )}
           </div>
 
           {/* Tip block */}
@@ -485,7 +486,7 @@ Once you've read it:
           </button>
 
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            {step > 1 && step < 5 && !twoFaEnabled && (
+            {((step > 1 && step < 5 && !twoFaEnabled) || step === 7) && (
               <button onClick={() => goTo(step - 1)} disabled={loading || twoFaLoading} className="btn" style={{ minHeight: '32px', padding: '5px 14px', fontSize: '13px' }}>
                 Back
               </button>
@@ -517,11 +518,16 @@ Once you've read it:
               </button>
             )}
             {step === 5 && (
-              <button onClick={() => setStep(6)} className="btn-primary" style={{ minHeight: '32px', padding: '5px 16px', fontSize: '13px' }}>
+              <button onClick={() => goTo(6)} className="btn-primary" style={{ minHeight: '32px', padding: '5px 16px', fontSize: '13px' }}>
                 Next →
               </button>
             )}
             {step === 6 && (
+              <button onClick={() => goTo(7)} className="btn-primary" style={{ minHeight: '32px', padding: '5px 16px', fontSize: '13px' }}>
+                Set this up →
+              </button>
+            )}
+            {step === 7 && (
               <button onClick={() => handleFinish('/')} className="btn-primary" style={{ minHeight: '32px', padding: '5px 16px', fontSize: '13px' }}>
                 Go to Dashboard
               </button>

@@ -1,0 +1,19 @@
+{
+  "name": "myapi-asc-mcp",
+  "version": "0.2.2",
+  "description": "MyApi MCP server — set MYAPI_TOKEN once, MCP auto-registers its Ed25519 keypair against your account, user approves at /dashboard/devices, then the key is the permanent credential (token can be removed). Requires a paid plan (Pro or Heavy).",
+  "main": "index.js",
+  "bin": {
+    "myapi-asc-mcp": "index.js"
+  },
+  "files": [
+    "index.js"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0"
+  },
+  "license": "MIT"
+}

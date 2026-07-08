@@ -6,6 +6,22 @@ function ActivityLog() {
   const masterToken = useAuthStore((state) => state.masterToken);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const currentWorkspace = useAuthStore((state) => state.currentWorkspace);
+  const user = useAuthStore((state) => state.user);
+
+  // Turn an audit row's actor into something a human understands: the token's
+  // name, the device/agent name, "You" for the account owner, or a friendly
+  // type — never a raw usr_/tok_ id.
+  const actorLabel = (item) => {
+    if (item.tokenLabel) return item.tokenLabel;
+    if (item.deviceName) return item.deviceName;
+    if (item.authType === 'trigger') return 'Automation';
+    if (item.authType === 'session' || item.actorType === 'user' || /^usr_/.test(item.actor || '')) {
+      return user?.name || user?.displayName || user?.username || 'You';
+    }
+    if (/^tok_/.test(item.actor || '')) return 'API token';
+    if (/^(agent|asc)/i.test(item.actorType || '')) return 'AI agent';
+    return item.actorType || 'Unknown';
+  };
   const [activity, setActivity] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -19,12 +35,14 @@ function ActivityLog() {
   const [actionType, setActionType] = useState('');
   const [resourceType, setResourceType] = useState('');
   const [result, setResult] = useState('');
+  const [actorFilter, setActorFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [dateRange, setDateRange] = useState('all');
 
   // Real-time updates via WebSocket
   const wsRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
+  const fetchTimerRef = useRef(null);
 
   const actionTypes = [
     'token_used', 'token_revoked', 'skill_executed', 'persona_invoked', 'guest_token_used',
@@ -98,13 +116,18 @@ function ActivityLog() {
     }
   };
 
-  // Initial load and filter changes
+  // Initial load and filter changes.
+  // Debounced so rapid dep changes (e.g. isAuthenticated → true then currentWorkspace.id
+  // populates a moment later) collapse into one request instead of two.
   useEffect(() => {
-    setOffset(0);
-    setActivity([]);
-    if (isAuthenticated) {
+    if (!isAuthenticated) return;
+    if (fetchTimerRef.current) clearTimeout(fetchTimerRef.current);
+    fetchTimerRef.current = setTimeout(() => {
+      setOffset(0);
+      setActivity([]);
       fetchActivityLog(true);
-    }
+    }, 80);
+    return () => { if (fetchTimerRef.current) clearTimeout(fetchTimerRef.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, actionType, resourceType, result, dateRange, currentWorkspace?.id]);
 
@@ -176,14 +199,19 @@ function ActivityLog() {
     };
   }, [masterToken]);
 
-  // Filter activity by search query
+  // Distinct human actor labels in the loaded rows, for the Actor filter.
+  const actorOptions = [...new Set(activity.map((it) => actorLabel(it)))].filter(Boolean).sort((a, b) => a.localeCompare(b));
+
+  // Filter activity by actor + search query
   const filteredActivity = activity.filter(item => {
+    if (actorFilter && actorLabel(item) !== actorFilter) return false;
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
     return (
       (item.resource || '').toLowerCase().includes(query) ||
       (item.action || '').toLowerCase().includes(query) ||
       (item.actor || '').toLowerCase().includes(query) ||
+      actorLabel(item).toLowerCase().includes(query) ||
       (item.endpoint || '').toLowerCase().includes(query)
     );
   });
@@ -233,14 +261,14 @@ function ActivityLog() {
       {/* Header */}
       <div>
         <div className="micro mb-2">ACCOUNT · ACTIVITY</div>
-        <h1 className="font-serif text-[20px] sm:text-[28px] font-medium tracking-tight ink">Activity Log.</h1>
+        <h1 className="font-serif text-[20px] sm:text-[28px] font-medium tracking-tight ink">Every action, on the record.</h1>
         <p className="ink-3 text-sm mt-1">
           View all token usage, skill executions, persona invocations, and other activities
         </p>
       </div>
 
       {/* Filters */}
-      <div className="ui-card p-5 space-y-4">
+      <div className="ui-card p-5 space-y-4" data-tour="act-filters">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           {/* Search */}
           <div>
@@ -299,6 +327,21 @@ function ActivityLog() {
             </select>
           </div>
 
+          {/* Actor */}
+          <div>
+            <label className="micro block mb-2">Actor</label>
+            <select
+              value={actorFilter}
+              onChange={(e) => setActorFilter(e.target.value)}
+              className="ui-input w-full"
+            >
+              <option value="">All Actors</option>
+              {actorOptions.map(a => (
+                <option key={a} value={a}>{a}</option>
+              ))}
+            </select>
+          </div>
+
           {/* Date Range */}
           <div>
             <label className="micro block mb-2">Date Range</label>
@@ -346,8 +389,8 @@ function ActivityLog() {
           </div>
         ) : (
           <>
-            <div className="rounded overflow-hidden" style={{ border: '1px solid var(--line)' }}>
-              <table className="w-full text-sm">
+            <div className="rounded overflow-x-auto" style={{ border: '1px solid var(--line)' }} data-tour="act-table">
+              <table className="w-full text-sm min-w-[640px]">
                 <thead>
                   <tr className="bg-sunk" style={{ borderBottom: '1px solid var(--line)' }}>
                     <th className="px-4 py-3 text-left micro">Action</th>
@@ -379,9 +422,12 @@ function ActivityLog() {
                       </td>
 
                       <td className="px-4 py-3.5 hidden sm:table-cell">
-                        <span className="text-xs ink-3">
-                          {item.actorType}{item.actor ? ` (${item.actor})` : ''}
+                        <span className="text-xs ink-2" title={item.actor || ''}>
+                          {actorLabel(item)}
                         </span>
+                        {item.authType && item.authType !== 'session' && (
+                          <span className="text-[10px] ink-3 ml-1">· {item.authType}</span>
+                        )}
                       </td>
 
                       <td className="px-4 py-3.5">

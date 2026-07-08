@@ -4,6 +4,7 @@ import { handleOAuthCallback, AVAILABLE_SERVICES } from '../utils/oauth';
 import WaitlistForm from '../components/WaitlistForm';
 import { clearAuthArtifacts } from '../utils/authRuntime';
 import { fetchPublicConfig } from '../utils/publicConfig';
+import SigningIn from './SigningIn';
 
 const OAuthIcons = {
   google: (
@@ -46,6 +47,7 @@ function SignUp() {
   const { setMasterToken, setUser, isAuthenticated } = useAuthStore();
   const [betaFull, setBetaFull] = useState(false);
   const [prefillEmail, setPrefillEmail] = useState('');
+  const [processingService, setProcessingService] = useState(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -66,8 +68,56 @@ function SignUp() {
     if (!callback) return;
 
     if (callback.status === 'signup_required') {
-      window.location.replace(`/dashboard/${window.location.search}`);
+      setProcessingService(callback.service || 'google');
+      fetch('/api/v1/auth/oauth-signup/pending', { credentials: 'include' })
+        .then(res => res.ok ? res.json() : null)
+        .then(async (payload) => {
+          const data = payload?.data || {};
+          const nonce = data.nonce || '';
+          if (!nonce) {
+            setProcessingService(null);
+            setError('Sign-up session expired. Please try again.');
+            window.history.replaceState({}, document.title, '/dashboard/signup');
+            return;
+          }
+          const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+          const r = await fetch('/api/v1/auth/oauth-signup/complete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              oauthSignupConfirm: true,
+              oauthSignupNonce: nonce,
+              displayName: data.name || '',
+              email: data.email || '',
+              username: data.recommendedUsername || '',
+              timezone: tz,
+              termsAccepted: true,
+            }),
+          });
+          const result = await r.json().catch(() => ({}));
+          if (r.ok) {
+            try {
+              localStorage.removeItem('myapi_onboarding_dismissed');
+              localStorage.removeItem('__myapi_logged_out__');
+            } catch { /* ignore */ }
+            window.location.href = '/dashboard/onboarding';
+          } else if (result?.code === 'BETA_FULL') {
+            const em = encodeURIComponent(result.email || data.email || '');
+            window.location.href = `/dashboard/signup?beta=full${em ? `&email=${em}` : ''}`;
+          } else {
+            setProcessingService(null);
+            setError(result?.error || 'Failed to create account. Please try again.');
+            window.history.replaceState({}, document.title, '/dashboard/signup');
+          }
+        })
+        .catch(() => {
+          setProcessingService(null);
+          setError('Failed to complete sign-up. Please try again.');
+          window.history.replaceState({}, document.title, '/dashboard/signup');
+        });
     } else if (callback.status === 'confirm_login' || callback.status === 'connected') {
+      setProcessingService(callback.service || 'google');
       const confirmToken = callback.token;
       const doConfirm = confirmToken
         ? fetch('/api/v1/oauth/confirm', {
@@ -85,9 +135,18 @@ function SignUp() {
             if (sessionUser.bootstrap?.masterToken) setMasterToken(sessionUser.bootstrap.masterToken);
             setUser(sessionUser.user);
           }
-          window.location.replace('/dashboard/');
+          const user = sessionUser?.user || sessionUser;
+          if (user?.needsOnboarding) {
+            window.location.replace('/dashboard/onboarding');
+          } else {
+            window.location.replace('/dashboard/');
+          }
         })
-        .catch(() => setError('Failed to complete sign-in. Please try again.'));
+        .catch(() => {
+          setProcessingService(null);
+          setError('Failed to complete sign-in. Please try again.');
+          window.history.replaceState({}, document.title, '/dashboard/signup');
+        });
     } else if (callback.error) {
       setError(`OAuth error: ${callback.error}`);
       window.history.replaceState({}, document.title, '/dashboard/signup');
@@ -99,10 +158,20 @@ function SignUp() {
     return null;
   }
 
+  if (processingService) {
+    return (
+      <SigningIn
+        serviceKey={processingService}
+        onCancel={() => { window.location.href = '/'; }}
+      />
+    );
+  }
+
   const handleOAuthClick = (serviceId) => {
     setError('');
     clearAuthArtifacts();
-    const params = new URLSearchParams({ mode: 'login', forcePrompt: '1', returnTo: '/dashboard/', redirect: '1' });
+    try { localStorage.removeItem('__myapi_logged_out__'); } catch { /* ignore */ }
+    const params = new URLSearchParams({ mode: 'login', forcePrompt: '1', returnTo: '/dashboard/signup', redirect: '1' });
     window.location.href = `/api/v1/oauth/authorize/${serviceId}?${params.toString()}`;
   };
 
@@ -122,17 +191,24 @@ function SignUp() {
           {/* Left: marketing copy */}
           <section className="lg:col-span-5">
             <div className="max-w-md">
+              <div
+                className="inline-flex items-center gap-2 mb-5 px-3 py-1.5 rounded-full text-[11px] font-medium tracking-wide"
+                style={{ fontFamily: "'JetBrains Mono', monospace", color: 'var(--ink-2)', border: '1px solid var(--line)', background: 'var(--bg-raised)' }}
+              >
+                <span style={{ width: 6, height: 6, borderRadius: 999, background: 'var(--green)', display: 'inline-block' }} />
+                OPEN BETA
+              </div>
               <h1 className="text-[32px] font-semibold leading-tight tracking-tight" style={{ color: 'var(--ink)' }}>
-                Your AI gateway,<br/>under your control.
+                Welcome to the<br/>MyApi beta.
               </h1>
               <p className="mt-4 text-[14.5px] leading-relaxed" style={{ color: 'var(--ink-2)' }}>
-                Connect services once, hand scoped tokens to agents, and keep every credential in an encrypted vault. Your data stays yours.
+                Connect services once, hand scoped tokens to your agents, and keep every credential in an encrypted vault. Free while we build it with you — your data stays yours.
               </p>
 
               <div className="mt-8 space-y-5">
                 {[
                   { icon: '⚡', title: 'AES-256-GCM vault', desc: 'OAuth tokens and API keys encrypted with 600k PBKDF2 iterations at rest.' },
-                  { icon: '🔗', title: '11 service integrations', desc: 'GitHub, Google, Slack, Discord, Twitter/X and more — OAuth once, proxy forever.' },
+                  { icon: '🔗', title: '100+ service integrations', desc: 'GitHub, Google, Slack, Discord, Notion, Stripe and 100+ more — OAuth once, proxy forever.' },
                   { icon: '🤖', title: 'Built for AI agents', desc: 'Issue scoped tokens per agent, create personas, build automation that respects limits.' },
                 ].map((item) => (
                   <div key={item.title} className="flex gap-3">
@@ -148,7 +224,10 @@ function SignUp() {
               <div className="mt-8 rounded-md px-4 py-3" style={{ background: 'var(--accent-bg)', border: '1px solid rgba(68,147,248,0.3)' }}>
                 <p className="text-[13px]" style={{ color: 'var(--ink-2)' }}>
                   <span className="font-semibold" style={{ color: 'var(--accent)' }}>Open beta — free access.</span>
-                  {' '}Sign up now to use all features at no cost while we build.
+                  {' '}Every feature is unlocked at no cost while we build.
+                </p>
+                <p className="text-[12.5px] mt-2 leading-relaxed" style={{ color: 'var(--ink-3)' }}>
+                  The beta breathes: seats are limited, so accounts that go inactive are gently released after a heads-up to make room for people waiting to get in.
                 </p>
               </div>
             </div>
@@ -158,15 +237,36 @@ function SignUp() {
           <section className="lg:col-span-7">
             <div className="ui-card p-6 sm:p-8">
               {betaFull ? (
-                <WaitlistForm
-                  defaultEmail={prefillEmail}
-                  title="MyApi is at capacity"
-                  subtitle="We're in closed beta and all spots are currently filled. Leave your email — we'll notify you when a spot opens."
-                />
+                <>
+                  <h2 className="text-[20px] font-semibold mb-1" style={{ color: 'var(--ink)' }}>The beta is full right now — sorry!</h2>
+                  <p className="text-[13.5px] mb-4 leading-relaxed" style={{ color: 'var(--ink-2)' }}>
+                    Every beta seat is currently taken. But spots open up regularly — the beta breathes: inactive accounts are released after a heads-up, and we invite people from the waitlist to fill the space.
+                  </p>
+                  <div className="mb-5 rounded-md px-4 py-3" style={{ background: 'var(--bg-sunk)', border: '1px solid var(--line)' }}>
+                    <p className="text-[13px] mb-2" style={{ color: 'var(--ink-2)' }}>
+                      Join our Discord — early testers usually hear about open spots there first.
+                    </p>
+                    <a
+                      href="https://discord.gg/WPp4sCN4xB"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 px-4 py-2 text-[13.5px] font-medium rounded-md"
+                      style={{ background: '#5865F2', color: '#fff', textDecoration: 'none' }}
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.369a19.79 19.79 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.865-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.1 13.1 0 0 1-1.872-.892.077.077 0 0 1-.008-.128c.126-.094.252-.192.372-.291a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.009c.12.099.246.198.373.292a.077.077 0 0 1-.006.127 12.3 12.3 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.84 19.84 0 0 0 6.002-3.03.077.077 0 0 0 .032-.056c.5-5.177-.838-9.674-3.549-13.66a.06.06 0 0 0-.031-.028zM8.02 15.331c-1.183 0-2.157-1.086-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.332-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.086-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.332-.946 2.418-2.157 2.418z"/></svg>
+                      Join the Discord
+                    </a>
+                  </div>
+                  <WaitlistForm
+                    defaultEmail={prefillEmail}
+                    title="Join the waitlist"
+                    subtitle="Leave your email and we'll notify you the moment a seat opens up."
+                  />
+                </>
               ) : (
                 <>
-                  <h2 className="text-[20px] font-semibold mb-1" style={{ color: 'var(--ink)' }}>Get started</h2>
-                  <p className="text-[13.5px] mb-6" style={{ color: 'var(--ink-2)' }}>Sign in or create your account with one click.</p>
+                  <h2 className="text-[20px] font-semibold mb-1" style={{ color: 'var(--ink)' }}>Join the beta</h2>
+                  <p className="text-[13.5px] mb-6" style={{ color: 'var(--ink-2)' }}>Create your free account with one click — no credit card.</p>
 
                   {error && (
                     <div className="mb-5 px-4 py-3 text-[13px] rounded-md" style={{ border: '1px solid var(--red)', background: 'var(--red-bg)', color: 'var(--red)' }}>
@@ -190,14 +290,7 @@ function SignUp() {
                     ))}
                   </div>
 
-                  <div className="mt-6 pt-5" style={{ borderTop: '1px solid var(--line)' }}>
-                    <p className="text-center text-[12.5px]" style={{ color: 'var(--ink-3)' }}>
-                      Already have an account?{' '}
-                      <a href="/dashboard/login" style={{ color: 'var(--accent)', textDecoration: 'none' }}>Sign in →</a>
-                    </p>
-                  </div>
-
-                  <p className="mt-4 text-center text-[12px]" style={{ color: 'var(--ink-4)' }}>
+                  <p className="mt-6 text-center text-[12px]" style={{ color: 'var(--ink-4)' }}>
                     By continuing, you agree to our{' '}
                     <a href="/legal/terms.html" style={{ color: 'var(--ink-3)', textDecoration: 'none' }}>Terms</a>
                     {' '}and{' '}

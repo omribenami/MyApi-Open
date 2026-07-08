@@ -51,27 +51,26 @@ Access your MyApi account — identity, personas, knowledge base, and connected 
 ### Step 2 — Add Actions (OAuth API)
 
 1. In the Configure tab → **Create new action**
-2. In the **Authentication** section → choose **OAuth**
-3. Fill in:
-   - **Client ID:** `chatgpt` *(or your `CHATGPT_OAUTH_CLIENT_ID` env var)*
-   - **Client Secret:** *(from your `.env` `CHATGPT_OAUTH_CLIENT_SECRET` or server startup log)*
+2. In the **Schema** field, instead of pasting, click **Import from URL** and enter:
+   ```
+   https://www.myapiai.com/api/v1/oauth-server/openapi.yaml
+   ```
+   This always serves the current, complete schema (including service discovery)
+   pointed at the right server — no copy-paste, no staleness. (You can still paste
+   the contents of `openapi.yaml` manually if you prefer.)
+3. In the **Authentication** section → choose **OAuth** and fill in:
+   - **Client ID:** `chatgpt`
+   - **Client Secret:** *(your `CHATGPT_OAUTH_CLIENT_SECRET` from `.env`, or the value printed in the server startup log)*
    - **Authorization URL:** `https://www.myapiai.com/api/v1/oauth-server/authorize`
    - **Token URL:** `https://www.myapiai.com/api/v1/oauth-server/token`
    - **Scope:** `full`
    - **Token Exchange Method:** `Default (POST request)`
+4. Click **Save**.
 
-4. Copy the **Callback URL** shown by ChatGPT — it looks like:
-   `https://chatgpt.com/aip/g-XXXXXXXXXXXX/oauth/callback`
-
-5. **Important:** Add that callback URL to your `.env`:
-   ```
-   CHATGPT_OAUTH_REDIRECT_URIS=https://chatgpt.com/aip/g-XXXXXXXXXXXX/oauth/callback
-   ```
-   Then restart the server.
-
-6. In the **Schema** field → paste the full content of `openapi.yaml`
-
-7. Click **Save**
+> **No callback-URL step needed.** MyApi's ChatGPT client pre-allows every ChatGPT
+> callback (custom GPTs *and* the newer Connectors platform) via wildcard, so you do
+> **not** have to copy ChatGPT's callback URL into `.env` or restart the server.
+> (Only set `CHATGPT_OAUTH_REDIRECT_URIS` if you want to lock it down to one specific GPT.)
 
 ---
 

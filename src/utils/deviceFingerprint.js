@@ -23,16 +23,12 @@ class DeviceFingerprint {
     const acceptLanguage = (data.acceptLanguage || '').trim();
     const ipAddress = (data.ipAddress || 'unknown').trim();
     const platform = (data.platform || 'unknown').trim();
-    const hostname = (data.hostname || 'unknown').trim();
-    const macAddress = (data.macAddress || 'unknown').trim();
 
     // Create component fingerprints
     const components = {
       userAgent: this._hashComponent(userAgent),
       acceptLanguage: this._hashComponent(acceptLanguage),
       platform: this._hashComponent(platform),
-      hostname: this._hashComponent(hostname),
-      macAddress: this._hashComponent(macAddress),
     };
 
     // Hash IP before storing to reduce PII retention while preserving abuse detection.
@@ -49,17 +45,18 @@ class DeviceFingerprint {
       acceptLanguage,
       ipAddressHash: hashedIP,  // hashed, not raw IP
       platform,
-      hostname,
-      macAddress,
       timestamp: new Date().toISOString(),
     };
 
-    // SHA256 hash for collision resistance
+    // Fingerprint hash is informational for dashboard visibility — NOT a security gate.
+    // Authorization for OAuth tokens relies on the bearer secret + tokenSecurityMonitor
+    // anomaly detection (ASN drift, VPN/Tor, velocity), not on this hash.
+    // We dropped req.hostname (server-side, constant) and macAddress (unobservable over HTTP)
+    // because they added no entropy and forced UA/platform to dominate, which made the hash
+    // flap whenever an AI agent's UA was missing or changed.
     const fingerprintString = JSON.stringify({
       userAgent,
       platform,
-      hostname,
-      macAddress,
     });
 
     const fingerprintHash = crypto
@@ -71,7 +68,6 @@ class DeviceFingerprint {
     const summary = {
       os: this._parseOS(platform, userAgent),
       browser: this._parseBrowser(userAgent),
-      hostname,
       ipAddress,
     };
 
@@ -90,22 +86,26 @@ class DeviceFingerprint {
    * @returns {Object} Device fingerprint data
    */
   static fromRequest(req, ipAddress = null) {
-    const clientIp = ipAddress || 
+    const clientIp = ipAddress ||
                      req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
                      req.headers['x-real-ip'] ||
                      req.socket?.remoteAddress ||
                      'unknown';
 
+    const ua = req.headers['user-agent'] || '';
+    // Operator-precedence guard: wrap the ternary so `sec-ch-ua-platform || ua.includes(...)`
+    // doesn't get coerced to a boolean and flatten everything to 'Windows'.
+    const platform = req.headers['sec-ch-ua-platform']
+      || (ua.includes('Windows') ? 'Windows'
+        : ua.includes('Mac') ? 'macOS'
+        : ua.includes('Linux') ? 'Linux'
+        : 'Unknown');
+
     return this.generateFingerprint({
-      userAgent: req.headers['user-agent'] || '',
+      userAgent: ua,
       acceptLanguage: req.headers['accept-language'] || '',
       ipAddress: clientIp,
-      platform: req.headers['sec-ch-ua-platform'] || 
-                req.headers['user-agent']?.includes('Windows') ? 'Windows' :
-                req.headers['user-agent']?.includes('Mac') ? 'macOS' :
-                req.headers['user-agent']?.includes('Linux') ? 'Linux' :
-                'Unknown',
-      hostname: req.hostname || 'unknown',
+      platform,
     });
   }
 
@@ -164,54 +164,16 @@ class DeviceFingerprint {
   }
 
   /**
-   * Check if fingerprint shows suspicious activity
-   * @param {Object} fingerprint - Fingerprint object
-   * @param {Array} previousFingerprints - Historical fingerprints for comparison
-   * @returns {Object} { suspicious, reasons, riskLevel }
+   * Deprecated: UA/IP-based heuristic analysis. Superseded by lib/tokenSecurityMonitor.js
+   * which uses ASN org-type drift, VPN/Tor detection, and velocity — signals that don't
+   * flap when an AI agent rotates workers or omits a User-Agent. Kept as an inert stub
+   * to avoid breaking external callers.
    */
-  static analyzeSuspiciousActivity(fingerprint, previousFingerprints = []) {
-    const suspicious = [];
-    const warnings = [];
-
+  static analyzeSuspiciousActivity(_fingerprint, previousFingerprints = []) {
     if (!previousFingerprints || previousFingerprints.length === 0) {
-      return { suspicious: false, reasons: [], warnings, riskLevel: 'new' };
+      return { suspicious: false, reasons: [], warnings: [], riskLevel: 'new' };
     }
-
-    // Check for OS changes (suspicious if ALL prior devices had a different OS)
-    const priorOSes = previousFingerprints.map(pf => pf.summary?.os).filter(Boolean);
-    if (priorOSes.length > 0 && fingerprint.summary?.os && priorOSes.every(os => os !== fingerprint.summary.os)) {
-      suspicious.push(`Operating system changed: was "${priorOSes[0]}", now "${fingerprint.summary.os}"`);
-    } else if (priorOSes.length > 0 && fingerprint.summary?.os && priorOSes.some(os => os !== fingerprint.summary.os)) {
-      warnings.push('Operating system differs from some previously seen devices');
-    }
-
-    // Check for browser/agent changes
-    const priorBrowsers = previousFingerprints.map(pf => pf.summary?.browser).filter(Boolean);
-    if (priorBrowsers.length > 0 && fingerprint.summary?.browser && priorBrowsers.every(b => b !== fingerprint.summary.browser)) {
-      suspicious.push(`Agent/browser changed: was "${priorBrowsers[0]}", now "${fingerprint.summary.browser}"`);
-    } else if (priorBrowsers.length > 0 && fingerprint.summary?.browser && priorBrowsers.some(b => b !== fingerprint.summary.browser)) {
-      warnings.push('Agent/browser differs from some previously seen devices');
-    }
-
-    // Check IP is entirely new vs all known devices
-    const priorIPs = previousFingerprints.map(pf => pf.fingerprint?.ipAddress || pf.summary?.ipAddress).filter(Boolean);
-    const currentIP = fingerprint.fingerprint?.ipAddress || fingerprint.summary?.ipAddress;
-    if (currentIP && priorIPs.length > 0 && priorIPs.every(ip => ip !== currentIP)) {
-      warnings.push(`New IP address (${currentIP}) — not seen on any previously approved device`);
-    }
-
-    // Multiple distinct IPs across recent history suggests token is being shared
-    if (previousFingerprints.length >= 3) {
-      const recentIPs = previousFingerprints.slice(-3).map(pf => pf.fingerprint?.ipAddress || pf.summary?.ipAddress).filter(Boolean);
-      if (new Set(recentIPs).size >= 3) {
-        suspicious.push('Token appears to be used from 3+ distinct IP addresses — possible token sharing');
-      }
-    }
-
-    const isSuspicious = suspicious.length > 0;
-    const riskLevel = isSuspicious ? 'high' : warnings.length > 0 ? 'medium' : 'low';
-
-    return { suspicious: isSuspicious, reasons: suspicious, warnings, riskLevel };
+    return { suspicious: false, reasons: [], warnings: [], riskLevel: 'low' };
   }
 }
 
