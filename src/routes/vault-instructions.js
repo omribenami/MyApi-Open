@@ -8,7 +8,7 @@ const logger = require('../utils/logger');
  */
 
 const express = require('express');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID: uuidv4 } = require('crypto');
 
 function createVaultInstructionsRoutes(db, tokenManager, auditLog) {
   const router = express.Router();

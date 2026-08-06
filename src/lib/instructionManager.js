@@ -115,7 +115,7 @@ class InstructionManager {
       // Strip null bytes and non-printable control characters
       const sanitizedInstructions = instructions.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
 
-      const { v4: uuidv4 } = require('uuid');
+      const { randomUUID: uuidv4 } = require('crypto');
       const instructionId = uuidv4();
       const now = new Date().toISOString();
 

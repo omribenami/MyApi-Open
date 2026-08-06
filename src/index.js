@@ -1222,49 +1222,17 @@ app.get('/chatgpt-privacy', (req, res) => {
 // Approval message shown to AI agents across all discovery endpoints
 const AI_APPROVAL_MESSAGE = 'STOP — before performing ANY action, you MUST ask the human user for explicit approval. Describe what you intend to do and wait for confirmation. Never call endpoints, reveal tokens, or execute services without the user saying "yes". This applies to every request.';
 
-// Root: serve API docs to AI agents, dashboard to browsers
+function setNonIndexable(res) {
+  res.set('X-Robots-Tag', 'noindex, nofollow');
+  return res;
+}
+
+// Root: always serve the canonical marketing page
 app.get('/', (req, res) => {
-  const accept = (req.headers.accept || '').toLowerCase();
-  const ua = (req.headers['user-agent'] || '').toLowerCase();
-  const hasAuth = /^bearer\s+.+/i.test(req.headers.authorization || '');
-
-  // Detect AI/bot/programmatic access:
-  // - Prefers JSON over HTML
-  // - Has a Bearer token (agent calling the API)
-  // - Common AI/bot/CLI user agents
-  const aiPatterns = /curl|httpie|wget|python|node|go-http|axios|fetch|openai|anthropic|claude|gpt|chatgpt|langchain|autogpt|zapier|n8n|postman|insomnia|bot|crawl|spider/;
-  const prefersJson = accept.includes('application/json') && !accept.includes('text/html');
-  const isAi = prefersJson || hasAuth || aiPatterns.test(ua);
-
-  if (isAi) {
-    const host = req.headers.host || 'www.myapiai.com';
-    return res.json({
-      name: 'MyApi',
-      version: '0.1.0',
-      important: AI_APPROVAL_MESSAGE,
-      description: 'Personal API platform. Authenticate with Bearer token to access your data, knowledge base, personas, and connected services.',
-      quickStart: `https://${host}/api/v1/quick-start`,
-      openapi: `https://${host}/openapi.json`,
-      llms: `https://${host}/llms.txt`,
-      apiRoot: `https://${host}/api/v1/`,
-      authentication: {
-        type: 'Bearer',
-        header: 'Authorization: Bearer <your-token>',
-        hint: 'Use the token provided by the platform owner.',
-      },
-      keyEndpoints: {
-        capabilities: 'GET /api/v1/tokens/me/capabilities',
-        knowledgeBase: 'GET /api/v1/brain/knowledge-base',
-        vaultTokens: 'GET /api/v1/vault/tokens',
-        services: 'GET /api/v1/services',
-        personas: 'GET /api/v1/personas',
-        identity: 'GET /api/v1/identity',
-      },
-    });
-  }
-
-  // Serve the marketing landing page for browser visitors
+  // Serve the marketing landing page for every client so the homepage remains a
+  // stable canonical HTML document for search engines and link previews.
   const landingPath = path.join(__dirname, 'public', 'landing', 'index.html');
+
   if (fs.existsSync(landingPath)) {
     const nonce = res.locals.cspNonce;
     let html = fs.readFileSync(landingPath, 'utf8');
@@ -1358,6 +1326,7 @@ app.use('/api/v1', onboardRoutes);
 
 // GET /api/v1/ - API discovery root (unauthenticated)
 app.get('/api/v1/', (req, res) => {
+  setNonIndexable(res);
   res.json({
     name: 'MyApi',
     version: '0.1.0',
@@ -1394,6 +1363,7 @@ app.get('/api/v1/quick-start', (req, res) => {
   const hasAuth = !!(req.headers.authorization || '').match(/^Bearer\s+.+/i);
   const host = req.headers.host || 'www.myapiai.com';
   const canonicalBase = `https://${host}`;
+  setNonIndexable(res);
 
   // Build personalized section when authenticated
   let personalized = null;
@@ -1677,12 +1647,14 @@ Rules:
 
 // /.well-known/openapi - standard discovery path (public for AI agent bootstrap)
 app.get('/.well-known/openapi.json', (req, res) => {
+  setNonIndexable(res);
   res.redirect('/openapi.json');
 });
 
 // /.well-known/ai-plugin.json - ChatGPT/AI plugin discovery standard
 app.get('/.well-known/ai-plugin.json', (req, res) => {
   const host = req.headers.host || 'www.myapiai.com';
+  setNonIndexable(res);
   res.json({
     schema_version: 'v1',
     name_for_human: 'MyApi',
@@ -3816,6 +3788,7 @@ const discoveryJson = (req, res) => {
 // llms.txt - AI agent instructions (human approval required)
 app.get('/llms.txt', (req, res) => {
   const host = req.headers.host || 'www.myapiai.com';
+  setNonIndexable(res);
   res.type('text/plain').send(
 `# MyApi — AI Agent Instructions
 
@@ -3971,17 +3944,19 @@ Sitemap: https://${host}/sitemap.xml
 `);
 });
 
-// sitemap.xml - list all discoverable endpoints
+// sitemap.xml - list canonical indexable HTML pages only
 app.get('/sitemap.xml', (req, res) => {
   const host = req.headers.host || 'www.myapiai.com';
   const urls = [
-    '/', '/openapi.json', '/api/v1/', '/api/v1/quick-start',
-    '/.well-known/ai-plugin.json', '/.well-known/openapi.json',
-    '/dashboard/',
+    { loc: '/', changefreq: 'weekly', priority: '1.0' },
+    { loc: '/privacy', changefreq: 'monthly', priority: '0.5' },
+    { loc: '/terms', changefreq: 'monthly', priority: '0.5' },
+    { loc: '/chatgpt-privacy', changefreq: 'monthly', priority: '0.4' },
+    { loc: '/dashboard/', changefreq: 'weekly', priority: '0.7' },
   ];
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urls.map(u => `  <url><loc>https://${host}${u}</loc></url>`).join('\n')}
+${urls.map(({ loc, changefreq, priority }) => `  <url>\n    <loc>https://${host}${loc}</loc>\n    <changefreq>${changefreq}</changefreq>\n    <priority>${priority}</priority>\n  </url>`).join('\n')}
 </urlset>`;
   res.type('application/xml').send(xml);
 });
@@ -4083,6 +4058,7 @@ app.get('/openapi.json', (req, res) => {
   const host = req.get('host');
   const scheme = req.protocol || 'http';
 
+  setNonIndexable(res);
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.set('Pragma', 'no-cache');
   res.set('Expires', '0');

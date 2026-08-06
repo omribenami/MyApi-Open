@@ -4,7 +4,7 @@
 
 const { db: _db } = require('../database');
 function getDatabase() { return _db; }
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID: uuidv4 } = require('crypto');
 const logger = require('../utils/logger');
 
 // In-memory sliding-window rate limit counters: Map<`${ruleId}:${tokenId}:${windowId}`, count>

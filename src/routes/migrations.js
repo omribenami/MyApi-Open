@@ -5,7 +5,7 @@
 
 const express = require('express');
 const router = express.Router();
-const { v4: uuid } = require('uuid');
+const { randomUUID: uuid } = require('crypto');
 const logger = require('../utils/logger');
 
 /**

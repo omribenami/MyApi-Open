@@ -3,7 +3,7 @@
 // See NOTICES file at the project root for full attribution.
 
 const express = require('express');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID: uuidv4 } = require('crypto');
 const { db: _db } = require('../database');
 function getDatabase() { return _db; }
 const logger = require('../utils/logger');

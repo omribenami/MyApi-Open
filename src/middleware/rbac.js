@@ -3,7 +3,7 @@
  * Phase 6B: Enforces role-based access control and auditLogs all permission checks
  */
 
-const { v4: uuid } = require('uuid');
+const { randomUUID: uuid } = require('crypto');
 
 /**
  * RBAC Middleware Factory - creates middleware with database reference

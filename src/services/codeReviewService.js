@@ -4,7 +4,7 @@
  * Submits code for review, polls results, handles webhooks
  */
 
-const { v4: uuid } = require('uuid');
+const { randomUUID: uuid } = require('crypto');
 const logger = require('../utils/logger');
 
 class CodeReviewService {

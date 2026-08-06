@@ -6,7 +6,7 @@
 const { getDatabase } = require('../config/database');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID: uuidv4 } = require('crypto');
 const logger = require('../utils/logger');
 
 // Dummy hash used to equalize timing when no token candidates are found.

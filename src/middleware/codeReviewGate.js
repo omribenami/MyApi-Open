@@ -4,7 +4,7 @@
  * Integrates Claude Opus 4.6 as the Code Reviewer
  */
 
-const { v4: uuid } = require('uuid');
+const { randomUUID: uuid } = require('crypto');
 const logger = require('../utils/logger');
 
 /**

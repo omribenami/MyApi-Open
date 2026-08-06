@@ -1,5 +1,5 @@
 const express = require('express');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID: uuidv4 } = require('crypto');
 const { queueEmail, getTokenScopes } = require('../database');
 
 const ALLOWED_FIELDS = ['date', 'complainer', 'complaint', 'repro_steps', 'status', 'fix_commit', 'source', 'source_message_id'];
