@@ -148,4 +148,73 @@ router.get('/onboard/steps', (req, res) => {
   ]});
 });
 
+
+// Activation funnel + AI preference stats (first-win onboarding).
+const ACTIVATION_EVENTS_PATH = path.join(__dirname, 'data', 'onboarding_activation.json');
+const ALLOWED_ACTIVATION_EVENTS = new Set([
+  'ai_selected', 'service_connected', 'agent_connected', 'test_drive_copied', 'activation_complete', 'step_viewed',
+]);
+
+function loadActivationStore() {
+  try {
+    if (fs.existsSync(ACTIVATION_EVENTS_PATH)) return JSON.parse(fs.readFileSync(ACTIVATION_EVENTS_PATH, 'utf8'));
+  } catch (_) {}
+  return { events: [] };
+}
+
+function saveActivationStore(store) {
+  fs.mkdirSync(path.dirname(ACTIVATION_EVENTS_PATH), { recursive: true });
+  fs.writeFileSync(ACTIVATION_EVENTS_PATH, JSON.stringify(store));
+}
+
+router.post('/onboarding/event', express.json(), (req, res) => {
+  const userId = req.session?.user?.id || req.user?.id || req.tokenMeta?.ownerId;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  const event = String(req.body?.event || '').trim();
+  if (!ALLOWED_ACTIVATION_EVENTS.has(event)) {
+    return res.status(400).json({ error: 'Unknown event' });
+  }
+  const primaryAi = req.body?.primaryAi ? String(req.body.primaryAi).slice(0, 40) : null;
+  const extraAis = Array.isArray(req.body?.extraAis)
+    ? req.body.extraAis.map((x) => String(x).slice(0, 40)).slice(0, 8)
+    : [];
+  const services = Array.isArray(req.body?.services)
+    ? req.body.services.map((x) => String(x).slice(0, 40)).slice(0, 20)
+    : [];
+  const step = req.body?.step ? String(req.body.step).slice(0, 40) : null;
+  const store = loadActivationStore();
+  store.events.push({
+    ts: new Date().toISOString(),
+    userId: String(userId),
+    event,
+    primaryAi,
+    extraAis,
+    services,
+    step,
+  });
+  if (store.events.length > 5000) store.events = store.events.slice(-4000);
+  try {
+    saveActivationStore(store);
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to persist event' });
+  }
+  res.json({ ok: true });
+});
+
+router.get('/onboarding/activation-stats', (req, res) => {
+  const userId = req.session?.user?.id || req.user?.id || req.tokenMeta?.ownerId;
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  if (!isOwnerUser(userId)) return res.status(403).json({ error: 'Owner only' });
+  const store = loadActivationStore();
+  const aiCounts = {};
+  const eventCounts = {};
+  for (const ev of store.events || []) {
+    eventCounts[ev.event] = (eventCounts[ev.event] || 0) + 1;
+    if (ev.event === 'ai_selected' && ev.primaryAi) {
+      aiCounts[ev.primaryAi] = (aiCounts[ev.primaryAi] || 0) + 1;
+    }
+  }
+  res.json({ ok: true, totals: { events: (store.events || []).length }, eventCounts, aiCounts });
+});
+
 module.exports = router;

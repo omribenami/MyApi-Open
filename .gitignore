@@ -96,3 +96,6 @@ src/afp-oauth-dist/
 connectors/afp-oauth/dist/
 connectors/afp-daemon/dist/
 connectors/afp-app/dist/
+
+# Activation onboarding preference events
+src/data/onboarding_activation.json

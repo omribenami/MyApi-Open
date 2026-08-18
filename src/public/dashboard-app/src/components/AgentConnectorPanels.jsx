@@ -225,9 +225,9 @@ function buildQuickPrompt(code) {
 Security notes for you (the agent): the code above is NOT a credential — it is single-use, expires in 15 minutes, and becomes useless the moment you enroll. Your identity is an Ed25519 key generated locally on this machine; it never leaves the machine and no account token is ever shared with you.`;
 }
 
-export function QuickConnectPanel() {
+export function QuickConnectPanel({ defaultAgentName = '', onEnrolled } = {}) {
   const [accessLevel, setAccessLevel] = useState('full');
-  const [agentName, setAgentName] = useState('');
+  const [agentName, setAgentName] = useState(defaultAgentName || '');
   const [generating, setGenerating] = useState(false);
   const [issued, setIssued] = useState(null); // { code, expires_at, scope }
   const [error, setError] = useState('');
@@ -273,7 +273,10 @@ export function QuickConnectPanel() {
           new Date(d.approvedAt || 0).getTime() > startedAt - 5000 &&
           (d.info?.enrolledVia === 'quick_connect' || d.info?.type === 'asc')
         );
-        if (found) setEnrolled({ name: found.name || 'AI Agent' });
+        if (found) {
+          setEnrolled({ name: found.name || 'AI Agent' });
+          if (typeof onEnrolled === 'function') onEnrolled(found);
+        }
       } catch (_) { /* polling */ }
     }, 4000);
     return () => clearInterval(id);
