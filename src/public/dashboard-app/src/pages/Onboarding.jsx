@@ -315,6 +315,7 @@ function StepAgent({ data, update, connectingExtra }) {
 
       {method === 'quick' && (
         <QuickConnectPanel
+          key={ai.id}
           defaultAgentName={ai.label}
           onEnrolled={() => markConnected()}
         />

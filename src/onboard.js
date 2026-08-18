@@ -150,7 +150,7 @@ router.get('/onboard/steps', (req, res) => {
 
 
 // Activation funnel + AI preference stats (first-win onboarding).
-const ACTIVATION_EVENTS_PATH = path.join(__dirname, 'data', 'onboarding_activation.json');
+const ACTIVATION_EVENTS_PATH = process.env.ONBOARDING_ACTIVATION_PATH || path.join(__dirname, 'data', 'onboarding_activation.json');
 const ALLOWED_ACTIVATION_EVENTS = new Set([
   'ai_selected', 'service_connected', 'agent_connected', 'test_drive_copied', 'activation_complete', 'step_viewed',
 ]);
@@ -208,13 +208,19 @@ router.get('/onboarding/activation-stats', (req, res) => {
   const store = loadActivationStore();
   const aiCounts = {};
   const eventCounts = {};
+  const serviceCounts = {};
+  const users = new Set();
   for (const ev of store.events || []) {
     eventCounts[ev.event] = (eventCounts[ev.event] || 0) + 1;
+    if (ev.userId) users.add(String(ev.userId));
     if (ev.event === 'ai_selected' && ev.primaryAi) {
       aiCounts[ev.primaryAi] = (aiCounts[ev.primaryAi] || 0) + 1;
     }
+    for (const svc of ev.services || []) {
+      serviceCounts[svc] = (serviceCounts[svc] || 0) + 1;
+    }
   }
-  res.json({ ok: true, totals: { events: (store.events || []).length }, eventCounts, aiCounts });
+  res.json({ ok: true, totals: { events: (store.events || []).length, uniqueUsers: users.size }, eventCounts, aiCounts, serviceCounts });
 });
 
 module.exports = router;

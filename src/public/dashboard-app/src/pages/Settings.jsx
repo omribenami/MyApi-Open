@@ -6,7 +6,7 @@ import apiRequest from '../utils/apiRequest';
 import DeleteAccountModal from '../components/DeleteAccountModal';
 import NotificationSettings from '../components/NotificationSettings';
 import ImportExport from '../components/ImportExport';
-import { restartOnboarding, requestOnboardingModal } from '../utils/onboardingUtils';
+import { restartOnboarding } from '../utils/onboardingUtils';
 import { fetchPublicConfig } from '../utils/publicConfig';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2275,18 +2275,17 @@ function OnboardingSection() {
 
   const handleRerunOnboarding = () => {
     restartOnboarding();
-    requestOnboardingModal();
-    setMessage('Onboarding restarted. The setup modal is open again.');
+    window.location.assign('/dashboard/onboarding');
   };
 
   return (
-    <SectionCard title="Onboarding" description="Replay the first-run setup whenever you want to refresh your profile, security, or integrations flow">
+    <SectionCard title="Onboarding" description="Replay the first-win activation flow: connect a service and an AI via MCP.">
       <div className="space-y-4">
         {message && <SuccessBanner message={message} onClose={() => setMessage('')} />}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <p className="text-sm ink-2">
-              Re-run onboarding to walk through profile setup, persona creation, 2FA, and first integrations again.
+              Re-run activation to pick your AI, connect a service, and enroll that agent over MCP.
             </p>
             <p className="text-xs ink-4 mt-1">
               This also restores the getting-started checklist until you finish or dismiss it again.

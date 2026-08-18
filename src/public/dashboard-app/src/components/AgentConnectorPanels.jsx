@@ -228,6 +228,7 @@ Security notes for you (the agent): the code above is NOT a credential — it is
 export function QuickConnectPanel({ defaultAgentName = '', onEnrolled } = {}) {
   const [accessLevel, setAccessLevel] = useState('full');
   const [agentName, setAgentName] = useState(defaultAgentName || '');
+  useEffect(() => { if (defaultAgentName) setAgentName(defaultAgentName); }, [defaultAgentName]);
   const [generating, setGenerating] = useState(false);
   const [issued, setIssued] = useState(null); // { code, expires_at, scope }
   const [error, setError] = useState('');

@@ -157,7 +157,7 @@ function App() {
   useEffect(() => {
     const onOpen = () => {
       restartOnboarding();
-      setShowOnboarding(true);
+      window.location.assign('/dashboard/onboarding');
     };
     window.addEventListener('myapi:open-onboarding', onOpen);
     return () => window.removeEventListener('myapi:open-onboarding', onOpen);
