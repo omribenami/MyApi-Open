@@ -74,7 +74,6 @@ function App() {
   const forceUnauthenticated = useAuthStore((state) => state.forceUnauthenticated);
   const fetchWorkspaces = useAuthStore((state) => state.fetchWorkspaces);
   const user = useAuthStore((state) => state.user);
-  const [_showOnboarding, setShowOnboarding] = useState(false);
   const [showSessionExpired, setShowSessionExpired] = useState(false);
 
   // Initialize auth store on mount
