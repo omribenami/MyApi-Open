@@ -396,9 +396,9 @@ function renderLegalMarkdown(markdown = '') {
 }
 
 function loadLegalDoc(filename, fallbackTitle, fallbackBody) {
-  // Bare filenames live in docs/legal/; repo-relative paths (e.g.
-  // connectors/openai/privacy-policy.md) resolve from the app root's parent,
-  // matching where the Dockerfile places /docs and /connectors.
+  // Bare filenames live in docs/legal/; repo-relative paths (containing '/')
+  // resolve from the app root's parent, matching where the Dockerfile places
+  // /docs and /connectors.
   const targetPath = filename.includes('/')
     ? path.join(__dirname, '..', filename)
     : path.join(LEGAL_DOCS_DIR, filename);
@@ -1124,15 +1124,9 @@ app.get('/terms', (req, res) => {
   res.type('html').send(renderLegalPage({ title: 'Terms of Use', markdownContent: markdown }));
 });
 
-// ChatGPT GPT privacy policy (required for GPT Store listing)
+// Retired ChatGPT privacy copy. Canonical policy is the public site.
 app.get('/chatgpt-privacy', (req, res) => {
-  const markdown = loadLegalDoc(
-    'connectors/openai/privacy-policy.md',
-    'MyApi GPT — Privacy Policy',
-    'Privacy policy for the MyApi ChatGPT integration.'
-  );
-  res.set('Cache-Control', 'public, max-age=86400');
-  res.type('html').send(renderLegalPage({ title: 'MyApi GPT — Privacy Policy', markdownContent: markdown }));
+  res.redirect(301, 'https://www.myapiai.com/privacy');
 });
 
 // Redirect to React dashboard
@@ -1663,7 +1657,7 @@ app.get('/.well-known/ai-plugin.json', (req, res) => {
     api: { type: 'openapi', url: `https://${host}/openapi.json` },
     logo_url: `https://${host}/dashboard/myapi-logo.svg`,
     contact_email: 'support@myapiai.com',
-    legal_info_url: `https://${host}/legal`,
+    legal_info_url: 'https://www.myapiai.com/privacy',
   });
 });
 
@@ -5621,7 +5615,7 @@ app.get('/.well-known/ai-plugin.json', (req, res) => {
     },
     api: { type: 'openapi', url: `${scheme}://${host}/openapi.json` },
     logo_url: `${scheme}://${host}/favicon.ico`,
-    legal_info_url: `${scheme}://${host}/`,
+    legal_info_url: 'https://www.myapiai.com/privacy',
     contact_email: 'support@localhost',
   });
 });

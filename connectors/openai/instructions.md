@@ -10,7 +10,7 @@ This file tells you exactly what's done, what's left, and every step required to
 - [x] Consent page served at `/api/v1/oauth-server/authorize`
 - [x] Token exchange endpoint at `/api/v1/oauth-server/token`
 - [x] OpenAPI schema hosted at `https://www.myapiai.com/api/v1/oauth-server/openapi.yaml`
-- [x] Privacy policy page live at `https://www.myapiai.com/chatgpt-privacy`
+- [x] Privacy policy page live at `https://www.myapiai.com/privacy`
 - [x] Connectors page in the MyApi dashboard under AI & Data → Connectors
 - [x] ChatGPT OAuth client auto-created on server startup (client ID: `chatgpt`)
 
@@ -155,7 +155,7 @@ ChatGPT Store listings need a profile picture. You can:
    - **Everyone** — listed in the ChatGPT GPT Store (requires OpenAI review)
 3. Set the **Privacy Policy URL** to:
    ```
-   https://www.myapiai.com/chatgpt-privacy
+   https://www.myapiai.com/privacy
    ```
 4. If publishing to Everyone: submit for OpenAI review. They check that the OAuth flow works, the privacy policy is accessible, and the GPT behaves as described.
 
@@ -202,5 +202,5 @@ Users can revoke access at any time:
 | `instructions.md` | This file — setup guide |
 | `openapi.yaml` | API schema for the GPT Actions editor |
 | `system-prompt.md` | Paste this as the GPT's Instructions |
-| `privacy-policy.md` | Hosted at `/chatgpt-privacy` — required for Store listing |
+| `privacy-policy.md` | Superseded. Privacy policy: https://www.myapiai.com/privacy |
 | `README.md` | Technical reference |
