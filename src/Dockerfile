@@ -18,7 +18,7 @@ COPY connectors/afp-oauth/dist/ afp-oauth-dist/
 COPY connectors/agent-auth/ connectors/agent-auth/
 
 # ChatGPT connector assets — runtime code resolves these as <app>/../connectors/openai/
-# (openapi.yaml served at /api/v1/oauth-server/openapi.yaml, privacy policy at https://www.myapiai.com/privacy)
+# (openapi.yaml served at /api/v1/oauth-server/openapi.yaml; privacy URL is PRIVACY_URL or this host's /legal)
 COPY connectors/openai/ /connectors/openai/
 
 # ── Dependency install (cached until package.json/lock changes) ────────────────

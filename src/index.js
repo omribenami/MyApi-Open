@@ -1124,9 +1124,39 @@ app.get('/terms', (req, res) => {
   res.type('html').send(renderLegalPage({ title: 'Terms of Use', markdownContent: markdown }));
 });
 
-// Retired ChatGPT privacy copy. Canonical policy is the public site.
+// Operator-configured privacy policy. Self-hosted instances must not be sent
+// to the hosted MyApi policy; unset PRIVACY_URL stays on this host.
+function configuredPrivacyUrl() {
+  const configured = String(process.env.PRIVACY_URL || '').trim();
+  return configured || '';
+}
+
+function legalInfoUrl(req) {
+  const configured = configuredPrivacyUrl();
+  if (configured) return configured;
+  const host = req.get('host') || 'localhost';
+  const scheme = req.protocol || 'http';
+  return `${scheme}://${host}/legal`;
+}
+
 app.get('/chatgpt-privacy', (req, res) => {
-  res.redirect(301, 'https://www.myapiai.com/privacy');
+  const configured = configuredPrivacyUrl();
+  if (configured) {
+    return res.redirect(301, configured);
+  }
+  res.set('Cache-Control', 'no-store');
+  res.type('html').send(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Privacy policy</title>
+</head>
+<body>
+  <p>This MyApi instance is operated by its owner. Ask the operator for their privacy policy.</p>
+</body>
+</html>
+`);
 });
 
 // Redirect to React dashboard
@@ -1657,7 +1687,7 @@ app.get('/.well-known/ai-plugin.json', (req, res) => {
     api: { type: 'openapi', url: `https://${host}/openapi.json` },
     logo_url: `https://${host}/dashboard/myapi-logo.svg`,
     contact_email: 'support@myapiai.com',
-    legal_info_url: 'https://www.myapiai.com/privacy',
+    legal_info_url: legalInfoUrl(req),
   });
 });
 
@@ -5615,7 +5645,7 @@ app.get('/.well-known/ai-plugin.json', (req, res) => {
     },
     api: { type: 'openapi', url: `${scheme}://${host}/openapi.json` },
     logo_url: `${scheme}://${host}/favicon.ico`,
-    legal_info_url: 'https://www.myapiai.com/privacy',
+    legal_info_url: legalInfoUrl(req),
     contact_email: 'support@localhost',
   });
 });
