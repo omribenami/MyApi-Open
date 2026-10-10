@@ -1,5 +1,7 @@
 # Self-Hosting MyApi (B2B)
 
+If you run MyApi Open for others, you are responsible for your own privacy policy and terms; MyApi's hosted policies apply only to myapiai.com.
+
 Run the entire MyApi agent gateway inside your own infrastructure. Your OAuth
 tokens, knowledge base, audit trail, and agent traffic never touch our cloud.
 

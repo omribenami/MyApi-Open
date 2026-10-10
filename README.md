@@ -105,6 +105,8 @@ node index.js
 
 ## Legal scope of this repository
 
+If you run MyApi Open for others, you are responsible for your own privacy policy and terms; MyApi's hosted policies apply only to myapiai.com.
+
 - Code in this repository is licensed under **AGPL-3.0**.
 - The legal documents in this repository that mention the hosted service are provided so self-hosters can understand the hosted product boundary.
 - If you deploy your own instance, **you** are responsible for your own terms, privacy, data processing disclosures, and compliance posture.

@@ -12,7 +12,7 @@ MyApi Assistant lets ChatGPT users interact with their MyApi account through nat
 |------|---------|
 | `openapi.yaml` | OpenAPI 3.1 schema — paste this into the GPT Actions editor |
 | `system-prompt.md` | Copy this as the GPT's Instructions |
-| `privacy-policy.md` | Host this publicly; required for GPT Store submission |
+| `privacy-policy.md` | Superseded. Privacy policy: https://www.myapiai.com/privacy |
 
 ---
 
@@ -86,7 +86,7 @@ Access your MyApi account — identity, personas, knowledge base, and connected 
 ### Step 4 — Publish to GPT Store
 
 1. In the GPT editor, click **Save** → choose **Everyone** (or **Anyone with link** for testing)
-2. Add a profile picture and confirm the privacy policy URL: `https://www.myapiai.com/chatgpt-privacy`
+2. Add a profile picture and confirm the privacy policy URL: `https://www.myapiai.com/privacy`
 3. Submit for review if you want it in the GPT Store browsable directory
 
 ---
